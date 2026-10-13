@@ -262,3 +262,17 @@ html:not(.lc-champ-select) #lc-winrate { display: none; }
 #lc-posjogo .lc-alerta-medio { border-left-color: #c8aa6e; }
 #lc-posjogo .lc-alerta-forte { border-left-color: #e84057; }
 #lc-posjogo tr.lc-esta td { background: #0f1a20; }
+
+/* Chat do pós-jogo (chat-posjogo.js; o CSS de dentro do iframe das mensagens vai em CSS_QUADRO, lá).
+   Classes no <html> vêm do config: lc-chat-posjogo (ligado), lc-escurecer-saiu. Sem z-index: nada aqui empilha. */
+html.lc-chat-posjogo lol-social-chat-room[type='postGame'].lc-chat-desbloqueado.focused-chat-box:not(.lc-chat-recolhido) .chat-placeholder-text {
+  display: none !important;
+}
+/* quem saiu do chat: o client já põe .not-in-chat e meia transparência no retrato; aqui fica cinza. Seletores do
+   original (patch 16.18, variantes -strawberry/-jade do fundo para outros modos), não medidos aqui */
+html.lc-chat-posjogo.lc-escurecer-saiu .scoreboard-row-component.not-in-chat .scoreboard-row-player-details-container .scoreboard-row-skin-background,
+html.lc-chat-posjogo.lc-escurecer-saiu .scoreboard-row-component.not-in-chat .scoreboard-row-player-details-container .scoreboard-row-skin-background-strawberry,
+html.lc-chat-posjogo.lc-escurecer-saiu .scoreboard-row-component.not-in-chat .scoreboard-row-player-details-container .scoreboard-row-skin-background-jade {
+  opacity: 0.5;
+  filter: grayscale(0.75);
+}

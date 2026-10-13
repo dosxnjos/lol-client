@@ -21,7 +21,7 @@ painel, overlay), coisa que a Riot não aprova para produtos: risco da conta ass
 | champ select | selo com winrate e KDA do campeão, matchup contra o adversário de rota provável, "X é trauma", força do draft em faixa | client (plugin) |
 | tela de carregamento | os 10 (elo, winrate, tags com número: OTP, morre cedo, sequência…), previsão de vitória em faixa, composição inimiga e lembrete de build ([ITENS](docs/ITENS.md)) | painel da 2ª tela |
 | partida | 4 blocos fixos (tua rota, ameaça, teu padrão, time e objetivos) + 1 aviso por vez; voz (1 fala a cada 20 s, gank fura); moldura colorida na borda da tela; área provável do jungler por cima do minimapa; Flash dos inimigos pelo chat ou F9; preparo 60 s antes de cada objetivo; picos de força | 2ª tela, voz, tela do jogo |
-| pós-jogo | 6 abas (Resumo com 3 lições, Rota, Mortes, Objetivos, Tendência, Sessão), análise do mentor e caixa de pergunta; botão "jogar de novo e buscar"; 30 s depois, coleta o prêmio da partida | client (plugin) |
+| pós-jogo | 6 abas (Resumo com 3 lições, Rota, Mortes, Objetivos, Tendência, Sessão), análise do mentor e caixa de pergunta; botão "jogar de novo e buscar"; 30 s depois, coleta o prêmio da partida; chat da tela de estatísticas com campeão, ícone e cor do time | client (plugin) |
 | a qualquer hora | `resumo`, `partidas`, `matchups`, `traumas`, `licoes`, `sessao_hoje`, `carregamento_atual`… | Claude Code (MCP) |
 
 ## Como liga sozinho
@@ -55,12 +55,14 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 | aceite, fila rápida, enxugamentos, runas, selo do champ select | blocos do plugin e Ctrl+K | (só o plugin) |
 | trazer o client para a frente ao achar partida (desligado = o client pisca e volta para trás; só com o aceite automático) | Aceitar partida | (plugin: `aceite.trazerClient`) |
 | esconder o popup de partida encontrada (só com o aceite automático; volta se o aceite não vier) | Aceitar partida | (plugin: `aceite.esconderPopup`) |
-| silenciar o som em loop depois de aceitar (o aviso de partida encontrada continua) | Aceitar partida | (plugin: `aceite.silenciarSom`) |
+| silenciar o som em loop depois de aceitar (padrão: ligado; o aviso de partida encontrada continua) | Aceitar partida | (plugin: `aceite.silenciarSom`) |
 | janelinha aceitar/recusar fora do client, por cima de tudo e sem roubar a tela (precisa do coletor) | Aceitar partida | `aceiteFlutuante` (+ `aceiteAtrasoS`, que o plugin manda sozinho) |
 | botão "jogar de novo e buscar" no pós-jogo | Fila rápida | (plugin: `filaRapida.jogarDeNovo`) |
 | freio de tilt: pedir 2º clique depois de N derrotas seguidas na sessão (padrão: 2; 0 = nunca), na fila rápida e no jogar de novo | Fila rápida | (plugin: `filaRapida.freioTilt`) |
 | freio de madrugada: pedir 2º clique ao buscar entre 01:00 e 05:59, hora do PC (padrão: ligado), nos mesmos dois botões | Fila rápida | (plugin: `filaRapida.freioMadrugada`) |
 | coletar recompensas sozinho / incluir o passe do TFT | Recompensas | (plugin: `recompensas.ligado`, `recompensas.tft`) |
+| chat da tela de estatísticas: campeão junto do nome (ou no lugar), ícone do campeão (do próprio client), cor certa de aliado/inimigo, abre sozinho e fica aberto (o botão do chat recolhe; o Esc também, se o cursor estiver no chat), sem "entrou/deixou o saguão", quem saiu cinza no placar; com o painel do pós-jogo aberto o chat fica por baixo; desligar no meio da tela devolve o chat como o client deixou | Chat do pós-jogo | (plugin: `chatPosjogo.ligado`, `.nomes` = ambos/campeao/jogador, `.iconeCampeao`, `.corTime`, `.abrirSozinho`, `.manterAberto`, `.esconderEntrouSaiu`, `.escurecerSaiu`) |
+| calar o aviso de runas mudadas pelo jogo e o de golpear colocado sozinho (resposta falsa só nessas 2 rotas; o "você foi preenchido" fica: sai da sessão do champ select). O de runas logo depois de um patch ainda não foi provado | Avisos do client | (plugin: `semPopups.ligado`, `.runasAutomaticas`, `.smiteAutomatico`) |
 | painel na 2ª tela / amostras de 10 s no banco | Painel ao vivo (2ª tela) | `painelAoVivo` / `amostrasAoVivo` |
 | voz e tom (sério ou descontraído) | Voz | `voz`, `tomVoz` |
 | moldura na tela e cada um dos 18 tipos de alerta (com o retorno do F8 e do F9), com voz e tela separadas | Alertas na tela | `alertasTela`, `avisosDesligados` |
@@ -101,7 +103,8 @@ jungler), minimapa a 6 fps de verdade, moldura e overlay alinhados sobre o jogo,
 aberto, OCR do chat com ≥ 10 pings, mentor chamado pela tarefa agendada, selo com inimigo de verdade no
 draft. Roteiro e status: topo do [plano v2](roadmap/2026-10-13-lol-client-v2-coach.md).
 Também sem prova no client (13/10/2026): o piscar e a volta no champ select, a janelinha aceitar/recusar, popup
-escondido, som calado, jogar de novo e a coleta de recompensas; status nos planos de
+escondido, som calado, jogar de novo, a coleta de recompensas, o chat do pós-jogo e os avisos calados; status nos planos de
+[chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md),
 [voz e foco](roadmap/2026-10-13-voz-pregravada-e-foco.md), [jogar de novo](roadmap/2026-10-13-jogar-de-novo.md) e
 [coleta](roadmap/2026-10-13-coleta-automatica-de-recompensas.md).
 

@@ -39,3 +39,10 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
   terceiros e ficam em `temp/gravacao/` (fora do git). 20 com chat, 6 com ping, 3 com ping de feitiço.
 - `jogo-estatico.json`: `sugestoes.montar_estatico()` da LCU no patch 16.20 (recarga dos feitiços
   CLASSIC, 112 itens lendários, 173 campeões com dano/controle/papéis); usado por `tools/teste-sugestoes.py`.
+
+## Chat do pós-jogo ([plano](../../roadmap/2026-10-13-chat-popups-som.md))
+
+- `chat-posjogo.json`: **sintético** (nomes `JogadorN#BR1`/`Eu#BR1`, puuid falso): eog no formato do
+  `eog-stats-block`, `champion-summary` recortado, mensagens do LCU, textos do saguão em pt-BR medidos em
+  `/fe/lol-social/trans.json` (13/10/2026) e as linhas do chat no formato do template do client (Riot ID com as
+  marcas bidi, linha de sistema, celebração, nome desconhecido, Ahri nos dois times). Usado por `tools/teste-chat-posjogo.mjs`.

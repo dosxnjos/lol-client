@@ -23,6 +23,8 @@ TESTES = [
     ["node", "tools/teste-matchup.mjs"],
     ["node", "tools/teste-aceite.mjs"],
     ["node", "tools/teste-config.mjs"],
+    ["node", "tools/teste-sem-popups.mjs"],
+    ["node", "tools/teste-chat-posjogo.mjs"],
     ["node", "tools/teste-recompensas.mjs"],
     ["node", "tools/teste-jogar-de-novo.mjs"],
     ["node", "tools/teste-runas.mjs"],

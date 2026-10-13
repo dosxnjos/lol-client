@@ -30,7 +30,7 @@ const casos = [
   ['migrar(null) não quebra', migrar(null), r => r === null],
   // chaves novas de 13/10/2026 (contrato plugin <-> coach): config salva antes delas ganha os padrões
   ['config antiga ganha as chaves novas com os padrões', carregarCom({ aceite: { ligado: true, atrasoS: 7 }, filaRapida: { fila: 440 }, coach: { voz: false } }),
-    c => c.aceite.atrasoS === 7 && c.aceite.trazerClient === false && c.aceite.esconderPopup === false && c.aceite.silenciarSom === false
+    c => c.aceite.atrasoS === 7 && c.aceite.trazerClient === false && c.aceite.esconderPopup === false && c.aceite.silenciarSom === true
       && c.filaRapida.fila === 440 && c.filaRapida.jogarDeNovo === true && c.filaRapida.freioTilt === 2 && c.filaRapida.freioMadrugada === true
       && c.recompensas.ligado === true && c.recompensas.tft === false && c.coach.aceiteFlutuante === true && c.coach.voz === false],
   ['valores salvos das chaves novas ficam', carregarCom({ aceite: { trazerClient: true, esconderPopup: true, silenciarSom: true },
@@ -39,24 +39,50 @@ const casos = [
       && c.filaRapida.freioTilt === 3 && !c.recompensas.ligado && c.recompensas.tft && c.coach.aceiteFlutuante === false],
   ['tipo errado salvo volta ao padrão (freioTilt "3" -> 2)', carregarCom({ filaRapida: { freioTilt: '3' } }), c => c.filaRapida.freioTilt === 2],
   // freios (decisão do Gabriel, 13/10/2026): padrão tilt 2 + madrugada; 0 salvo antes da marca vira 2 uma vez só
-  ['padrão: freioTilt 2, freioMadrugada ligado, versao 2', carregarCom(null),
-    c => c.filaRapida.freioTilt === 2 && c.filaRapida.freioMadrugada === true && c.versao === 2],
+  ['padrão: freioTilt 2, freioMadrugada ligado, versao 3', carregarCom(null),
+    c => c.filaRapida.freioTilt === 2 && c.filaRapida.freioMadrugada === true && c.versao === 3],
   ['migração: 0 salvo sem a marca vira 2 e grava com a marca', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0, fila: 440 } }); return { c, salvo, gravacoes }; })(),
-    ({ c, salvo: s, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.filaRapida.fila === 440 && g === 1 && s.versao === 2 && s.filaRapida.freioTilt === 2],
+    ({ c, salvo: s, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.filaRapida.fila === 440 && g === 1 && s.versao === 3 && s.filaRapida.freioTilt === 2],
   ['migração uma vez só: recarregar não grava de novo', (() => { gravacoes = 0; const c = recarregar(); return { c, gravacoes }; })(),
     ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 2 && g === 0],
   ['respeita desligar depois: definir 0 -> salvar -> recarregar = 0', (() => { definir('filaRapida.freioTilt', 0); return recarregar(); })(),
-    c => c.filaRapida.freioTilt === 0 && c.versao === 2],
+    c => c.filaRapida.freioTilt === 0 && c.versao === 3],
   ['com a marca, 0 salvo fica 0', carregarCom({ versao: 2, filaRapida: { freioTilt: 0 } }), c => c.filaRapida.freioTilt === 0],
-  ['sem a marca, limiar escolhido (3) fica 3', carregarCom({ filaRapida: { freioTilt: 3 } }), c => c.filaRapida.freioTilt === 3 && c.versao === 2],
-  ['migração grava a marca de fora (lol-client.versao = 2)', (carregarCom({ filaRapida: { freioTilt: 0 } }), marca), m => m === 2],
+  ['sem a marca, limiar escolhido (3) fica 3', carregarCom({ filaRapida: { freioTilt: 3 } }), c => c.filaRapida.freioTilt === 3 && c.versao === 3],
+  ['migração grava a marca de fora (lol-client.versao = 3)', (carregarCom({ filaRapida: { freioTilt: 0 } }), marca), m => m === 3],
   // revert do plugin: o código antigo apaga a versao de dentro da config; a marca de fora segura o 0 escolhido
-  ['revert: 0 salvo sem versao mas com a marca de fora fica 0 (não migra de novo)', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 } }, 2); return { c, gravacoes }; })(),
+  ['revert: 0 salvo sem versao mas com a marca de fora (3) fica 0 e nada grava', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 } }, 3); return { c, gravacoes }; })(),
     ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 0 && g === 0],
+  ['revert da v2: marca de fora 2 segura o 0 do freio; a migração do som ainda roda', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }, 2); return { c, gravacoes, m: marca }; })(),
+    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && c.aceite.silenciarSom === true && g === 1 && m === 3],
   ['instalação nova sem nada salvo não grava a marca de fora', (carregarCom(null), marca), m => m === null],
-  ['config já na versão nova sem a marca de fora: grava a marca, não a config', (() => { gravacoes = 0; const c = carregarCom({ versao: 2, filaRapida: { freioTilt: 0 } }); return { c, gravacoes, m: marca }; })(),
-    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && g === 0 && m === 2],
+  ['config já na versão nova sem a marca de fora: grava a marca, não a config', (() => { gravacoes = 0; const c = carregarCom({ versao: 3, filaRapida: { freioTilt: 0 } }); return { c, gravacoes, m: marca }; })(),
+    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && g === 0 && m === 3],
   ['madrugada desligada salva fica desligada', carregarCom({ versao: 2, filaRapida: { freioMadrugada: false } }), c => c.filaRapida.freioMadrugada === false],
+  // som do aceite (decisão do Gabriel, 13/10/2026): padrão ligado; false salvo antes da marca 3 vira true uma vez só
+  ['som: padrão silenciarSom ligado', carregarCom(null), c => c.aceite.silenciarSom === true && PADRAO.aceite.silenciarSom === true],
+  ['som: false salvo (v2) sem a marca 3 vira true e grava uma vez, com a marca', (() => { gravacoes = 0; const c = carregarCom({ versao: 2, aceite: { silenciarSom: false, atrasoS: 7 } }, 2); return { c, salvo, gravacoes, m: marca }; })(),
+    ({ c, salvo: s, gravacoes: g, m }) => c.aceite.silenciarSom === true && c.aceite.atrasoS === 7 && g === 1 && s.versao === 3 && s.aceite.silenciarSom === true && m === 3],
+  ['som: recarregar depois da migração não grava de novo', (() => { gravacoes = 0; const c = recarregar(); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.aceite.silenciarSom === true && g === 0],
+  ['som: respeita desligar depois (definir false -> recarregar = false)', (() => { definir('aceite.silenciarSom', false); return recarregar(); })(),
+    c => c.aceite.silenciarSom === false && c.versao === 3],
+  ['som: com a marca 3 dentro, false fica false', carregarCom({ versao: 3, aceite: { silenciarSom: false } }), c => c.aceite.silenciarSom === false],
+  ['som: revert (sem versao dentro, marca de fora 3) não migra nem grava', (() => { gravacoes = 0; const c = carregarCom({ aceite: { silenciarSom: false } }, 3); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.aceite.silenciarSom === false && g === 0],
+  ['config v1 recebe as duas migrações na mesma carga', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.aceite.silenciarSom === true && g === 1],
+  ['migrar puro: v2 com som false -> true, freio 0 fica', migrar({ versao: 2, filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }),
+    s => s.aceite.silenciarSom === true && s.filaRapida.freioTilt === 0 && s.versao === 3],
+  // chaves novas da leva de 13/10/2026 (chat do pós-jogo e avisos): padrão ligado, classes sem colisão
+  ['chat e avisos: padrões ligados e nomes "ambos"', carregarCom(null),
+    c => c.chatPosjogo.ligado && c.chatPosjogo.nomes === 'ambos' && c.chatPosjogo.iconeCampeao && c.chatPosjogo.corTime
+      && c.chatPosjogo.abrirSozinho && c.chatPosjogo.manterAberto && c.chatPosjogo.esconderEntrouSaiu && c.chatPosjogo.escurecerSaiu
+      && c.semPopups.ligado && c.semPopups.runasAutomaticas && c.semPopups.smiteAutomatico],
+  ['classes sem colisão (lc-runas é só das runas por campeão)', (carregarCom({ runas: { ligado: false } }), classes()),
+    l => l.filter(([k]) => k === 'lc-runas').length === 1 && l.find(([k]) => k === 'lc-runas')[1] === false
+      && new Set(l.map(([k]) => k)).size === l.length
+      && ['lc-chat-posjogo', 'lc-escurecer-saiu', 'lc-sem-popups', 'lc-runas-automaticas', 'lc-smite-automatico'].every(n => l.some(([k]) => k === n))],
   ['migrar(null) e migrar(lixo) não quebram', [migrar(null), migrar('x')], ([a, b]) => a === null && b === 'x'],
   ['aceiteAtrasoS não fica salvo no cfg (é derivado)', carregarCom({ coach: { aceiteAtrasoS: 9 } }), c => !('aceiteAtrasoS' in c.coach)],
   ['classes: lc-esconder-popup, lc-trazer-client, lc-silenciar-som, lc-recompensas', (carregarCom({ aceite: { esconderPopup: true } }), classes()),

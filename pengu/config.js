@@ -7,10 +7,13 @@ const POSICOES = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
 const FILAS = [420, 440];
 export const ATRASOS = [3, 4, 5, 6, 7, 8, 9, 10]; // dona única: painel (configuracoes.js) e Ctrl+K
 export const FREIOS = [0, 2, 3, 4, 5]; // freio de tilt: 0 = desligado; padrão 2 (decisão do Gabriel, 13/10/2026)
-// versão das migrações de valor (migrar): 2 = freioTilt 0 salvo antes de 13/10/2026 virou 2, uma vez só.
+// nomes no chat do pós-jogo (dona única: Configurações e Ctrl+K)
+export const NOMES_CHAT = [['ambos', 'nome e campeão'], ['campeao', 'só o campeão'], ['jogador', 'só o nome']];
+// versão das migrações de valor (migrar): 2 = freioTilt 0 salvo antes de 13/10/2026 virou 2, uma vez só;
+// 3 = aceite.silenciarSom false salvo antes da leva de 13/10/2026 virou true, uma vez só (roadmap/2026-10-13-chat-popups-som.md).
 // A marca vive em duas casas: versao dentro da config e CHAVE_VERSAO à parte. A de fora sobrevive a um revert do
 // plugin (a mescla antiga apaga chave que não está no PADRAO dela e a migração voltaria por cima de um 0 escolhido).
-const VERSAO = 2;
+const VERSAO = 3;
 const CHAVE_VERSAO = 'lol-client.versao';
 
 export const PADRAO = {
@@ -19,8 +22,9 @@ export const PADRAO = {
   colunaLarga: true,
   // trazerClient false = devolver o foco (minimiza o client que pulou na frente no ReadyCheck; volta no
   // ChampSelect); esconderPopup só vale com o aceite ligado (CSS em html.lc-aceite.lc-esconder-popup);
-  // silenciarSom corta o loop que toca depois do aceite (roadmap/2026-10-13-voz-pregravada-e-foco.md, 2–2c)
-  aceite: { ligado: true, atrasoS: 10, limiteS: 12, trazerClient: false, esconderPopup: false, silenciarSom: false },
+  // silenciarSom corta o loop que toca depois do aceite (roadmap/2026-10-13-voz-pregravada-e-foco.md, 2–2c); ligado
+  // por padrão desde a decisão do Gabriel de 13/10/2026 (roadmap/2026-10-13-chat-popups-som.md)
+  aceite: { ligado: true, atrasoS: 10, limiteS: 12, trazerClient: false, esconderPopup: false, silenciarSom: true },
   // jogarDeNovo: botão no pós-jogo; freioTilt: derrotas seguidas que pedem confirmação (0 = desligado);
   // freioMadrugada: pedir confirmação ao buscar entre 01:00 e 05:59. Os dois freios valem para a fila rápida e o
   // jogar de novo (freios.js; roadmap/2026-10-13-jogar-de-novo.md)
@@ -28,6 +32,14 @@ export const PADRAO = {
   // coleta sem escolha ao abrir o client e depois de cada partida (roadmap/2026-10-13-coleta-automatica-de-recompensas.md)
   recompensas: { ligado: true, tft: false },
   posjogo: { ligado: true },
+  // chat da tela de estatísticas (chat-posjogo.js): nomes 'ambos' | 'campeao' | 'jogador'; quando o painel #lc-posjogo
+  // está aberto o chat fica por baixo e só o texto muda (roadmap/2026-10-13-chat-popups-som.md)
+  chatPosjogo: {
+    ligado: true, nomes: 'ambos', iconeCampeao: true, corTime: true, abrirSozinho: true, manterAberto: true,
+    esconderEntrouSaiu: true, escurecerSaiu: true,
+  },
+  // avisos calados por resposta falsa só nas rotas exatas (sem-popups.js); autofill fica de fora: rota sem consumidor
+  semPopups: { ligado: true, runasAutomaticas: true, smiteAutomatico: true },
   extras: { esconderEvento: false, esconderClassic: false, esconderLoja: false },
   champSelect: { ligado: true },
   traumas: { ligado: true }, // linha "X é trauma" no selo e bloco na aba Tendência (só o plugin)
@@ -67,15 +79,17 @@ function mesclar(padrao, salvo) {
 // avisosDesligados até 13/10/2026 era uma lista só (calado na voz e na tela): vira {voz, tela}.
 // versao < 2: freioTilt 0 era o padrão antigo, nunca escolhido pelo Gabriel -> 2 (decisão dele, 13/10/2026). A marca
 // faz valer uma vez só: se ele desligar depois (0 com versao 2), fica 0. marca = CHAVE_VERSAO lida à parte.
+// versao < 3: aceite.silenciarSom false era o padrão antigo, nunca escolhido -> true (decisão dele, 13/10/2026), mesma
+// regra de uma vez só. Config v1 recebe as duas na mesma carga.
 // -> salvo (alterado no lugar)
 export function migrar(salvo, marca = 0) {
   if (!salvo || typeof salvo !== 'object') return salvo;
   const d = salvo.coach?.avisosDesligados;
   if (Array.isArray(d)) salvo.coach.avisosDesligados = { voz: [...d], tela: [...d] };
-  if (!(Math.max(Number(salvo.versao) || 0, Number(marca) || 0) >= 2)) {
-    if (salvo.filaRapida?.freioTilt === 0) salvo.filaRapida.freioTilt = 2;
-    salvo.versao = VERSAO;
-  }
+  const versao = Math.max(Number(salvo.versao) || 0, Number(marca) || 0);
+  if (versao < 2 && salvo.filaRapida?.freioTilt === 0) salvo.filaRapida.freioTilt = 2;
+  if (versao < 3 && salvo.aceite?.silenciarSom === false) salvo.aceite.silenciarSom = true;
+  if (versao < VERSAO) salvo.versao = VERSAO;
   return salvo;
 }
 
@@ -153,7 +167,7 @@ const ALTERNAVEIS = [
   ['aceite.ligado', 'aceitar partida automático'],
   ['aceite.trazerClient', 'trazer o client para a frente ao achar partida'],
   ['aceite.esconderPopup', 'esconder o popup de partida encontrada'],
-  ['aceite.silenciarSom', 'silenciar o som de partida encontrada'],
+  ['aceite.silenciarSom', 'silenciar o som depois de aceitar'],
   ['coach.aceiteFlutuante', 'aceitar/recusar fora do client'],
   ['filaRapida.ligado', 'botão fila rápida'],
   ['filaRapida.jogarDeNovo', 'botão jogar de novo no pós-jogo'],
@@ -161,6 +175,16 @@ const ALTERNAVEIS = [
   ['recompensas.ligado', 'coletar recompensas sozinho'],
   ['recompensas.tft', 'coletar o passe do TFT'],
   ['posjogo.ligado', 'painel pós-jogo'],
+  ['chatPosjogo.ligado', 'chat do pós-jogo melhorado'],
+  ['chatPosjogo.iconeCampeao', 'ícone do campeão no chat do pós-jogo'],
+  ['chatPosjogo.corTime', 'cor certa de aliado e inimigo no chat do pós-jogo'],
+  ['chatPosjogo.abrirSozinho', 'abrir o chat do pós-jogo sozinho'],
+  ['chatPosjogo.manterAberto', 'manter o chat do pós-jogo aberto'],
+  ['chatPosjogo.esconderEntrouSaiu', 'esconder "entrou/deixou o saguão" no chat'],
+  ['chatPosjogo.escurecerSaiu', 'escurecer no placar quem saiu do chat'],
+  ['semPopups.ligado', 'calar avisos automáticos do client'],
+  ['semPopups.runasAutomaticas', 'calar o aviso de runas mudadas pelo jogo'],
+  ['semPopups.smiteAutomatico', 'calar o aviso de golpear colocado sozinho'],
   ['champSelect.ligado', 'winrate no champ select'],
   ['runas.ligado', 'runa por campeão ao travar'],
   ['traumas.ligado', 'traumas no selo e no pós-jogo'],
@@ -194,6 +218,7 @@ export function registrarAcoes(extras = []) {
   ciclo('filaRapida.fila', FILAS, 'fila da fila rápida', v => (v === 420 ? 'solo/duo (420)' : 'flex (440)'));
   ciclo('filaRapida.pos1', POSICOES, '1ª posição da fila rápida', undefined, 'filaRapida.pos2');
   ciclo('filaRapida.pos2', POSICOES, '2ª posição da fila rápida', undefined, 'filaRapida.pos1');
+  ciclo('chatPosjogo.nomes', NOMES_CHAT.map(([v]) => v), 'nomes no chat do pós-jogo', v => NOMES_CHAT.find(([x]) => x === v)?.[1] ?? v);
   ciclo('filaRapida.freioTilt', FREIOS, 'freio de tilt (fila rápida e jogar de novo)', v => (v ? `${v} derrotas seguidas` : 'desligado'));
   CommandBar.addAction({
     name: 'lol-client: restaurar configuração padrão', group: grupo, tags: ['lol-client'],

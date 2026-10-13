@@ -8,6 +8,8 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - Busca na fila só por clique do Gabriel (fila rápida, jogar de novo), sempre pelos freios de `pengu/freios.js`
   (tilt e madrugada, 2º clique); escrita da coleta de recompensas só por
   `ROTAS_COLETA` (`pengu/recompensas.js`), nunca rota que gasta (baú, criação, fichas, passe).
+- Resposta falsa (avisos calados) só GET das `ROTAS` de `pengu/sem-popups.js`; nunca a sessão do champ select
+  (o coletor lê `isAutofilled`). Plano: [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,
   com rede de segurança na página; `cancel-champ-select` não cancela e o client põe hover sozinho.
 - Coach ao vivo (`coletor/coach_vivo.py`): provar com `python tools/ensaio-coach.py` (sem client, banco e

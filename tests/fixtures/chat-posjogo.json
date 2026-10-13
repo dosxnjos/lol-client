@@ -1,0 +1,53 @@
+{
+  "_sobre": "Chat do pós-jogo SINTÉTICO para tools/teste-chat-posjogo.mjs: eog no formato de /lol-end-of-game/v1/eog-stats-block, champion-summary recortado e as linhas no formato do template do client (lol-social-chat-room, rcp-fe-lol-social, 16.20). Nomes falsos (JogadorN#BR1, Eu#BR1); textos do saguão em pt-BR medidos em /fe/lol-social/trans.json (13/10/2026).",
+  "eu": { "puuid": "puuid-eu", "summonerId": 100 },
+  "eog": {
+    "gameId": 1,
+    "teams": [
+      { "teamId": 100, "isPlayerTeam": true, "players": [
+        { "puuid": "puuid-eu", "summonerId": 100, "championId": 154, "riotIdGameName": "Eu", "riotIdTagLine": "BR1", "teamId": 100 },
+        { "puuid": "puuid-1", "summonerId": 101, "championId": 58, "riotIdGameName": "Jogador1", "riotIdTagLine": "BR1", "teamId": 100 },
+        { "puuid": "puuid-2", "summonerId": 102, "championId": 103, "riotIdGameName": "Jogador2", "riotIdTagLine": "BR1", "teamId": 100 },
+        { "puuid": "puuid-3", "summonerId": 0, "championId": 222, "riotIdGameName": "Jogador3", "riotIdTagLine": "BR1", "teamId": 100 },
+        { "puuid": "puuid-4", "summonerId": 104, "championId": 412, "riotIdGameName": "Jogador4", "riotIdTagLine": "BR1", "teamId": 100 }
+      ] },
+      { "teamId": 200, "isPlayerTeam": false, "players": [
+        { "puuid": "puuid-5", "summonerId": 105, "championId": 266, "riotIdGameName": "Jogador5", "riotIdTagLine": "BR1", "teamId": 200 },
+        { "puuid": "puuid-6", "summonerId": 106, "championId": 64, "riotIdGameName": "Jogador6", "riotIdTagLine": "BR1", "teamId": 200 },
+        { "puuid": "puuid-7", "summonerId": 107, "championId": 134, "riotIdGameName": "Jogador7", "riotIdTagLine": "BR1", "teamId": 200 },
+        { "puuid": "puuid-8", "summonerId": 108, "championId": 51, "riotIdGameName": "Jogador8", "riotIdTagLine": "BR1", "teamId": 200 },
+        { "puuid": "puuid-9", "summonerId": 109, "championId": 103, "riotIdGameName": "Jogador9", "riotIdTagLine": "BR1", "teamId": 200 }
+      ] }
+    ]
+  },
+  "campeoes": [
+    { "id": 154, "name": "Zac", "alias": "Zac", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/154.png" },
+    { "id": 58, "name": "Renekton", "alias": "Renekton", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/58.png" },
+    { "id": 103, "name": "Ahri", "alias": "Ahri", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/103.png" },
+    { "id": 222, "name": "Jinx", "alias": "Jinx", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/222.png" },
+    { "id": 412, "name": "Thresh", "alias": "Thresh", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/412.png" },
+    { "id": 266, "name": "Aatrox", "alias": "Aatrox", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/266.png" },
+    { "id": 64, "name": "Lee Sin", "alias": "LeeSin", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/64.png" },
+    { "id": 134, "name": "Syndra", "alias": "Syndra", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/134.png" },
+    { "id": 51, "name": "Caitlyn", "alias": "Caitlyn", "squarePortraitPath": "/lol-game-data/assets/v1/champion-icons/51.png" }
+  ],
+  "mensagens": [
+    { "type": "system", "body": "joined_room", "fromPuuid": "puuid-3", "fromSummonerId": 103 },
+    { "type": "groupchat", "body": "gg", "fromPuuid": "puuid-2", "fromSummonerId": 0 }
+  ],
+  "trans": {
+    "system_message_joined_room": "{{actor}} entrou no saguão",
+    "system_message_left_room": "{{actor}} deixou o saguão"
+  },
+  "linhas": [
+    { "id": "entrou", "classe": "my-team", "sistema": "⁦⁦Jogador1⁩ #⁦BR1⁩⁩ entrou no saguão" },
+    { "id": "saiu", "classe": "other-team", "sistema": "⁦⁦Jogador5⁩ #⁦BR1⁩⁩ deixou o saguão" },
+    { "id": "entrou-en", "classe": "my-team", "sistema": "⁦⁦Jogador4⁩ #⁦BR1⁩⁩ joined the lobby" },
+    { "id": "minha", "classe": "mine", "nome": "⁦⁦Eu⁩ #⁦BR1⁩⁩", "texto": "gg" },
+    { "id": "aliado", "classe": "other-team", "nome": "⁦⁦Jogador2⁩ #⁦BR1⁩⁩", "texto": "bom jogo" },
+    { "id": "inimigo", "classe": "other-team", "nome": "⁦⁦Jogador6⁩ #⁦BR1⁩⁩", "texto": "gg wp" },
+    { "id": "sem-tag", "classe": "other-team", "nome": "Jogador3", "texto": "valeu" },
+    { "id": "desconhecido", "classe": "other-team", "nome": "⁦⁦Ninguem⁩ #⁦BR9⁩⁩", "texto": "oi" },
+    { "id": "honra", "classe": "other-team", "celebracao": "Todo o seu time honrou alguém!" }
+  ]
+}

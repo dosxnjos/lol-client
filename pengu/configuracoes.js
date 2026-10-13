@@ -105,7 +105,7 @@ function montar(painel, cfg, definir, restaurar) {
     ui.explica(`Conta pelo relógio do servidor; ${cfg.aceite.limiteS - 2} s é o máximo seguro (a janela da Riot é de ~${cfg.aceite.limiteS} s).`),
     caixa('aceite.trazerClient', 'Trazer o client para a frente ao achar partida', 'Desligado (padrão), com o aceite automático: se tu estava em outra janela, o client pisca e some de novo (o Windows devolve a janela de antes); no champ select ele volta sozinho.'),
     caixa('aceite.esconderPopup', 'Esconder o popup de partida encontrada', 'Some a janela de aceitar do client; a contagem do lol-client continua. Só vale com o aceite automático ligado.'),
-    caixa('aceite.silenciarSom', 'Silenciar o som de partida encontrada', 'Corta o som em loop que toca depois que tu aceita, até todos aceitarem. O aviso de partida encontrada continua tocando.'),
+    caixa('aceite.silenciarSom', 'Silenciar o som depois de aceitar', 'Ligado (padrão): corta o som em loop que toca depois que tu aceita, até todos aceitarem. O aviso de partida encontrada continua tocando.'),
     caixa('coach.aceiteFlutuante', 'Aceitar ou recusar fora do client', 'Janelinha no canto da tela, por cima de tudo e sem roubar o foco, com a contagem e os botões "aceitar agora" e "recusar". Precisa do coletor ligado.'));
 
   add(ui.secao('Fila rápida'),

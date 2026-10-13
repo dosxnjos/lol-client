@@ -12,18 +12,23 @@ import { iniciarRecompensas, levantar, criarLcu } from './recompensas.js';
 import { blocoChampSelect, blocoRunas, blocoConexao, blocoPainel, blocoVoz, blocoAlertas, blocoMinimapa, blocoMentor,
   blocoCarregamento, blocoTraumas } from './blocos.js';
 import { coletor, sincronizarConfig, estadoConexao } from './coach.js';
+import { iniciarSemPopups, blocoSemPopups } from './sem-popups.js';
+import { iniciarChatPosjogo, blocoChatPosjogo } from './chat-posjogo.js';
 
 // um módulo quebrado não derruba os outros
 const seguro = (nome, fn) => { try { return fn(); } catch (e) { console.error(`[lol-client] ${nome}`, e); return null; } };
 
 export function init(context) {
   seguro('config', carregar);
+  // antes de tudo: os plugins do client começam a pedir logo depois deste init (só GET das rotas exatas; sem-popups.js)
+  const semPopups = seguro('sem popups', () => iniciarSemPopups(cfg));
   const aceite = seguro('aceite', () => iniciarAceite(context, cfg));
   // champ select antes da fila rápida: o cache de histórico dele alimenta o freio de tilt (sem ele, a fila lê sozinha)
   const champ = seguro('champ select', () => iniciarChampSelect(context, cfg, coletor));
   const historico = champ ? { partidas: champ.partidas, ler: champ.lerHistorico } : null;
   const fila = seguro('fila rápida', () => iniciarFilaRapida(context, cfg, { historico }));
   const posjogo = seguro('pós-jogo', () => iniciarPosjogo(context, cfg, coletor));
+  const chat = seguro('chat do pós-jogo', () => iniciarChatPosjogo(context, cfg));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
   const recompensas = seguro('recompensas', () => iniciarRecompensas(context, cfg));
   seguro('configurações', () => iniciarConfiguracoes({ cfg, definir, aoMudar, restaurar }));
@@ -38,6 +43,8 @@ export function init(context) {
     registrarBloco('mentor', blocoMentor, 'Mentor');
     registrarBloco('carregamento', blocoCarregamento, 'Tela de carregamento');
     registrarBloco('traumas', blocoTraumas, 'Traumas');
+    registrarBloco('chatPosjogo', blocoChatPosjogo, 'Chat do pós-jogo');
+    registrarBloco('semPopups', blocoSemPopups, 'Avisos do client');
   });
   // config do coach para o coletor: agora e a cada mudança (o coletor sobe depois: coach.js tenta de novo)
   seguro('coach', () => sincronizarConfig(cfg));
@@ -49,6 +56,7 @@ export function init(context) {
     seguro('champ select', () => champ?.desenhar());
     if (!c.runas.ligado) seguro('runas', () => runas?.fecharPopup());
     seguro('coach', () => sincronizarConfig(c));
+    seguro('chat do pós-jogo', () => chat?.atualizar()); // nomes, cores e avisos repintam na hora (desligado devolve o original)
   });
   seguro('ações', () => registrarAcoes([
     { name: 'lol-client: analisar última partida', tags: ['lol-client', 'pós-jogo'], perform: () => analisarUltima() },
@@ -68,6 +76,8 @@ export function init(context) {
     // levantar() só lê (GET): o que está pendente e o motivo de pular cada item; rodar() coleta de verdade
     recompensas: { levantar: () => levantar(criarLcu(), cfg), rodar: () => recompensas?.rodar('manual'), estado: () => recompensas?.estado() },
     foco: () => aceite?.foco?.estado(),
+    chatPosjogo: chat, // estado() e atualizar()
+    semPopups, // rotaFalsa(metodo, url): o que seria respondido por nós agora (só consulta)
   };
   document.documentElement.dataset.lolClient = 'ok';
   console.log('[lol-client] ok');
