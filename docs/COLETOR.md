@@ -96,8 +96,8 @@ no resumo e o laço segue; erro inesperado encerra, mas a conferência de creden
 `python tools\gravador.py --ensaio` grava 5 s da fase atual, tenta a Live Client, tira 1 recorte
 do minimapa e confere em memória que a credencial não está em nenhum arquivo ("credencial nos
 arquivos: 0"; o valor nunca é impresso). Antes de uma partida, o orquestrador reinicia a tarefa
-`lol-client-coletor` para o coletor com champ select ser o que roda. Disco: estimativa de ~100 MB
-de `live.jsonl` por partida de 30 min, mais ~5 MB por print de tela inteira (1 por minuto); apagar
+`lol-client-coletor` para o coletor com champ select ser o que roda. Disco: medido 69,3 MB
+de `live.jsonl` numa partida de 33 min (33 KB por amostra), mais ~4–5 MB por print de tela inteira (1 por minuto); apagar
 `temp\gravacao\` depois de extrair o que interessa.
 
 ### Minimapa (retângulo de recorte)
@@ -106,18 +106,34 @@ Lido do `Config\game.cfg` do jogo: `[General] Width`, `Height`, `WindowMode`; `[
 `MinimapScale`, `FlipMiniMap`. O monitor do jogo é o que tem `Width×Height` (`mss` 10 já devolve
 px físicos: 2560×1080 aqui, mesmo com escala de 125%).
 
+**Medido na partida de 13/10/2026** (2560×1080, `MinimapScale` 2,46, `FlipMiniMap` 0; 28 de 28
+telas de jogo, [MEDICAO-2026-10-13](MEDICAO-2026-10-13.md) § 3):
+
+| o quê | retângulo (px físicos da tela) |
+| --- | --- |
+| **mapa** (quadrado preto onde ficam os ícones) | **347×347 em (2197, 716)**, a 16 px da borda direita e 17 da de baixo |
+| moldura dourada de fora | ~381×382 em (2179, 698) até o canto do monitor |
+| faixa em volta do mapa | cor (16, 28, 27), começa logo após a borda do mapa |
+
+Mundo → pixel da tela (mínimos quadrados, 79 pontos): `X = 2196,7 + 0,02345·x`,
+`Y = 1064,0 − 0,02361·y`. A conversão nominal (0–14870 × 0–14980 esticado nos 347 px) erra ≤ 6 px.
+
+Fórmula do gravador (ainda o chute antigo, que acertou a **moldura**, não o mapa):
+
 ```
-lado    = altura × (0,194 + 0,0648 × MinimapScale)       # CHUTE inicial, não medido
+lado    = altura × (0,194 + 0,0648 × MinimapScale)       # = moldura (382); mapa ≈ moldura − 33 px
 recorte = min(altura, lado × 1,3), quadrado preso ao canto de baixo (direito; FlipMiniMap=1: esquerdo)
 ```
 
-Em 13/10/2026 (2560×1080, `MinimapScale` 2,46, `FlipMiniMap` 0): lado estimado 382 px, recorte
-497×497 em (2063, 583). O recorte é folgado de propósito: o minimapa cabe mesmo com o lado errado
-em ±30%. **Calibrar** com o 1º print de `telas/`: medir o lado `L` do minimapa em px e a distância
-até o canto; com um print, `MINI_A = L / altura − MINI_B × MinimapScale`; com dois prints em
-escalas diferentes, resolve `MINI_A` e `MINI_B`. Constantes no topo de `tools/gravador.py` (o
-passo 13 leva para `coletor/minimapa.py`). `GlobalScale` (escala do HUD) fica fora da fórmula
-até um print mostrar que mexe no minimapa.
+O recorte gravado (497×497 em 2063, 583) contém o mapa inteiro em (134,133)–(481,480), com ~2× a
+área necessária. Só uma escala foi medida, então `MINI_A` e `MINI_B` não se separam: a restrição é
+`A + 2,46·B = 0,3213` para o mapa (0,352 para a moldura); mantendo B = 0,0648,
+`lado_mapa = altura × (0,1619 + 0,0648 × MinimapScale)` e canto em `(W − 16 − lado, H − 17 − lado)`.
+Fixar B pede um `--ensaio` com outra `MinimapScale`. **Para produção (passo 13), autodetectar**: achar
+a faixa (16, 28, 27) em volta do mapa no 1º recorte de jogo e guardar o retângulo; a fórmula fica
+de reserva. Constantes no topo de `tools/gravador.py` (o passo 13 leva para `coletor/minimapa.py`).
+`GlobalScale` (escala do HUD) fica fora da fórmula até um print mostrar que mexe no minimapa. O
+print é do monitor, não da janela: filtrar quadros sem jogo ([ARMADILHAS](ARMADILHAS.md) § Tela).
 
 ## MCP (`mcp\servidor.py`)
 

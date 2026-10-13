@@ -13,3 +13,12 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
 - `summoner.json`: só o `puuid` da conta.
 - `ref-3292712362.json`: números esperados, saída do cálculo independente `temp/insights_calc.py`
   (fora do repo); a tabela de [INSIGHTS.md](../../docs/INSIGHTS.md) § Caso de teste é a mesma.
+
+## Champ select (`tools/teste-champselect.py`, acha `champselect-*.json` por glob)
+
+- `champselect-preferida`, `-autofill`, `-blind`, `-tardio`: montadas à mão no formato do `/help`.
+- `champselect-real.json`: **real**, 61 eventos do `champselect.jsonl` do gravador (normal draft,
+  fila 400, 13/10/2026, partida 3292746609), sem edição além do `coletor.limpar_sessao` (sem
+  identidade de jogador nem `chatDetails`; 29 identificadores dos 10 conferidos: 0 achados). Tem
+  seleção desfeita por dodge, troca de ordem de pick e ban não feito (`championId` -1). Esperado
+  conferido contra a partida e `/lol-perks/v1/pages`. Detalhe: [MEDICAO-2026-10-13](../../docs/MEDICAO-2026-10-13.md).

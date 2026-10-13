@@ -98,7 +98,7 @@ coletor\coletor.py   + champ select (retrato no fim da seleção)
                        amostra a cada 10 s -> tabela ao_vivo; servidor HTTP local 127.0.0.1:8765
 coletor\coach.py     motor de lições: lê docs/LICOES.md (regras) + estado -> lista priorizada
 coletor\minimapa.py  captura do minimapa (mss) + detecção de ícones (cv2) -> últimas posições vistas
-coletor\jungler.py   previsão do jungler inimigo (última vez visto + farm do placar + rotas de selva)
+coletor\jungler.py   previsão do jungler inimigo (última vez visto + eventos globais + rotas de selva)
 coletor\voz.py       fala pt-BR (System.Speech, voz Maria), fila com prioridade e intervalo
 painel\              página da 2ª tela (HTML/CSS/JS sem build), servida pelo coletor
 pengu\posjogo\       pós-jogo v2: abas + lições
@@ -130,10 +130,13 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
   tem o monitor. Overlay vira proposta depois. Quem: opus 5.5; confiança alta.
 - **Previsão do jungler é probabilística e honesta**: mostra "provável: selva top inimiga
   (visto há 25 s)" com um nível de confiança, nunca uma posição "certa". Sem visão recente →
-  "sumido há X s" + farm do placar como pista.
+  "sumido há X s" + ~~farm do placar como pista~~ eventos globais (objetivo, abate, morte) como
+  pista (o farm do inimigo não anda na fog: passo 9).
 - **Hipótese a medir antes de construir em cima**: o farm (`creepScore`) do inimigo na Live
   Client atualiza mesmo na fog (é o que o TAB mostra). Se não atualizar, a previsão usa só o
-  tempo e as rotas típicas. Medir na 1ª partida real (passo 9).
+  tempo e as rotas típicas. Medir na 1ª partida real (passo 9). **Medido em 13/10/2026: FALSA**
+  (o cs do inimigo só sobe com farm visto e nunca recupera; jungler inimigo 100 contra 266 reais).
+  A previsão usa tempo, rotas, horários dos campos e os eventos globais (objetivo, abate, morte).
 - Conceitos do acervo: **falácia da previsão** (previsão do jungler é distribuição com
   confiança, nunca ponto) e **via-negativa** (painel ao vivo com 4 blocos fixos; cada aviso novo tem de
   tirar a vaga de outro).
@@ -165,7 +168,16 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
    grava a linha de comando no log Security) e `temp/v2/conferir_credencial.py` → 0. Também grava
    a tela inteira a cada 60 s para calibrar o minimapa (fórmula e calibração:
    [COLETOR.md](../docs/COLETOR.md) § Minimapa); sai 30 s após o client fechar ou 10 min após o
-   `EndOfGame`. **Falta a gravação de uma partida real** (só ela fecha readycheck, champ select real, live e timeline).
+   `EndOfGame`. ~~Falta a gravação de uma partida real~~ **Partida real gravada** em 13/10/2026
+   07:10–07:54 (`temp/gravacao/20261013-071040/`, normal fila 400, partida 3292746609): 3
+   ready-checks, 61 eventos de champ select (2 seleções, uma desfeita por dodge), 2106 amostras da
+   Live Client, 202 recortes do minimapa, 35 telas, partida + timeline. Resultado:
+   [MEDICAO-2026-10-13.md](../docs/MEDICAO-2026-10-13.md). Defeitos do gravador achados (corrigir
+   antes da próxima gravação): o recorte `chat/` cai no lugar errado nesta HUD (chat em x≈1400–1800,
+   y≈830–975); os prints são do monitor, não da janela (11% dos recortes com navegador/desktop);
+   no carregamento o nome = `gameTime` parado e os prints se sobrescrevem; `limpar_sessao` apaga
+   `nameVisibilityType` (anonimato do champ select sem resposta); recortar só o mapa de 347 px e
+   alinhar a cadência de 10 s ao `gameTime` (capturar com `gameTime mod 10 < 0,5`).
 
 ### Fase A — champ select e matchups
 
@@ -185,6 +197,11 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
    `3/3 ok` + extras ok (seleção desfeita, reconexão no meio, fluxo pelo `Coletor` com LCU falsa,
    banco em `temp/`). Regras do retrato: [COLETOR.md](../docs/COLETOR.md) § Retrato do champ select.
    Coletor real **não reiniciado** (fica para o orquestrador antes da partida).
+   **Fixture real entrou** (13/10/2026): `tests/fixtures/champselect-real.json` (61 eventos da
+   partida 3292746609, anonimizada). Ela achou um bug: ban não feito vem com `championId` -1 e
+   entrava em `bans_aliados`; `coletor.py` agora filtra `championId > 0` → `5/5 ok` + extras ok.
+   O coletor em execução segue com o código antigo até reiniciar; a linha desta partida no
+   `dados/lol.db` ficou com o -1.
 2. [x] `coletor/analise.py` + `docs/INSIGHTS.md` § Matchups: por campeão inimigo adversário
    de rota (posição pela heurística da v1): n, vitórias, ouro, xp e farm aos 10/15 médios, mortes
    antes dos 10, mortes solo (1 inimigo) contra gank (2+); filtro por campeão próprio.
@@ -205,6 +222,10 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
 4. [ ] Selo do champ select (v1 7c) + matchup: quando o top inimigo travar (campeão visível no
    time inimigo com `assignedPosition` igual à minha, ou o único sem posição em blind), o selo
    ganha a linha "contra X: aV/bD · ouro10 ±N" (n ≥ 3; senão "contra X: n=1").
+   **correção (medição de 13/10/2026):** na normal draft `theirTeam[].assignedPosition` vem
+   sempre "" (os 5 sem posição), então esse gatilho nunca dispara. Gatilho novo: adversário = o
+   inimigo cuja **rota provável** (C2 do passo 17) é a minha, lido só quando a ação de pick dele
+   fica `completed` (o hover inimigo vaza 0,5–2,2 s antes e causaria flicker).
    **prova:** função pura `linhaMatchup(historico, meuCampeao, campeaoInimigo)` em
    `node tools/teste-matchup.mjs` contra a saída de `matchups()` em Python → `ok`
    **reprova se:** números diferentes
@@ -239,15 +260,29 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
    estimado, KDA, farm, morto); eventos novos na tabela `eventos_ao_vivo`. Servidor HTTP
    `127.0.0.1:8765` (`/` página, `/estado` JSON). Sem partida → `/estado` = `{"partida": false}`.
    Flag `--liveclient <url>` (padrão `https://127.0.0.1:2999`) para o simulador rodar em HTTP simples.
+   **Da medição (13/10/2026):** a Live Client responde no carregamento com `gameTime` ~0,025 e sem
+   eventos por ~100 s: estado "carregando" até o evento `GameStart` (não gravar amostra antes).
+   Eventos: lista inteira em toda resposta, deduplicar por `EventID`. Não guardar o `allgamedata`
+   bruto (33 KB/amostra, 69 MB por partida): só o resumo por participante. Farm vem em degraus de
+   10; nível e itens do inimigo podem estar velhos (guardar "visto em gt X"). O simulador pode tocar
+   amostras reais de `temp/gravacao/20261013-071040/live.jsonl`.
    **prova:** `python tools/simular-liveclient.py` (servidor falso em 2999 tocando um
    `allgamedata` gravado de 3 momentos) + `curl -s 127.0.0.1:8765/estado` → JSON com 10 jogadores e `ouroEstimado` > 0
    **reprova se:** `partida:false` com o simulador de pé
-9. [ ] **Medição numa partida real** (com o Gabriel, numa normal antes de usar na ranqueada):
+9. [x] **Medição numa partida real** (com o Gabriel, numa normal antes de usar na ranqueada):
    gravar `allgamedata` bruto a cada 1 s em `temp/` por 5 min; responder no ARMADILHAS: o
    `creepScore` do inimigo muda quando ele está na fog? `position` dos inimigos vem preenchida?
    itens do inimigo atualizam na fog?
    **prova:** `python tools/analisar-gravacao.py temp/live-*.jsonl` → as três respostas com evidência (timestamps)
    **reprova se:** gravação vazia
+   Feito 13/10/2026 com a partida inteira (2106 amostras, 33 min, partida 3292746609).
+   **Desvio da prova:** `tools/analisar-gravacao.py` não existe; as respostas saíram de scripts em
+   `temp/medicao/live_*.py` (fora do git) cruzando `live.jsonl` com a timeline. Respostas: (1)
+   `creepScore` do inimigo **não muda na fog** e nunca recupera (Ekko cs 0 até 306,9 s com 16 reais
+   no min 3; fim 100 contra 266); (2) `position` **não é coordenada** (é a rota declarada; não há
+   x/y em lugar nenhum); (3) itens e nível do inimigo **congelam na fog** e sincronizam ao
+   reaparecer (Ekko nível 1 → 4 com 2 itens em 244,9 s); KDA, morte e renascer são globais.
+   Detalhe e o resto (eventos, alma, feitiços, carregamento): [MEDICAO-2026-10-13.md](../docs/MEDICAO-2026-10-13.md) § 1.
 10. [ ] Página `painel/`: 4 blocos fixos (Tua rota · Ameaça · Teu padrão · Time e objetivos)
     + faixa de **um** aviso por vez do `coach.py` (texto ≤ 6 palavras + ícone + cor). Escuro, fonte
     grande, números grandes, nada de rolagem; legível de relance a 1,5 m. Itens:
@@ -289,6 +324,20 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     **prova:** `python tools/teste-minimapa.py tests/fixtures/minimapa-*.png` (prints reais do
     minimapa tirados numa partida, com as posições anotadas à mão num `.json` ao lado) → acerto ≥ 80% dos ícones a ≤ 600 unidades
     **reprova se:** acerto < 80%
+    **Ajustes da medição de 13/10/2026** ([MEDICAO](../docs/MEDICAO-2026-10-13.md) § 3):
+    - retângulo: **autodetectar** a faixa (16, 28, 27) em volta do mapa no 1º recorte de jogo, em
+      vez da fórmula (só uma `MinimapScale` medida). Referência: mapa 347 px em (2197, 716) na tela
+      2560×1080 com escala 2,46; os 382 px do chute são a moldura. Mundo → pixel:
+      `X = 2196,7 + 0,02345·x`, `Y = 1064,0 − 0,02361·y` ([COLETOR](../docs/COLETOR.md) § Minimapa);
+    - template = ícone **base** da LCU (`champion-icons/{id}.png`) **inteiro** com máscara circular,
+      28 px (testar 26–30); a skin não muda o ícone, não baixar círculo de skin. Medido: aliados
+      76% a ≤ 600 com score ≥ 0,75; inimigos 67–84% de precisão (piso; borda vermelha/azul não testada);
+    - acrescentar template do **anel da Yuumi presa** (tirado da gravação), hospedeiro por
+      eliminação; sem isso o par some ~80% do jogo;
+    - em luta o ícone inimigo cobre o aliado: testar segmentação da borda + classificação entre 5;
+    - **filtro "jogo na tela"** antes de detectar (11% dos recortes eram navegador/desktop);
+    - a prova fica com as **fixtures anotadas à mão**: a timeline (1/min, recorte ~2 s depois) tem
+      teto de ~82% a ≤ 600 mesmo com detecção certa; se usar a timeline, a régua é ≤ 1000.
 14. [ ] `coletor/jungler.py`: estado do jungler inimigo = última posição vista + tempo desde
     então + (se o passo 9 confirmar) variação do farm dele + horários de nascimento dos campos;
     distribuição sobre zonas (selva top/bot inimiga, rio, selva aliada top/bot, rota X) com
@@ -297,6 +346,13 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     **prova:** `python tools/teste-jungler.py` com 5 cenários sintéticos (visto no azul inimigo aos
     3:15 → aos 3:40 provável rio top; sem dado → "sumido"; …) → `5/5 ok`
     **reprova se:** cenário falha
+    **correção (passo 9, 13/10/2026):** a pista "variação do farm dele" **sai**: o `creepScore` do
+    inimigo não anda na fog (só quando ele já está visível, e aí a posição é melhor), anda de 10
+    em 10 e nunca recupera. Pistas que ficam, todas globais e em ≤ 1 s: eventos de objetivo com
+    `KillerName` (vastilarvas, dragão, arauto, barão: local exato do jungler inimigo naquele
+    instante), `ChampionKill` com ele em `KillerName`/`Assisters` (esteve na rota da vítima),
+    `isDead`/`respawnTimer` (morto = sem gank por N s). Nome do Smite (upgrade) só quando visto.
+    Um dos 5 cenários deve ser "objetivo do jungler inimigo na fog → posição fixada no objetivo".
 15. [ ] Validação ao vivo com o Gabriel numa normal: registrar cada alerta de gank e, no
     pós-jogo, conferir contra a timeline (o jungler apareceu perto em ≤ 30 s?). Reportar precisão.
     **prova:** `python tools/avaliar-gank.py <game_id>` → precisão e cobertura impressas
@@ -313,8 +369,19 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
       visível no TAB (itens da Live Client).
     - **Menos a área que tu enxerga**: a fog do minimapa é mais escura; o que está iluminado e
       sem o ícone dele, ele não está. Alcançável ∩ fog.
-    - **Peso pelas pistas** do passo 14 (farm subindo → campos; abate com assistência dele → lugar
-      e hora) vira mapa de calor em vez de mancha uniforme.
+    - **Peso pelas pistas** do passo 14 (~~farm subindo → campos~~, que a medição derrubou; abate
+      com assistência dele ou objetivo feito por ele → lugar e hora) vira mapa de calor em vez de
+      mancha uniforme.
+    - **Medido em 13/10/2026** ([MEDICAO](../docs/MEDICAO-2026-10-13.md) § 3): a fog sai do próprio
+      recorte por brilho absoluto (HSV `V`: parede 0–10, chão na fog ~56, iluminado ~154; regra
+      chão = V > 30, fog = chão com V < 100), sem histórico. A grade de caminhável sai de V > 30
+      (1 quadro concorda 96,9% com a mediana; preencher buracos pretos < 40 px de ícones/textos;
+      usar mediana de vários quadros ou o início da partida). Grade 347×347 ≈ 43 unidades/px.
+      Mapa dinâmico **sem teste**: nesta partida `mapTerrain` ficou "Default" e não houve alma;
+      o gatilho de regerar é a contagem de `DragonKill` (a fenda muda para o elemento da alma por
+      volta do 2º/3º dragão; elemento = `DragonType` do 3º), não o `mapTerrain`; o instante exato
+      da mudança fica para a partida com alma.
+      Gravar uma partida com alma para validar. Pausar quando o jogo não está na tela.
     - Some sozinha depois de ~30 s sem pista nova (a área cobre o mapa e vira ruído) e
       troca por "sumido há Xs". Só para o jungler por padrão; laners opcionais.
     - Liga/desliga na seção do 7b e por atalho global (ex.: F8).
@@ -346,6 +413,9 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     - "Minha rota": a posição atribuída no champ select (passo 1) + a zona do meu ícone no
       minimapa quando detectado (ícone próprio tem moldura distinta).
     - Anti-spam do passo 12; liga/desliga por tipo na seção do 7b.
+    - **Da medição (13/10/2026):** o print é do monitor; quando o jogo não está na tela (morto,
+      trocou de janela: 11% dos recortes), pausar os alertas em vez de alertar sobre lixo. Teste
+      barato: a faixa (16, 28, 27) em volta do mapa ou a janela em primeiro plano.
     **prova:** `python tools/teste-alertas.py` com sequências sintéticas de detecções (jungler
     aparece no rio top; mid some 8 s e reaparece no top; suporte inimigo entra na rota top) → os 3
     alertas certos, sem repetição em 10 s → `3/3 ok`
@@ -354,8 +424,9 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     `docs/SELVA.md` (campos, ouro e farm por campo, nascimento e renascimento do patch atual, com
     fonte e data; conferir na wiki a cada patch) + estado por campo inimigo:
     - **lado de início do jungler** pelo 1º avistamento, pelo farm aos ~1:45 e pelo nível 2/3;
-    - **campos provavelmente limpos**: farm do inimigo subindo (se o passo 9 confirmar) somado ao
-      horário e à posição, com renascimento contado a partir daí;
+    - **campos provavelmente limpos**: ~~farm do inimigo subindo~~ (o passo 9 derrubou: o farm do
+      inimigo não anda na fog) → horário + último avistamento + eventos globais (vastilarvas,
+      dragão, arauto feitos por ele, abates), com renascimento contado a partir daí;
     - **previsões úteis**: "jungler nível 3 por volta de 3:15 perto do top" (janela de gank),
       "campos top inimigos livres" quando ele foi visto no bot (para contra-selva quando o Gabriel
       joga de Zac), "caranguejo do rio nasce em 30 s";
@@ -365,6 +436,10 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     vermelho inimigo aos 1:35 → início no vermelho, 3 campos limpos na ordem certa, nível 3 previsto
     entre 3:00 e 3:30 → `ok`
     **reprova se:** lado ou ordem errados
+    **correção (passo 9):** o cenário da prova não pode usar farm do inimigo (fica 0 na fog e anda
+    de 10 em 10). Trocar por: visto no vermelho inimigo aos 1:35 + sem avistamento até 3:00 →
+    início no vermelho, campos limpos estimados pelo tempo, nível 3 entre 3:00 e 3:30; e um 2º
+    cenário com `HordeKill` dele aos 8:50 → posição e campos do lado das vastilarvas.
 15e. [ ] **Flash e feitiços inimigos** (pedido do Gabriel, 13/10/2026: "aparece na visão de algum
     aliado quando o inimigo usou o flash"). A Live Client não informa recarga de feitiço inimigo;
     as fontes visíveis são:
@@ -379,6 +454,29 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     reconhecidas com campeão e feitiço certos em ≥ 80% dos prints que têm um (anotar 10 prints à mão);
     `python tools/teste-feiticos.py` → cronômetro com bota jônica = 300 × 100/110 s
     **reprova se:** OCR < 80% ou tempo errado
+    **Ajustes da medição de 13/10/2026** ([MEDICAO](../docs/MEDICAO-2026-10-13.md) § 4):
+    - **chat da LCU fechado**: `/lol-chat/v1/conversations` ficou `[]` a partida toda; fica OCR + atalho;
+    - **pré-condição da prova**: o `chat/` gravado está no lugar errado (canto inferior esquerdo;
+      nesta HUD o chat fica em x≈1400–1800, y≈830–975 de 2560×1080). Calibrar sozinho no 1º print
+      de tela inteira (linha "Digite /help…" ou linhas que começam em `mm:ss`, pela caixa
+      `OcrLine.Words[].BoundingRect` do OCR do Windows), gravar em `calibracao.json` e **gravar
+      outra partida** com ≥ 10 prints de ping anotados. Os 6/6 de hoje (n pequeno, em `telas/`) não cravam 80%;
+    - **formato real do ping** (troca o "Campeão - Flash"): `^(\d\d:\d\d) .*\((<aliado>)\): (<inimigo>) usou (<feitiço>)$`
+      e a variante sem "usou" (`<inimigo> <feitiço>`); descartar "X - Vivo(a)", "Espere por R - Ns",
+      "usou R - <ult>" e "<item> - Precisa de N de ouro". "usou" = gasto: o cronômetro começa no
+      horário da linha. Dedupe por (horário, inimigo, feitiço): aliados repetem e a linha aparece em vários prints;
+    - **motor**: Windows.Media.Ocr pt-BR (nativo, < 20 ms por print), recorte colorido ampliado 3×,
+      sem binarizar; votar entre prints de 3 s; dicionário fechado (10 campeões da Live Client +
+      feitiços). Tesseract descartado como principal (44% contra 57% das linhas);
+    - **recarga**: a runa é **Perspicácia Cósmica** (8347, +18), não "Visão Cósmica"; botas 3158
+      (+10) e 3171 Lucidez Escarlate (+20); `base × 100/(100 + soma)`, base do
+      `summoner-spells.json` da LCU (Flash 300, Incendiar/Barreira 180, Exaustão/Curar/Fantasma/
+      Purificar 240, Teleporte 300). A prova `teste-feiticos.py` cobre também 3158 + 8347 = 234,4 s;
+    - **runa dos outros**: a Live Client só tem keystone + árvores (sem Inspiração → "sem"; com →
+      "±"). Fonte certa: spectator-v5 (by-puuid do Gabriel) uma vez no carregamento, guardando só
+      `championId → perkIds` (nunca `riotId`/`puuid`);
+    - **bota do inimigo** na Live Client atrasa (mediana 25 s, até 322 s): ler no momento do ping
+      (ele está visível) e marcar "±" se a última leitura de item for velha.
 15f. [ ] **Sugestões aceitas pelo Gabriel em 13/10/2026 ("quero todas")**:
     1. **flash por atalho**: coberto pelo 15e.
     2. **preparo de objetivo**: 60 s antes de dragão, arauto, vastilarvas ou barão, bloco que mostra
@@ -397,6 +495,13 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     4: nível 5→6 → 1 aviso; 5: comp 4 AD → lembrete de armadura; 6: fila 3140 → painel ativo e
     nada gravado em `partidas`) → `5/5 ok`
     **reprova se:** qualquer item falha
+    **Da medição (13/10/2026):** item 2: inimigos mortos e o tempo de renascer vêm globais
+    (`isDead`/`respawnTimer`), e o objetivo feito pelo inimigo chega em ≤ 1 s; item 3: a timeline é
+    1 posição/min e o recorte cai ~2 s depois, então a precisão usa ≤ 1000 unidades (≤ 600 tem teto
+    ~82%); item 4: nível e item do jungler/adversário só atualizam quando ele é visto (aviso pode
+    sair atrasado: dizer "visto nível 6"); item 5: disparar pela Live Client respondendo com
+    `gameTime` parado em ~0,025 (não pela fase `GameStart`, que dura ~50 ms); ~100 s de janela, com
+    campeão, rota, feitiços e keystone dos 10 já disponíveis.
 
 ### Fase F — inteligência no champ select e no carregamento (pedido do Gabriel, 13/10/2026)
 
@@ -409,7 +514,11 @@ Chave: `LOL_RIOT_API_KEY` no Doppler pessoal ([ARMADILHAS](../docs/ARMADILHAS.md
 17. [ ] C1 (= passo 4) + C2 + C3 no champ select: winrate dos 10 campeões na rota provável,
     rota provável do inimigo, força do draft em faixa com os 2–3 termos que mais pesaram.
     Antes do C2, conferir na gravação real (`temp/gravacao/*/champselect.jsonl`) se
-    `theirTeam[].assignedPosition` vem preenchido.
+    `theirTeam[].assignedPosition` vem preenchido. **Conferido em 13/10/2026: não vem** ("" em
+    todos os eventos da normal draft, `isAutofilled` false e feitiços 0 no time inimigo; no banco,
+    `champ_select.inimigos` com posição nula). C2 é inferência: prior por campeão (histórico +
+    tabela), resolvido como atribuição dos 5 inimigos às 5 rotas; o smite inimigo só confirma o
+    jungler no carregamento (Live Client). Ler o campeão inimigo só com a ação `completed`.
     **prova:** testes puros por item (`tools/teste-draft.py` com 3 drafts sintéticos → faixa e
     termos esperados) → `3/3 ok`; selo ao vivo numa personalizada sozinho (protocolo do CLAUDE.md)
     **reprova se:** faixa errada ou selo ausente
@@ -419,6 +528,11 @@ Chave: `LOL_RIOT_API_KEY` no Doppler pessoal ([ARMADILHAS](../docs/ARMADILHAS.md
     **prova:** `tools/teste-tags.py` com partidas sintéticas por tag → todas as tags certas;
     contagem de chamadas por partida ≤ orçamento da § 7 (contador no log)
     **reprova se:** tag errada ou orçamento estourado
+    **Gatilho medido em 13/10/2026:** o carregamento não tem fase própria (`GameStart` dura ~50 ms,
+    o resto corre em `InProgress`). O sinal é a Live Client respondendo (~7 s após `InProgress`)
+    com `gameTime` parado em ~0,025 e sem o evento `GameStart`: ~100 s de janela para elo, WR e
+    maestria dos 10. Rota do inimigo: a declarada em `allPlayers[].position` já vem aqui (e o smite),
+    então o carregamento corrige o palpite do C2.
 
 ### Fase G — herança do projeto antigo do Gabriel (abril de 2026)
 
@@ -482,6 +596,10 @@ mesmo mentor). O conceito vale; o método e a fonte não:
 ## Riscos / o que pode dar errado
 
 - **Live Client sem dado de fog** (passo 9): a previsão perde a pista do farm; segue com tempo e rotas.
+  **Aconteceu** (medido em 13/10/2026): o farm do inimigo não anda na fog. Ganho inesperado:
+  objetivos e abates feitos por ele chegam globais em ≤ 1 s com `KillerName`.
+- **Print pega o que estiver na tela** (medido em 13/10/2026: 11% dos recortes com navegador ou
+  desktop, inclusive conteúdo pessoal): todo módulo de tela filtra "jogo na tela" antes de usar.
 - **Minimapa muda de lugar e tamanho** com a configuração do HUD: calibrar pelo `game.cfg` a
   cada partida e logar o retângulo usado; print de calibração em `temp/`.
 - **CPU**: cv2 a 6 fps num recorte pequeno é barato; medir o uso (< 5% de um núcleo) e cair para 3 fps se passar.

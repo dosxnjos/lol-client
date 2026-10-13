@@ -344,7 +344,7 @@ class RetratoChampSelect:
             auto = None if riot is None else bool(riot)
         bans = {True: [], False: []}
         for a in _acoes(s):
-            if a.get("type") == "ban" and a.get("completed") and a.get("championId"):
+            if a.get("type") == "ban" and a.get("completed") and (a.get("championId") or 0) > 0:  # -1 = sem ban
                 bans[bool(a.get("isAllyAction"))].append(a["championId"])
         b = s.get("bans") or {}
         if not bans[True] and not bans[False]:  # sem ações de ban: usa o resumo da sessão
