@@ -23,6 +23,7 @@ WS_EX_LAYERED, WS_EX_TRANSPARENT = 0x00080000, 0x00000020
 WS_EX_TOPMOST, WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE = 0x00000008, 0x00000080, 0x08000000
 ESTILO = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
 VK_F8, WM_HOTKEY, ID_ATALHO = 0x77, 0x0312, 0x4C43
+MOD_NOREPEAT = 0x4000              # segurar o F8 = 1 alternância (sem ele o autorrepeat piscava o overlay)
 WDA_EXCLUIR = 0x11                 # WDA_EXCLUDEFROMCAPTURE
 
 
@@ -70,6 +71,7 @@ class OverlayMinimapa:
         self.intervalo = intervalo_ms
         self.ligado = True
         self.atalho = atalho
+        self.ao_alternar = None   # callback(ligado) do F8: retorno ao jogador ("overlay ligado" na moldura)
         # o overlay fica EM CIMA do minimapa que o passo 13 captura: sem isto o print veria o próprio
         # mapa de calor (fog e ícones errados). WDA_EXCLUDEFROMCAPTURE: some do print, segue na tela.
         self.excluir = excluir_do_print
@@ -88,7 +90,8 @@ class OverlayMinimapa:
         self._thread.start()
         if self.atalho:
             threading.Thread(target=self._escutar_atalho, name="overlay-f8", daemon=True).start()
-        self._pronto.wait(5)
+        if not self._pronto.wait(5):   # Tk morto na thread não deixava rastro no log
+            log.warning("overlay: janela do Tk não nasceu em 5 s")
 
     def parar(self):
         self._parar.set()
@@ -96,8 +99,20 @@ class OverlayMinimapa:
     def alternar(self):
         self.ligado = not self.ligado
         log.info("overlay do minimapa %s (F8)", "ligado" if self.ligado else "desligado")
+        if self.ao_alternar is not None:
+            try:
+                self.ao_alternar(self.ligado)
+            except Exception as e:
+                log.warning("overlay: retorno do F8 falhou: %s: %s", type(e).__name__, e)
 
     def _laco(self):
+        try:
+            self._laco_tk()
+        except Exception as e:   # exceção na thread do Tk ia para o stderr (nenhum, na tarefa agendada)
+            log.warning("overlay: janela morreu: %s: %s", type(e).__name__, e)
+            self._pronto.set()
+
+    def _laco_tk(self):
         import tkinter as tk
         from PIL import Image, ImageTk
         _dpi_fisico()
@@ -154,19 +169,25 @@ class OverlayMinimapa:
         gc.collect()
 
     def _escutar_atalho(self):
-        u = ctypes.windll.user32
-        if not u.RegisterHotKey(None, ID_ATALHO, 0, VK_F8):
-            log.warning("overlay: F8 já está em uso por outro programa")
+        # WinDLL próprio com use_last_error: o GetLastError depois de uma chamada do ctypes não é confiável
+        u = ctypes.WinDLL("user32", use_last_error=True)
+        if not u.RegisterHotKey(None, ID_ATALHO, MOD_NOREPEAT, VK_F8):
+            log.warning("overlay: RegisterHotKey do F8 falhou (erro %d; 1409 = outro programa já tem o F8)",
+                        ctypes.get_last_error())
             return
+        log.info("overlay: F8 registrado (RegisterHotKey, thread %d)", threading.get_native_id())
         msg = wt.MSG()
         try:
             while not self._parar.is_set():
                 if u.PeekMessageW(ctypes.byref(msg), None, WM_HOTKEY, WM_HOTKEY, 1):
                     if msg.message == WM_HOTKEY and msg.wParam == ID_ATALHO:
-                        self.alternar()
+                        self.alternar()   # loga "overlay do minimapa ligado/desligado (F8)"
                 time.sleep(0.05)
+        except Exception as e:
+            log.warning("overlay: escuta do F8 morreu: %s: %s", type(e).__name__, e)
         finally:
             u.UnregisterHotKey(None, ID_ATALHO)
+            log.info("overlay: F8 solto")
 
     def fora_do_print(self, sim=True):
         """liga/desliga WDA_EXCLUDEFROMCAPTURE (Windows 10 2004+); True se o Windows aceitou"""

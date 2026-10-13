@@ -317,6 +317,39 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **`RegisterHotKey` come a tecla** → a janela em foco não recebe a tecla registrada. Só o F9 fica
   registrado; 1..5 (teclas de item do jogo) só nos 2 s depois do F9 (`feiticos.Atalhos`). Registro
   medido em 13/10/2026; com o jogo aberto ainda não (se o F9 já for atalho do jogo, trocar a tecla).
+- **F8 e F9 "não fazem nada" no jogo** (treino 3292803384, 13/10/2026) → registro deu certo (nenhum
+  aviso de falha no log; o mesmo código fora do jogo, com `keybd_event`, alterna e marca), mas nenhum
+  F8 chegou (o `alternar` loga cada um). A borda vermelha que o Gabriel viu ao apertar F9 não é do coach
+  (vermelho só sai de gank/intruso/jungler apareceu, que pedem inimigo no `allPlayers`; o treino não tem);
+  se foi o jogo reagindo ao F9, o jogo recebeu uma tecla que o hotkey registrado deveria comer.
+  Suspeita principal, **não provada**: o jogo lê o teclado por
+  raw input com `RIDEV_NOHOTKEYS` (com ele, hotkey de aplicativo não dispara enquanto o jogo tem o foco);
+  alternativa: tecla F na camada Fn/multimídia. Agora o log diz `F9 registrado`/`F8 registrado` e cada
+  tecla recebida: apertar na partida sem linha "recebido" = o jogo segurou; `python coletor\feiticos.py
+  --sonda 30` fora da partida separa o teclado. Se o jogo segurar, `RegisterHotKey` não serve lá e a
+  saída (`GetAsyncKeyState`, ainda só leitura) é decisão: a linha da casa hoje é "só RegisterHotKey".
+  O retorno ao jogador também faltava: no treino não há inimigo, o F9 + n devolvia `None` calado e o F8
+  só muda um overlay vazio; hoje todo aperto tem rótulo na moldura ([COLETOR](COLETOR.md) § Feitiços).
+- **Thread que morre não deixa rastro** → exceção não tratada numa thread vai só para o stderr, que a
+  tarefa agendada não guarda (atalho, overlay, Tk). `coletor.configurar_log` põe `threading.excepthook`
+  no log ("thread X morreu"), e o overlay e o atalho logam a própria morte (13/10/2026).
+- **"dado estático sem cache (FileNotFoundError)" na 1ª partida** (13/10/2026, 14:00:24) → o cache
+  `dados\cache\jogo-estatico.json` só era montado no `InProgress`, em thread: gravou 3,5 s depois (14:00:27)
+  e a partida já tinha começado com recarga padrão e sem picos de força. Era a 1ª partida com o coach v2
+  (a de 13:06 não tem linha do coach). Hoje o `Coach.fase` monta na 1ª fase com client, antes da partida, e
+  a gravação é atômica (`.tmp` + troca), uma vez por client aberto (porta da LCU: o client que atualiza
+  de patch reabre com porta nova e confere de novo). Não apagar o cache para "testar de novo":
+  `teste-coach.py` prova.
+- **Retorno de atalho como `urgente` atropela perigo** (revisão de 13/10/2026) → urgente fura o gap da
+  moldura e a `Moldura` mostra sempre o último pedido: o F9 apertado logo depois de um gank apagava a borda
+  vermelha em 0,5 s; na voz, `urgente=True` corta a frase em curso e zerava o intervalo, e o "jungler no
+  rio" na fila vencia. Hoje o retorno é `retorno=True` (`avisos.TIPOS`), nunca urgente: só preenche tempo
+  ocioso (moldura sem alerta há 2,5 s; voz na hora, sem cortar e fora do intervalo). Prova: `teste-alertas.py`.
+- **F8 sem `MOD_NOREPEAT`** → segurar a tecla gera um `WM_HOTKEY` por autorrepeat: o overlay piscava e o
+  log ganhava ~30 linhas por segundo. O F8 e o F9 registram com `MOD_NOREPEAT` (13/10/2026).
+- **`Atalhos.iniciar` estoura os 5 s e a thread segue viva** → registrava o F9 depois, sem dono, e as
+  partidas seguintes davam 1409. Hoje a thread confere `_desistiu` sob trava e solta a tecla; e o retorno
+  sai da thread do hotkey por fila (`_Partida._laco_retorno`): a thread do F9 não espera a moldura nascer.
 - **`ConvertTo-Json` do PowerShell 5.1 desembrulha lista de 1** (e array dentro de array sai como
   `{value, Count}`): no OCR cada palavra vai como hashtable e o Python normaliza lista/dict
   (`feiticos.OcrChat.ler`). Imagem sem arquivo: base64 no stdin → `MemoryStream` →

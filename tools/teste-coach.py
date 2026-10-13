@@ -234,6 +234,86 @@ def caso_replay(caminho):
          [a.fala for a in fora if a.tipo == "objetivo_60s"] == ["ancião em um minuto"], f"{[a.fala for a in fora]}")
 
 
+def caso_cache_estatico():
+    """dado estático montado na 1ª fase com client, antes da partida (13/10/2026: a 1ª partida do coach
+    rodou 'sem cache (FileNotFoundError)', o cache só nascia 3,5 s depois do InProgress)"""
+    import asyncio
+    import coach_vivo
+    import sugestoes
+
+    class LCU:
+        def __init__(self, quebra=False):
+            self.gets, self.quebra = [], quebra
+
+        def get(self, caminho, timeout=None):
+            self.gets.append(caminho)
+            if self.quebra:
+                raise ConnectionError("client fechando")
+            return {"/lol-patch/v1/game-version": "16.20.1+teste",
+                    "/lol-game-data/assets/v1/summoner-spells.json": [{"name": "Flash", "cooldown": 300, "gameModes": ["CLASSIC"]}],
+                    "/lol-game-data/assets/v1/items.json": [{"id": 3031, "from": [1038], "to": [], "priceTotal": 3400,
+                                                             "inStore": True, "categories": []}],
+                    "/lol-game-data/assets/v1/champion-summary.json": [{"id": 1}, {"id": 60001}],
+                    "/lol-game-data/assets/v1/champions/1.json": {"alias": "Annie", "id": 1, "name": "Annie",
+                                                                  "tacticalInfo": {"damageType": "kMagic"}, "roles": ["mage"]},
+                    }[caminho]
+
+    class Janela:
+        def fase(self, f):
+            pass
+
+        def fechar(self):
+            pass
+
+    def sem_mentor(*a):
+        raise RuntimeError("sem mentor no teste")
+
+    import logging
+    log_coach = logging.getLogger("coletor.coach")   # avisos esperados (sem mentor, LCU quebrada) fora do stderr
+    log_coach.propagate = False
+    log_coach.addHandler(logging.NullHandler())
+    with tempfile.TemporaryDirectory() as tmp:
+        cache = Path(tmp) / "cache" / "jogo-estatico.json"
+        fab = {"estatico": lambda lcu: sugestoes.carregar_estatico(cache, lcu=lcu), "mentor": sem_mentor,
+               "janela": lambda url, ligado: Janela()}
+        c = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=Path(tmp) / "config.json", fabricas=fab)
+        sem_antes = not cache.exists()
+        lcu = LCU()
+        asyncio.run(c.fase("Lobby", lcu=lcu))
+        pronto = c.estatico_pronto.wait(10)
+        lido = sugestoes.carregar_estatico(cache) if cache.exists() else None   # o que o _Partida lê no InProgress
+        n = len(lcu.gets)
+        asyncio.run(c.fase("ChampSelect", lcu=lcu))
+        caso("cache do dado estático montado no Lobby, antes da 1ª partida (e só 1 vez)",
+             sem_antes and pronto and lido and lido["versao"] == "16.20.1+teste" and lido["feiticos"] == {"Flash": 300}
+             and list(lido["campeoes"]) == ["Annie"] and len(lcu.gets) == n and not cache.with_name(cache.name + ".tmp").exists(),
+             f"GETs {n}, campeões {list((lido or {}).get('campeoes') or {})}")
+        # client reaberto (atualizou de patch: porta nova) → confere de novo; mesma versão = só 1 GET
+        lcu2 = LCU()
+        c.lcu = lcu2
+        t2 = c.aquecer_estatico()
+        if t2:
+            t2.join(5)
+        caso("client reaberto (outra LCU): aquece de novo, 1 GET da versão com o cache em dia",
+             t2 is not None and lcu2.gets == ["/lol-patch/v1/game-version"] and c.estatico_pronto.is_set(),
+             f"GETs {lcu2.gets}")
+        # LCU falhando: não marca pronto e tenta de novo depois da espera (não a cada fase)
+        c2 = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=Path(tmp) / "config.json",
+                              fabricas={**fab, "estatico": lambda lcu: sugestoes.carregar_estatico(Path(tmp) / "x.json", lcu=lcu)})
+        ruim = LCU(quebra=True)
+        c2.lcu = ruim
+        t = c2.aquecer_estatico()
+        t.join(5)
+        de_novo_ja = c2.aquecer_estatico()
+        depois = c2.aquecer_estatico(espera_s=0)
+        if depois:
+            depois.join(5)
+        caso("LCU falhando: não marca pronto, não repete a cada fase, tenta de novo depois da espera",
+             not c2.estatico_pronto.is_set() and de_novo_ja is None and depois is not None and len(ruim.gets) == 2,
+             f"GETs {len(ruim.gets)}")
+    log_coach.propagate = True
+
+
 def principal():
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", type=Path, default=LIVE_PADRAO)
@@ -246,6 +326,7 @@ def principal():
     caso_textos_md()
     caso_fila_voz()
     caso_relogio()
+    caso_cache_estatico()
     caso_replay(a.live)
     n = sum(resultados)
     print(f"\n{'ok' if n == len(resultados) else 'FALHOU'} ({n}/{len(resultados)})")

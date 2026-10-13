@@ -155,7 +155,7 @@ no lugar; nada lê memória, injeta ou clica. Módulos (todos em `coletor/`, tes
 | `jungler.py` | `EstadoJungler`: pista = último avistamento, objetivo com `KillerName`, abate com ele, renascer na fonte; zonas (rota/rio/selva/base, relativas ao meu time) com prior por horário; `gank()` | `teste-jungler.py` 5/5; `--real` toca a partida medida |
 | `selva.py` | `EstadoSelva`: lado de início, rota provável e campos limpos pelo tempo, nível 3 previsto, contra-selva; horários em [SELVA](SELVA.md) | `teste-selva.py` 2/2 + partida real |
 | `alcance.py` | `Grade` (caminhável do próprio minimapa; Dijkstra 8-vizinhos, ~40 ms), `Area` (velocidade × tempo, um salto da [MOBILIDADE](MOBILIDADE.md), Flash = 0,5), `GradeViva` (regera ~20 s após o 2º `DragonKill` e a cada 5 min; `dados/mapas/`), `velocidade()` (Data Dragon + bota) | `teste-alcance.py` 4/4 |
-| `overlay_minimapa.py` | janela Tk click-through, topo, sem foco, **fora do print** (`WDA_EXCLUDEFROMCAPTURE`) sobre o retângulo; calor ∩ fog; some 30 s após a última pista e mostra "jungler sumido há X s" (caixa do tamanho do texto) por 10 s, depois some até a próxima pista; F8 liga/desliga | `python coletor/overlay_minimapa.py --demo` (estilos, `WindowFromPoint`, desenho e exclusão do print) |
+| `overlay_minimapa.py` | janela Tk click-through, topo, sem foco, **fora do print** (`WDA_EXCLUDEFROMCAPTURE`) sobre o retângulo; calor ∩ fog; some 30 s após a última pista e mostra "jungler sumido há X s" (caixa do tamanho do texto) por 10 s, depois some até a próxima pista; F8 liga/desliga (retorno "overlay ligado/desligado" na moldura, azul; registro e cada F8 recebido vão para o log) | `python coletor/overlay_minimapa.py --demo` (estilos, `WindowFromPoint`, desenho e exclusão do print) |
 
 Ligação no laço ao vivo (quem integra; `relogio()` = `gameTime` estimado do laço, `live` = última
 amostra da Live Client):
@@ -283,9 +283,20 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
 
 - **Tipos calados por destino** (`avisos.normalizar_desligados`): `{"voz": [tipos], "tela": [tipos]}`,
   "tela" = painel + moldura. Tipo nos dois = descartado (`suprimidos["desligado"]`); só num = os outros
-  destinos seguem. Tipos ligáveis: `avisos.TIPOS_LIGAVEIS` (os 12 de `TIPOS` + `feitico_voltou`,
-  `pico_nivel`, `pico_item`, `regra`); tipo publicado fora da lista conta como `regra`. Lista simples
-  (formato até 13/10/2026) = calado nos dois: o motor, o `servidor_local` e o plugin migram.
+  destinos seguem. Tipos ligáveis: `avisos.TIPOS_LIGAVEIS` (os 14 de `TIPOS`, com os retornos de atalho
+  `feitico_marcado` e `overlay_f8`, + `feitico_voltou`, `pico_nivel`, `pico_item`, `regra`; a mesma lista
+  do `AVISOS` de `pengu/blocos.js`, conferida pelo `teste-alertas.py`); tipo publicado fora da lista conta
+  como `regra`. Lista simples (formato até 13/10/2026) = calado nos dois: o motor, o `servidor_local` e o
+  plugin migram.
+- **Aviso por evento**: `Aviso.molde` escolhe a fala em `TEXTOS` quando um tipo tem falas por evento
+  (`feitico_marcado`: `feitico_armado`, `feitico_desfeito`, `feitico_sem_inimigo`…), e `Aviso.destinos`
+  só restringe os do tipo (o F9 armado vai só para a moldura).
+- **Retorno de atalho** (`retorno=True` em `TIPOS`: `feitico_marcado`, `overlay_f8`) só preenche tempo
+  ocioso: na moldura sai quando nenhum alerta está na tela (2,5 s desde o último; o mais novo substitui os
+  anteriores) e não conta no gap, então um alerta que chega depois entra na hora; na voz sai na hora, sem
+  urgência (não corta a frase em curso) e fora do intervalo de 20 s. Nunca apaga nem atrasa um alerta.
+- **Log**: cada fala e cada moldura saem no `dados\coletor.log` (`aviso voz <tipo>/<cor>: <fala>`,
+  `aviso moldura <tipo>/<cor>: <rótulo>`): "a borda ficou vermelha" se confere pelo log.
 
 - **Detecções do minimapa** (contrato do passo 13): lista de `{campeao, time, x, y, visto_em}`
   (`minimapa.Captura.deteccoes(max_idade=1)`); visível agora = `visto_em` a ≤ 0,6 s do `gt`, o
@@ -340,6 +351,28 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   pelo stdin, nada em disco) e `Atalhos` (F9 + 1..5 = TOP..UTILITY: Flash dele agora; repetir em
   10 s desfaz). Dedupe: mesmo inimigo e feitiço a ≤ 60 s = um gasto; linha > 300 s antes do
   `gameTime` cai (a linha fica na tela 2 min ou mais).
+- **Como o F9 funciona** (só `RegisterHotKey`: escuta, nunca manda tecla ao jogo): o F9 fica registrado a
+  partida inteira; apertar arma por **2 s**, e só nesses 2 s o 1..5 é do coach (fora deles é tecla de
+  item do jogo). 1 top, 2 jungler, 3 mid, 4 atirador, 5 suporte = "ele acabou de usar o Flash" (sem Flash,
+  o outro feitiço com recarga); o mesmo número de novo em ≤ 10 s desfaz. `Feiticos.marcar(n)` devolve
+  `marcado`/`desfeito`/`sem_inimigo`/`sem_feitico` + a rota da fala (`ROTA_FALA`), e o coach responde pelo
+  `MotorAvisos` (tipo `feitico_marcado`, `avisos.aviso_atalho`; nunca vermelho, vermelho é perigo):
+
+  | evento | moldura (rótulo, cor) | voz |
+  | --- | --- | --- |
+  | F9 armado | "flash: 1-5", azul | — |
+  | marcado | "<rota> sem flash", verde | "flash do <rota> marcado" (descontraído: "anotado: <rota> sem flash") |
+  | desfeito | "marcação desfeita", azul | "marcação desfeita" |
+  | sem inimigo na posição (treino) | "sem inimigo", azul | — |
+
+  Rota da fala genérica (top, jungler, mid, atirador, suporte; "inimigo" quando a Live Client não deu a
+  posição dele, porque aí a ordem é a do `allPlayers` e a rota da tecla seria mentira), nunca nome de
+  campeão. Com um alerta na tela (gank vermelho), o retorno da moldura espera ele acabar. A voz e a tela do
+  retorno se calam na seção LOL-CLIENT como qualquer tipo. No log: `atalho: F9 registrado`, `atalho: F9
+  recebido`, `atalho: F9 + n recebido`, `coach: F9+n -> <resultado>` (o F8: `overlay: F8 registrado`,
+  `overlay do minimapa ligado/desligado (F8)`). Sem a linha "recebido" depois de apertar = a tecla não
+  chegou ao `RegisterHotKey` ([ARMADILHAS](ARMADILHAS.md) § Windows). Fora da partida:
+  `python coletor\feiticos.py --sonda 30` imprime cada F8/F9 que o Windows entrega.
 - **`coletor\sugestoes.py`**: `preparo_objetivo` (60 s antes: mortos, vistos/sumidos pelo minimapa,
   área do jungler; horários do `ao_vivo.py`), `revisar_previsao`/`precisao_acumulada` (previsão do
   jungler × timeline, ≤ 1000 unidades, só com ele na fog), `PicosDeForca` (adversário de rota e
@@ -364,6 +397,7 @@ tudo que bloqueia roda em `asyncio.to_thread`. `--sem-coach` desliga.
 | momento | o que liga ou desliga |
 | --- | --- |
 | início do coletor | servidor local (8765; porta ocupada → loga e segue), mentor (tabela `mentor`) |
+| 1ª fase com client (lobby, champ select, fim) | `aquecer_estatico`: monta/confere `dados\cache\jogo-estatico.json` em thread (uma vez por processo; falhou = de novo na próxima fase após 60 s), para a 1ª partida já ler o cache (loga "dado estático pronto antes da partida") |
 | champ select (cada sessão) | `draft.Draft.analisar_sessao` → `GET /draft`; `GET /draft/<meu campeão>` junta `matchups` (`analise.matchups`) e `traumas` dele contra os inimigos travados (cache de 10 min por campeão): é o que o selo do plugin lê |
 | `InProgress`/`Reconnect` | processo **abaixo do normal**; laço ao vivo (`AoVivo`, só um ouvinte para sempre); por partida: `MotorAvisos` + `GatilhosLive` (voz, moldura, faixa do painel), `Captura` do minimapa + `EstadoJungler`/`GradeViva` + overlay, `Feiticos` + OCR do chat a cada 3 s + atalho F9, `PicosDeForca`, dado estático (cache; a LCU refaz por patch em thread); janela do painel |
 | carregamento (Live Client com `gameTime` ~0) | `Carregamento.verificar` (Riot API, uma vez por partida) → `carregamento` no `/estado`; `bloco_carregamento` → `composicao`; runas do spectator → `Feiticos.definir_runas` |

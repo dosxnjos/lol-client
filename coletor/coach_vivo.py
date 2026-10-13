@@ -12,6 +12,7 @@
 import asyncio
 import json
 import logging
+import queue
 import sqlite3
 import threading
 import time
@@ -43,6 +44,11 @@ create table if not exists revisoes_jungler (
 
 def _time_str(t):
     return "ORDER" if t in (100, "100", "ORDER") else "CHAOS"
+
+
+def _resumo_estatico(est):
+    v = str((est or {}).get("versao") or "?").split("+")[0]
+    return f"versão {v}, {len((est or {}).get('campeoes') or {})} campeões, {len((est or {}).get('feiticos') or {})} feitiços"
 
 
 class _Avisa:
@@ -163,7 +169,12 @@ class _Partida:
         self.threads = []
         self.ticks = []                   # duração de cada passo do laço (ms), para o ensaio medir
         self._fonte_ov = None             # overlay_minimapa.fonte_jungler, quando cap e jungler existem
-        self._carregar_estatico()         # antes da config: o OCR e o atalho precisam do Feiticos
+        self._n_retorno = 0               # chave única de cada retorno de atalho (F8/F9)
+        # o retorno sai da thread do hotkey por esta fila: publicar pode esperar a janela da moldura
+        # nascer (até 5 s), e a thread do F9 parada segura o WM_TIMER (1..5 longe do jogo além dos 2 s)
+        self._fila_retorno = queue.Queue()
+        self._thread(self._laco_retorno, "coach-retorno")
+        self._carregar_estatico()        # antes da config: o OCR e o atalho precisam do Feiticos
         self.configurar(cfg, inicio=True)
 
     # -- montagem --
@@ -178,15 +189,22 @@ class _Partida:
         try:
             self.estatico = self.coach.fab["estatico"](None)
         except Exception as e:
-            log.info("coach: dado estático sem cache (%s); feitiços com recarga padrão", type(e).__name__)
+            # o Coach.fase já monta o cache antes da partida (1ª fase com client); chegar aqui sem ele =
+            # coletor ligado no meio do carregamento ou LCU fora: o refazer abaixo grava em segundos
+            log.info("coach: dado estático sem cache (%s); feitiços com recarga padrão até a LCU montar",
+                     type(e).__name__)
         self._montar_feiticos()
         if self.coach.lcu is not None:
             def atualizar():
                 try:
-                    est = self.coach.fab["estatico"](self.coach.lcu)
+                    with self.coach.trava_estatico:   # o aquecimento do Coach.fase pode estar montando agora
+                        est = self.coach.fab["estatico"](self.coach.lcu)
                     if not self.parando.is_set():
+                        veio_agora = self.estatico is None
                         self.estatico = est
                         self._montar_feiticos()
+                        if veio_agora:
+                            log.info("coach: dado estático da LCU pronto no meio da partida (%s)", _resumo_estatico(est))
                 except Exception as e:
                     self.coach.avisa("dado estático", e)
             self._thread(atualizar, "coach-estatico")
@@ -259,6 +277,7 @@ class _Partida:
         try:
             self.ov = self.coach.fab["overlay"](fonte)
             self.ov.ligado = bool(self.cfg["overlayMinimapa"])
+            self.ov.ao_alternar = self._overlay_alternado   # F8: "overlay ligado/desligado" na moldura
             self.ov.iniciar()
         except Exception as e:
             self.coach.avisa("overlay", e)
@@ -272,7 +291,9 @@ class _Partida:
             except Exception as e:
                 self.coach.avisa("OCR do chat", e)
             try:
-                self.atalhos = self.coach.fab["atalhos"](self._atalho).iniciar()
+                at = self.coach.fab["atalhos"](self._atalho)
+                at.ao_armar = self._armado   # retorno ao jogador ("flash: 1-5" na moldura)
+                self.atalhos = at.iniciar()
             except Exception as e:  # F9 registrado por outro programa: segue sem atalho
                 self.coach.avisa("atalho F9", e)
                 self.atalhos = None
@@ -293,11 +314,34 @@ class _Partida:
             except Exception as e:
                 self.coach.avisa("OCR do chat", e)
 
+    # -- atalhos (thread do RegisterHotKey): todo aperto tem retorno na moldura (e voz, quando marca) --
+    def _retorno(self, evento, **kw):
+        """chamado das threads do F9/F8: só enfileira (nunca bloqueia a thread do hotkey), em ordem"""
+        self._n_retorno += 1
+        self._fila_retorno.put(avisos.aviso_atalho(evento, self._n_retorno, **kw))
+
+    def _laco_retorno(self):
+        while not self.parando.is_set():
+            try:
+                a = self._fila_retorno.get(timeout=0.5)
+            except queue.Empty:
+                continue
+            try:
+                self.motor.publicar(a)
+            except Exception as e:
+                self.coach.avisa("retorno do atalho", e)
+
+    def _armado(self):
+        self._retorno("armado")
+
     def _atalho(self, n):
         with self.trava_f:
-            u = self.f.atalho(n, self.relogio())
-        if u:
-            log.info("coach: atalho F9+%d -> %s sem %s", n, u.get("inimigo"), u.get("feitico"))
+            r = self.f.marcar(n, self.relogio())
+        log.info("coach: F9+%d -> %s (%s, %s, %s)", n, r["resultado"], r["rota"], r["inimigo"], r["feitico"])
+        self._retorno(r["resultado"], rota=r["rota"], feitico=r["feitico"])
+
+    def _overlay_alternado(self, ligado):
+        self._retorno("overlay", estado="ligado" if ligado else "desligado")
 
     def _laco_ocr(self):
         while not self.parando.wait(OCR_S):
@@ -592,6 +636,12 @@ class Coach:
         self._draft = None
         self.previsoes_db = previsoes_db   # onde o carregamento grava a previsão (padrão: dados/meta.db)
         self.salvar_mapas = salvar_mapas   # grade de caminhável em dados/mapas/ (o ensaio não grava)
+        # dado estático (dados\cache\jogo-estatico.json) montado ANTES da 1ª partida: na 1ª fase com LCU
+        # (13/10/2026: só nascia no InProgress, e a 1ª partida rodava com recarga padrão e sem picos)
+        self.trava_estatico = threading.Lock()
+        self.estatico_pronto = threading.Event()
+        self._estatico_tentou = float("-inf")
+        self._estatico_porta = None        # client (porta da LCU) que já aqueceu: client reaberto = confere de novo
         self.av = ao_vivo.AoVivo(liveclient=liveclient, db=self.db, avisador=lambda est: None, intervalo=intervalo)
         self.av.ao_ler(self._ao_ler)   # uma vez só: cada partida troca o _Partida, não o ouvinte
         self.car = None
@@ -668,6 +718,8 @@ class Coach:
     async def fase(self, fase, game_id=None, fila=None, lcu=None):
         """chamado pelo Coletor.fase() a cada mudança; nada aqui bloqueia o laço do websocket"""
         self.lcu = lcu or self.lcu
+        if fase not in FASES_LIGA:
+            self.aquecer_estatico()
         if fase in FASES_LIGA:
             await asyncio.to_thread(self.iniciar_partida, game_id, fila)
         elif fase in FASES_TELA_FORA:
@@ -678,6 +730,41 @@ class Coach:
             await asyncio.to_thread(self.jan.fase, fase)
         except Exception as e:
             self.avisa("janela do painel", e)
+
+    def aquecer_estatico(self, espera_s=60):
+        """monta/confere o cache do dado estático em thread, fora da partida (lobby, champ select, fim):
+        a 1ª partida com o client aberto já lê o cache. Uma vez por client aberto (porta da LCU: o client
+        que atualiza de patch fecha e reabre com porta nova, e o carregar_estatico remonta se a versão
+        mudou; mesma versão = 1 GET); falhou = tenta de novo na próxima fase depois de espera_s.
+        Devolve a thread ou None."""
+        if self.lcu is None:
+            return None
+        porta = getattr(self.lcu, "porta", None) or id(self.lcu)
+        if porta != self._estatico_porta:
+            self._estatico_porta = porta
+            self.estatico_pronto.clear()
+            self._estatico_tentou = float("-inf")
+        if self.estatico_pronto.is_set():
+            return None
+        agora = time.monotonic()
+        if agora - self._estatico_tentou < espera_s:
+            return None
+        self._estatico_tentou = agora
+        lcu = self.lcu
+
+        def montar():
+            try:
+                with self.trava_estatico:
+                    t0 = time.monotonic()
+                    est = self.fab["estatico"](lcu)
+                self.estatico_pronto.set()
+                log.info("coach: dado estático pronto antes da partida (%s, %.1f s)", _resumo_estatico(est),
+                         time.monotonic() - t0)
+            except Exception as e:
+                self.avisa("dado estático (antes da partida)", e)
+        t = threading.Thread(target=montar, name="coach-estatico-antes", daemon=True)
+        t.start()
+        return t
 
     def iniciar_partida(self, game_id=None, fila=None):
         from voz import prioridade_do_processo

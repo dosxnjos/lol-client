@@ -82,7 +82,10 @@ def carregar_estatico(caminho=CACHE_ESTATICO, lcu=None):
     if lcu is not None and (d is None or d.get("versao") != lcu.get("/lol-patch/v1/game-version")):
         d = montar_estatico(lcu)
         caminho.parent.mkdir(parents=True, exist_ok=True)
-        caminho.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        # grava ao lado e troca: quem lê no meio (o _Partida no InProgress) nunca pega o arquivo pela metade
+        tmp = caminho.with_name(caminho.name + ".tmp")
+        tmp.write_text(json.dumps(d, ensure_ascii=False), encoding="utf-8")
+        tmp.replace(caminho)
     if d is None:
         raise FileNotFoundError(f"sem dado estático em {caminho} e sem LCU para montar")
     d["por_nome"] = {v["nome"]: k for k, v in d["campeoes"].items()}

@@ -143,6 +143,7 @@ const AVISOS = [
   ['objetivo_60s', 'Objetivo em 60 s'], ['mortes_cedo', 'Mortes antes dos 10'], ['inimigo_fed', 'Inimigo forte na tua rota'],
   ['ouro_guardado', 'Ouro guardado (hora de voltar?)'], ['feitico_voltou', 'Feitiço inimigo voltou (Flash...)'],
   ['pico_nivel', 'Inimigo no nível de pico'], ['pico_item', 'Inimigo fechou item'], ['regra', 'Outras dicas do coach'],
+  ['feitico_marcado', 'Retorno do F9 (Flash marcado)'], ['overlay_f8', 'Retorno do F8 (overlay ligado/desligado)', ['tela']],
 ];
 const MODELOS = [['sonnet', 'Sonnet (padrão)'], ['haiku', 'Haiku'], ['opus', 'Opus']];
 const EFFORTS = [['low', 'Baixo'], ['medium', 'Médio (padrão)'], ['high', 'Alto']];
@@ -177,12 +178,14 @@ export function blocoAlertas(corpo, ctx) {
     definir('coach.avisosDesligados', { ...atual, [destino]: ligado ? resto : [...resto, tipo] });
   };
   const coluna = (...filhos) => { const d = document.createElement('div'); d.className = 'lc-campo'; d.append(...filhos); return d; };
-  for (const [tipo, rotulo] of AVISOS) {
+  // 3º campo opcional: destinos que o tipo tem (o retorno do F8 só pinta a moldura, não fala: sem caixa "voz")
+  for (const [tipo, rotulo, destinos = ['voz', 'tela']] of AVISOS) {
     const nome = document.createElement('div');
     nome.className = 'lol-settings-window-size-text';
     nome.textContent = rotulo;
     corpo.append(ui.linha(coluna(nome),
-      ...['voz', 'tela'].map(d => coluna(ui.caixa(`coach.aviso.${d}.${tipo}`, d, '', !desl[d].includes(tipo), v => trocar(d, tipo, v))))));
+      ...['voz', 'tela'].map(d => coluna(...(destinos.includes(d)
+        ? [ui.caixa(`coach.aviso.${d}.${tipo}`, d, '', !desl[d].includes(tipo), v => trocar(d, tipo, v))] : [])))));
   }
 }
 

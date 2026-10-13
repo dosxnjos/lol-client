@@ -3,6 +3,8 @@ uso: python tools/teste-feiticos.py [--sem-gravacao]
 - recarga com bota e Perspicácia Cósmica (300 × 100/110 = 272,7; 3158 + 8347 = 234,4);
 - leitura das linhas de ping (formato real, ruído de OCR, descartes), dedupe de aliados repetindo;
 - atalho F9 + 1..5 (máquina de estado simulada, sem tecla nenhuma) e RegisterHotKey real do F9;
+- marcar(): marcado / desfeito / sem inimigo (modo treino) / sem feitiço, com a rota da fala; ganchos
+  ao_armar/ao_expirar do retorno ao jogador (a voz e a moldura do retorno: teste-alertas.py);
 - com a gravação 20261013-071040: OCR das telas + Live Client tocadas em ordem -> cronômetros.
 """
 import json
@@ -120,6 +122,30 @@ def main():
     confere("F9 + 2 de novo em 4 s desfaz", f3.atalho(2, 304.0) is None and not f3.usos[("Ekko", "Flash")])
     confere("F9 + 9 (sem inimigo) não faz nada", f3.atalho(9, 305.0) is None)
 
+    # 5b. marcar(): resultado para o retorno ao jogador (rota genérica, sem nome de campeão na fala)
+    r = f3.marcar(4, 310.0)
+    confere("marcar 4 = marcado, rota 'atirador', Flash", r["resultado"] == "marcado" and r["rota"] == "atirador"
+            and r["feitico"] == "Flash" and r["uso"] and r["uso"]["inimigo"] == "Tristana", str({k: r[k] for k in ("resultado", "rota", "feitico")}))
+    r = f3.marcar(4, 315.0)
+    confere("marcar 4 de novo em 5 s = desfeito", r["resultado"] == "desfeito" and r["uso"] is None
+            and not f3.usos[("Tristana", "Flash")])
+    rotas = [f3.marcar(n, 400.0 + 20 * n)["rota"] for n in range(1, 6)]
+    confere("rotas da fala: top, jungler, mid, atirador, suporte", rotas == ["top", "jungler", "mid", "atirador", "suporte"], str(rotas))
+    treino = F.Feiticos()
+    treino.atualizar(live(120.0, []))   # modo treino: só eu na partida
+    r = treino.marcar(3, 120.0)
+    confere("modo treino (sem inimigo): marcar 3 = sem_inimigo, rota 'mid' pela tecla", r["resultado"] == "sem_inimigo"
+            and r["rota"] == "mid" and r["uso"] is None, str(r))
+    so_smite = F.Feiticos()
+    so_smite.atualizar(live(120.0, [jogador("Ekko", "CHAOS", "JUNGLE", ("Golpear", "Golpe Primordial"))]))
+    confere("inimigo só com Smite: sem_feitico", so_smite.marcar(1, 120.0)["resultado"] == "sem_feitico")
+    blind = F.Feiticos()   # Live Client sem position (blind, ARAM, personalizada): ordem = a do allPlayers
+    blind.atualizar(live(120.0, [jogador("Riven", "CHAOS", "", ("Flash", "Teleporte")),
+                                 jogador("Ekko", "CHAOS", "", ("Golpear", "Flash"))]))
+    r = blind.marcar(2, 120.0)
+    confere("inimigo sem posição: fala 'inimigo', nunca a rota da tecla (2 = jungler)",
+            r["resultado"] == "marcado" and r["rota"] == "inimigo", str({k: r[k] for k in ("resultado", "rota", "inimigo")}))
+
     # 6. máquina do hotkey (mensagens simuladas: nada de tecla enviada)
     marcados, reg = [], []
     a = F.Atalhos(marcados.append)
@@ -130,6 +156,36 @@ def main():
     a.tratar(F.WM_HOTKEY, F.ID_ARMAR, lambda: reg.append("+"), lambda: reg.append("-"))
     a.tratar(F.WM_TIMER, 0, lambda: reg.append("+"), lambda: reg.append("-"))
     confere("F9 sem número em 2 s: desarma (1..5 voltam para o jogo)", not a.armado and reg[-1] == "-")
+    armou, expirou = [], []
+    import logging
+
+    class Captura(logging.Handler):   # o aviso do callback quebrado vai para cá, não para o stderr
+        def __init__(self):
+            super().__init__()
+            self.linhas = []
+
+        def emit(self, rec):
+            self.linhas.append(rec.getMessage())
+    cap_log = Captura()
+    F.log.addHandler(cap_log)
+    F.log.propagate = False
+    nivel = F.log.level
+    F.log.setLevel(logging.INFO)   # no coletor quem põe INFO é o logger "coletor"; aqui ele não existe
+    b = F.Atalhos(lambda n: 1 / 0, ao_armar=lambda: armou.append(1), ao_expirar=lambda: expirou.append(1))
+    b.tratar(F.WM_HOTKEY, F.ID_ARMAR)
+    b.tratar(F.WM_HOTKEY, F.ID_ARMAR)   # F9 de novo armado: não chama o retorno 2 vezes
+    n = b.tratar(F.WM_HOTKEY, 11)        # ao_marcar quebra: a máquina segue (exceção vira log, não mata a thread)
+    b.tratar(F.WM_HOTKEY, F.ID_ARMAR)
+    b.tratar(F.WM_TIMER, 0)
+    F.log.removeHandler(cap_log)
+    F.log.propagate = True
+    F.log.setLevel(nivel)
+    confere("retorno: ao_armar 1 vez por F9, ao_expirar no tempo; callback quebrado não derruba", armou == [1, 1]
+            and expirou == [1] and n == 1 and not b.armado, f"armou {armou}, expirou {expirou}")
+    confere("log do atalho: F9 recebido, F9 + 1 recebido, retorno quebrado avisado, expirou",
+            any("F9 recebido" in x for x in cap_log.linhas) and any("F9 + 1 recebido" in x for x in cap_log.linhas)
+            and any("retorno falhou: ZeroDivisionError" in x for x in cap_log.linhas)
+            and any("expirou" in x for x in cap_log.linhas), str(len(cap_log.linhas)))
     try:
         real = F.Atalhos(lambda n: None).iniciar()
         time.sleep(0.2)
@@ -137,6 +193,24 @@ def main():
         confere("RegisterHotKey do F9 real (registra e solta, sem tecla)", True)
     except RuntimeError as e:
         confere("RegisterHotKey do F9 real", False, str(e))
+    # iniciar() estourou os 5 s: a thread que registra depois solta o F9 e sai (não prende a tecla)
+    import threading
+    orfa = F.Atalhos(lambda n: None)
+    orfa._desistiu = True
+    pronto_orfa = threading.Event()
+    t_orfa = threading.Thread(target=orfa._rodar, args=(pronto_orfa,), daemon=True)
+    F.log.disabled = True   # o aviso "registrou depois do prazo" é esperado aqui
+    t_orfa.start()
+    t_orfa.join(3)
+    F.log.disabled = False
+    try:
+        de_novo = F.Atalhos(lambda n: None).iniciar()
+        de_novo.parar()
+        livre = True
+    except RuntimeError:
+        livre = False
+    confere("thread órfã do atalho (iniciar desistiu) solta o F9: o próximo registra",
+            not t_orfa.is_alive() and not pronto_orfa.is_set() and livre)
 
     # 6b. monitor do print: o do jogo, não o monitors[1] do mss (nesta máquina, a 2ª tela)
     import minimapa

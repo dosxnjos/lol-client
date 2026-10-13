@@ -266,6 +266,133 @@ def extra_destinos():
          f"lido {lido['avisosDesligados']}, salvo {salvo['avisosDesligados']}, salvo2 {salvo2['avisosDesligados']}")
 
 
+def extra_retorno_atalho():
+    """retorno ao jogador do F9 e do F8 (treino de 13/10/2026: nada aparecia e a borda vermelha confundiu)"""
+    import re
+    from avisos import CORES_RETORNO, TIPOS, TIPOS_LIGAVEIS, Aviso, aviso_atalho
+
+    class VozFalsa:
+        def __init__(self):
+            self.faladas = []
+
+        def falar(self, texto, urgente=False, prioridade=0):
+            self.faladas.append((texto, urgente))
+
+    def rodar_eventos(eventos, tom="serio", desligados=None, antes=None):
+        voz, mol = VozFalsa(), MolduraFalsa()
+        m = MotorAvisos(textos=TEXTOS, voz=voz, moldura=mol, tom=tom)
+        if desligados:
+            m.configurar(desligados=desligados)
+        t = 100.0
+        for a in antes or []:
+            m.publicar(a, t)
+        for i, (ev, kw) in enumerate(eventos):
+            t += 0.5
+            m.publicar(aviso_atalho(ev, i, **kw), t)
+            m.tick(t)
+        return m, voz, mol
+
+    # armado → marcado → desfeito → sem inimigo, em sequência rápida (< 2,5 s entre eles: retorno substitui
+    # retorno na hora, sem alerta na tela)
+    m, voz, mol = rodar_eventos([("armado", {}), ("marcado", {"rota": "atirador", "feitico": "Flash"}),
+                                 ("desfeito", {"rota": "atirador", "feitico": "Flash"}), ("sem_inimigo", {"rota": "mid"})])
+    caso("retorno F9: rótulos na moldura na hora (flash: 1-5, atirador sem flash, marcação desfeita, sem inimigo)",
+         [r for _, r in mol.mostradas] == ["flash: 1-5", "atirador sem flash", "marcação desfeita", "sem inimigo"],
+         str(mol.mostradas))
+    caso("retorno F9: voz só no marcado e no desfeito, na hora, sem urgência (não corta fala em curso)",
+         voz.faladas == [("flash do atirador marcado", False), ("marcação desfeita", False)], str(voz.faladas))
+    _, voz1, mol1 = rodar_eventos([("marcado", {"rota": "inimigo", "feitico": "Flash"})])
+    caso("retorno F9 de inimigo sem posição: 'flash do inimigo marcado' (nunca a rota da tecla)",
+         voz1.faladas == [("flash do inimigo marcado", False)] and mol1.mostradas == [("verde", "inimigo sem flash")],
+         f"{voz1.faladas} {mol1.mostradas}")
+    cores = {c for c, _ in mol.mostradas}
+    caso("retorno F9: cor azul ou verde, nunca vermelho", cores <= set(CORES_RETORNO) and "vermelho" not in cores,
+         str(sorted(cores)))
+    nomes_campeao = re.compile(r"Tristana|Ekko|Yasuo|Riven|Seraphine")
+    caso("retorno F9: fala sem nome de campeão", not any(nomes_campeao.search(f) for f, _ in voz.faladas))
+    # rótulo ≤ 3 palavras: o "flash: 1 a 5" cortaria em "flash: 1 a"
+    caso("retorno F9: todo rótulo cabe em 3 palavras (nada cortado)", all(len(r.split()) <= 3 for _, r in mol.mostradas))
+
+    # tom descontraído e as 5 rotas
+    _, voz2, mol2 = rodar_eventos([("marcado", {"rota": r, "feitico": "Flash"}) for r in
+                                   ("top", "jungler", "mid", "atirador", "suporte")], tom="descontraido")
+    caso("retorno F9 descontraído: 5 rotas, rótulo '<rota> sem flash'",
+         [r for _, r in mol2.mostradas] == [f"{r} sem flash" for r in ("top", "jungler", "mid", "atirador", "suporte")]
+         and voz2.faladas[0][0] == "anotado: top sem flash", f"{mol2.mostradas[:2]} {voz2.faladas[:1]}")
+
+    # F8: rótulo do overlay
+    _, voz3, mol3 = rodar_eventos([("overlay", {"estado": "desligado"}), ("overlay", {"estado": "ligado"})])
+    caso("retorno F8: 'overlay desligado' / 'overlay ligado' só na moldura, azul",
+         mol3.mostradas == [("azul", "overlay desligado"), ("azul", "overlay ligado")] and voz3.faladas == [],
+         f"{mol3.mostradas} {voz3.faladas}")
+
+    # tipo novo ligável, por destino, e na lista do plugin
+    blocos = (RAIZ / "pengu" / "blocos.js").read_text(encoding="utf-8")
+    lista_js = re.search(r"const AVISOS = \[(.*?)\n\];", blocos, re.S)
+    tipos_js = re.findall(r"\['([a-z0-9_]+)', '", lista_js.group(1)) if lista_js else []   # não casa o ['tela']
+    caso("tipos novos em TIPOS_LIGAVEIS e no plugin (blocos.js AVISOS = TIPOS_LIGAVEIS)",
+         {"feitico_marcado", "overlay_f8"} <= set(TIPOS_LIGAVEIS) and sorted(tipos_js) == sorted(TIPOS_LIGAVEIS)
+         and len(tipos_js) == len(set(tipos_js)),
+         f"plugin {len(tipos_js)}, coletor {len(TIPOS_LIGAVEIS)}")
+    caso("tipos do retorno sem vermelho na tabela", all(TIPOS[t]["cor"] in CORES_RETORNO for t in ("feitico_marcado", "overlay_f8")))
+    _, voz4, mol4 = rodar_eventos([("marcado", {"rota": "top", "feitico": "Flash"})],
+                                  desligados={"voz": ["feitico_marcado"], "tela": []})
+    caso("retorno F9 com a voz desligada na config: só a moldura", voz4.faladas == [] and len(mol4.mostradas) == 1)
+    _, voz5, mol5 = rodar_eventos([("marcado", {"rota": "top", "feitico": "Flash"})],
+                                  desligados={"voz": ["feitico_marcado"], "tela": ["feitico_marcado"]})
+    caso("retorno F9 desligado nos dois: nada", voz5.faladas == [] and mol5.mostradas == [])
+
+    # plugin: tipo sem voz (overlay_f8, destinos "m") não desenha a caixa "voz" (ela não teria efeito)
+    sem_voz_py = sorted(t for t in TIPOS if "v" not in TIPOS[t]["destinos"])
+    sem_voz_js = sorted(re.findall(r"\['([a-z0-9_]+)', '[^']*', \['tela'\]\]", lista_js.group(1) if lista_js else ""))
+    caso("plugin: só a caixa 'tela' nos tipos que não falam", sem_voz_py == sem_voz_js, f"py {sem_voz_py}, js {sem_voz_js}")
+
+    # retorno só preenche tempo ocioso (revisão de 13/10/2026). Voz: sai na hora com um aviso comum
+    # esperando os 20 s, e não conta no intervalo (o comum segue esperando)
+    m6 = MotorAvisos(textos=TEXTOS, voz=VozFalsa(), moldura=MolduraFalsa())
+    m6.publicar(Aviso("objetivo_60s", {"objetivo": "dragão"}, "d"), 0.0)        # fala em 0
+    m6.publicar(Aviso("inimigo_fed", {"campeao": "Yasuo"}, "y"), 1.0)          # espera (20 s)
+    m6.publicar(aviso_atalho("marcado", 1, rota="mid", feitico="Flash"), 2.0)
+    for t in (3.0, 10.0, 19.9, 20.0):
+        m6.tick(t)
+    falas6 = [(round(t), a.fala) for t, d, a in m6.emitidos if d == "voz"]
+    caso("retorno F9 sai na hora com aviso comum na fila e não mexe no intervalo (o comum sai em 20 s)",
+         falas6[:2] == [(0, "dragão em um minuto"), (2, "flash do mid marcado")] and len(falas6) == 3
+         and falas6[2][0] == 20,
+         str(falas6))
+    # voz: objetivo em 0, jungler apareceu em 17 (esperando os 20 s), F9 + 3 em 18 → o jungler ainda fala em 20
+    m7v = VozFalsa()
+    m7 = MotorAvisos(textos=TEXTOS, voz=m7v, moldura=MolduraFalsa())
+    m7.publicar(Aviso("objetivo_60s", {"objetivo": "dragão"}, "d"), 0.0)
+    m7.publicar(Aviso("jungler_apareceu", {"zona": "no rio top", "zc": "rio top", "campeao": "Ekko"}, "rio"), 17.0)
+    m7.publicar(aviso_atalho("marcado", 1, rota="mid", feitico="Flash"), 18.0)
+    for t in (19.0, 20.0, 21.0):
+        m7.tick(t)
+    caso("retorno F9 não atrasa nem vence alerta de posição na fila da voz (jungler fala em 20 s)",
+         [f for f, _ in m7v.faladas] == ["dragão em um minuto", "flash do mid marcado", "jungler no rio top"]
+         and not m7.suprimidos["vencido"], f"{m7v.faladas} {dict(m7.suprimidos)}")
+    # moldura: gank vermelho em 0, F9 em 0,5, F9 + 2 em 1,2 → o vermelho fica os 2 s; o retorno sai depois
+    # (só o mais novo: 'jungler sem flash')
+    m8m = MolduraFalsa()
+    m8 = MotorAvisos(textos=TEXTOS, voz=VozFalsa(), moldura=m8m)
+    m8.publicar(Aviso("gank", {"zona": "no rio", "zc": "rio"}, "rio"), 0.0)
+    m8.publicar(aviso_atalho("armado", 1), 0.5)
+    m8.publicar(aviso_atalho("marcado", 2, rota="jungler", feitico="Flash"), 1.2)
+    for t in (1.5, 2.0, 2.5, 3.0):
+        m8.tick(t)
+    tempos8 = [(t, a.rotulo) for t, d, a in m8.emitidos if d == "moldura"]
+    caso("retorno não apaga a borda vermelha de um gank (espera o gap; o mais novo substitui o armado)",
+         m8m.mostradas == [("vermelho", "gank rio"), ("verde", "jungler sem flash")] and tempos8[1][0] >= 2.5,
+         str(tempos8))
+    # moldura: retorno na tela e um alerta chega → o alerta entra na hora (o retorno nunca segura alerta)
+    m9m = MolduraFalsa()
+    m9 = MotorAvisos(textos=TEXTOS, voz=VozFalsa(), moldura=m9m)
+    m9.publicar(aviso_atalho("armado", 1), 0.0)
+    m9.publicar(Aviso("jungler_apareceu", {"zona": "no rio top", "zc": "rio top", "campeao": "Ekko"}, "rio"), 0.3)
+    caso("alerta entra na moldura na hora com um retorno na tela",
+         m9m.mostradas == [("azul", "flash: 1-5"), ("vermelho", "jungler rio top")], str(m9m.mostradas))
+
+
 def janela_real():
     import ctypes
     import mss
@@ -327,6 +454,7 @@ def principal():
     extra_eu_entro_na_rota()
     extra_contra_gank()
     extra_destinos()
+    extra_retorno_atalho()
     if not a.sem_janela:
         janela_real()
     n = sum(resultados)

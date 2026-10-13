@@ -11,6 +11,7 @@ import ctypes
 import difflib
 import io
 import json
+import logging
 import re
 import subprocess
 import threading
@@ -20,6 +21,7 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 CALIBRACAO_PADRAO = RAIZ / "dados" / "calibracao-chat.json"
+log = logging.getLogger("coletor.feiticos")   # cai no dados\coletor.log (handler do logger "coletor")
 
 # recarga base (s) do summoner-spells.json da LCU, modo CLASSIC (13/10/2026); a LCU manda quando houver
 RECARGA_BASE = {"Flash": 300, "Teleporte": 300, "Incendiar": 180, "Barreira": 180, "Exaustão": 240,
@@ -30,6 +32,9 @@ ARVORE_INSPIRACAO = 8300         # a runa só existe nessa árvore
 ACEL_RUNA = 18
 ACEL_BOTA = {3158: 10, 3171: 20}  # Botas Ionianas da Lucidez, Lucidez Escarlate (3171 vem de 3158)
 ROTAS = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")  # atalho 1..5
+# como a rota sai na fala/rótulo do retorno do F9 (frase genérica: sem nome de campeão, que a voz
+# pré-gravada não tem)
+ROTA_FALA = {"TOP": "top", "JUNGLE": "jungler", "MIDDLE": "mid", "BOTTOM": "atirador", "UTILITY": "suporte"}
 JANELA_DEDUPE = 60    # mesmo (inimigo, feitiço) com horário a <= 60 s = o mesmo gasto (aliados repetem o ping)
 LINHA_VELHA = 300     # linha de chat > 300 s antes do gameTime (maior recarga): leitura errada ou inútil.
                       # a linha fica na tela bem mais que 90 s (00562.0: ping de 7:06 lido aos 9:22)
@@ -448,23 +453,41 @@ class Feiticos:
                 out.append(u)
         return out
 
-    def atalho(self, n, gt=None):
+    def marcar(self, n, gt=None):
         """F9 + n (1..5 = TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY): Flash dele gasto agora.
-        Repetir o mesmo número em <= 10 s desfaz. Devolve o uso, ou None (desfeito / sem inimigo)."""
+        Repetir o mesmo número em <= 10 s desfaz. Devolve sempre o resultado, para o retorno ao jogador:
+        {"resultado": "marcado"|"desfeito"|"sem_inimigo"|"sem_feitico", "n", "rota" (ROTA_FALA: top,
+        jungler, mid, atirador, suporte; "inimigo" se ele veio sem posição), "inimigo", "feitico", "uso"}. Sem inimigo na posição n (modo
+        treino, personalizada sozinho) = "sem_inimigo"."""
         gt = self.gt if gt is None else gt
+        r = {"resultado": "sem_inimigo", "n": n, "rota": ROTA_FALA[ROTAS[n - 1]] if 1 <= n <= len(ROTAS) else None,
+             "inimigo": None, "feitico": None, "uso": None}
         if not (1 <= n <= len(self.ordem)):
-            return None
+            return r
         nome = self.ordem[n - 1]
-        fs = [f for f in self.inimigos[nome]["feiticos"] if f not in SEM_CRONOMETRO]
+        reg = self.inimigos[nome]
+        # rota de verdade do inimigo (a Live Client dá). Sem posição (blind, ARAM, personalizada) a ordem
+        # é a do allPlayers, então a rota da tecla seria mentira: a fala diz só "inimigo"
+        r.update(inimigo=nome, rota=ROTA_FALA.get(reg.get("rota"), "inimigo"))
+        fs = [f for f in reg["feiticos"] if f not in SEM_CRONOMETRO]
         f = "Flash" if "Flash" in fs else (fs[0] if fs else None)
         if not f:
-            return None
+            r["resultado"] = "sem_feitico"
+            return r
+        r["feitico"] = f
         lista = self.usos.setdefault((nome, f), [])
         for u in list(lista):
             if u["fonte"] == "atalho" and 0 <= gt - u["ts"] <= DESFAZ_ATALHO:
                 lista.remove(u)
-                return None
-        return self.registrar(nome, f, gt, "atalho")
+                r["resultado"] = "desfeito"
+                return r
+        u = self.registrar(nome, f, gt, "atalho")
+        r.update(resultado="marcado" if u else "sem_feitico", uso=u)   # sem recarga conhecida: nada a marcar
+        return r
+
+    def atalho(self, n, gt=None):
+        """como marcar(), devolvendo só o uso (None = desfeito, sem inimigo ou sem feitiço)"""
+        return self.marcar(n, gt)["uso"]
 
     def estado(self, gt=None):
         """para o painel: só o que está em recarga, do que volta antes para o que volta depois"""
@@ -605,15 +628,30 @@ class Atalhos:
     """F9 arma por janela_s; nesse tempo 1..5 escolhe o inimigo e chama ao_marcar(n).
     Só o F9 fica registrado o tempo todo: 1..5 são as teclas de item do jogo, então só ficam
     registradas (e não chegam ao jogo) nos ~2 s depois do F9. RegisterHotKey é por thread: tudo
-    roda numa thread própria com GetMessage."""
+    roda numa thread própria com GetMessage. ao_armar() / ao_expirar() (opcionais, atributos) são o
+    gancho do retorno ao jogador ("flash: 1-5" na moldura). Cada tecla recebida vai para o log: sem
+    linha "F9 recebido" depois de apertar = a tecla não chegou ao RegisterHotKey (ARMADILHAS § Windows)."""
 
-    def __init__(self, ao_marcar, tecla=VK_F9, janela_s=2.0):
+    def __init__(self, ao_marcar, tecla=VK_F9, janela_s=2.0, ao_armar=None, ao_expirar=None):
         self.ao_marcar, self.tecla, self.janela_ms = ao_marcar, tecla, int(janela_s * 1000)
+        self.ao_armar, self.ao_expirar = ao_armar, ao_expirar
         self.armado = False
         self.thread = None
         self.tid = None
         self.erro = None
         self._timer = 0
+        self._trava_inicio = threading.Lock()
+        self._desistiu = False
+
+    @staticmethod
+    def _chamar(f, *a):
+        """callback do retorno não derruba a thread do atalho (exceção aqui sumiria calada)"""
+        if f is None:
+            return
+        try:
+            f(*a)
+        except Exception as e:
+            log.warning("atalho: retorno falhou: %s: %s", type(e).__name__, e)
 
     # máquina de estado (pura: o teste chama direto, sem tecla nenhuma)
     def tratar(self, msg, wparam, registrar=None, desregistrar=None):
@@ -623,31 +661,48 @@ class Atalhos:
             if not self.armado:
                 self.armado = True
                 registrar()
+                log.info("atalho: F9 recebido, 1..5 por %.0f s", self.janela_ms / 1000)
+                self._chamar(self.ao_armar)
             return None
         if msg == WM_HOTKEY and wparam in IDS_NUMERO and self.armado:
             self.armado = False
             desregistrar()
             n = IDS_NUMERO[wparam]
-            self.ao_marcar(n)
+            log.info("atalho: F9 + %d recebido", n)
+            self._chamar(self.ao_marcar, n)
             return n
         if msg == WM_TIMER and self.armado:
             self.armado = False
             desregistrar()
+            log.info("atalho: F9 expirou sem número (1..5 voltam para o jogo)")
+            self._chamar(self.ao_expirar)
         return None
 
     def _rodar(self, pronto):
-        u = ctypes.windll.user32
+        # WinDLL próprio com use_last_error: o GetLastError depois de uma chamada do ctypes não é confiável
+        u = ctypes.WinDLL("user32", use_last_error=True)
         k = ctypes.windll.kernel32
         self.tid = k.GetCurrentThreadId()
         if not u.RegisterHotKey(None, ID_ARMAR, MOD_NOREPEAT, self.tecla):
-            self.erro = f"RegisterHotKey falhou (tecla em uso por outro programa? erro {k.GetLastError()})"
+            # 1409 = ERROR_HOTKEY_ALREADY_REGISTERED (outro programa, ou outro coletor, já tem a tecla)
+            self.erro = f"RegisterHotKey falhou (tecla em uso por outro programa? erro {ctypes.get_last_error()})"
             pronto.set()
             return
-        pronto.set()
+        with self._trava_inicio:
+            if self._desistiu:   # iniciar() já estourou os 5 s e lançou: thread órfã solta o F9 e sai
+                u.UnregisterHotKey(None, ID_ARMAR)
+                log.warning("atalho: F9 registrou depois do prazo do iniciar; solto")
+                return
+            pronto.set()
+        log.info("atalho: F9 registrado (RegisterHotKey, thread %d)", self.tid)
 
         def registrar():
+            falhas = []
             for hid, n in IDS_NUMERO.items():
-                u.RegisterHotKey(None, hid, MOD_NOREPEAT, 0x30 + n)
+                if not u.RegisterHotKey(None, hid, MOD_NOREPEAT, 0x30 + n):
+                    falhas.append(f"{n} (erro {ctypes.get_last_error()})")
+            if falhas:
+                log.warning("atalho: números não registrados: %s", ", ".join(falhas))
             self._timer = u.SetTimer(None, 0, self.janela_ms, None)
 
         def desregistrar():
@@ -661,15 +716,25 @@ class Atalhos:
         try:
             while u.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
                 self.tratar(msg.message, msg.wParam, registrar, desregistrar)
+        except Exception as e:   # thread do atalho morrendo calada = F9 sem efeito e sem rastro
+            log.warning("atalho: thread do F9 morreu: %s: %s", type(e).__name__, e)
+            raise
         finally:
             desregistrar()
             u.UnregisterHotKey(None, ID_ARMAR)
+            log.info("atalho: F9 solto")
 
     def iniciar(self):
         pronto = threading.Event()
         self.thread = threading.Thread(target=self._rodar, args=(pronto,), daemon=True, name="atalhos-feiticos")
         self.thread.start()
-        pronto.wait(5)
+        if not pronto.wait(5):
+            with self._trava_inicio:
+                if not pronto.is_set():
+                    # sem isto a thread registrava o F9 depois, ficava no GetMessage sem dono e o
+                    # RegisterHotKey das próximas partidas dava 1409 (F9 morto até reiniciar o coletor)
+                    self._desistiu = True
+                    raise RuntimeError("thread do atalho não respondeu em 5 s")
         if self.erro:
             raise RuntimeError(self.erro)
         return self
@@ -679,3 +744,47 @@ class Atalhos:
             ctypes.windll.user32.PostThreadMessageW(self.tid, WM_QUIT, 0, 0)
             self.thread.join(3)
             self.tid = None
+
+
+def sonda(segundos=30.0, teclas=(("F8", 0x77), ("F9", VK_F9))):
+    """registra F8 e F9 (RegisterHotKey, só escuta) e imprime cada vez que a tecla chega. Para separar
+    "o teclado não manda F8/F9" (camada Fn/multimídia) de "o jogo segura a tecla": rodar fora da partida
+    (na partida o coach já tem as teclas e o registro dá erro 1409)."""
+    u = ctypes.WinDLL("user32", use_last_error=True)
+    ids = {}
+    for i, (nome, vk) in enumerate(teclas, start=0x5A00):
+        if u.RegisterHotKey(None, i, MOD_NOREPEAT, vk):
+            ids[i] = nome
+        else:
+            print(f"{nome}: RegisterHotKey falhou (erro {ctypes.get_last_error()}; 1409 = já registrada)")
+    if not ids:
+        return 1
+    print(f"aperte {' ou '.join(ids.values())} nos próximos {segundos:.0f} s (Ctrl+C sai)")
+    msg = wintypes.MSG()
+    fim, n = time.monotonic() + segundos, 0
+    try:
+        while time.monotonic() < fim:
+            if u.PeekMessageW(ctypes.byref(msg), None, WM_HOTKEY, WM_HOTKEY, 1):
+                n += 1
+                print(f"{time.strftime('%H:%M:%S')} {ids.get(msg.wParam, msg.wParam)} recebido")
+            time.sleep(0.03)
+    except KeyboardInterrupt:
+        pass
+    finally:
+        for i in ids:
+            u.UnregisterHotKey(None, i)
+    print(f"{n} tecla(s) recebida(s)" + ("" if n else ": o Windows não entregou nada (tecla Fn/multimídia?)"))
+    return 0
+
+
+if __name__ == "__main__":
+    import argparse
+    import sys
+    ap = argparse.ArgumentParser(description="ferramentas do feiticos.py")
+    ap.add_argument("--sonda", type=float, metavar="S", help="escuta F8/F9 por S segundos e imprime o que chegar")
+    a = ap.parse_args()
+    for s in (sys.stdout, sys.stderr):
+        s.reconfigure(encoding="utf-8")
+    if a.sonda:
+        sys.exit(sonda(a.sonda))
+    ap.print_help()

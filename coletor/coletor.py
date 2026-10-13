@@ -62,6 +62,17 @@ def configurar_log(console=False):
         s.addFilter(SemSegredo())
         log.addHandler(s)
     log.setLevel(logging.INFO)
+    # thread que morre com exceção não tratada ia só para o stderr (nenhum, na tarefa agendada): sem isto
+    # um atalho, overlay ou leitor morto não deixava rastro (13/10/2026, F8/F9 mudos no treino)
+    import threading
+    anterior = threading.excepthook
+
+    def _thread_morreu(args):
+        if args.exc_type is not SystemExit:
+            log.error("thread %s morreu: %s: %s", getattr(args.thread, "name", "?"), args.exc_type.__name__,
+                      args.exc_value, exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
+        anterior(args)
+    threading.excepthook = _thread_morreu
 
 
 # ---------- lockfile e LCU ----------

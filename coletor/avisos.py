@@ -34,7 +34,15 @@ TIPOS = {
     "adversario_voltou": dict(prio=40, validade=6, repetir=30, urgente=False, destinos="vpm", cor="azul", icone="olho"),
     "inimigo_fed":       dict(prio=35, validade=20, repetir=120, urgente=False, destinos="vp", cor="amarelo", icone="espada"),
     "ouro_guardado":     dict(prio=30, validade=20, repetir=120, urgente=False, destinos="vp", cor="amarelo", icone="moeda"),
+    # retorno dos atalhos (o próprio Gabriel apertou a tecla), nunca vermelho (vermelho é perigo; foi o que
+    # confundiu no treino de 13/10/2026). retorno=True: só preenche tempo ocioso (MotorAvisos._distribuir):
+    # sai na hora sem alerta na moldura, nunca apaga nem passa na frente de alerta, não corta fala e não
+    # conta no intervalo da voz. Cada evento sai com o destino dele (Aviso.destinos): F9 armado e "sem
+    # inimigo" só na moldura; marcado e desfeito, voz + moldura.
+    "feitico_marcado":   dict(prio=45, validade=3, repetir=1, urgente=False, retorno=True, destinos="vm", cor="verde", icone="relogio"),
+    "overlay_f8":        dict(prio=45, validade=3, repetir=1, urgente=False, retorno=True, destinos="m", cor="azul", icone="olho"),
 }
+CORES_RETORNO = ("azul", "verde")   # cores permitidas no retorno de atalho (teste-alertas confere)
 # regra do coach.py que chega pelo motor sem tipo próprio usa este molde
 TIPO_REGRA = dict(prio=20, validade=15, repetir=180, urgente=False, destinos="vp", cor="azul", icone="dica")
 
@@ -80,6 +88,18 @@ TEXTOS = {
                     "descontraido": ("{campeao} tá fed, nada de um contra um", "evita 1x1")},
     "ouro_guardado": {"serio": ("{ouro} de ouro guardado, hora de voltar?", "hora de voltar"),
                       "descontraido": ("tá rico: {ouro} de ouro, volta e gasta", "hora de voltar")},
+    # retorno do F9 (tipo feitico_marcado; molde por evento, ver aviso_atalho). {rota} = top, jungler,
+    # mid, atirador, suporte (frase genérica, sem nome de campeão); {feitico} = "flash" (minúsculo)
+    "feitico_marcado": {"serio": ("{feitico} do {rota} marcado", "{rota} sem {feitico}"),
+                        "descontraido": ("anotado: {rota} sem {feitico}", "{rota} sem {feitico}")},
+    "feitico_desfeito": {"serio": ("marcação desfeita", "marcação desfeita"),
+                         "descontraido": ("beleza, desfiz a marcação", "marcação desfeita")},
+    "feitico_armado": {"serio": ("flash: 1 a 5", "flash: 1-5"), "descontraido": ("flash: 1 a 5", "flash: 1-5")},
+    "feitico_sem_inimigo": {"serio": ("sem inimigo nessa posição", "sem inimigo"),
+                            "descontraido": ("ninguém nessa posição", "sem inimigo")},
+    "feitico_sem_feitico": {"serio": ("{rota} sem feitiço para marcar", "sem feitiço"),
+                            "descontraido": ("{rota} sem feitiço para marcar", "sem feitiço")},
+    "overlay_f8": {"serio": ("overlay {estado}", "overlay {estado}"), "descontraido": ("overlay {estado}", "overlay {estado}")},
 }
 ARQUIVOS_TEXTOS = (RAIZ / "pengu" / "posjogo" / "licoes.md", RAIZ / "docs" / "LICOES.md")
 _LINHA_TEXTO = re.compile(r"^\s*-\s*`?([a-z0-9_]+)`?\s*\|(.+)$")
@@ -144,12 +164,14 @@ class Aviso:
     cor: str | None = None
     urgente: bool | None = None
     textos: dict | None = None
+    molde: str = ""       # chave de TEXTOS quando o tipo tem falas por evento (feitico_marcado); vazio = o tipo
+    # destinos: vazio = os do tipo; preenchido = só esses DENTRO dos do tipo (o F9 armado só na moldura)
+    destinos: str = ""
     # preenchidos pelo motor
     fala: str = ""
     rotulo: str = ""
     validade: float = 0.0
     repetir: float = 0.0
-    destinos: str = ""
     icone: str = ""
     furou: bool = False   # falou antes dos 20 s por passar à frente de uma fala informativa (MotorAvisos)
 
@@ -224,10 +246,12 @@ class MotorAvisos:
         a.prio = p["prio"] if a.prio is None else a.prio
         a.cor = a.cor or p["cor"]
         a.urgente = p["urgente"] if a.urgente is None else a.urgente
-        a.validade, a.repetir, a.destinos, a.icone = p["validade"], p["repetir"], p["destinos"], p["icone"]
+        a.validade, a.repetir, a.icone = p["validade"], p["repetir"], p["icone"]
+        # destinos do aviso só restringem os do tipo (nunca acrescentam: a config é por tipo)
+        a.destinos = "".join(d for d in a.destinos if d in p["destinos"]) if a.destinos else p["destinos"]
         if not a.chave.startswith(f"{a.tipo}:"):     # republicar o mesmo Aviso não prefixa de novo
             a.chave = f"{a.tipo}:{a.chave or '-'}"
-        moldes = a.textos or self.textos.get(a.tipo) or {}
+        moldes = a.textos or self.textos.get(a.molde or a.tipo) or {}
         fala, rotulo = moldes.get(self.tom) or moldes.get("serio") or (a.tipo, a.tipo)
         a.fala = _formatar(fala, a.dados)
         a.rotulo = _curto(_formatar(rotulo, a.dados))
@@ -265,18 +289,39 @@ class MotorAvisos:
     def _melhor(fila):
         return max(fila, key=lambda a: (a.prio, -a.em))
 
+    @staticmethod
+    def _e_retorno(a):
+        return bool(TIPOS.get(a.tipo, {}).get("retorno"))
+
     def _distribuir(self, agora):
         for fila in (self._fila_voz, self._fila_moldura):
             vencidos = [a for a in fila if agora - a.em > a.validade]
             for a in vencidos:
                 fila.remove(a)
                 self.suprimidos["vencido"] += 1
-        if self._fila_moldura:
-            a = self._melhor(self._fila_moldura)
+        alertas = [a for a in self._fila_moldura if not self._e_retorno(a)]
+        if alertas:
+            a = self._melhor(alertas)
             if agora - self._ultima_moldura >= self.GAP_MOLDURA or a.urgente:
                 self._fila_moldura.remove(a)
                 self._ultima_moldura = agora
                 self._emitir(agora, "moldura", a)
+        # retorno de atalho (TIPOS retorno=True) só preenche tempo ocioso: sai quando nenhum alerta está na
+        # tela (GAP_MOLDURA desde o último), o mais novo substitui os anteriores, e não mexe em
+        # _ultima_moldura (um alerta que chega depois apaga o retorno na hora, nunca o contrário)
+        retornos = [a for a in self._fila_moldura if self._e_retorno(a)]
+        if retornos and agora - self._ultima_moldura >= self.GAP_MOLDURA:
+            a = max(retornos, key=lambda x: x.em)
+            for x in retornos:
+                self._fila_moldura.remove(x)
+            if len(retornos) > 1:
+                self.suprimidos["substituido"] += len(retornos) - 1
+            self._emitir(agora, "moldura", a)
+        # na voz o retorno sai na hora, em ordem, sem urgência (não corta fala; a fila do voz.py põe atrás
+        # do que está tocando) e fora do intervalo de 20 s: não atrasa nem vence alerta de posição
+        for a in sorted((a for a in self._fila_voz if self._e_retorno(a)), key=lambda x: x.em):
+            self._fila_voz.remove(a)
+            self._emitir(agora, "voz", a)
         if self._fila_voz:
             a = self._melhor(self._fila_voz)
             desde = agora - self._ultima_fala
@@ -290,6 +335,10 @@ class MotorAvisos:
 
     def _emitir(self, agora, destino, a):
         self.emitidos.append((agora, destino, a))
+        if self.log and destino in ("voz", "moldura"):
+            # rastro do que o coach disse/pintou: "a borda ficou vermelha" se confere no log (13/10/2026)
+            self.log.info("aviso %s %s/%s: %s", destino, a.tipo, a.cor,
+                          a.rotulo if destino == "moldura" else a.fala)
         try:
             if destino == "voz" and self.voz is not None:
                 self.voz.falar(a.fala, urgente=a.urgente, prioridade=a.prio)
@@ -310,6 +359,30 @@ class MotorAvisos:
         """Bloco para o /estado do servidor do passo 8."""
         return {"aviso": self.painel(agora), "tom": self.tom, "ligado": dict(self.ligado),
                 "desligados": {d: sorted(s) for d, s in self.desligados.items()}}
+
+
+_RETORNO_F9 = {   # evento do F9 -> (molde em TEXTOS, destinos, cor)
+    "armado": ("feitico_armado", "m", "azul"),
+    "marcado": ("feitico_marcado", "vm", "verde"),
+    "desfeito": ("feitico_desfeito", "vm", "azul"),
+    "sem_inimigo": ("feitico_sem_inimigo", "m", "azul"),
+    "sem_feitico": ("feitico_sem_feitico", "m", "azul"),
+}
+
+
+def aviso_atalho(evento, chave, rota=None, feitico=None, estado=None):
+    """retorno ao jogador de um atalho que ELE apertou -> Aviso para o MotorAvisos.
+    evento do F9: "armado" (rótulo "flash: 1-5"), "marcado" (voz "flash do <rota> marcado" + rótulo
+    "<rota> sem flash"), "desfeito" (voz "marcação desfeita"), "sem_inimigo", "sem_feitico" (feiticos.
+    Feiticos.marcar); "overlay" = F8 (estado "ligado"/"desligado"). rota = feiticos.ROTA_FALA (top,
+    jungler, mid, atirador, suporte; "inimigo" quando a Live Client não deu a posição dele). chave única
+    por aperto (repetir do tipo = 1 s). Cor: azul ou verde."""
+    if evento == "overlay":
+        return Aviso("overlay_f8", {"estado": estado or "?"}, str(chave), cor="azul")
+    molde, destinos, cor = _RETORNO_F9[evento]
+    f = (str(feitico or "flash").split() or ["flash"])[0].lower()
+    return Aviso("feitico_marcado", {"rota": rota or "?", "feitico": f}, f"{evento}:{chave}", cor=cor,
+                 molde=molde, destinos=destinos)
 
 
 # --------------------------------------------------------------------------------------------

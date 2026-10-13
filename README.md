@@ -54,10 +54,10 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 | aceite, fila rápida, enxugamentos, runas, selo do champ select | blocos do plugin e Ctrl+K | (só o plugin) |
 | painel na 2ª tela / amostras de 10 s no banco | Painel ao vivo (2ª tela) | `painelAoVivo` / `amostrasAoVivo` |
 | voz e tom (sério ou descontraído) | Voz | `voz`, `tomVoz` |
-| moldura na tela e cada um dos 16 tipos de alerta, com voz e tela separadas | Alertas na tela | `alertasTela`, `avisosDesligados` |
+| moldura na tela e cada um dos 18 tipos de alerta (com o retorno do F8 e do F9), com voz e tela separadas | Alertas na tela | `alertasTela`, `avisosDesligados` |
 | leitura do minimapa (jungler, gank, alertas de posição) | Minimapa e jungler | `minimapa` |
-| overlay do jungler sobre o minimapa | Minimapa e jungler (e **F8** na partida) | `overlayMinimapa` |
-| Flash inimigo (OCR do chat e **F9 + 1..5** = top..suporte; de novo em 10 s desfaz) | Minimapa e jungler | `feiticos` |
+| overlay do jungler sobre o minimapa (**F8** na partida liga/desliga; a moldura mostra "overlay ligado/desligado") | Minimapa e jungler | `overlayMinimapa` |
+| Flash inimigo: OCR do chat e **F9 e logo depois 1 a 5** (1 top, 2 jungler, 3 mid, 4 atirador, 5 suporte) = ele acabou de usar o flash; repetir em 10 s desfaz. O F9 mostra "flash: 1-5" na borda por 2 s; marcado, a voz diz "flash do mid marcado" | Minimapa e jungler | `feiticos` |
 | os 10 na tela de carregamento (Riot API) | Tela de carregamento | `carregamento` |
 | mentor, modelo e esforço (padrão Sonnet + medium) | Mentor | `mentor`, `mentorModelo`, `mentorEffort` |
 | traumas no selo e na aba Tendência | Traumas | (só o plugin) |
