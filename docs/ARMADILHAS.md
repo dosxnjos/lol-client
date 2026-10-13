@@ -181,8 +181,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `doppler run --project pessoal --config prd --scope ~/.doppler-pessoal -- <cmd>`.
 - **Chave de desenvolvimento vence em 24 h** → o Gabriel regenera no painel developer.riotgames.com
   e o valor novo vai só no `prd`. A Personal API Key não vence (pedido de aprovação; ver docs/MERCADO.md).
-  Produto registrado em 13/10/2026: app `891070` (`developer.riotgames.com/app/891070/apis`); a
-  chave dele entrou no `prd` no mesmo dia e respondeu 200 (limite `100:120,20:1`).
+  **Personal API Key aprovada em 13/10/2026** (app `891070` "lol-client personal coach", status
+  Approved, conferido no painel pelo Playwright): é ela que está no `prd` desde então (limite
+  `100:120,20:1`). Não vence; a chave de desenvolvimento do painel não é mais usada.
 - **`401 Unknown apikey`** → duas causas, olhar o painel antes: (1) a chave **venceu** (o painel
   mostra a validade; regenerar); (2) a chave **acabou de ser gerada** e ainda não vale: leva
   alguns minutos (13/10/2026: a 1ª tinha vencido; a regenerada deu 401 por ~5 min e 200 às 07:21).
