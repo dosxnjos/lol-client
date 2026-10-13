@@ -442,9 +442,27 @@ mesmo mentor). O conceito vale; o método e a fonte não:
     **prova:** `python tools/teste-traumas.py` com histórico sintético (campeão X em 6 de 8
     derrotas e 1 de 8 vitórias → trauma; campeão popular em tudo → não) → `ok`
     **reprova se:** campeão popular aparece como trauma
-20. [ ] (proposta, depende do Gabriel) **mentor com LLM** no pós-jogo: 3 frases no tom
-    "mentor ácido" a partir das lições do passo 6. A chave do Gemini já existe no Doppler
-    (`harness`), camada grátis; ou só o MCP com o Claude, que já existe e não custa nada a mais.
+20. [ ] **Mentor com o Claude do Gabriel** (decidido por ele em 13/10/2026: "usar o meu claude
+    aqui, versão sonnet, com advisor opus"). O coletor chama o **binário oficial** em modo
+    headless (classe D da régua [termos-de-uso](../../cerebro/temas/harness/hooks/termos-de-uso.md):
+    `claude -p` próprio é uso permitido; proxy/SDK pelo plano, não):
+    `claude -p --model sonnet --advisor opus --disallowedTools "<todas as ferramentas>" --output-format json "<prompt>"`.
+    - **Isolamento obrigatório**: cwd e `BACKUP_RAIZ` em `%LOCALAPPDATA%\lol-client-mentor` (fora de
+      qualquer repo; dentro de `C:\Dev` o hook de backup commitaria e daria push), `SESSOES_ABERTAS_IGNORAR=1`,
+      `CENTRAL_ORIGEM=ia:lol-client-mentor`. `--bare` **não serve**: pula o login e dá "Not logged in".
+    - Medido em 13/10/2026: resposta em ~20 s no total (~10 s de API), 1 turno, Sonnet 5.5; o
+      advisor só é chamado quando o modelo acha necessário.
+    - Pós-jogo: no `EndOfGame`, o coletor manda as lições do passo 6 + números da partida + traumas
+      no tom "mentor ácido" (o do `analise_trauma.py` de abril), grava o texto no banco e serve
+      em `/mentor/<gameId>` (servidor do passo 8); o painel mostra "mentor pensando…" e depois o texto.
+    - **Conversa**: caixa "pergunta ao mentor" no pós-jogo continua a mesma sessão (`--resume <session_id>`
+      guardado com o texto), como o chat do `telemetria_partida.py`.
+    - Ao vivo: ~20 s é lento para alerta; serve só para resumo sob demanda (ex.: atalho na tela de morte).
+    - Custo: sai da cota da assinatura (1 chamada por partida + perguntas), sem chave nova.
+    **prova:** `python tools/teste-mentor.py --seco` (monta o prompt da partida de referência e mostra
+    o comando sem chamar) → comando com `--model sonnet --advisor opus` e o env isolado; e uma
+    chamada real → texto não vazio em ≤ 60 s gravado na tabela `mentor`
+    **reprova se:** cwd dentro de `C:\Dev`, ferramenta liberada no comando, ou texto vazio
 
 ### Fase E — fechamento
 
