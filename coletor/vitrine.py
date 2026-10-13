@@ -40,7 +40,7 @@ BLOCO_PRIVACIDADE = 24      # px do pixelado nas regiões com nome de jogador
 PRIVACIDADE = ((0.53, 0.74, 0.72, 0.92), (0.0, 0.62, 0.30, 1.0), (0.30, 0.0, 0.70, 0.10))
 LEIA_ME = ("Prints do modo vitrine (coletor/vitrine.py). Antes de usar em resumo, apresentação ou mensagem:\n"
            "revisão de privacidade. Nomes de outros jogadores podem aparecer (barras de vida, placar com Tab,\n"
-           "chat fora da posição medida). O recorte do minimapa quase não tem nome; a tela inteira já vai\n"
+           "avisos de abate no canto superior direito, chat fora da posição medida). O recorte do minimapa quase não tem nome; a tela inteira já vai\n"
            "reduzida e com chat e topo central pixelados, mas não é garantia. Campo revisao_privacidade no\n"
            "vitrine.jsonl: 'pendente' até alguém olhar.\n")
 
