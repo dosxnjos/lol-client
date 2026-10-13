@@ -263,8 +263,11 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
      (foto 64 px, skin 240×142, WebP) e embutidas; o HTML segue sem URL externa (~0,5 MB).
    - tela 5: botão enviar e campo com a mesma altura e centro (o botão era mais alto que a faixa e vazava para
      baixo); barra das janelas, contador de não lidas e "convidar" alinhados ao centro da linha.
-   - telas 1 e 4 (aprovadas) mudaram só no ícone do campeão (letra → foto), mesmo componente da tela 3.
+   - telas 1, 4 e 7 (aprovadas) mudaram só no ícone do campeão (letra → foto): mesmo componente da tela 3; volta à
+     letra com um `if` no `cp()` se ele preferir.
    - atalho de endereço `#3`, `#3b`, `#5` abre direto na tela (prints por Edge headless em `temp/prototipo-compacto/`).
+   - chave das marcações **mantida** (`lc-prototipo-compacto-v2`): as 5 aprovações dele continuam marcadas e ele só
+     re-marca a 3 e a 5 (o contrário da rodada anterior, que trocou a chave porque o protótipo inteiro mudou).
 1. [ ] **Medir as [S] numa ranqueada real, só leitura** (gravador do coletor ou `tools/cdp.mjs eval` com GET):
    estados de `positionSwaps`/`pickOrderSwaps`/`trades` e `summoners/{slotId}` a cada `Update`; `skin-carousel-skins`
    dentro da seleção; `lol.gameStatus` de um amigo na fila e `lol.timeStamp`; `GET /lol-matchmaking/v1/search` na fila
