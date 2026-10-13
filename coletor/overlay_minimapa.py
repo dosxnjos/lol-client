@@ -10,6 +10,7 @@ import ctypes.wintypes as wt
 import logging
 import threading
 import time
+import unicodedata
 
 import cv2
 import numpy as np
@@ -44,11 +45,42 @@ def renderizar(calor, lado, texto=None):
         borda = cv2.morphologyEx(m.astype(np.uint8), cv2.MORPH_GRADIENT, np.ones((3, 3), np.uint8)) > 0
         img[borda] = (255, 255, 255)
     if texto:
-        # caixa do tamanho do texto, não uma faixa na largura toda (cobria o topo do mapa)
+        img = _escrever(img, texto, lado)
+    return img
+
+
+_FONTE = None
+
+
+def _fonte():
+    """Segoe UI do Windows (tem acento); sem ela, None e o texto cai no cv2 sem acento"""
+    global _FONTE
+    if _FONTE is None:
+        try:
+            from PIL import ImageFont
+            _FONTE = ImageFont.truetype(r"C:\Windows\Fonts\segoeui.ttf", 13)
+        except Exception:
+            _FONTE = False
+    return _FONTE or None
+
+
+def _escrever(img, texto, lado):
+    """caixa do tamanho do texto no topo, não uma faixa na largura toda (cobria o topo do mapa).
+    cv2.putText só tem ASCII ("há" saía "h??"): o texto vai pelo Pillow com fonte do sistema."""
+    fonte = _fonte()
+    if fonte is None:
+        texto = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
         (w, h), base = cv2.getTextSize(texto, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
         cv2.rectangle(img, (0, 0), (min(lado - 1, w + 8), h + base + 6), (20, 20, 20), -1)
         cv2.putText(img, texto, (4, h + 3), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
-    return img
+        return img
+    from PIL import Image, ImageDraw
+    pil = Image.fromarray(img)
+    d = ImageDraw.Draw(pil)
+    x0, y0, x1, y1 = d.textbbox((4, 2), texto, font=fonte)
+    d.rectangle((0, 0, min(lado - 1, x1 + 4), y1 + 3), fill=(20, 20, 20))
+    d.text((4, 2), texto, font=fonte, fill=(255, 255, 255))
+    return np.asarray(pil).copy()
 
 
 def _dpi_fisico():

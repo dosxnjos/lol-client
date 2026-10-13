@@ -285,6 +285,10 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 1.
 
 Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 
+- **Texto do overlay saía "sumido h?? 38 s"** → `cv2.putText` só tem fonte ASCII. O texto do overlay vai
+  pelo Pillow com a Segoe UI do Windows (`overlay_minimapa._escrever`); sem a fonte, cai no cv2 sem acento
+  (nunca "?"). Achado pela revisão do resumo visual em 13/10/2026.
+
 - **`lado_estimado` 382 do `calibracao.json` é a moldura, não o mapa** → a moldura dourada mede
   ~381×382 em (2179, 698); o mapa (quadrado preto dos ícones) mede **347 px em (2197, 716)** em
   2560×1080 com `MinimapScale` 2,46. Converter mundo→pixel com 382 erra ~10%: [COLETOR](COLETOR.md) § Minimapa.
