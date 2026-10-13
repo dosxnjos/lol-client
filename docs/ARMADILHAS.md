@@ -302,12 +302,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   (`GetForegroundWindow`, título "League of Legends (TM) Client"), pela faixa (16,28,27) em volta do
   mapa ou pelo tamanho do PNG (< ~300 KB contra ~3,7 MB).
 - **Trazer a janela do jogo para a frente com o Gabriel usando o PC manda o que ele digita para o jogo**
-  (incidente 13/10/2026 ~18:28:50, `temp/resumo-jogo/captura.py`) → a `rajada()` punha o jogo na frente por ~1 s
+  (incidente 13/10/2026 ~18:28:50, script de captura avulso em `temp/`, já apagado) → a `rajada()` punha o jogo na frente por ~1 s
   (`AttachThreadInput` + `SetForegroundWindow`) e devolvia a janela de antes; o foco vai junto, e o que ele digitava
   no outro app caiu no jogo. A trava de 3–4 s sem tecla (`ocioso()`) não basta: pausa de quem digita passa disso.
   Captura que dependa do jogo em primeiro plano só com o PC ocioso de verdade (ninguém usando) e **nunca forçar o
-  foco**: sem o jogo já na frente, pular a captura e registrar no log. `captura.py` e `demo_overlays.py` (em
-  `temp/`) ainda chamam a `rajada()`: não reusar sem tirar o `_frente`.
+  foco**: sem o jogo já na frente, pular a captura e registrar no log. Os scripts que tinham a `rajada()`
+  (`captura.py`, `demo_overlays.py`) foram apagados com `temp/resumo-jogo/`; captura nova nasce sem `SetForegroundWindow`.
 - **Prints do carregamento sobrescrevem um ao outro** → o nome é o `gameTime`, parado em ~0,025:
   `00000.0.png` é regravado e só a última captura sobrevive.
 - **Minimapa ignora a skin** → mostra o ícone **base** do campeão; o círculo da skin
