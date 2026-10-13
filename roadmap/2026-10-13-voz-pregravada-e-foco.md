@@ -144,6 +144,10 @@
    Estimativa de 13/10: ~500 frases. Com o tempo por frase da bancada, decide: pacote completo na voz
    escolhida, ou só os tipos urgentes nela e o resto numa voz rápida. **prova:** contagem impressa por
    `python -c "from coletor.avisos import catalogo; print(len(catalogo()))"`.
+4a. [ ] **14/10/2026 (pedido do Gabriel: "pode completar o gemini amanhã, não esquece"):** cota grátis do
+   Gemini esgotou em 13/10; rodar `python tools/bancada-vozes.py --motores gemini` (Puck 4 de 6, Orus 6 de 6) e
+   regerar o HTML. Bark: modelo de 13 GB **apagado em 13/10** com autorização do Gabriel (clipes das frases 1 e 6
+   ficam no HTML; não serve ao pacote: RTF 32,5 e inventa áudio) — não retomar `--motores bark`.
 4. [x] **Bancada de vozes** (`tools/bancada-vozes.py`, venv isolado em
    `%LOCALAPPDATA%\lol-client\voz\venv` com Python 3.11 do `uv`, nunca no Python do coletor): as
    mesmas 6 frases do catálogo em cada candidata, com o tempo de geração por frase:
