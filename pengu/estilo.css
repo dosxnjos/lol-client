@@ -6,11 +6,12 @@ html.lc-esconder-tft .game-type-card:has(.parties-game-type-icon.map-22),
 html.lc-esconder-tft .main-navigation-menu-item.menu_item_navbar_tft { display: none !important; }
 
 /* coluna larga das filas (protótipo aprovado pelo Gabriel: "ficou boa a questão do width") */
-html.lc-coluna-larga .game-type-card.selected .parties-game-type-lower-half { width: 340px; height: 360px; position: relative; z-index: 2; }
+/* só no cartão que tem lista de filas (Rift): o do Modo de Treino não tem e a altura fixa cobria o Confirmar */
+html.lc-coluna-larga .game-type-card.selected .parties-game-type-lower-half:has(.parties-game-type-card-categories) { width: 340px; height: 360px; position: relative; z-index: 2; }
 html.lc-coluna-larga .game-type-card.selected .parties-game-type-card-categories { width: 100%; max-height: none; }
 html.lc-coluna-larga .game-type-card.selected .parties-game-type-card-category-div { width: auto; }
 /* os 2 últimos cards abrem para a esquerda (340 - 180), senão passam da borda direita */
-html.lc-coluna-larga .game-type-card.selected:nth-last-child(-n+2) .parties-game-type-lower-half { margin-left: -160px; }
+html.lc-coluna-larga .game-type-card.selected:nth-last-child(-n+2) .parties-game-type-lower-half:has(.parties-game-type-card-categories) { margin-left: -160px; }
 
 /* extras (desligados por padrão) */
 html.lc-esconder-evento .main-navigation-menu-item.menu_item_event_hub_generic_nav_name,

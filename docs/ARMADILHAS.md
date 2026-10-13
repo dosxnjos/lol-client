@@ -11,6 +11,13 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Porta 8888 não responde** → `RemoteDebuggingPort=8888` vive em
   `C:\Program Files\Pengu Loader\config` (adicionada 13/10/2026; backup do original em
   `%TEMP%\pengu-config.bak`). Só vale depois de recarregar a interface.
+- **`cdp.mjs` mira na página errada** → com o DevTools do client aberto, ele também é `type: "page"` e
+  pode vir primeiro na `/json/list`; o `eval` roda no DevTools. Mirar na página cuja url tem `/index.html`
+  e não começa com `devtools://` (corrigido 13/10/2026). A url da página traz a credencial: nunca logar.
+- **Botão Confirmar do Modo de Treino não clica** → a altura fixa da coluna larga (360 px, `z-index: 2`)
+  valia para todo cartão selecionado; o do Treino não tem lista de filas e a caixa vazia cobria o botão.
+  A regra só vale com `:has(.parties-game-type-card-categories)` (13/10/2026). Trocar o CSS ao vivo: o
+  Pengu injeta o `estilo.css` como `<link>`; trocar por `<style>` com o texto novo.
 - **Clique por coordenada erra o alvo** → a janela tem `devicePixelRatio` 1,25; print em
   1600×900, CSS em 1280×720. Coordenada do print ÷ 1,25.
 - **`el.click()` em botão do Ember não faz nada** → alguns componentes do uikit só reagem a

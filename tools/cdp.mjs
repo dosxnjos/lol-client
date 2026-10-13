@@ -2,7 +2,8 @@
 import { readFileSync, writeFileSync } from 'node:fs';
 const [, , mode, arg] = process.argv;
 const list = await (await fetch('http://127.0.0.1:8888/json/list')).json();
-const page = list.find(t => t.type === 'page');
+// com o DevTools aberto ele também é uma "page" (e pode vir primeiro): mirar só na página do client
+const page = list.find(t => t.type === 'page' && !t.url.startsWith('devtools://') && t.url.includes('/index.html'));
 const ws = new WebSocket(page.webSocketDebuggerUrl);
 let id = 0; const pending = new Map();
 ws.onmessage = e => { const m = JSON.parse(e.data); if (pending.has(m.id)) { pending.get(m.id)(m); pending.delete(m.id); } };
