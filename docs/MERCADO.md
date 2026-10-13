@@ -172,7 +172,23 @@ A personal substitui o valor no mesmo segredo. Nunca no repo, em log ou em doc.
 Key**, descrição: "coach pessoal local, uso só meu: meu histórico e os 10 jogadores da minha
 partida a partir da tela de carregamento; usa LCU e Live Client Data API; endpoints account-v1,
 league-v4, champion-mastery-v4, match-v5, spectator-v5". Aprovada, colar a chave no
-`LOL_RIOT_API_KEY` do Doppler pessoal (`prd`).
+`LOL_RIOT_API_KEY` do Doppler pessoal (`prd`). **Feito em 13/10/2026**: app `891070`, Approved.
+
+### Os 39 métodos da chave pessoal (painel do app 891070, 13/10/2026)
+
+| uso no lol-client | API (métodos) | para quê |
+| --- | --- | --- |
+| **central** | `match-v5` (ids por puuid, partida, timeline, replays) | teu histórico completo, sem o teto de 20/200 da LCU; histórico recente dos 9 da partida; timeline para "morre cedo" (L3) |
+| **central** | `spectator-v5` (partida ativa por puuid) | no carregamento: os 10 com puuid, campeão, feitiços, **runas completas** (`perks`) e bans. Runas inimigas destravam a Visão Cósmica no cronômetro de flash (15e) |
+| **central** | `league-v4` (`entries/by-puuid`) | elo, PdL, vitórias e derrotas, `hotStreak`, `veteran`, `freshBlood` (L1) |
+| **central** | `champion-mastery-v4` (por campeão, top, pontuação) | primeira vez / OTP / experiência no campeão (L1, L2) |
+| **central** | `account-v1` (por Riot ID, por puuid) | Riot ID ↔ puuid; `summoner-v4` (por puuid) dá o nível, pista de smurf |
+| **meta própria (C2)** | `league-v4` (`entries/{fila}/{tier}/{divisão}`, listas de Mestre/GM/Desafiante), `league-exp-v4` | amostrar jogadores do teu elo → `match-v5` → winrate de campeão por rota no teu elo |
+| útil, menor | `lol-challenges-v1` (dados do jogador, percentis, configs) | estatísticas agregadas por jogador (percentis de desafios): perfil extra no carregamento |
+| útil, menor | `lol-status-v4` | aviso de instabilidade ou manutenção no servidor BR |
+| útil, menor | `champion-v3` (rotação) | campeões grátis da semana |
+| só se jogar Clash | `clash-v1` (5 métodos) | ver o time adversário do Clash antes da partida |
+| sem uso | `tournament-stub-v5` (5 métodos) | ambiente de teste de torneio, nada para o coach |
 
 ## 6. Regras e fronteira
 
