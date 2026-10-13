@@ -215,6 +215,8 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
   return {
     // desenhar(sessao): teste com sessão gravada (sem argumento, a última do socket)
     lerHistorico, desenhar: s => { if (s !== undefined) ultimaSessao = s; return desenhar(); }, coach: () => ({ ...coach }),
+    // cache do histórico para o freio de tilt da fila rápida (fila-rapida.criarSequencia); null = nunca leu
+    partidas: () => (ultimaLeitura ? [...partidas.values()] : null),
     // eventos e alvo: diagnóstico para o teste ao vivo (o socket entrega? qual campo trouxe o campeão?)
     estado: () => ({ partidas: partidas.size, carregando: !!carregando, ultimaLeitura, falhou, eventos, alvo: meu(ultimaSessao) }),
     estatisticas: (championId, posicao) => estatisticasCampeao([...partidas.values()], championId, posicao),

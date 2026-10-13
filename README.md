@@ -57,7 +57,9 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 | esconder o popup de partida encontrada (só com o aceite automático; volta se o aceite não vier) | Aceitar partida | (plugin: `aceite.esconderPopup`) |
 | silenciar o som em loop depois de aceitar (o aviso de partida encontrada continua) | Aceitar partida | (plugin: `aceite.silenciarSom`) |
 | janelinha aceitar/recusar fora do client, por cima de tudo e sem roubar a tela (precisa do coletor) | Aceitar partida | `aceiteFlutuante` (+ `aceiteAtrasoS`, que o plugin manda sozinho) |
-| botão "jogar de novo e buscar" no pós-jogo e o freio de tilt (pedir 2º clique depois de N derrotas seguidas; padrão: nunca) | Fila rápida | (plugin: `filaRapida.jogarDeNovo`, `filaRapida.freioTilt`) |
+| botão "jogar de novo e buscar" no pós-jogo | Fila rápida | (plugin: `filaRapida.jogarDeNovo`) |
+| freio de tilt: pedir 2º clique depois de N derrotas seguidas na sessão (padrão: 2; 0 = nunca), na fila rápida e no jogar de novo | Fila rápida | (plugin: `filaRapida.freioTilt`) |
+| freio de madrugada: pedir 2º clique ao buscar entre 01:00 e 05:59, hora do PC (padrão: ligado), nos mesmos dois botões | Fila rápida | (plugin: `filaRapida.freioMadrugada`) |
 | coletar recompensas sozinho / incluir o passe do TFT | Recompensas | (plugin: `recompensas.ligado`, `recompensas.tft`) |
 | painel na 2ª tela / amostras de 10 s no banco | Painel ao vivo (2ª tela) | `painelAoVivo` / `amostrasAoVivo` |
 | voz e tom (sério ou descontraído) | Voz | `voz`, `tomVoz` |
@@ -72,6 +74,14 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 **Jogar de novo:** só busca quando tu clica, nunca sozinho. Volta à mesma fila da partida que acabou, com as tuas
 posições; em grupo só volta ao lobby (quem busca é o líder); com penalidade (dodge, leaver) diz o motivo e o prazo e
 não busca. Plano: [jogar de novo](roadmap/2026-10-13-jogar-de-novo.md).
+
+**Freios (fila rápida e jogar de novo):** com 2 derrotas seguidas na sessão (pausa < 2 h) ou de madrugada (01:00 a
+05:59), o 1º clique só mostra o motivo com o número medido ("de madrugada teu winrate cai: 47% contra 58% de dia.
+buscar mesmo assim?") e o 2º, entre 0,7 s e 8 s depois, busca (duplo clique rápido é ignorado); sem o 2º clique nada
+acontece. Nunca bloqueia de vez, nunca busca sozinho. Em grupo ou sem ser o líder o "jogar de novo" só volta ao lobby
+e não pede confirmação. Números e data da medição: `pengu/freios.js` (`MEDICAO`). O resultado da partida que acabou
+vem do fim de partida (`eog-stats-block`) até o histórico trazê-la: vitória zera na hora. Histórico que não carregou
+a tempo = "não sei quantas derrotas" e também pede o 2º clique.
 
 **Recompensas:** ao abrir o client e 30 s depois de cada partida, pega o que não tem escolha (concessões de
 recompensa, trilha dos eventos e, se ligado, o passe do TFT). De cada tipo pega uma primeiro e só pega o resto depois

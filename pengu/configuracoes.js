@@ -5,6 +5,7 @@
 // Módulos novos plugam controles sem editar este arquivo: registrarBloco(nome, renderizar).
 // Seletores medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md.
 import { ATRASOS, FREIOS } from './config.js';
+import { MEDICAO, JANELA_MS } from './freios.js';
 
 const SEL = {
   container: '.lol-settings-container',
@@ -114,7 +115,8 @@ function montar(painel, cfg, definir, restaurar) {
     caixa('filaRapida.jogarDeNovo', 'Botão "jogar de novo" no pós-jogo', 'Um clique volta ao lobby da mesma fila da partida, põe as tuas posições e busca. Em grupo só volta ao lobby: quem busca é o líder. Nunca busca sozinho.'),
     ui.linha(ui.lista('filaRapida.freioTilt', 'Pedir confirmação depois de', FREIOS.map(n => [n, n ? `${n} derrotas seguidas` : 'nunca']),
       cfg.filaRapida.freioTilt, v => definir('filaRapida.freioTilt', v))),
-    ui.explica('Freio de tilt: com essa sequência de derrotas na sessão, o "jogar de novo" pede um segundo clique.'));
+    ui.explica(`Freio de tilt: com essa sequência de derrotas na sessão, a fila rápida e o "jogar de novo" pedem um segundo clique em até ${JANELA_MS / 1000} s. Depois de 2 derrotas seguidas teu winrate cai para ${MEDICAO.wrDepoisDe2}% (${MEDICAO.partidas} partidas, ${MEDICAO.data}).`),
+    caixa('filaRapida.freioMadrugada', 'Pedir confirmação de madrugada (1h–6h)', `Entre 01:00 e 05:59 (hora do PC), a fila rápida e o "jogar de novo" pedem um segundo clique. De madrugada teu winrate é ${MEDICAO.wrMadrugada}%, contra ${MEDICAO.wrDia}% de dia.`));
 
   add(ui.secao('Recompensas'),
     caixa('recompensas.ligado', 'Coletar recompensas sozinho', 'Ao abrir o client e 30 s depois de cada partida, pega as recompensas que não têm escolha (concessões, trilha do evento); de cada tipo, pega uma primeiro e confere antes do resto. Nunca abre baú, cria, desencanta nem compra; recompensa de escolher fica para ti, com aviso.'),

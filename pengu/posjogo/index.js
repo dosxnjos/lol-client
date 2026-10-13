@@ -7,6 +7,7 @@ import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPar
   abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from './abas.js';
 import regrasMd from './licoes.md?raw';
 import { jogarDeNovo } from '../fila-rapida.js';
+import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -197,31 +198,35 @@ async function acaoMentor(p, caminho, corpo) {
   return r.status;
 }
 
-// "jogar de novo e buscar": só o clique chama (fila-rapida.js jogarDeNovo). Freio de tilt: o 1º clique com
-// N derrotas seguidas na sessão (a mesma regra do tilt do projeto: pausa < 2 h) só pede confirmação.
+// "jogar de novo e buscar": só o clique chama (fila-rapida.js jogarDeNovo). Freios (freios.js, os mesmos da fila
+// rápida): com N derrotas seguidas na sessão (pausa < 2 h) ou de madrugada, o 1º clique só pede confirmação e o 2º,
+// em até 8 s, busca. Sem o 2º clique nada acontece.
 const avisarToast = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(msg); } catch { console.log('[lol-client]', msg); } };
 async function acaoJogarDeNovo(p, botao) {
-  if (botao.disabled) return;
-  const confirmado = botao.dataset.confirmar === '1';
+  p.confirmacao ||= criarConfirmacao();
+  // duplo clique de reflexo (2º clique em menos de 700 ms depois de armar): ignorado, a confirmação segue na tela
+  if (botao.disabled || p.confirmacao.cedo()) return;
   const textoOriginal = 'jogar de novo e buscar';
   botao.disabled = true;
   botao.textContent = 'voltando ao lobby…';
   let r;
   try {
-    // histórico que não carregou: a sequência é incerta (null) e o freio pede confirmação em vez de chutar 1
-    const seq = p.r.vitoria ? 0 : (p.r.historicoIncompleto || !p.r.sessao ? null : p.r.sessao.seq);
-    r = await jogarDeNovo(p.cfg, { derrotasSeguidas: seq, confirmado, queueIdEsperado: p.r.esta?.fila });
+    r = await cliqueComFreio(p.confirmacao, confirmado => {
+      // histórico que não carregou: a sequência é incerta (null) e o freio pede confirmação em vez de chutar 1
+      const seq = p.r.vitoria ? 0 : (p.r.historicoIncompleto || !p.r.sessao ? null : p.r.sessao.seq);
+      return jogarDeNovo(p.cfg, { derrotasSeguidas: seq, confirmado, queueIdEsperado: p.r.esta?.fila });
+    });
   } catch (e) { r = { status: 'recusa', motivo: e?.message || String(e) }; }
+  clearTimeout(p.timerFreio);
   botao.disabled = false;
   botao.classList.remove('lc-confirmar');
-  delete botao.dataset.confirmar;
   botao.textContent = textoOriginal;
+  botao.title = 'volta ao lobby da mesma fila e busca partida';
   if (r.status === 'confirmar') {
-    botao.dataset.confirmar = '1';
     botao.classList.add('lc-confirmar');
-    botao.textContent = r.derrotas === null ? 'sequência de derrotas incerta (histórico não carregou): clicar de novo para jogar'
-      : `${r.derrotas} derrotas seguidas: clicar de novo para jogar mesmo assim`;
-    setTimeout(() => { if (botao.dataset.confirmar) { delete botao.dataset.confirmar; botao.classList.remove('lc-confirmar'); botao.textContent = textoOriginal; } }, 10000);
+    botao.textContent = r.texto;
+    botao.title = `clica de novo em até ${JANELA_MS / 1000} s para buscar`;
+    p.timerFreio = setTimeout(() => { botao.classList.remove('lc-confirmar'); botao.textContent = textoOriginal; }, JANELA_MS + 50);
     return;
   }
   if (r.status === 'buscando') { avisarToast('de volta à fila'); fechar(); return; }

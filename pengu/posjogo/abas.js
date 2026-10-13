@@ -9,7 +9,7 @@ export const ABAS = [['resumo', 'Resumo'], ['rota', 'Rota'], ['mortes', 'Mortes'
 const LARG = 14870, ALT = 14980, PX = 330;
 const sx = x => (x / LARG * PX).toFixed(1);
 const sy = y => ((ALT - y) / ALT * PX).toFixed(1);
-const SESSAO_GAP_MS = 2 * 3600 * 1000; // mesma regra do licoes.js e do tilt no MCP
+export const SESSAO_GAP_MS = 2 * 3600 * 1000; // mesma regra do licoes.js, do tilt no MCP e do freio (freios.js)
 const REMAKE_S = 300;
 
 export const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
@@ -59,7 +59,7 @@ export function objetivosDaPartida(partida, linha, meuTime) {
   return out.sort((a, b) => a.ms - b.ms);
 }
 
-const valida = g => g?.mapId === 11 && !FORA_DAS_CONTAS.includes(g.queueId) && g.gameDuration >= REMAKE_S && !!g.participants?.[0]?.stats;
+export const valida = g => g?.mapId === 11 && !FORA_DAS_CONTAS.includes(g.queueId) && g.gameDuration >= REMAKE_S && !!g.participants?.[0]?.stats;
 
 // 4 indicadores desta partida contra as últimas 20 válidas antes dela (histórico da LCU, só o meu participante)
 const INDICADORES = [

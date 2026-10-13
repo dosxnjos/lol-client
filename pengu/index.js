@@ -19,9 +19,11 @@ const seguro = (nome, fn) => { try { return fn(); } catch (e) { console.error(`[
 export function init(context) {
   seguro('config', carregar);
   const aceite = seguro('aceite', () => iniciarAceite(context, cfg));
-  const fila = seguro('fila rápida', () => iniciarFilaRapida(context, cfg));
-  const posjogo = seguro('pós-jogo', () => iniciarPosjogo(context, cfg, coletor));
+  // champ select antes da fila rápida: o cache de histórico dele alimenta o freio de tilt (sem ele, a fila lê sozinha)
   const champ = seguro('champ select', () => iniciarChampSelect(context, cfg, coletor));
+  const historico = champ ? { partidas: champ.partidas, ler: champ.lerHistorico } : null;
+  const fila = seguro('fila rápida', () => iniciarFilaRapida(context, cfg, { historico }));
+  const posjogo = seguro('pós-jogo', () => iniciarPosjogo(context, cfg, coletor));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
   const recompensas = seguro('recompensas', () => iniciarRecompensas(context, cfg));
   seguro('configurações', () => iniciarConfiguracoes({ cfg, definir, aoMudar, restaurar }));
@@ -56,6 +58,7 @@ export function init(context) {
   window.__lolClient = {
     cfg, definir, aoMudar, classes, registrarBloco,
     prepararLobby: fila?.prepararLobby,
+    derrotasSeguidas: fila?.derrotasSeguidas, // o que o freio de tilt da fila rápida vê agora (só leitura; null = não sei)
     analisarUltima, abrirPainel, analisarPartida, fecharPainel,
     posjogo, // aba('rota') troca a aba do painel aberto (prints da prova)
     coach: { coletor, estadoConexao, sincronizar: () => sincronizarConfig(cfg) },

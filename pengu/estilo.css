@@ -32,6 +32,8 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 #lc-fila-rapida:hover { color: #f0e6d2; border-image: linear-gradient(180deg, #f0e6d2, #c8aa6e) 1; box-shadow: 0 0 8px rgba(200, 170, 110, .35); }
 #lc-fila-rapida.lc-buscando { color: #0ac8b9; border-image: linear-gradient(180deg, #0ac8b9, #005a82) 1; }
 #lc-fila-rapida.lc-ocupado { opacity: .6; pointer-events: none; }
+/* freio (tilt ou madrugada): o 1º clique armou; o 2º em até 8 s busca (freios.js) */
+#lc-fila-rapida.lc-confirmar { color: #e84057; border-image: linear-gradient(180deg, #e84057, #7a1f2b) 1; }
 
 /* overlay do aceite automático: acima do painel pós-jogo (100001), que também fecha no ReadyCheck */
 #lc-aceite {
