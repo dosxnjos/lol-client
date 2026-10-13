@@ -120,9 +120,11 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
 - **API antes de print** (Gabriel, 13/10/2026: "o que a gente conseguir evitar fazer sem print
   na tela, melhor"): toda informação sai primeiro da Live Client, da LCU e do histórico. Captura
   de tela só onde não existe API (posição no minimapa: passos 13, 15b, 15c e o fallback OCR do
-  15e), sempre como módulo separado que liga e desliga na seção do 7b, **desligado por padrão**
-  até o Gabriel decidir. O gravador só tira print com `--tela`. O chat do jogo é sondado pela
-  LCU (`/lol-chat/v1/conversations`, sem conversas privadas) antes de pensar em OCR.
+  15e), sempre como módulo separado que liga e desliga na seção do 7b. Atualização do Gabriel
+  no mesmo dia: "pode usar print então, no fear, mas api first": os módulos de tela nascem
+  **ligados**, e a regra de preferir API continua (se a API cobre, não se usa print). O gravador
+  roda a partida de medição com `--tela`. O chat do jogo é sondado pela LCU
+  (`/lol-chat/v1/conversations`, sem conversas privadas) antes de pensar em OCR.
 
 - **2ª tela antes de overlay**: zero interação com a janela do jogo, legível, e o Gabriel já
   tem o monitor. Overlay vira proposta depois. Quem: opus 5.5; confiança alta.
