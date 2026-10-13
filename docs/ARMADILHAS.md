@@ -88,6 +88,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   fila personalizada (`GET /lol-game-queues/v1/custom`; 3100 = SR às cegas) e o corpo precisa
   de `queueId: 3100` no topo, junto de `customGameLobby` e `isCustom: true`. Iniciar a seleção:
   `POST /lol-lobby/v1/lobby/custom/start-champ-select` (13/10/2026).
+- **Personalizada com o campeão parado cai por inatividade em ~2,5–3 min** (partida 3292880277,
+  13/10/2026, `TerminatedInError`) → o jogo avisa "Aviso de ociosidade" aos 0:50 e encerra a partida
+  logo depois, mesmo personalizada com bots. Print de 6–8 min (painel no meio do jogo, preparo de
+  objetivo, pico de força) exige alguém jogando; captura sem ninguém no teclado só rende os 2 primeiros minutos.
 - **Campeão duplicado na busca** → `champion-summary.json` traz variantes de modo com o mesmo nome
   (60103 = `Jade_Ahri`); filtrar `id < 10000` (13/10/2026). Vale para a tabela `campeoes` do banco: 77
   nomes têm a variante 60xxx e um mapa nome→id sem o filtro pega ela (Lee Sin → 60064, sem participante:
@@ -297,6 +301,13 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   recortes (11%) e 6 de 35 telas, com conteúdo pessoal. Filtrar por janela em primeiro plano
   (`GetForegroundWindow`, título "League of Legends (TM) Client"), pela faixa (16,28,27) em volta do
   mapa ou pelo tamanho do PNG (< ~300 KB contra ~3,7 MB).
+- **Trazer a janela do jogo para a frente com o Gabriel usando o PC manda o que ele digita para o jogo**
+  (incidente 13/10/2026 ~18:28:50, `temp/resumo-jogo/captura.py`) → a `rajada()` punha o jogo na frente por ~1 s
+  (`AttachThreadInput` + `SetForegroundWindow`) e devolvia a janela de antes; o foco vai junto, e o que ele digitava
+  no outro app caiu no jogo. A trava de 3–4 s sem tecla (`ocioso()`) não basta: pausa de quem digita passa disso.
+  Captura que dependa do jogo em primeiro plano só com o PC ocioso de verdade (ninguém usando) e **nunca forçar o
+  foco**: sem o jogo já na frente, pular a captura e registrar no log. `captura.py` e `demo_overlays.py` (em
+  `temp/`) ainda chamam a `rajada()`: não reusar sem tirar o `_frente`.
 - **Prints do carregamento sobrescrevem um ao outro** → o nome é o `gameTime`, parado em ~0,025:
   `00000.0.png` é regravado e só a última captura sobrevive.
 - **Minimapa ignora a skin** → mostra o ícone **base** do campeão; o círculo da skin
