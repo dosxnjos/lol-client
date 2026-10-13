@@ -24,6 +24,7 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 #lc-fila-rapida {
   position: absolute; left: 250px; top: 24px; height: 34px; padding: 0 12px; box-sizing: border-box; z-index: 2;
   display: flex; align-items: center; white-space: nowrap; cursor: pointer; user-select: none;
+  pointer-events: auto; /* o pai (.navbar_backdrop) fica com pointer-events: none com o lobby aberto e herdava */
   font: 700 12px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #cdbe91;
   background: linear-gradient(180deg, #1e2328, #0f1317);
   border: 2px solid transparent; border-image: linear-gradient(180deg, #c8aa6e, #785a28) 1;
