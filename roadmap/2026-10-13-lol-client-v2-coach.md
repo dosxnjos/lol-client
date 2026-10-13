@@ -398,6 +398,28 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     nada gravado em `partidas`) → `5/5 ok`
     **reprova se:** qualquer item falha
 
+### Fase F — inteligência no champ select e no carregamento (pedido do Gabriel, 13/10/2026)
+
+Pesquisa de mercado, tags, previsão de vitória, Riot API e fronteira (anonimato no champ select
+da ranqueada desde o patch 12.22: jogador de terceiro só a partir do carregamento) em
+[docs/MERCADO.md](../docs/MERCADO.md), que é o contrato desta fase: a tabela da § 7 (C1–C4,
+L1–L5, prioridade e custo de chamadas) e as decisões técnicas de lá valem como passos.
+Chave: `LOL_RIOT_API_KEY` no Doppler pessoal ([ARMADILHAS](../docs/ARMADILHAS.md) § Riot API).
+
+17. [ ] C1 (= passo 4) + C2 + C3 no champ select: winrate dos 10 campeões na rota provável,
+    rota provável do inimigo, força do draft em faixa com os 2–3 termos que mais pesaram.
+    Antes do C2, conferir na gravação real (`temp/gravacao/*/champselect.jsonl`) se
+    `theirTeam[].assignedPosition` vem preenchido.
+    **prova:** testes puros por item (`tools/teste-draft.py` com 3 drafts sintéticos → faixa e
+    termos esperados) → `3/3 ok`; selo ao vivo numa personalizada sozinho (protocolo do CLAUDE.md)
+    **reprova se:** faixa errada ou selo ausente
+18. [ ] C4 + L1–L4 no carregamento: 10 jogadores (elo, WR, sequência, maestria, tags da § 2,
+    "morre cedo" do adversário e do jungler) no painel da 2ª tela e num resumo no client;
+    identidade de terceiros só em memória; previsão gravada para calibrar contra o resultado.
+    **prova:** `tools/teste-tags.py` com partidas sintéticas por tag → todas as tags certas;
+    contagem de chamadas por partida ≤ orçamento da § 7 (contador no log)
+    **reprova se:** tag errada ou orçamento estourado
+
 ### Fase E — fechamento
 
 16. [ ] README (o coach: o que faz, como ligar/desligar cada parte), ARMADILHAS, COLETOR, hub,
