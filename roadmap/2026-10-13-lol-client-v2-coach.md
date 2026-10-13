@@ -459,6 +459,14 @@ mesmo mentor). O conceito vale; o método e a fonte não:
       guardado com o texto), como o chat do `telemetria_partida.py`.
     - Ao vivo: ~20 s é lento para alerta; serve só para resumo sob demanda (ex.: atalho na tela de morte).
     - Custo: sai da cota da assinatura (1 chamada por partida + perguntas), sem chave nova.
+    - Padrão medido em 13/10/2026 com texto simples: Sonnet, `--effort low`, advisor Opus (Haiku
+      inventou "sem flash"; medium inventou "first blood" e veio cortado). **Refazer a comparação
+      com dados reais** (pedido do Gabriel): entrada = o que a partida 3292746609 gerou (amostras
+      da Live Client, eventos, análise do pós-jogo, lições, traumas, histórico), nos dois usos:
+      pós-jogo (partida inteira) e ao vivo (estado de um momento, ex.: minuto 8 e minuto 20).
+      Matriz Sonnet/Haiku × low/medium, saídas lado a lado em `temp/mentor-comparacao.md`, julgadas
+      por especificidade, fato inventado (conferir cada afirmação contra os dados) e tempo; o
+      vencedor vira o padrão da seção LOL-CLIENT.
     **prova:** `python tools/teste-mentor.py --seco` (monta o prompt da partida de referência e mostra
     o comando sem chamar) → comando com `--model sonnet --advisor opus` e o env isolado; e uma
     chamada real → texto não vazio em ≤ 60 s gravado na tabela `mentor`
