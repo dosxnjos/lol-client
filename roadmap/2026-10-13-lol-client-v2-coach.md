@@ -356,6 +356,38 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     vermelho inimigo aos 1:35 → início no vermelho, 3 campos limpos na ordem certa, nível 3 previsto
     entre 3:00 e 3:30 → `ok`
     **reprova se:** lado ou ordem errados
+15e. [ ] **Flash e feitiços inimigos** (pedido do Gabriel, 13/10/2026: "aparece na visão de algum
+    aliado quando o inimigo usou o flash"). A Live Client não informa recarga de feitiço inimigo;
+    as fontes visíveis são:
+    - **ping de feitiço dos aliados no chat** (clicar no feitiço do inimigo no placar gera a linha
+      "Campeão - Flash" com o horário): OCR do recorte do chat (`chat/` do gravador, a cada 3 s);
+    - **atalho manual** (ex.: F9 + 1 a 5 para o inimigo) quando o próprio Gabriel vê o flash;
+    - (avaliar com a gravação) detectar o efeito do flash na tela: provavelmente pouco confiável, só se a gravação mostrar que dá.
+    Recarga: 300 s, reduzida por bota jônica (itens no TAB) e por Visão Cósmica quando o ramo
+    secundário visível (`runes` da Live Client) permitir; senão marca "±". Mostra "Darius sem
+    flash 3:12" no painel e fala quando ele volta.
+    **prova:** `python tools/teste-ocr-chat.py temp/gravacao/*/chat/` → linhas de ping
+    reconhecidas com campeão e feitiço certos em ≥ 80% dos prints que têm um (anotar 10 prints à mão);
+    `python tools/teste-feiticos.py` → cronômetro com bota jônica = 300 × 100/110 s
+    **reprova se:** OCR < 80% ou tempo errado
+15f. [ ] **Sugestões aceitas pelo Gabriel em 13/10/2026 ("quero todas")**:
+    1. **flash por atalho**: coberto pelo 15e.
+    2. **preparo de objetivo**: 60 s antes de dragão, arauto, vastilarvas ou barão, bloco que mostra
+       quais inimigos estão mortos (e por quanto tempo), sumidos ou vistos, e a área provável do jungler.
+    3. **revisão da previsão no pós-jogo**: aba que compara a previsão do jungler (gravada a cada
+       10 s) com a posição real dele na timeline (1/min) e mostra a precisão da partida e a acumulada.
+    4. **picos de força do adversário**: 1º item lendário completo e nível 6 (e 11/16) do adversário de
+       rota e do jungler → aviso curto ("Darius nível 6").
+    5. **tela de carregamento**: composição inimiga (AD/AP, cura, controle), tua página de runa
+       atual e o lembrete de build da tabela `docs/ITENS.md` para o teu campeão contra aquela
+       composição, no painel da 2ª tela.
+    6. **modo treino**: tudo funciona na fila 3140 (modo treino) para calibrar overlay, alertas e
+       voz sem partida valendo; a amostragem do banco ignora esse modo (`FORA_DAS_CONTAS`).
+    **prova:** um teste por item em `tools/teste-sugestoes.py` com estados sintéticos (2: 2
+    inimigos mortos 40 s antes do dragão → bloco lista os 2; 3: precisão calculada sobre fixture;
+    4: nível 5→6 → 1 aviso; 5: comp 4 AD → lembrete de armadura; 6: fila 3140 → painel ativo e
+    nada gravado em `partidas`) → `5/5 ok`
+    **reprova se:** qualquer item falha
 
 ### Fase E — fechamento
 

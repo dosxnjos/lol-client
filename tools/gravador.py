@@ -193,9 +193,13 @@ class Gravador:
         if agora >= prox.get("tela", 0):
             prox["tela"] = agora + 60
             self.print_tela("telas", f"{t:07.1f}")
+        if agora >= prox.get("chat", 0):  # pings de feitiço dos aliados ("Darius - Flash") ficam ~10 s no chat
+            prox["chat"] = agora + 3
+            self.print_tela("chat", f"{t:07.1f}")
 
     def print_tela(self, pasta, nome):
-        """pasta minimapa: recorte do minimapa; telas: o monitor do jogo inteiro (para calibrar)"""
+        """minimapa: recorte do minimapa; telas: o monitor do jogo inteiro (para calibrar);
+        chat: canto inferior esquerdo (chat do jogo), por proporção do monitor, para testar OCR"""
         try:
             import mss
             import mss.tools
@@ -208,7 +212,14 @@ class Gravador:
                     {"monitor": {k: self.mon[k] for k in ("left", "top", "width", "height")},
                      "recorte_minimapa": self.ret, **det}, ensure_ascii=False, indent=1), encoding="utf-8")
                 print(f"recorte do minimapa: {self.ret} (lado estimado {det['lado_estimado']} px)", flush=True)
-            regiao = self.ret if pasta == "minimapa" else self.mon
+            if pasta == "minimapa":
+                regiao = self.ret
+            elif pasta == "chat":
+                m = self.mon
+                regiao = {"left": m["left"], "top": m["top"] + int(m["height"] * 0.55),
+                          "width": int(m["width"] * 0.36), "height": int(m["height"] * 0.35)}
+            else:
+                regiao = self.mon
             img = self.mss.grab({k: regiao[k] for k in ("left", "top", "width", "height")})
             d = self.saida / pasta
             d.mkdir(parents=True, exist_ok=True)
