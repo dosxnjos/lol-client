@@ -74,9 +74,10 @@ def contexto_tls():
 
 
 class Gravador:
-    def __init__(self, saida, ensaio=False):
+    def __init__(self, saida, ensaio=False, tela=False):
         self.saida = saida
         self.ensaio = ensaio
+        self.tela = tela        # captura de tela só com --tela (preferência do Gabriel: API antes de print)
         self.lcu = None
         self.ctx = contexto_tls()
         self.n = {}             # contagem por arquivo
@@ -187,6 +188,11 @@ class Gravador:
         except Exception:  # formato inesperado: melhor perder a amostra que gravar nome de jogador
             self.n["erro_anonimizar"] = self.n.get("erro_anonimizar", 0) + 1
         t = ((dados.get("gameData") or {}).get("gameTime")) or 0
+        if agora >= prox.get("chat_lcu", 0):
+            prox["chat_lcu"] = agora + 5
+            self.chat_lcu(ts, t)
+        if not self.tela:
+            return
         if agora >= prox.get("minimapa", 0):
             prox["minimapa"] = agora + 10
             self.print_tela("minimapa", f"{t:07.1f}")
@@ -196,6 +202,19 @@ class Gravador:
         if agora >= prox.get("chat", 0):  # pings de feitiço dos aliados ("Darius - Flash") ficam ~10 s no chat
             prox["chat"] = agora + 3
             self.print_tela("chat", f"{t:07.1f}")
+
+    def chat_lcu(self, ts, t):
+        """o chat do jogo passa pela LCU? grava tipo da conversa e texto da última mensagem, sem autor
+        (pergunta da partida de medição: ler o ping "Campeão - Flash" por API em vez de print)"""
+        convs = self.get("/lol-chat/v1/conversations", timeout=5)
+        if not isinstance(convs, list):
+            return
+        snap = [{"tipo": c.get("type"), "nao_lidas": c.get("unreadMessageCount"),
+                 "ultima": ((c.get("lastMessage") or {}).get("body") or "")[:200],
+                 "ultima_tipo": (c.get("lastMessage") or {}).get("type")}
+                for c in convs if c.get("type") != "chat"]  # "chat" = conversa privada com amigo: nunca gravar
+        if self.mudou("chat_lcu", json.dumps(snap, sort_keys=True)):
+            self.escrever("chat_lcu", {"ts": ts, "gameTime": t, "conversas": snap})
 
     def print_tela(self, pasta, nome):
         """minimapa: recorte do minimapa; telas: o monitor do jogo inteiro (para calibrar);
@@ -316,8 +335,10 @@ class Gravador:
 
     def ensaio_extra(self):
         """sem partida: confere a Live Client (espera recusa) e tira 1 recorte do minimapa"""
-        self.ao_vivo(int(time.time() * 1000), 0, {"minimapa": 1e18, "tela": 1e18})
-        self.print_tela("minimapa", "ensaio")
+        self.ao_vivo(int(time.time() * 1000), 0, {"minimapa": 1e18, "tela": 1e18, "chat": 1e18})
+        self.chat_lcu(int(time.time() * 1000), 0)
+        if self.tela:
+            self.print_tela("minimapa", "ensaio")
 
     def credencial_nos_arquivos(self):
         """quantos arquivos da saída contêm a credencial (ou o Basic dela); nunca imprime o valor"""
@@ -336,6 +357,8 @@ def principal():
     ap = argparse.ArgumentParser(description="gravador passivo de uma partida real (só GET)")
     ap.add_argument("--ensaio", action="store_true", help="grava 5 s da fase atual e sai")
     ap.add_argument("--saida", default=str(RAIZ / "temp" / "gravacao"))
+    ap.add_argument("--tela", action="store_true",
+                    help="também tira prints (minimapa 10 s, chat 3 s, tela 60 s); sem isso, só API")
     args = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     try:  # abaixo do normal: o jogo tem prioridade sobre a gravação
@@ -344,7 +367,7 @@ def principal():
     except Exception:
         pass
     saida = Path(args.saida) / datetime.now().strftime("%Y%m%d-%H%M%S")
-    g = Gravador(saida, args.ensaio)
+    g = Gravador(saida, args.ensaio, args.tela)
     print(f"gravando em {saida} (prioridade abaixo do normal; Ctrl+C encerra)", flush=True)
     t0 = time.monotonic()
     falhou = False
