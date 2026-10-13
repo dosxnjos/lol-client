@@ -38,9 +38,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Clique na seta (37,108) ou no GRUPO não faz nada** → a dica "SEU GRUPO ESTÁ ABERTO"
   (`.parties-first-experience-tooltip`) às vezes muda de lugar e cobre o canto de cima à
   esquerda. Fecha no `lol-uikit-close-button` dela (≈255,14 px CSS quando está ali).
-- **Janela do ready-check** ainda não medida: o aceite usa `limiteS: 12` (constante do
-  `PADRAO` em `config.js`; o valor salvo no DataStore é ignorado) e aceita em
-  `min(atrasoS, limiteS − 2)` pelo `timer` do payload. Medir no 1º aceite real e ajustar o `PADRAO`.
+- **Janela do ready-check = 12 s** (medida em 13/10/2026 pelo gravador, 2 aceites reais: `timer`
+  vai de 0,0 a 12,0; o plugin aceitou com `timer` 10,0 nas duas). O aceite usa `limiteS: 12`
+  (constante do `PADRAO` em `config.js`; o valor salvo no DataStore é ignorado) e aceita em
+  `min(atrasoS, limiteS − 2)` pelo `timer` do payload.
 - **Seção "lol-client" nas Configurações some, duplica ou volta errada** (medido 13/10/2026,
   `pengu/configuracoes.js`):
   - o modal (`.lol-settings-container`, dentro de `#lol-uikit-layer-manager`) **não é destruído
