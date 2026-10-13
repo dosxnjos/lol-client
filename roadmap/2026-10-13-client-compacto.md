@@ -248,6 +248,23 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
    a chave das marcações mudou para `lc-prototipo-compacto-v2` (marcação antiga não vale para o protótipo novo).
    — **prova:** parecer colado no chat com as 7 linhas `aprovada` → registrar a data e a frase dele aqui.
    **reprova se:** qualquer linha `ajuste:` ou `sem parecer` (ajusta o protótipo e repete o passo 0).
+   **Parecer de 13/10/2026 (1ª rodada), palavras dele:**
+   > tela 1 lobby: aprovada · tela 2 na fila: aprovada · tela 3 seleção de campeões: ajuste: fotos dos campeões ao
+   > invés de só a letra inicial do nome deles E nas skins pode ser uma miniatura da Splash Art · tela 4 pós-jogo:
+   > aprovada · tela 5 chat (amigos + conversa): ajuste: centralizar verticalmente corretamente elementos como o
+   > botão de enviar · tela 6 client normal com o botão: aprovada · tela 7 regra: expandir sozinho: aprovada
+
+   **Aprovadas (5):** 1, 2, 4, 6, 7. **Ajustadas, aguardando nova aprovação (2):** 3 e 5. Passo 0 continua aberto:
+   construção segue bloqueada até ele aprovar a 3 e a 5 de novo. Ajustes feitos no protótipo (13/10/2026):
+   - tela 3: foto de cada campeão (grade, favoritos, teu time, inimigos, bans agora em fotos) e skins com miniatura
+     da splash art, nome real do client e **só as que ele tem** (Renekton 6, Zac 3), como no carrossel do client.
+     Origem: o próprio client, só GET pela página (`champion-summary.json`, `champion-icons/<id>.png`,
+     `champions/<id>.json` → `splashPath`, posse por `/lol-champions/v1/inventories/.../skins`), reduzidas no canvas
+     (foto 64 px, skin 240×142, WebP) e embutidas; o HTML segue sem URL externa (~0,5 MB).
+   - tela 5: botão enviar e campo com a mesma altura e centro (o botão era mais alto que a faixa e vazava para
+     baixo); barra das janelas, contador de não lidas e "convidar" alinhados ao centro da linha.
+   - telas 1 e 4 (aprovadas) mudaram só no ícone do campeão (letra → foto), mesmo componente da tela 3.
+   - atalho de endereço `#3`, `#3b`, `#5` abre direto na tela (prints por Edge headless em `temp/prototipo-compacto/`).
 1. [ ] **Medir as [S] numa ranqueada real, só leitura** (gravador do coletor ou `tools/cdp.mjs eval` com GET):
    estados de `positionSwaps`/`pickOrderSwaps`/`trades` e `summoners/{slotId}` a cada `Update`; `skin-carousel-skins`
    dentro da seleção; `lol.gameStatus` de um amigo na fila e `lol.timeStamp`; `GET /lol-matchmaking/v1/search` na fila
