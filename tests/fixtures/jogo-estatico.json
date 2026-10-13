@@ -1,0 +1,1817 @@
+{
+"versao": "16.20.8248524+branch.releases-16-20.code.public.content.release.anticheat.vanguard",
+"feiticos": {
+"Purificar": 240,
+"Exaustão": 240,
+"Flash": 300,
+"Fantasma": 240,
+"Curar": 240,
+"Golpear": 15,
+"Teleporte": 300,
+"Incendiar": 180,
+"Barreira": 180
+},
+"lendarios": [
+2065,
+2501,
+2502,
+2503,
+2504,
+2510,
+2512,
+2517,
+2520,
+2522,
+2523,
+2524,
+2525,
+3003,
+3004,
+3026,
+3031,
+3032,
+3033,
+3036,
+3039,
+3046,
+3050,
+3053,
+3065,
+3068,
+3071,
+3072,
+3073,
+3074,
+3075,
+3078,
+3083,
+3084,
+3085,
+3087,
+3089,
+3091,
+3094,
+3095,
+3100,
+3102,
+3107,
+3109,
+3110,
+3115,
+3116,
+3118,
+3119,
+3124,
+3128,
+3131,
+3135,
+3137,
+3139,
+3142,
+3143,
+3146,
+3152,
+3153,
+3156,
+3157,
+3161,
+3165,
+3179,
+3181,
+3190,
+3222,
+3302,
+3504,
+3508,
+3742,
+3748,
+3814,
+4004,
+4005,
+4401,
+4402,
+4403,
+4628,
+4629,
+4633,
+4643,
+4645,
+4646,
+6333,
+6609,
+6610,
+6616,
+6617,
+6620,
+6621,
+6631,
+6653,
+6655,
+6657,
+6662,
+6664,
+6665,
+6672,
+6673,
+6675,
+6676,
+6692,
+6694,
+6695,
+6696,
+6697,
+6698,
+6699,
+8010,
+8020
+],
+"campeoes": {
+"Annie": {
+"id": 1,
+"nome": "Annie",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Olaf": {
+"id": 2,
+"nome": "Olaf",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Galio": {
+"id": 3,
+"nome": "Galio",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"mage"
+]
+},
+"TwistedFate": {
+"id": 4,
+"nome": "Twisted Fate",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"marksman"
+]
+},
+"XinZhao": {
+"id": 5,
+"nome": "Xin Zhao",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Urgot": {
+"id": 6,
+"nome": "Urgot",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Leblanc": {
+"id": 7,
+"nome": "LeBlanc",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Vladimir": {
+"id": 8,
+"nome": "Vladimir",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"mage",
+"fighter"
+]
+},
+"FiddleSticks": {
+"id": 9,
+"nome": "Fiddlesticks",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Kayle": {
+"id": 10,
+"nome": "Kayle",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"MasterYi": {
+"id": 11,
+"nome": "Master Yi",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Alistar": {
+"id": 12,
+"nome": "Alistar",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Ryze": {
+"id": 13,
+"nome": "Ryze",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"Sion": {
+"id": 14,
+"nome": "Sion",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"tank",
+"fighter"
+]
+},
+"Sivir": {
+"id": 15,
+"nome": "Sivir",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman"
+]
+},
+"Soraka": {
+"id": 16,
+"nome": "Soraka",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Teemo": {
+"id": 17,
+"nome": "Teemo",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Tristana": {
+"id": 18,
+"nome": "Tristana",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Warwick": {
+"id": 19,
+"nome": "Warwick",
+"dano": "misto",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Nunu": {
+"id": 20,
+"nome": "Nunu e Willump",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"tank",
+"mage"
+]
+},
+"MissFortune": {
+"id": 21,
+"nome": "Miss Fortune",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Ashe": {
+"id": 22,
+"nome": "Ashe",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"marksman",
+"support"
+]
+},
+"Tryndamere": {
+"id": 23,
+"nome": "Tryndamere",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Jax": {
+"id": 24,
+"nome": "Jax",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter"
+]
+},
+"Morgana": {
+"id": 25,
+"nome": "Morgana",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Zilean": {
+"id": 26,
+"nome": "Zilean",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Singed": {
+"id": 27,
+"nome": "Singed",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"tank",
+"mage"
+]
+},
+"Evelynn": {
+"id": 28,
+"nome": "Evelynn",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Twitch": {
+"id": 29,
+"nome": "Twitch",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Karthus": {
+"id": 30,
+"nome": "Karthus",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"mage"
+]
+},
+"Chogath": {
+"id": 31,
+"nome": "Cho'Gath",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"tank",
+"mage"
+]
+},
+"Amumu": {
+"id": 32,
+"nome": "Amumu",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Rammus": {
+"id": 33,
+"nome": "Rammus",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank"
+]
+},
+"Anivia": {
+"id": 34,
+"nome": "Anivia",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage"
+]
+},
+"Shaco": {
+"id": 35,
+"nome": "Shaco",
+"dano": "misto",
+"controle": 2,
+"papeis": [
+"assassin"
+]
+},
+"DrMundo": {
+"id": 36,
+"nome": "Dr. Mundo",
+"dano": "misto",
+"controle": 1,
+"papeis": [
+"tank",
+"fighter"
+]
+},
+"Sona": {
+"id": 37,
+"nome": "Sona",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Kassadin": {
+"id": 38,
+"nome": "Kassadin",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Irelia": {
+"id": 39,
+"nome": "Irelia",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Janna": {
+"id": 40,
+"nome": "Janna",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Gangplank": {
+"id": 41,
+"nome": "Gangplank",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter"
+]
+},
+"Corki": {
+"id": 42,
+"nome": "Corki",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Karma": {
+"id": 43,
+"nome": "Karma",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Taric": {
+"id": 44,
+"nome": "Taric",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"support",
+"tank"
+]
+},
+"Veigar": {
+"id": 45,
+"nome": "Veigar",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage"
+]
+},
+"Trundle": {
+"id": 48,
+"nome": "Trundle",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Swain": {
+"id": 50,
+"nome": "Swain",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Caitlyn": {
+"id": 51,
+"nome": "Caitlyn",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman"
+]
+},
+"Blitzcrank": {
+"id": 53,
+"nome": "Blitzcrank",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Malphite": {
+"id": 54,
+"nome": "Malphite",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"mage"
+]
+},
+"Katarina": {
+"id": 55,
+"nome": "Katarina",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Nocturne": {
+"id": 56,
+"nome": "Nocturne",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Maokai": {
+"id": 57,
+"nome": "Maokai",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Renekton": {
+"id": 58,
+"nome": "Renekton",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"JarvanIV": {
+"id": 59,
+"nome": "Jarvan IV",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Elise": {
+"id": 60,
+"nome": "Elise",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Orianna": {
+"id": 61,
+"nome": "Orianna",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"MonkeyKing": {
+"id": 62,
+"nome": "Wukong",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Brand": {
+"id": 63,
+"nome": "Brand",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"LeeSin": {
+"id": 64,
+"nome": "Lee Sin",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Vayne": {
+"id": 67,
+"nome": "Vayne",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Rumble": {
+"id": 68,
+"nome": "Rumble",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"fighter",
+"mage"
+]
+},
+"Cassiopeia": {
+"id": 69,
+"nome": "Cassiopeia",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage"
+]
+},
+"Skarner": {
+"id": 72,
+"nome": "Skarner",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"tank",
+"fighter"
+]
+},
+"Heimerdinger": {
+"id": 74,
+"nome": "Heimerdinger",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Nasus": {
+"id": 75,
+"nome": "Nasus",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Nidalee": {
+"id": 76,
+"nome": "Nidalee",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Udyr": {
+"id": 77,
+"nome": "Udyr",
+"dano": "misto",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Poppy": {
+"id": 78,
+"nome": "Poppy",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"tank",
+"fighter"
+]
+},
+"Gragas": {
+"id": 79,
+"nome": "Gragas",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"fighter",
+"mage"
+]
+},
+"Pantheon": {
+"id": 80,
+"nome": "Pantheon",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Ezreal": {
+"id": 81,
+"nome": "Ezreal",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Mordekaiser": {
+"id": 82,
+"nome": "Mordekaiser",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"fighter",
+"mage"
+]
+},
+"Yorick": {
+"id": 83,
+"nome": "Yorick",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Akali": {
+"id": 84,
+"nome": "Akali",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"assassin"
+]
+},
+"Kennen": {
+"id": 85,
+"nome": "Kennen",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage"
+]
+},
+"Garen": {
+"id": 86,
+"nome": "Garen",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Leona": {
+"id": 89,
+"nome": "Leona",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Malzahar": {
+"id": 90,
+"nome": "Malzahar",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage"
+]
+},
+"Talon": {
+"id": 91,
+"nome": "Talon",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"assassin"
+]
+},
+"Riven": {
+"id": 92,
+"nome": "Riven",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"KogMaw": {
+"id": 96,
+"nome": "Kog'Maw",
+"dano": "misto",
+"controle": 1,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Shen": {
+"id": 98,
+"nome": "Shen",
+"dano": "misto",
+"controle": 2,
+"papeis": [
+"tank"
+]
+},
+"Lux": {
+"id": 99,
+"nome": "Lux",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Xerath": {
+"id": 101,
+"nome": "Xerath",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Shyvana": {
+"id": 102,
+"nome": "Shyvana",
+"dano": "misto",
+"controle": 1,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Ahri": {
+"id": 103,
+"nome": "Ahri",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"assassin"
+]
+},
+"Graves": {
+"id": 104,
+"nome": "Graves",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman"
+]
+},
+"Fizz": {
+"id": 105,
+"nome": "Fizz",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"assassin",
+"fighter"
+]
+},
+"Volibear": {
+"id": 106,
+"nome": "Volibear",
+"dano": "misto",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Rengar": {
+"id": 107,
+"nome": "Rengar",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"assassin",
+"fighter"
+]
+},
+"Varus": {
+"id": 110,
+"nome": "Varus",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Nautilus": {
+"id": 111,
+"nome": "Nautilus",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Viktor": {
+"id": 112,
+"nome": "Viktor",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"Sejuani": {
+"id": 113,
+"nome": "Sejuani",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank"
+]
+},
+"Fiora": {
+"id": 114,
+"nome": "Fiora",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Ziggs": {
+"id": 115,
+"nome": "Ziggs",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"Lulu": {
+"id": 117,
+"nome": "Lulu",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Draven": {
+"id": 119,
+"nome": "Draven",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman"
+]
+},
+"Hecarim": {
+"id": 120,
+"nome": "Hecarim",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Khazix": {
+"id": 121,
+"nome": "Kha'Zix",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"assassin"
+]
+},
+"Darius": {
+"id": 122,
+"nome": "Darius",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Jayce": {
+"id": 126,
+"nome": "Jayce",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"marksman"
+]
+},
+"Lissandra": {
+"id": 127,
+"nome": "Lissandra",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage"
+]
+},
+"Diana": {
+"id": 131,
+"nome": "Diana",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Quinn": {
+"id": 133,
+"nome": "Quinn",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Syndra": {
+"id": 134,
+"nome": "Syndra",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"AurelionSol": {
+"id": 136,
+"nome": "Aurelion Sol",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"Kayn": {
+"id": 141,
+"nome": "Kayn",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Zoe": {
+"id": 142,
+"nome": "Zoe",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"Zyra": {
+"id": 143,
+"nome": "Zyra",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Kaisa": {
+"id": 145,
+"nome": "Kai'Sa",
+"dano": "AD",
+"controle": 0,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Seraphine": {
+"id": 147,
+"nome": "Seraphine",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Gnar": {
+"id": 150,
+"nome": "Gnar",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Zac": {
+"id": 154,
+"nome": "Zac",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"fighter"
+]
+},
+"Yasuo": {
+"id": 157,
+"nome": "Yasuo",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Velkoz": {
+"id": 161,
+"nome": "Vel'Koz",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Taliyah": {
+"id": 163,
+"nome": "Taliyah",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Camille": {
+"id": 164,
+"nome": "Camille",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Akshan": {
+"id": 166,
+"nome": "Akshan",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Belveth": {
+"id": 200,
+"nome": "Bel'Veth",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter"
+]
+},
+"Braum": {
+"id": 201,
+"nome": "Braum",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Jhin": {
+"id": 202,
+"nome": "Jhin",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Kindred": {
+"id": 203,
+"nome": "Kindred",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman"
+]
+},
+"Zeri": {
+"id": 221,
+"nome": "Zeri",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman"
+]
+},
+"Jinx": {
+"id": 222,
+"nome": "Jinx",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman"
+]
+},
+"TahmKench": {
+"id": 223,
+"nome": "Tahm Kench",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Briar": {
+"id": 233,
+"nome": "Briar",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Viego": {
+"id": 234,
+"nome": "Viego",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Senna": {
+"id": 235,
+"nome": "Senna",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"support",
+"marksman"
+]
+},
+"Lucian": {
+"id": 236,
+"nome": "Lucian",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Zed": {
+"id": 238,
+"nome": "Zed",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"assassin"
+]
+},
+"Kled": {
+"id": 240,
+"nome": "Kled",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter"
+]
+},
+"Ekko": {
+"id": 245,
+"nome": "Ekko",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Qiyana": {
+"id": 246,
+"nome": "Qiyana",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"assassin"
+]
+},
+"Vi": {
+"id": 254,
+"nome": "Vi",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Aatrox": {
+"id": 266,
+"nome": "Aatrox",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter"
+]
+},
+"Nami": {
+"id": 267,
+"nome": "Nami",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Azir": {
+"id": 268,
+"nome": "Azir",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"marksman"
+]
+},
+"Yuumi": {
+"id": 350,
+"nome": "Yuumi",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Samira": {
+"id": 360,
+"nome": "Samira",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"assassin"
+]
+},
+"Thresh": {
+"id": 412,
+"nome": "Thresh",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"tank"
+]
+},
+"Illaoi": {
+"id": 420,
+"nome": "Illaoi",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"RekSai": {
+"id": 421,
+"nome": "Rek'Sai",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Ivern": {
+"id": 427,
+"nome": "Ivern",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Kalista": {
+"id": 429,
+"nome": "Kalista",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman"
+]
+},
+"Bard": {
+"id": 432,
+"nome": "Bardo",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Rakan": {
+"id": 497,
+"nome": "Rakan",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support"
+]
+},
+"Xayah": {
+"id": 498,
+"nome": "Xayah",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"marksman"
+]
+},
+"Ornn": {
+"id": 516,
+"nome": "Ornn",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank"
+]
+},
+"Sylas": {
+"id": 517,
+"nome": "Sylas",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"mage",
+"assassin"
+]
+},
+"Neeko": {
+"id": 518,
+"nome": "Neeko",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Aphelios": {
+"id": 523,
+"nome": "Aphelios",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"marksman"
+]
+},
+"Rell": {
+"id": 526,
+"nome": "Rell",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"tank",
+"support"
+]
+},
+"Pyke": {
+"id": 555,
+"nome": "Pyke",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"support",
+"assassin"
+]
+},
+"Vex": {
+"id": 711,
+"nome": "Vex",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage"
+]
+},
+"Yone": {
+"id": 777,
+"nome": "Yone",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Ambessa": {
+"id": 799,
+"nome": "Ambessa",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"Mel": {
+"id": 800,
+"nome": "Mel",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Yunara": {
+"id": 804,
+"nome": "Yunara",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman"
+]
+},
+"Locke": {
+"id": 805,
+"nome": "Locke",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"assassin",
+"mage"
+]
+},
+"Sett": {
+"id": 875,
+"nome": "Sett",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter",
+"tank"
+]
+},
+"Lillia": {
+"id": 876,
+"nome": "Lillia",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"fighter",
+"mage"
+]
+},
+"Gwen": {
+"id": 887,
+"nome": "Gwen",
+"dano": "AP",
+"controle": 1,
+"papeis": [
+"fighter"
+]
+},
+"Renata": {
+"id": 888,
+"nome": "Renata Glasc",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Aurora": {
+"id": 893,
+"nome": "Aurora",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"mage",
+"assassin"
+]
+},
+"Nilah": {
+"id": 895,
+"nome": "Nilah",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"fighter",
+"assassin"
+]
+},
+"KSante": {
+"id": 897,
+"nome": "K'Sante",
+"dano": "AD",
+"controle": 3,
+"papeis": [
+"tank",
+"fighter"
+]
+},
+"Smolder": {
+"id": 901,
+"nome": "Smolder",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"marksman",
+"mage"
+]
+},
+"Milio": {
+"id": 902,
+"nome": "Milio",
+"dano": "AP",
+"controle": 2,
+"papeis": [
+"support",
+"mage"
+]
+},
+"Zaahen": {
+"id": 904,
+"nome": "Zaahen",
+"dano": "AD",
+"controle": 2,
+"papeis": [
+"fighter"
+]
+},
+"Hwei": {
+"id": 910,
+"nome": "Hwei",
+"dano": "AP",
+"controle": 3,
+"papeis": [
+"mage",
+"support"
+]
+},
+"Naafiri": {
+"id": 950,
+"nome": "Naafiri",
+"dano": "AD",
+"controle": 1,
+"papeis": [
+"assassin",
+"fighter"
+]
+}
+}
+}

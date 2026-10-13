@@ -123,6 +123,8 @@ function montar(painel, cfg, definir, restaurar) {
   botao.addEventListener('click', restaurar);
   add(el('div', { class: 'lol-settings-general-row lc-rodape' }, botao));
   painel.scrollTop = topo;
+  // o foco do input clicado (desanexado na remontagem) faz o scrollable rolar depois: segura de novo no quadro seguinte
+  requestAnimationFrame(() => { if (Math.abs(painel.scrollTop - topo) > 1) painel.scrollTop = topo; });
 }
 
 // liga a seção; cfg/definir/aoMudar/restaurar vêm do config.js

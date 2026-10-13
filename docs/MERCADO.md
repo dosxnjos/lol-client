@@ -52,7 +52,7 @@ made of them". Os limiares abaixo marcados *proposta* são ponto de partida, a c
 | Experiência no campeão | maestria < 5 mil → 41,5% de WR; > 500 mil → 54,5%; de 2,5 mil a 7,5 mil ≈ +8 pp; recomenda ≥ 5 jogos antes de ranqueada | [iTero, 08/09/2022, > 1 M jogos](https://www.itero.gg/articles/draft-sq) `[concorrente]` | maestria no campeão | sim: champion-mastery-v4 `by-champion` |
 | KDA bom no campeão | KDA ≥ 3 (`GOOD_KDA`) | TrueMain `[código]` | K/D/A das partidas no campeão | sim |
 | Morre cedo / "Dies Early" | sem limiar publicado; *proposta*: média ≥ 1,5 morte antes dos 10 min nas últimas N partidas (o banco do Gabriel: 2+ mortes antes dos 10 → 43% de vitória) | Blitz (nome, via iTero), Hexgate (mortes cedo do oponente) | minuto de cada morte | **caro**: só a timeline do match-v5 traz o minuto; 1 chamada extra por partida |
-| Perde a rota / "Bad Laner" | sem limiar publicado; *proposta*: `laningPhaseGoldExpAdvantage = 1` em < 35% das últimas N | Blitz (nome, via iTero) | vantagem de ouro+xp na fase de rota | sim: `challenges.laningPhaseGoldExpAdvantage` (0/1) e `earlyLaningPhaseGoldExpAdvantage` existem no [schema](https://www.mingweisamuel.com/riotapi-schema/openapi-3.0.0.json) do match-v5; **semântica sem descrição oficial**: conferir contra o próprio banco antes de usar |
+| Perde a rota / "Bad Laner" | sem limiar publicado; *proposta*: `laningPhaseGoldExpAdvantage = 1` em < 35% das últimas N | Blitz (nome, via iTero) | vantagem de ouro+xp na fase de rota | sim: `challenges.laningPhaseGoldExpAdvantage` (0/1) e `earlyLaningPhaseGoldExpAdvantage` existem no [schema](https://www.mingweisamuel.com/riotapi-schema/openapi-3.0.0.json) do match-v5; **semântica sem descrição oficial**: conferir contra o próprio banco antes de usar. **Conferido em 13/10/2026: é "vantagem grande"** (1 em 12% dos jogos, ≥ +24% de ouro+xp aos 14 min): virou a tag "domina a rota" (≥ 2 de N); "perde a rota" não sai dele ([ARMADILHAS](ARMADILHAS.md) § Riot API) |
 | Agressivo na rota / solo kills | sem limiar; *proposta*: `challenges.soloKills` médio ≥ 1 | Porofessor ("Aggressive Laner", via iTero) | solo kills | sim: `challenges.soloKills`, `takedownsFirstXMinutes` |
 | Visão ruim / "Bad Vision" | sem limiar; *proposta*: placar de visão/min abaixo da média do papel | Porofessor, Mobalytics ("Vision Focused") | `visionScore`, duração | sim |
 | Smurf / conta nova | sem limiar; "Newbie" (Porofessor), "veteran"/"freshBlood" (league-v4, **semântica não documentada**) | wecoach `[terceiro]`, iTero `[concorrente]` | nível, jogos na season, WR | parcial; WR alto + poucos jogos é **cálculo de MMR implícito**: evitar (seção 6) |
@@ -251,6 +251,10 @@ se gasta account-v1; L1 cabe sobrado em `br1`; L2 com 5 partidas por jogador usa
 `americas`, com 10 estoura. Daí: 5 partidas, partida repetida entre jogadores (premades) baixada
 uma vez, timeline só para L3. Alternativa sem cota: histórico pelo LCU (como o TrueMain), se a
 verificação da seção 5 confirmar os campos.
+**correção (13/10/2026):** o puuid da LCU **não** serve na Riot API (dá 400; o da API é cifrado por
+chave): os 10 vêm do spectator-v5 pelo puuid do Gabriel (1 `account-v1`), ou Riot ID → `account-v1`
+(+10 em `americas`, e o carregamento baixa 4 partidas por jogador em vez de 5). Medido na partida
+real 3292746609: br1 30, americas 49, 7 s com chamadas em paralelo.
 
 ### Decisões técnicas
 

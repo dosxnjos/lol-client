@@ -1,0 +1,162 @@
+/* painel da 2ª tela: escuro, números grandes, sem rolagem. Feito para 1536×960 (DISPLAY1 a 125%)
+   e legível a 1,5 m: tamanhos em vh para escalar com a janela. */
+:root {
+  --fundo: #0b0e13;
+  --bloco: #141922;
+  --borda: #232b38;
+  --texto: #eef2f7;
+  --suave: #8d97a6;
+  --velho: #6b7482;
+  --verde: #3ccf6e;
+  --vermelho: #ff5a52;
+  --amarelo: #f2b33d;
+  --azul: #5aa9ff;
+  --raio: 1.4vh;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body {
+  background: var(--fundo);
+  color: var(--texto);
+  font-family: "Segoe UI", system-ui, sans-serif;
+  font-variant-numeric: tabular-nums;
+  display: flex;
+  flex-direction: column;
+  gap: 1.4vh;
+  padding: 1.6vh 1.6vh;
+}
+
+/* ---------- topo ---------- */
+#topo {
+  display: flex;
+  align-items: baseline;
+  gap: 2vw;
+  font-size: 3.2vh;
+  color: var(--suave);
+  min-height: 4.6vh;
+}
+#relogio { font-size: 4.4vh; font-weight: 700; color: var(--texto); }
+#fase { text-transform: uppercase; letter-spacing: .08em; font-size: 2.6vh; }
+#fase.carregando { color: var(--azul); }
+#fase.fim { color: var(--amarelo); }
+#placar { margin-left: auto; }
+#conexao { font-size: 2.2vh; }
+#conexao.erro { color: var(--vermelho); }
+
+/* ---------- faixa de 1 aviso ---------- */
+.aviso {
+  display: flex;
+  align-items: center;
+  gap: 2vw;
+  min-height: 10vh;
+  padding: 0 2.4vw;
+  border-radius: var(--raio);
+  font-size: 6vh;
+  font-weight: 700;
+  background: var(--bloco);
+  border: .4vh solid var(--borda);
+}
+.aviso.vazio { color: var(--velho); font-weight: 400; font-size: 3vh; }
+.aviso.verde { background: #10301d; border-color: var(--verde); }
+.aviso.vermelho { background: #3a1513; border-color: var(--vermelho); }
+.aviso.amarelo { background: #352712; border-color: var(--amarelo); }
+.aviso.azul { background: #11253d; border-color: var(--azul); }
+.aviso-icone { font-size: 6.4vh; line-height: 1; }
+
+/* ---------- blocos ---------- */
+#blocos {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 1fr 1fr;
+  gap: 1.4vh;
+}
+.bloco {
+  background: var(--bloco);
+  border: .3vh solid var(--borda);
+  border-radius: var(--raio);
+  padding: 1.6vh 1.6vw;
+  display: flex;
+  flex-direction: column;
+  gap: 1vh;
+  min-height: 0;
+  overflow: hidden;
+}
+.bloco.destaque { border-color: var(--verde); }
+.bloco.alerta { border-color: var(--vermelho); }
+h2 {
+  font-size: 2.6vh;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .1em;
+  color: var(--suave);
+  display: flex;
+  gap: 1vw;
+  align-items: baseline;
+  white-space: nowrap;
+}
+h2 .sub { text-transform: none; letter-spacing: 0; color: var(--texto); font-size: 2.8vh; overflow: hidden; text-overflow: ellipsis; }
+.rodape { margin-top: auto; font-size: 2.6vh; color: var(--suave); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+/* tua rota: três colunas (ouro, farm, nível) */
+/* ouro tem até 6 caracteres (−2.250), farm 4, nível 2: colunas proporcionais para não cortar */
+.trio { display: grid; grid-template-columns: 1.6fr 1.1fr 0.8fr; gap: 1vw; flex: 1; align-items: center; }
+.metrica { display: flex; flex-direction: column; align-items: flex-start; gap: .4vh; min-width: 0; }
+.metrica .rotulo { font-size: 2.4vh; color: var(--suave); text-transform: uppercase; letter-spacing: .08em; white-space: nowrap; }
+.metrica .valor { font-size: 8vh; font-weight: 800; line-height: 1; white-space: nowrap; letter-spacing: -.02em; }
+.metrica .par { font-size: 2.8vh; color: var(--suave); white-space: nowrap; }
+
+.verde { color: var(--verde); }
+.vermelho { color: var(--vermelho); }
+.amarelo { color: var(--amarelo); }
+.azul { color: var(--azul); }
+.neutro { color: var(--texto); }
+.velho { color: var(--velho); }
+
+/* ameaça */
+.nome-grande { font-size: 8vh; font-weight: 800; line-height: 1.05; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; flex-shrink: 0; }
+.linha-grande { font-size: 4.6vh; font-weight: 600; }
+.chips { display: flex; flex-wrap: wrap; gap: .8vh .8vw; }
+.chip {
+  font-size: 2.8vh;
+  font-weight: 600;
+  padding: .5vh 1vw;
+  border-radius: 99px;
+  background: #1f2632;
+  border: .25vh solid var(--borda);
+  white-space: nowrap;
+}
+.chip.verde { border-color: var(--verde); }
+.chip.vermelho { border-color: var(--vermelho); }
+.chip.amarelo { border-color: var(--amarelo); }
+.chip.azul { border-color: var(--azul); }
+.chip.velho { color: var(--velho); }
+
+/* teu padrão */
+.acao { font-size: 7.4vh; font-weight: 800; line-height: 1.05; }
+.contexto { font-size: 3.6vh; color: var(--texto); }
+
+/* objetivos */
+.timers { display: grid; grid-template-columns: repeat(3, 1fr); gap: 1vw; }
+.timer { display: flex; flex-direction: column; gap: .2vh; }
+.timer .rotulo { font-size: 2.4vh; color: var(--suave); text-transform: uppercase; letter-spacing: .08em; }
+.timer .valor { font-size: 7vh; font-weight: 800; line-height: 1; }
+.timer.vivo .valor { color: var(--azul); }
+.timer.logo .valor { color: var(--amarelo); }
+
+/* sem partida */
+#espera {
+  position: fixed;
+  inset: 0;
+  background: var(--fundo);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2vh;
+}
+#espera[hidden] { display: none; }
+.espera-titulo { font-size: 6vh; font-weight: 700; color: var(--suave); }
+.espera-sub { font-size: 2.8vh; color: var(--velho); }

@@ -14,7 +14,7 @@ const botao = (texto, classe, aoClicar) => {
 
 export function blocoChampSelect(champ) {
   return (corpo, { cfg, definir, ui }) => {
-    corpo.append(ui.caixa('champSelect.ligado', 'Winrate com o campeão', 'No champ select, mostra partidas, winrate e KDA com o campeão em hover ou escolhido, no geral e na tua posição. Só os teus dados.',
+    corpo.append(ui.caixa('champSelect.ligado', 'Winrate com o campeão', 'No champ select, mostra partidas, winrate e KDA com o campeão em hover ou escolhido, no geral e na tua posição; com o coletor ligado, também o teu histórico contra o adversário de rota provável, o trauma e a força do draft em faixa. Só os teus dados.',
       cfg.champSelect.ligado, v => definir('champSelect.ligado', v)));
     const e = champ?.estado?.();
     corpo.append(ui.explica(!e ? '' : e.carregando && !e.partidas ? 'Lendo o histórico do client (leva até 40 s)…'
@@ -130,3 +130,66 @@ export function blocoRunas(corpo, ctx) {
   if (rascunho.erro) nova.append(ui.explica(rascunho.erro));
   corpo.append(nova, ui.explica('Posição específica com página vence a "qualquer posição". O "restaurar padrão" não apaga as regras.'));
 }
+
+// ---- coach (plano v2: painel, voz, alertas, minimapa, mentor, carregamento, traumas) ----
+// As chaves moram em cfg.coach (mesmos nomes do servidor_local.CONFIG_PADRAO) e vão ao coletor em
+// POST 127.0.0.1:8765/config na carga e a cada mudança (coach.js). Traumas é só do plugin.
+
+// avisos.TIPOS do coletor: tipo -> rótulo. Desmarcado = calado na voz, no painel e na moldura
+const AVISOS = [
+  ['gank', 'Gank provável'], ['intruso_grupo', '2+ inimigos chegando'], ['intruso', 'Intruso na tua rota'],
+  ['jungler_apareceu', 'Jungler inimigo apareceu'], ['mid_indo', 'Mid inimigo saiu da rota'], ['mid_sumiu', 'Mid inimigo sumiu'],
+  ['adversario_voltou', 'Adversário de rota voltou'], ['janela_objetivo', 'Janela de objetivo (inimigos mortos)'],
+  ['objetivo_60s', 'Objetivo em 60 s'], ['mortes_cedo', 'Mortes antes dos 10'], ['inimigo_fed', 'Inimigo forte na tua rota'],
+  ['ouro_guardado', 'Ouro guardado (hora de voltar?)'],
+];
+const MODELOS = [['sonnet', 'Sonnet (padrão)'], ['haiku', 'Haiku'], ['opus', 'Opus']];
+const EFFORTS = [['low', 'Baixo'], ['medium', 'Médio (padrão)'], ['high', 'Alto']];
+const TONS = [['serio', 'Sério'], ['descontraido', 'Descontraído']];
+
+const caixaCoach = ({ cfg, definir, ui }, chave, rotulo, explicacao) =>
+  ui.caixa('coach.' + chave, rotulo, explicacao, cfg.coach[chave], v => definir('coach.' + chave, v));
+
+// estado da ligação com o coletor, no topo do 1º bloco
+export const blocoConexao = estado => (corpo, { ui }) => {
+  const e = estado();
+  corpo.append(ui.explica(e.ok === null ? 'Coletor: ainda sem contato (a config vai quando ele responder).'
+    : e.ok ? `Coletor ligado em 127.0.0.1:8765${e.enviadoEm ? ': config aplicada' : ''}.`
+      : 'Coletor fora do ar agora: a config fica salva aqui e vai sozinha quando ele subir (tento a cada 30 s).'));
+};
+
+export const blocoPainel = (corpo, ctx) => corpo.append(
+  caixaCoach(ctx, 'painelAoVivo', 'Painel ao vivo na 2ª tela', 'Na partida, abre o painel no monitor secundário (tua rota, ameaça, teu padrão, time e objetivos) e fecha no fim.'),
+  caixaCoach(ctx, 'amostrasAoVivo', 'Gravar amostras da partida', 'A cada 10 s guarda nível, itens, ouro estimado e KDA dos 10 no banco: deixa o pós-jogo mais fino.'));
+
+export const blocoVoz = (corpo, ctx) => corpo.append(
+  caixaCoach(ctx, 'voz', 'Voz do coach', 'Fala os avisos em pt-BR (voz Maria do Windows), no máximo 1 a cada 20 s fora o de gank.'),
+  ctx.ui.linha(ctx.ui.lista('coach.tomVoz', 'Tom', TONS, ctx.cfg.coach.tomVoz, v => ctx.definir('coach.tomVoz', v))));
+
+export function blocoAlertas(corpo, ctx) {
+  const { cfg, definir, ui } = ctx;
+  corpo.append(caixaCoach(ctx, 'alertasTela', 'Moldura de alertas na tela', 'Borda colorida pulsando + rótulo curto por ~2 s, só com o jogo em primeiro plano.'),
+    ui.explica('Por tipo (desmarcado cala o aviso na voz, no painel e na moldura):'));
+  const desl = cfg.coach.avisosDesligados;
+  for (const [tipo, rotulo] of AVISOS) corpo.append(ui.caixa('coach.aviso.' + tipo, rotulo, '', !desl.includes(tipo), v =>
+    definir('coach.avisosDesligados', v ? desl.filter(t => t !== tipo) : [...desl.filter(t => t !== tipo), tipo])));
+}
+
+export const blocoMinimapa = (corpo, ctx) => corpo.append(
+  caixaCoach(ctx, 'minimapa', 'Ler o minimapa', 'Print só do minimapa (~6 por segundo) para achar os ícones vistos: alimenta jungler, gank e alertas de posição. Nada do que está na fog.'),
+  caixaCoach(ctx, 'overlayMinimapa', 'Overlay do jungler no minimapa', 'Área provável do jungler inimigo desde a última vez visto, por cima do minimapa; não recebe clique. Atalho: F8 liga e desliga durante a partida.'),
+  caixaCoach(ctx, 'feiticos', 'Flash e feitiços inimigos', 'Lê os pings de feitiço do chat (OCR) e conta a recarga; F9 + 1 a 5 marca na mão o flash do inimigo.'));
+
+export const blocoMentor = (corpo, ctx) => corpo.append(
+  caixaCoach(ctx, 'mentor', 'Mentor no pós-jogo', 'No fim da partida, o teu Claude lê os números e escreve a análise; dá para perguntar no pós-jogo.'),
+  ctx.ui.linha(
+    ctx.ui.lista('coach.mentorModelo', 'Modelo', MODELOS, ctx.cfg.coach.mentorModelo, v => ctx.definir('coach.mentorModelo', v)),
+    ctx.ui.lista('coach.mentorEffort', 'Esforço', EFFORTS, ctx.cfg.coach.mentorEffort, v => ctx.definir('coach.mentorEffort', v))),
+  ctx.ui.explica('Padrão Sonnet + médio: venceu a comparação com a partida real (mais específico, nenhum número inventado, ~17 s).'));
+
+export const blocoCarregamento = (corpo, ctx) => corpo.append(
+  caixaCoach(ctx, 'carregamento', 'Os 10 na tela de carregamento', 'Elo, winrate e tags com número dos 10 jogadores (sequência, fora da rota, OTP, primeira vez, experiência, KDA, morre cedo, domina a rota) no painel da 2ª tela, pela Riot API. Identidade dos outros só em memória.'));
+
+export const blocoTraumas = (corpo, { cfg, definir, ui }) => corpo.append(
+  ui.caixa('traumas.ligado', 'Mostrar traumas', 'Campeão inimigo que mais aparece nas tuas derrotas (lift ≥ 1,2 com n ≥ 3, sempre com V/D ao lado): linha no selo do champ select e bloco na aba Tendência do pós-jogo.',
+    cfg.traumas.ligado, v => definir('traumas.ligado', v)));

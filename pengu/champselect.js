@@ -60,13 +60,70 @@ export function textoSelo(est, nome) {
   return { titulo: nome, linhas };
 }
 
+// ---- matchup, trauma e draft (dados do coletor, GET 127.0.0.1:8765/draft/<meu campeão>) ----
+// O histórico do client só traz o meu participante, sem adversário nem linha do tempo: matchup (papel pela
+// timeline, ouro aos 10), traumas e a faixa do draft (meta.db) saem do coletor; aqui só escolhe e formata.
+// Spec: docs/INSIGHTS.md § Matchups e § Traumas; prova: tools/teste-matchup.mjs contra o analise.py.
+
+export const MIN_MATCHUP = 3; // analise.MIN_MATCHUP: abaixo disso só o n
+const arred = v => Math.floor(v + 0.5); // igual aos motores de lições (sem round bancário)
+const comSinal = v => (v > 0 ? `+${v}` : v < 0 ? `−${-v}` : '0');
+
+// grupo (meu campeão, papel, adversário) de analise.matchups(); papel desempata quando joguei em 2 rotas
+export function grupoMatchup(matchups, meu, inimigo, papel = '') {
+  const gs = (matchups || []).filter(g => g.campeao === meu && g.adversario === inimigo);
+  if (!gs.length) return null;
+  return gs.find(g => papel && g.papel === papel) || [...gs].sort((a, b) => (b.n - a.n) || a.papel.localeCompare(b.papel))[0];
+}
+
+// "contra Ekko: 1V/3D · ouro10 −435"; n < 3: "contra Ekko: n=2"; nunca: "contra Ekko: sem histórico"
+export function linhaMatchup(matchups, meu, inimigo, nome = `campeão ${inimigo}`, papel = '') {
+  const g = grupoMatchup(matchups, meu, inimigo, papel);
+  if (!g) return `contra ${nome}: sem histórico`;
+  if (g.n < MIN_MATCHUP) return `contra ${nome}: n=${g.n}`;
+  const base = `contra ${nome}: ${g.vitorias}V/${g.n - g.vitorias}D`;
+  return g.ouro10 === null || g.ouro10 === undefined ? base : `${base} · ouro10 ${comSinal(arred(g.ouro10))}`;
+}
+
+// o inimigo travado com maior lift entre os marcados trauma (n ≥ 3, lift ≥ 1,2): "Darius é trauma: 2V/7D"
+export function linhaTrauma(traumas, nome = id => `campeão ${id}`) {
+  const t = (traumas || []).filter(x => x.trauma).sort((a, b) => (b.lift - a.lift) || (a.campeao - b.campeao))[0];
+  return t ? `${nome(t.campeao)} é trauma: ${t.vitorias}V/${t.derrotas}D` : null;
+}
+
+// adversário de rota = o inimigo travado cuja rota provável (C2 do draft.py) é a minha
+export const adversarioDoDraft = (draft, posicao) =>
+  (posicao && (draft?.inimigos || []).find(i => i.rota === normalizarPosicao(posicao))) || null;
+
+// "draft: leve vantagem" + os 2 termos que mais pesaram (texto do draft.py, com o efeito em pontos)
+export function linhasDraft(draft) {
+  // sem nenhum campeão travado a faixa é só o 50% do vazio: não mostra
+  if (!draft?.faixa || !((draft.aliados || []).length + (draft.inimigos || []).length)) return [];
+  const pp = t => `${t.pp > 0 ? '+' : '−'}${Math.abs(t.pp).toFixed(1).replace('.', ',')}`;
+  const termos = (draft.termos || []).slice(0, 2).map(t => `${pp(t)} ${String(t.texto).replace(/(\d)\.(\d)/g, '$1,$2')}`);
+  return [`draft: ${draft.faixa}`, ...(termos.length ? [termos.join(' · ')] : [])];
+}
+
 // ---- no client ----
 
 const URL_HIST = '/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199';
 
-export function iniciarChampSelect(context, cfg) {
+export function iniciarChampSelect(context, cfg, coletor = null) {
   const partidas = new Map(); // gameId -> partida (só cresce)
   let carregando = null, ultimaLeitura = 0, falhou = 0, nomes = null, ultimaSessao = null;
+  // dados do coletor para o selo: relidos a cada 3 s na seleção (inimigo trava, draft muda)
+  const coach = { dados: null, campeao: 0, em: 0, buscando: false, fora: false };
+  const lerCoach = async id => {
+    if (!coletor || coach.buscando) return;
+    coach.buscando = true;
+    const r = await coletor(`/draft/${id}`, { prazoMs: 4000 });
+    coach.buscando = false;
+    coach.fora = r.status !== 200;
+    Object.assign(coach, { dados: r.status === 200 ? r.dados : null, campeao: id, em: Date.now() });
+    desenhar();
+  };
+  let relogio = null;
+  const pararRelogio = () => { clearInterval(relogio); relogio = null; };
 
   // só leitura boa marca ultimaLeitura; erro (HTTP ou rede) deixa o selo tentar de novo (no máximo a cada 15 s)
   const lerHistorico = () => {
@@ -117,10 +174,22 @@ export function iniciarChampSelect(context, cfg) {
     }
     const t = ultimaLeitura ? textoSelo(estatisticasCampeao([...partidas.values()], alvo.championId, alvo.posicao), nome)
       : { titulo: nome, linhas: [falhou && !carregando ? 'histórico indisponível agora (tento de novo)' : 'carregando histórico…'] };
+    // matchup, trauma e draft: do coletor, só para o campeão em tela (dado de outro campeão não aparece)
+    if (coletor && (coach.campeao !== alvo.championId || Date.now() - coach.em > 3000)) lerCoach(alvo.championId);
+    const extra = [];
+    const d = coach.campeao === alvo.championId ? coach.dados : null;
+    if (d) {
+      const adv = adversarioDoDraft(d.draft, alvo.posicao);
+      if (adv) extra.push(['lc-wr-coach', linhaMatchup(d.matchups, alvo.championId, adv.campeao, await nomeCampeao(adv.campeao), alvo.posicao)]);
+      const tr = cfg.traumas?.ligado ? linhaTrauma(d.traumas, id => nomes?.[id] || `campeão ${id}`) : null;
+      if (tr) extra.push(['lc-wr-trauma', tr]);
+      linhasDraft(d.draft).forEach((l, i) => extra.push([i ? 'lc-wr-sub' : 'lc-wr-coach', l]));
+    } else if (coletor && coach.fora) extra.push(['lc-wr-sub', 'coach: coletor fora do ar (sem matchup e draft)']);
+    if (n !== pedido || !document.body) return;
     const div = (className, textContent) => Object.assign(document.createElement('div'), { className, textContent });
     const titulo = div('lc-wr-titulo', '');
     titulo.append(div('lc-wr-nome', t.titulo), ultimaLeitura ? div('lc-wr-amostra', `histórico: ${partidas.size} partidas`) : '');
-    el.replaceChildren(titulo, ...t.linhas.map(l => div('lc-wr-linha', l)));
+    el.replaceChildren(titulo, ...t.linhas.map(l => div('lc-wr-linha', l)), ...extra.map(([c, l]) => div('lc-wr-linha ' + c, l)));
     // na faixa vazia acima da coluna do meu time (.summoner-array, medido 13/10/2026); sem ela, no topo ao centro
     const col = document.querySelector('.summoner-array')?.getBoundingClientRect();
     el.classList.toggle('lc-wr-coluna', !!col?.width);
@@ -131,8 +200,10 @@ export function iniciarChampSelect(context, cfg) {
   let eventos = 0;
   context.socket.observe('/lol-champ-select/v1/session', msg => {
     eventos++;
-    if (msg?.eventType === 'Delete' || !msg?.data) { ultimaSessao = null; return remover(); }
+    if (msg?.eventType === 'Delete' || !msg?.data) { ultimaSessao = null; pararRelogio(); return remover(); }
     ultimaSessao = msg.data;
+    // sem evento novo (todos pensando) o draft do coletor ainda muda: redesenha a cada 3 s
+    if (coletor && !relogio) relogio = setInterval(() => (ultimaSessao ? desenhar() : pararRelogio()), 3000);
     if (!ultimaLeitura && !carregando && Date.now() - falhou > 15000) lerHistorico();
     desenhar();
   });
@@ -142,7 +213,8 @@ export function iniciarChampSelect(context, cfg) {
   setTimeout(lerHistorico, 5000);
 
   return {
-    lerHistorico, desenhar: () => desenhar(),
+    // desenhar(sessao): teste com sessão gravada (sem argumento, a última do socket)
+    lerHistorico, desenhar: s => { if (s !== undefined) ultimaSessao = s; return desenhar(); }, coach: () => ({ ...coach }),
     // eventos e alvo: diagnóstico para o teste ao vivo (o socket entrega? qual campo trouxe o campeão?)
     estado: () => ({ partidas: partidas.size, carregando: !!carregando, ultimaLeitura, falhou, eventos, alvo: meu(ultimaSessao) }),
     estatisticas: (championId, posicao) => estatisticasCampeao([...partidas.values()], championId, posicao),

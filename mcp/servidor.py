@@ -443,5 +443,87 @@ def sincronizar() -> dict:
         c.close()
 
 
+@mcp.tool()
+def traumas(campeao: str | None = None, min_partidas: int = 3) -> dict:
+    """"Teus traumas": contra quais campeões INIMIGOS o Gabriel perde mais que o normal. Lift = taxa
+    de derrota com o campeão no time inimigo ÷ taxa geral de derrota, encolhido para 1 quando a
+    amostra é pequena (K partidas fictícias); trauma = n ≥ `min_partidas` e lift ≥ 1,2. `campeao` = o
+    campeão DELE (nome ou id; vazio = todas as partidas). Campeão popular que aparece em tudo fica com
+    lift ~1 (não vira trauma). Só Summoner's Rift; remake, personalizada e treino fora.
+    Regras: docs/INSIGHTS.md § Traumas."""
+    try:
+        c = _conn()
+    except FileNotFoundError:
+        return _sem_banco()
+    nomes = _nomes(c)
+    cid = _campeao_id(c, campeao)
+    if cid == -1:
+        return {"erro": f"campeão '{campeao}' não encontrado (use o nome como aparece no client, ex. 'Renekton', ou o id)"}
+    r = analise.traumas(c, cid, min_partidas=max(min_partidas, 1))
+    if not r["partidas"]:
+        return {"campeao": nomes.get(cid, cid) if cid is not None else "todos", "partidas": 0, "traumas": [],
+                "obs": "sem partidas elegíveis"}
+
+    def linha(x):
+        return {"contra": nomes.get(x["campeao"], x["campeao"]), "n": x["n"], "vitorias": x["vitorias"],
+                "derrotas": x["derrotas"], "lift": round(x["lift"], 2), "lift_bruto": round(x["lift_bruto"], 2),
+                "texto": f"{nomes.get(x['campeao'], x['campeao'])} é trauma: {x['vitorias']}V/{x['derrotas']}D"}
+    fregueses = sorted((x for x in r["campeoes"] if x["n"] >= min_partidas and x["lift"] <= 1 / analise.LIFT_TRAUMA),
+                       key=lambda x: x["lift"])[:5]
+    return {"campeao": nomes.get(cid, cid) if cid is not None else "todos", "partidas": r["partidas"],
+            "taxa_derrota": round(100 * r["taxa_derrota"], 1), "traumas": [linha(x) for x in r["traumas"]],
+            "fregueses": [{**linha(x), "texto": f"{nomes.get(x['campeao'], x['campeao'])}: {x['vitorias']}V/{x['derrotas']}D"}
+                          for x in fregueses],
+            "obs": f"lift encolhido com K={r['k']}; com ~170 campeões comparados, 1 ou 2 traumas podem ser acaso: "
+                   "olhar n e lift_bruto juntos"}
+
+
+@mcp.tool()
+def carregamento_atual() -> dict:
+    """Análise da tela de carregamento da partida em andamento (precisa do LoL aberto numa partida):
+    os 10 jogadores identificados só pelo CAMPEÃO (nunca nome), com elo, winrate da fila, maestria no
+    campeão, últimas partidas (V/D) e tags com número (sequência, fora da rota, OTP, primeira vez,
+    pouca experiência, KDA bom, domina a rota, agressivo, "morre cedo" do adversário de rota e do
+    jungler inimigo), mais a previsão em FAIXA (draft + jogadores, com os termos que mais pesaram).
+    Fora de partida devolve {"partida": false}. Usa a Riot API (chave LOL_RIOT_API_KEY do Doppler
+    pessoal); a 1ª chamada da partida leva ~5–10 s."""
+    # o coletor já fez a análise no carregamento: ler o /estado dele não gasta a cota da chave (dois
+    # processos na mesma chave tomam 429: docs/ARMADILHAS.md § Riot API). Só sem coletor analisa aqui.
+    import urllib.request
+    try:
+        with urllib.request.urlopen(f"http://127.0.0.1:{os.environ.get('LOL_CLIENT_PORTA', '8765')}/estado",
+                                    timeout=3) as r:
+            est = json.loads(r.read())
+        car = est.get("carregamento") if isinstance(est, dict) else None
+        if car and car.get("camada"):
+            return {**car, "fonte": "coletor"}
+        if isinstance(est, dict) and est.get("partida") is False:
+            return {"partida": False, "fonte": "coletor"}
+    except Exception:
+        pass  # coletor fora do ar: analisa neste processo
+    import carregamento
+    try:
+        return carregamento.analisar_agora()
+    except Exception as e:  # nunca derrubar o MCP
+        return {"erro": f"carregamento falhou: {type(e).__name__}"}
+
+
+@mcp.tool()
+def licoes(game_id: int | None = None) -> dict:
+    """As 3 lições do pós-jogo de uma partida (a última, sem game_id): regras de
+    pengu/posjogo/licoes.md sobre as métricas da partida, do histórico e do contexto (matchup,
+    traumas, winrate por faixa de horário), as mesmas que o painel do client mostra. Cada lição tem
+    id, tipo (atencao|positiva), prioridade e texto; `metricas` traz os números que decidiram."""
+    try:
+        c = _conn()
+    except FileNotFoundError:
+        return _sem_banco()
+    import coach
+    try:
+        return coach.licoes_partida(c, game_id)
+    finally:
+        c.close()
+
+
 if __name__ == "__main__":
     mcp.run()

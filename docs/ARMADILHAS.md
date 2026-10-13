@@ -82,7 +82,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   de `queueId: 3100` no topo, junto de `customGameLobby` e `isCustom: true`. Iniciar a seleção:
   `POST /lol-lobby/v1/lobby/custom/start-champ-select` (13/10/2026).
 - **Campeão duplicado na busca** → `champion-summary.json` traz variantes de modo com o mesmo nome
-  (60103 = `Jade_Ahri`); filtrar `id < 10000` (13/10/2026).
+  (60103 = `Jade_Ahri`); filtrar `id < 10000` (13/10/2026). Vale para a tabela `campeoes` do banco: 77
+  nomes têm a variante 60xxx e um mapa nome→id sem o filtro pega ela (Lee Sin → 60064, sem participante:
+  a revisão do jungler sumia calada; `coach_vivo.revisar`, revisão de 13/10/2026).
 - **Painel pós-jogo cobre o ready-check** → `#lc-posjogo` é tela cheia (z-index 100001) e o
   modal do client fica embaixo. Ele fecha sozinho em `ReadyCheck`/`ChampSelect`/`GameStart`/`InProgress`
   e o `#lc-aceite` fica acima (100002); tela nova por cima do client precisa do mesmo cuidado.
@@ -91,6 +93,18 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Selo do winrate preso em "sem partidas"** → erro HTTP do histórico (404/5xx no boot) marcava a
   leitura como feita. Hoje só resposta com `games.games` conta; erro vira "histórico indisponível" e o
   selo relê no máximo a cada 15 s (13/10/2026, achado de revisão).
+- **Pós-jogo leva ~1 min para abrir** (13/10/2026: 52–54 s) → esperava a leitura de 200 partidas do histórico
+  (15–40 s, às vezes mais) e, provável (não isolado), a LCU atende o match-history em fila: o `games/{id}`
+  pedido junto ficava atrás dela. Hoje busca partida e linha do tempo primeiro, dá ao histórico 1,5 s (com cache) ou 8 s (sem), abre e
+  repinta Tendência e Sessão quando a leitura chega (`posjogo/index.js`).
+- **3ª lição diferente no client e no coletor para a mesma partida** (13/10/2026, 3292746609: `atras-10` x
+  `farm-acima`) → o cache do client tinha 20 partidas e a média de farm ficou sem amostra (n=2). Com o
+  coletor de pé, o pós-jogo mostra as lições do `GET /licoes/<gameId>` (banco inteiro) e a média de farm dele.
+- **Configurações pulam ~50 px a cada clique numa caixa** (lá embaixo na seção) → a remontagem desanexa o
+  input focado e o `lol-uikit-scrollable` rola depois; `montar()` reaplica o `scrollTop` no quadro seguinte.
+- **Lição com texto diferente no JS e no Python** → `%` e `//` de negativo diferem (`-1 % 60` = 59 no
+  Python, −1 no JS) e `round` do Python é bancário: os motores de lições formatam sobre o valor
+  absoluto e arredondam com `floor(v + 0,5)`. O cruzado de `tools/teste-licoes.mjs` pega (13/10/2026).
 
 ## LCU API
 
@@ -211,6 +225,17 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 1.
   depois do 3º dragão. Contar `DragonKill` por time; elemento = `DragonType` do 3º em diante.
 - **Lista de eventos inteira em toda amostra** (acumulativa; `EventID` contíguo): deduplicar por
   `EventID`. Amostra de 16–47 KB (mediana 33 KB, 69 MB por 33 min): não guardar o bruto no banco.
+- **`items[].price` é o custo da receita, não o do item** (Sinal de Sterak 775 contra 3200): valor e
+  "lendário" saem do `priceTotal` do `items.json` da LCU (`sugestoes.montar_estatico`, 13/10/2026).
+- **`rawChampionName` não tem padrão único** (`game_character_displayname_Illaoi`, mas a Seraphine vem
+  `Character_Seraphine_Name`): casar o campeão pelo `championName` (pt-BR) com o `champion-summary.json`.
+- **Ordem de `allPlayers` muda ao sair do carregamento** (Zac 1º nas 99 amostras do carregamento, 2º
+  no jogo): estado guardado por índice troca de jogador; chavear pelo nome (`ao_vivo.py`, 13/10/2026).
+- **Dado do inimigo "atual" na 1ª leitura do meio da partida** (coletor reiniciado): não dá para saber
+  desde quando está parado; o `ao_vivo.py` marca `vistoHaS` nulo até a 1ª mudança ou abate dele.
+- **Rajada de avisos com o coletor reiniciado no meio da partida** → o `GatilhosLive` nasce sem memória
+  e na 1ª leitura acha `inimigo_fed`, `janela_objetivo` e `mortes_cedo` de uma vez. O motor segura (1 fala a
+  cada 20 s, o resto cai pela `validade`), então sai 1 fala velha, não 3; não é bug, é o custo de reiniciar.
 
 ## Tela, minimapa e chat (prints do gravador, 13/10/2026)
 
@@ -230,7 +255,16 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   (CommunityDragon) não casa (Zac com skin 2: 0/30). Usar `champion-icons/{id}.png` da LCU.
 - **Ícone inimigo é desenhado por cima do aliado** → em luta o aliado some do template matching.
 - **Yuumi presa** troca o ícone do hospedeiro por um anel azul maior; nem template quadrado nem
-  circular acham o hospedeiro (Nilah 2/26). A Live Client não diz em quem ela está.
+  circular acham o hospedeiro (Nilah 2/26). A Live Client não diz em quem ela está. Achando o anel
+  pela cor e o rosto só no miolo (sem o anel), o hospedeiro sai (`minimapa.py`, 7/8 nas fixtures).
+  **O anel grosso também é o de "voltando à base"** (com seta): no recorte 442 a Nilah voltava sozinha
+  e a Yuumi estava na fonte 20 s antes; a `Captura` descarta Yuumi deduzida onde ela não teria como
+  chegar (450 unidades/s desde a última vez vista).
+- **`matchTemplate` com máscara é lento** → ~1 ms por chamada pequena e ~50 ms no mapa inteiro por
+  campeão (10 campeões = 500 ms por quadro). Achar os anéis por cor em meia resolução e comparar o
+  rosto à mão em numpy só nos candidatos: ~7–9 ms por quadro (13/10/2026).
+- **Contorno preto de ícone vira parede** na grade de caminhável (torre, inibidor têm traço de 1–2 px):
+  abrir a máscara de parede com 3×3 antes de preencher buracos (`minimapa.caminhavel`).
 - **Gabarito pela timeline não certifica ≤ 600** → 1 posição por minuto e recorte ~2 s depois: até
   ~900 unidades de diferença com a detecção certa (teto ~82%).
 - **Recorte do chat por proporção erra** → nesta HUD (2560×1080) o chat fica acima da barra de
@@ -242,13 +276,44 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   "<item> - Precisa de N de ouro" são outros pings.
 - **Nome da runa**: 8347 = **Perspicácia Cósmica** (+18 de aceleração de feitiço de invocador), não
   "Visão Cósmica". Bota 3158 dá +10 e 3171 (Lucidez Escarlate) +20.
+- **Linha mais velha do chat sai cortada no topo** → o OCR lê `0/:06` e `Hash`/`1-lash` no lugar de
+  `07:06` e Flash: `/` vira 7 e o feitiço casa por semelhança com o dicionário fechado
+  (`feiticos._ts_norm`/`ler_ping`, 13/10/2026). Ping sem "usou" (`Seraphine Exaustão`) não diz que
+  gastou: não liga cronômetro.
 - **Painel pós-jogo não deixa rastro de sucesso** → `fechar()` remove `#lc-posjogo` sem log; depois
   que o Gabriel fecha, não dá para provar de fora que abriu sozinho (13/10/2026).
+- **Overlay próprio aparece no print do minimapa** → o `mss` (BitBlt com `CAPTUREBLT`) captura
+  janelas layered; a borda de 12 px da moldura (15c) cai em cima da faixa (16,28,27) que o minimapa
+  usa para se achar (16/17 px). Janela de overlay nasce com `SetWindowDisplayAffinity(hwnd,
+  WDA_EXCLUDEFROMCAPTURE=0x11)`: segue na tela e some do print (medido 13/10/2026, `teste-alertas.py`).
+  Vale para o overlay do minimapa (15b) também (`overlay_minimapa.py --demo`: área quente 100% no
+  print sem a exclusão, 0% com ela).
+- **Overlay "não aparece" no canto do minimapa da área de trabalho** → um `Windows.UI.Core.CoreWindow`
+  sempre-no-topo (painel do sistema) cobria (2197, 716) em 13/10/2026: até uma janela branca opaca
+  saía (50, 50, 50) no print. Testar o desenho em outro ponto (`--demo --left 1000 --top 300`).
+- **`--demo` do overlay dá `FALHOU` num ponto e `ok` no outro** → "px fora da área que mudaram" mede a tela
+  **atrás** da janela; um terminal ou vídeo animando ali passa dos 5% (11% em (300, 300), 13/10/2026). Rodar
+  de novo com a área livre antes de mexer no overlay.
+- **LCU não tem atributo de campeão** → `/lol-game-data/assets/v1/champions/{id}.json` não traz
+  velocidade (só `tacticalInfo`, magias, skins). Velocidade base sai do Data Dragon (`champion.json`
+  da versão do client, 16.20.1 em 13/10/2026; Zac 340 = `moveSpeed` da Live Client), em cache em `dados/`.
+- **Mapa muda depois do 2º dragão, não com a alma** (wiki "Elemental drake", 13/10/2026); o elemento
+  é o do 3º, que só aparece no `DragonType` quando ele morre.
 
 ## Windows
 
 - **Print com `mss`**: a versão 10 já devolve px físicos (monitor do jogo 2560×1080 com escala
   125%) e `mss.mss()` virou `mss.MSS()` (o antigo só avisa). Conferido 13/10/2026.
+- **`sct.monitors[1]` não é o monitor principal** → aqui é a 2ª tela (1920×1200 em (2560, 595)); o do
+  jogo é o `[2]`. O OCR do chat usava o `[1]` e lia painel, navegador e conversas. Escolher pelo
+  `minimapa.monitor_do_jogo` (resolução do `game.cfg`, senão `is_primary`) (revisão de 13/10/2026).
+- **`RegisterHotKey` come a tecla** → a janela em foco não recebe a tecla registrada. Só o F9 fica
+  registrado; 1..5 (teclas de item do jogo) só nos 2 s depois do F9 (`feiticos.Atalhos`). Registro
+  medido em 13/10/2026; com o jogo aberto ainda não (se o F9 já for atalho do jogo, trocar a tecla).
+- **`ConvertTo-Json` do PowerShell 5.1 desembrulha lista de 1** (e array dentro de array sai como
+  `{value, Count}`): no OCR cada palavra vai como hashtable e o Python normaliza lista/dict
+  (`feiticos.OcrChat.ler`). Imagem sem arquivo: base64 no stdin → `MemoryStream` →
+  `WindowsRuntimeStreamExtensions.AsRandomAccessStream` funciona; ~70–100 ms por recorte ampliado 3×.
 - **Testar o coletor sem mexer no real** → não rodar `coletor.py` (a trava e o log são os de
   `dados/`); usar `RetratoChampSelect` ou `Coletor` com LCU falsa e `--db`/banco em `temp/`
   (`tools/teste-champselect.py`). MCP: `LOL_CLIENT_DB=<banco>`.
@@ -280,6 +345,29 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **Token da LCU no log Security** → com `ProcessCreationIncludeCmdLine_Enabled=1` (ligado
   pelo harness em 10/10/2026), o 4688 do client grava `--remoting-auth-token`. O log de 200 MB
   é circular e retém ~2,5 h. Detalhe e desligar: [COLETOR.md](COLETOR.md) § Segurança.
+- **Janela do painel fora do lugar** → `msedge --window-position/--window-size` usa px **lógicos**:
+  2560,595 físicos viraram (3200, 744); dividir pela escala do monitor (`GetDpiForMonitor`). Usar a
+  área útil (`rcWork`), senão a barra de tarefas cobre o rodapé (13/10/2026).
+- **Pid do painel guardado pode virar o Edge do Gabriel** → coletor morto no meio da partida deixa
+  `dados\edge-painel.pid`; o Windows reaproveita o pid e o próximo `fechar()` derrubaria o navegador
+  dele. `janela_painel.pid_existe` recusa processo criado depois do `ts` do arquivo (13/10/2026).
+- **`taskkill /PID <edge> /T` sem `/F` não fecha o Edge** (esperou 3 s e precisou do `/F`) →
+  `WM_CLOSE` na janela do pid fecha em 0,4 s (`janela_painel.py`, 13/10/2026).
+- **Print headless do painel sai vazio** → `msedge --headless --screenshot` tira a foto no load,
+  antes do 1º `fetch('/estado')`: o servidor embute o estado no HTML; `--virtual-time-budget=3000` ajuda.
+- **Nome grande some de um bloco do painel** (integração, 13/10/2026: "3 AD · 2 AP" sumiu no
+  carregamento) → o bloco é flex em coluna com `min-height: 0` e `overflow: hidden`: texto longo
+  (lembrete do ITENS.md em 3 linhas) encolhe o `.nome-grande` até zero. `.nome-grande` tem
+  `flex-shrink: 0` e o texto longo vai para um rodapé de uma linha, nunca para o meio do bloco.
+- **Coach não desliga no fim da partida** → `EndOfGame` está em `FASES_JOGO` do `coletor.py`: "parar fora
+  das fases de jogo" nunca dispara nele. Quem decide é o `coach_vivo.Coach.fase` (`WaitingForStats`
+  para o que olha a tela; `EndOfGame` ou fora do jogo para tudo).
+- **Cópia do `dados\lol.db` inconsistente** (WAL aberto pelo coletor real) → copiar com
+  `sqlite3.Connection.backup`, não com cópia de arquivo (`tools\ensaio-coach.py`).
+- **Previsão do jungler sempre no meio do mapa** (ensaio, 13/10/2026) → o centro do calor da área inteira
+  cai em (8000–9000, 8000–9000) assim que ela cresce: não diz nada. O coach grava o centro **dentro da
+  zona mais provável**. Nenhum dos dois passou de 2/26 a ≤ 1000 no ensaio (zona certa 4/29), mas lá o
+  minimapa é 1 recorte a cada 10 s e a fog tem até 10 s: quem mede de verdade é o passo 15, ao vivo a 6 fps.
 
 ## Riot API (servidores da Riot, não a LCU)
 
@@ -297,3 +385,29 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   Chave recém-gerada com 401: esperar, não regenerar de novo.
 - **`403 error code: 1010`** → a Cloudflare da Riot bloqueia requisição sem `User-Agent`
   (o padrão do `urllib` é barrado). Mandar `User-Agent: lol-client/<versão>`.
+- **`400` em `/by-puuid/` com o puuid da LCU** → o puuid da Riot API é cifrado por chave (78 caracteres)
+  e **não** é o UUID da LCU (`meta.puuid`, `participantIdentities`, gameflow). Riot ID → `account-v1` →
+  puuid da API, ou os 10 pelo spectator-v5 (13/10/2026). O caminho da URL tem identidade: `riotapi.mascarar`.
+- **`laningPhaseGoldExpAdvantage` não é "ganhou a rota"** → vale 1 em só 12% dos jogos (3050 da meta);
+  com 1, todos estavam +24% ou mais de ouro+xp sobre o adversário aos 14 min; com 0, 42% estavam à
+  frente (120 participantes do banco, 13/10/2026). Mede "domina a rota"; "perde a rota" não sai dele.
+- **Sem chave até reiniciar o coletor** → o cliente é um só no processo e guardava `""` na 1ª falha do
+  `doppler secrets get` (sem rede, CLI deslogado). Hoje relê depois de 60 s (`riotapi.RELER_CHAVE_S`).
+- **429 com dois processos na mesma chave** → o limite (100/2 min) é da chave, o balde de cada processo
+  não vê o do outro (2º teste do carregamento em < 2 min: 7 s → 64 s). `riotapi` lê
+  `X-App-Rate-Limit-Count` da resposta e se acerta; ainda assim, só um processo consulta durante a partida.
+
+## Mentor (`claude -p`, `coletor/mentor.py`, medido em 13/10/2026, Claude Code 2.1.296)
+
+- **`CLAUDE.md` global e hooks vazam no `claude -p` mesmo com cwd fora de `C:\Dev`** → o modelo recebe o
+  modo caveman e a persona do `~/.claude/CLAUDE.md`, e os hooks de `UserPromptSubmit` (calendário,
+  conceitos) injetam contexto pessoal. `--safe-mode` tira `CLAUDE.md`, hook, skill e plugin e mantém o
+  login (o `--bare` não serve: pula o OAuth). Sobra só o bloco automático com o e-mail da conta.
+- **Ferramenta e MCP**: `--tools ""` zera as nativas, mas os MCP do escopo de usuário carregam em qualquer
+  cwd; `--strict-mcp-config` sem `--mcp-config` zera. O advisor é ferramenta do servidor e segue ativo.
+- **Env da sessão que roda o teste vaza** (`CLAUDECODE`, `CLAUDE_EFFORT`, `CLAUDE_CODE_SESSION_ID`…):
+  `CLAUDE_EFFORT` pode passar por cima do `--effort`. `mentor.ambiente()` tira toda chave `CLAUDE*`.
+- **`--resume <id>` só acha a sessão no mesmo cwd** (as sessões ficam por pasta de projeto): o cwd do
+  mentor é fixo (`%LOCALAPPDATA%\lol-client-mentor`); nunca `--no-session-persistence`.
+- **Prompt pela linha de comando**: estoura o limite de ~32 K do Windows no pós-jogo e cai no 4688 (o log
+  Security grava a linha de comando). O prompt vai pelo stdin.

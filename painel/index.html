@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Coach ao vivo</title>
+<link rel="stylesheet" href="/painel.css">
+<!--ESTADO-->
+</head>
+<body>
+<header id="topo">
+  <span id="relogio">--:--</span>
+  <span id="fase"></span>
+  <span id="placar"></span>
+  <span id="conexao"></span>
+</header>
+
+<section id="aviso" class="aviso vazio" aria-live="polite">
+  <span class="aviso-icone"></span><span class="aviso-texto"></span>
+</section>
+
+<main id="blocos">
+  <article class="bloco" id="b-rota">
+    <h2>Tua rota <span class="sub" id="rota-quem"></span></h2>
+    <div class="trio" id="rota-trio"></div>
+    <p class="rodape" id="rota-rodape"></p>
+  </article>
+
+  <article class="bloco" id="b-ameaca">
+    <h2>Ameaça <span class="sub" id="ameaca-sub"></span></h2>
+    <div class="nome-grande" id="ameaca-nome"></div>
+    <div class="linha-grande" id="ameaca-linha"></div>
+    <div class="chips" id="ameaca-chips"></div>
+  </article>
+
+  <article class="bloco" id="b-padrao">
+    <h2>Teu padrão</h2>
+    <div class="acao" id="padrao-acao"></div>
+    <div class="contexto" id="padrao-titulo"></div>
+    <p class="rodape" id="padrao-hist"></p>
+  </article>
+
+  <article class="bloco" id="b-obj">
+    <h2>Time e objetivos <span class="sub" id="obj-dragoes"></span></h2>
+    <div class="timers" id="obj-timers"></div>
+    <div class="chips" id="obj-mortos"></div>
+    <p class="rodape" id="obj-item"></p>
+  </article>
+</main>
+
+<div id="espera" hidden>
+  <div class="espera-titulo">aguardando partida</div>
+  <div class="espera-sub" id="espera-sub">o painel acende quando a tela de carregamento abrir</div>
+</div>
+
+<script src="/painel.js"></script>
+</body>
+</html>

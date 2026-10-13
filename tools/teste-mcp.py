@@ -56,6 +56,15 @@ async def principal():
     print("sessao_hoje:", "erro" if erro3 else json.dumps(sh, ensure_ascii=False)[:400])
     if erro3 or "vitorias" not in sh:
         falhas.append(f"sessao_hoje: {str(sh)[:200]}")
+    # integração (13/10/2026): lições do coach.py e o carregamento lido do /estado do coletor
+    _, out = await chamar({}, ("licoes", {"game_id": 3292746609}), ("carregamento_atual", {}))
+    (_, erro5, li), (_, erro6, ca) = out
+    print("licoes(3292746609):", [x["id"] for x in (li or {}).get("licoes", [])] if not erro5 else li)
+    if erro5 or len((li or {}).get("licoes") or []) != 3:
+        falhas.append(f"licoes: {str(li)[:200]}")
+    print("carregamento_atual:", json.dumps(ca, ensure_ascii=False)[:200])
+    if erro6 or not isinstance(ca, dict):
+        falhas.append(f"carregamento_atual: {str(ca)[:200]}")
     if len(sys.argv) > 1:  # champ_select com retratos, no banco de teste
         _, out = await chamar({"LOL_CLIENT_DB": sys.argv[1]}, ("champ_select", {"limite": 5}))
         _, erro4, cs = out[0]

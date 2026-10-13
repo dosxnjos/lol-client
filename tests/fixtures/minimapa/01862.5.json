@@ -1,0 +1,56 @@
+{
+ "arquivo": "01862.5.png",
+ "gameTime": 1862.5,
+ "partida": 3292746609,
+ "mapa_no_recorte": [
+  134,
+  133,
+  347
+ ],
+ "anotacao": "à mão, inspeção visual de folha 3x com grade de 25 px (13/10/2026); centro do anel em px do mapa",
+ "mortos": [
+  "Annie",
+  "Riven",
+  "Ekko"
+ ],
+ "icones": [
+  {
+   "campeao": "Nilah",
+   "id": 895,
+   "time": "ORDER",
+   "px": [
+    55,
+    273
+   ],
+   "marca": "yuumi"
+  },
+  {
+   "campeao": "Illaoi",
+   "id": 420,
+   "time": "ORDER",
+   "px": [
+    116,
+    273
+   ]
+  },
+  {
+   "campeao": "Zac",
+   "id": 154,
+   "time": "ORDER",
+   "px": [
+    228,
+    242
+   ]
+  },
+  {
+   "campeao": "Seraphine",
+   "id": 147,
+   "time": "CHAOS",
+   "px": [
+    249,
+    233
+   ]
+  }
+ ],
+ "obs": "outro anel vermelho atrás da Seraphine (sem anotação)"
+}

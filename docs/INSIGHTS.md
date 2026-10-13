@@ -252,6 +252,105 @@ independente em Python: `tools/teste-winrate.py` (par do `tools/teste-winrate.mj
 Conferência (13/10/2026, 200 partidas): Renekton 86 · 49% · KDA 1,5 (topo, as mesmas 86);
 Zac 63 · 49% · 2,4, na selva 61 · 48% · 2,5; 24/24 recortes iguais ao Python.
 
+### Lições do pós-jogo
+
+Plano v2, passos 5 e 6. As regras (condição, prioridade, texto) e a regra de escolha das 3 lições
+moram em [pengu/posjogo/licoes.md](../pengu/posjogo/licoes.md), o arquivo dono; aqui fica só o que
+elas podem citar. Motores: `coletor/coach.py` (Python: MCP, mentor e `GET /licoes` do coletor; o painel ao
+vivo não usa regras daqui: "Teu padrão" é do `ao_vivo.py` e os textos de voz/moldura, de [LICOES](LICOES.md)) e
+`pengu/posjogo/licoes.js` (JS: pós-jogo no client), ambos lendo o mesmo `licoes.md`. Provas:
+`python tools/validar-licoes.py` (toda métrica citada existe nesta tabela e no `coach.METRICAS`) e
+`python tools/teste-licoes.py` + `node tools/teste-licoes.mjs` (mesmas lições nas partidas
+3292712362 e 3292746609).
+
+Entrada dos dois motores: o resultado da análise acima (mais `vitoria` e `duracaoS`), a **sessão**
+(calculada do histórico de cada lado) e o **contexto** (calculado só pelo Python, que tem o banco:
+`coach.contexto_partida(c, gameId)`; o JS recebe pronto do servidor do coletor, ou fica sem).
+
+**Fontes**: `partida` = os dois calculam do mesmo json (iguais sempre); `histórico` = cada um do
+histórico que tem (JS: as 20 da LCU; Python: o banco; divergência esperada, como no farm por
+minuto); `coletor` = só o banco tem (matchups e traumas pedem a linha do tempo de outras partidas).
+
+### Métricas das lições
+
+Métrica sem dado = nulo (a regra que depende dela não dispara). Contagens sobre `mortes` da seção
+Mortes; `adv` = `adversario`.
+
+| métrica | tipo | fonte | fórmula |
+| --- | --- | --- | --- |
+| `vitoria` | número | partida | 1 vitória, 0 derrota |
+| `duracao_min` | número | partida | `gameDuration / 60` |
+| `campeao_nome` | texto | partida | nome do meu campeão |
+| `adversario_nome` | texto | partida | nome do campeão do `adv`; nulo sem `adv` |
+| `adversario_incerto` | número | partida | 1 se `adv.incerto`, 0 se não; nulo sem `adv` |
+| `ouro10`, `xp10`, `farm10` | número | partida | `diffs["10"]` (eu − adv); nulo sem a chave |
+| `ouro15`, `xp15`, `farm15` | número | partida | `diffs["15"]`; nulo sem a chave |
+| `mortes` | número | partida | nº de mortes |
+| `mortes10` | número | partida | mortes com `ms < 600000` |
+| `mortes15` | número | partida | mortes com `ms < 900000` |
+| `primeira_morte` | número | partida | `ms` da 1ª morte; nulo sem morte |
+| `mortes_1x1_adversario` | número | partida | mortes com `matador == adv.participantId` e `inimigos == 1`; nulo sem `adv` |
+| `mortes_sozinho_inimigo` | número | partida | mortes com `lado == "inimigo"` e `aliadosPerto` vazio |
+| `mortes_desvantagem` | número | partida | mortes com `inimigos > len(aliadosPerto) + 1` |
+| `mortes_objetivo` | número | partida | mortes com pelo menos 1 item em `objetivos` |
+| `objetivos_pos_morte` | número | partida | itens distintos `(tipo, detalhe, rota, ms)` somando os `objetivos` de todas as mortes |
+| `farm_min` | número | partida | `farm.valor` |
+| `farm_media`, `farm_n`, `farm_dif` | número | histórico | `farm.media`, `farm.n`, `farm.diferenca` (n < 3 → média e dif nulas) |
+| `sessao_partida` | número | histórico | posição desta partida na sessão (1 = primeira) |
+| `derrotas_antes` | número | histórico | derrotas seguidas que terminam na partida anterior da sessão |
+| `vitorias_antes` | número | histórico | idem, vitórias |
+| `hora` | número | histórico | hora local de `gameCreation` (0–23) |
+| `faixa` | texto | histórico | `00-06`, `06-12`, `12-18` ou `18-24` pela `hora` |
+| `matchup_n`, `matchup_v`, `matchup_d` | número | coletor | n, vitórias e derrotas do grupo (meu campeão, papel, adversário) de § Matchups, com o banco inteiro (inclui esta partida); nulo sem grupo ou com `adv.incerto` |
+| `matchup_wr`, `matchup_ouro10` | número | coletor | `winrate` (%) e `ouro10` do mesmo grupo; nulos com n < 3 |
+| `trauma_lift`, `trauma_n`, `trauma_v`, `trauma_d` | número | coletor | `lift`, n, vitórias e derrotas do campeão do time inimigo desta partida com maior `lift` (empate: menor id) entre os `traumas` de `analise.traumas(c, campeao=meu campeão, antes_de=gameCreation)` (§ Traumas: só os marcados `trauma`, n ≥ 3); nulos sem nenhum |
+| `trauma_nome` | texto | coletor | nome desse campeão |
+| `geral_wr` | número | coletor | % de vitória nas partidas anteriores a esta (Rift, fora remake, personalizada e treino) |
+| `faixa_wr`, `faixa_n` | número | coletor | % e n nessas partidas, só as da mesma `faixa` |
+| `apos_derrotas_wr`, `apos_derrotas_n` | número | coletor | % e n das partidas anteriores jogadas depois de `min(derrotas_antes, 3)` derrotas seguidas (sequência zera em pausa ≥ 2 h, como o `tilt()` do MCP); nulos com `derrotas_antes == 0` |
+
+**Sessão**: partidas do Rift fora de `FORA_DAS_CONTAS` e remake, anteriores à analisada, em ordem de
+`gameCreation`; nova sessão quando o início de uma fica ≥ 2 h depois do fim (`criação + duração`) da
+anterior, inclusive entre a última e a analisada.
+
+**Contexto** (JSON que o coletor entrega ao JS, `coach.contexto_partida`): `{"matchup": {n, vitorias,
+winrate, ouro10, xp10, farm10, mortes10} | null, "traumas": [{campeao, n, vitorias, derrotas, lift}],
+"historico": {"geral": {n, wr}, "faixas": {"00-06": {n, wr}, …}, "apos_derrotas": {"1": {n, wr},
+"2": …, "3": …}}}` (`wr` em %, nulo com n = 0).
+
+Conferência (13/10/2026): 3292712362 → `mortes-1x1-adversario`, `virada-10-15`, `farm-acima`;
+3292746609 (banco com 202 partidas; matchup e trauma derivam com partidas novas) →
+`sozinho-lado-inimigo`, `morte-objetivo`, `farm-acima`. Na real, JS e Python
+calculam as métricas `partida` e `histórico` cada um do seu lado; as `coletor` vêm do Python.
+
+### Traumas
+
+Plano v2, passo 19 (herança do `analise_trauma.py` de abril). Python: `analise.traumas(c, campeao=None)`;
+MCP: `traumas()`. Prova: `python tools/teste-traumas.py`.
+
+- **Partidas**: as minhas com `mapId == 11`, `queueId ∉ FORA_DAS_CONTAS`, `gameDuration ≥ 300`; `campeao`
+  filtra pelo meu campeão. Não precisa de linha do tempo. `taxa` = derrotas ÷ partidas. No pós-jogo
+  (`coach.contexto_partida`: lições e aba Tendência) só as partidas **anteriores** à analisada
+  (`antes_de` = `gameCreation` dela): o resultado de agora não decide se X era trauma.
+- Por campeão X no **time inimigo** (conta 1 vez por partida): `n`, `derrotas`; `lift_bruto` =
+  (derrotas/n) ÷ taxa; `lift` = ((derrotas + K·taxa)/(n + K)) ÷ taxa com **K = 10**.
+- **Trauma**: `n ≥ 3` e `lift ≥ 1,2`. Campeão que aparece em tudo fica com lift ~1. Com ~170 campeões
+  comparados, 1–2 traumas podem ser acaso: mostrar sempre `n` e V/D ("Darius é trauma: 2V/7D").
+
+### Pós-jogo v2: Objetivos, Tendência e Sessão
+
+Plano v2, passo 7 (`pengu/posjogo/abas.js`; prova sem client: `node tools/teste-abas.mjs`).
+
+- **Objetivos**: monstros do `ELITE_MONSTER_KILL` com o time do matador (o `teamId` vem 0) e prédios do
+  `BUILDING_KILL` com o time **contrário** ao dono (`teamId` = quem perdeu o prédio).
+- **Tendência**: esta partida contra as 20 válidas anteriores (Rift, fora `FORA_DAS_CONTAS` e remake) do
+  histórico do client, qualquer campeão: farm/min, ouro/min, dano em campeões/min e mortes. Seta "melhor" ou
+  "pior" com diferença ≥ 5% da média (mortes: ≥ 1 morte); abaixo disso, "na média".
+- **Sessão**: mesma regra do `tilt()` (pausa ≥ 2 h entre o fim de uma e o início da outra abre sessão nova),
+  nos dois sentidos a partir da analisada. Alertas, com o histórico do coletor (`contexto.historico`): 2+
+  derrotas seguidas até esta → taxa depois de `min(k, 3)` derrotas; faixa horária de agora com n ≥ 10 e
+  taxa ≤ geral − 5 pontos. Sem coletor, sem alerta (não há número para sustentar).
+
 ### Limites conhecidos
 
 - **1 frame por minuto**: posição, ouro e farm são amostras de até 30 s de distância do

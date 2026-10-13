@@ -62,7 +62,7 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 #lc-posjogo .lc-fechar { margin-left: auto; cursor: pointer; background: none; border: 1px solid #785a28; color: #cdbe91; font: 700 11px var(--font-display); padding: 6px 10px; text-transform: uppercase; }
 #lc-posjogo .lc-fechar:hover { border-color: #c8aa6e; color: #f0e6d2; }
 #lc-posjogo .lc-mapa { position: relative; align-self: start; }
-#lc-posjogo svg { width: 330px; height: 330px; display: block; background: #0a1a14; border: 1px solid #1e2328; }
+#lc-posjogo .lc-mapa svg { width: 330px; height: 330px; display: block; background: #0a1a14; border: 1px solid #1e2328; }
 #lc-posjogo .lc-legenda { margin-top: 6px; font-size: 11px; display: flex; gap: 10px; flex-wrap: wrap; }
 #lc-posjogo .lc-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
 #lc-posjogo .lc-direita { overflow: auto; min-height: 0; padding-right: 6px; }
@@ -157,3 +157,93 @@ html:not(.lc-champ-select) #lc-winrate { display: none; }
 #lc-config-painel .lc-sugestoes:empty { display: none; }
 #lc-config-painel .lc-sugestao { cursor: pointer; padding: 3px 8px; border: 1px solid #3c3c41; color: #cdbe91; font: 12px var(--font-body); }
 #lc-config-painel .lc-sugestao:hover { border-color: #c8aa6e; color: #f0e6d2; }
+
+/* selo: linhas do coletor (matchup, trauma, draft) */
+#lc-winrate .lc-wr-coach { color: #cdbe91; }
+#lc-winrate .lc-wr-trauma { color: #e84057; }
+#lc-winrate .lc-wr-sub { font-size: 10.5px; line-height: 1.3; color: #a09b8c; }
+
+/* pós-jogo v2: 6 abas (posjogo/abas.js); a caixa deixa de ser grade de 2 colunas */
+#lc-posjogo .lc-caixa.lc-v2 { display: flex; flex-direction: column; gap: 0; padding: 12px 18px 14px; }
+#lc-posjogo .lc-v2 .lc-topo { flex: 0 0 auto; }
+#lc-posjogo .lc-abas { flex: 0 0 auto; display: flex; gap: 2px; margin: 8px 0 10px; border-bottom: 1px solid #1e2328; }
+#lc-posjogo .lc-aba {
+  cursor: pointer; background: none; border: 0; border-bottom: 2px solid transparent; padding: 6px 14px 7px;
+  font: 700 12px var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #a09b8c;
+}
+#lc-posjogo .lc-aba:hover { color: #f0e6d2; }
+#lc-posjogo .lc-aba.lc-ativa { color: #f0e6d2; border-bottom-color: #c8aa6e; }
+#lc-posjogo .lc-paineis { flex: 1 1 auto; min-height: 0; position: relative; }
+#lc-posjogo .lc-painel { position: absolute; inset: 0; overflow: auto; padding-right: 6px; }
+#lc-posjogo .lc-painel[hidden] { display: none; }
+#lc-posjogo .lc-vazio { color: #5b5a56; }
+#lc-posjogo .lc-botao { cursor: pointer; margin-top: 8px; background: linear-gradient(180deg, #1e2328, #0f1317); border: 1px solid #785a28; color: #cdbe91; font: 700 11px var(--font-display); letter-spacing: .06em; text-transform: uppercase; padding: 7px 12px; }
+#lc-posjogo .lc-botao:hover { border-color: #c8aa6e; color: #f0e6d2; }
+
+/* placar em blocos (Resumo, Objetivos, Sessão) */
+#lc-posjogo .lc-placar { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 8px; }
+#lc-posjogo .lc-placar > div { flex: 1 1 0; min-width: 90px; box-sizing: border-box; padding: 6px 10px; background: #0a1118; border: 1px solid #1e2328; display: flex; flex-direction: column; gap: 2px; }
+#lc-posjogo .lc-placar b { font: 700 17px/1.1 var(--font-display); color: #f0e6d2; }
+#lc-posjogo .lc-placar > div > span { font-size: 11px; color: #a09b8c; }
+#lc-posjogo .lc-res-esq .lc-placar > div { flex-basis: calc((100% - 16px) / 3); }
+
+/* Resumo: lições à esquerda, mentor à direita */
+#lc-posjogo .lc-resumo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; height: 100%; }
+#lc-posjogo .lc-res-esq, #lc-posjogo .lc-res-dir { min-height: 0; display: flex; flex-direction: column; }
+#lc-posjogo .lc-licoes { display: flex; flex-direction: column; gap: 8px; }
+#lc-posjogo .lc-licao { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; background: #0a1118; border: 1px solid #1e2328; border-left: 3px solid #c8aa6e; font-size: 13px; line-height: 1.45; color: #f0e6d2; }
+#lc-posjogo .lc-licao.lc-positiva { border-left-color: #0ac8b9; }
+#lc-posjogo .lc-licao.lc-atencao { border-left-color: #e84057; }
+#lc-posjogo .lc-licao-n { flex: 0 0 auto; font: 700 15px/1.2 var(--font-display); color: #c8aa6e; }
+#lc-posjogo .lc-mentor-corpo { flex: 1 1 auto; min-height: 0; overflow: auto; padding: 10px 12px; background: #0a1118; border: 1px solid #1e2328; font-size: 13px; line-height: 1.5; color: #f0e6d2; }
+#lc-posjogo .lc-mentor-texto .lc-rotulo { color: #c8aa6e; }
+#lc-posjogo .lc-conversa { margin-top: 10px; padding-top: 8px; border-top: 1px solid #1e2328; }
+#lc-posjogo .lc-pergunta { color: #0ac8b9; margin-bottom: 3px; }
+#lc-posjogo .lc-pensando { color: #c8aa6e; }
+#lc-posjogo .lc-pensando span { display: inline-block; animation: lc-pisca 1.2s infinite; }
+@keyframes lc-pisca { 50% { opacity: .2; } }
+#lc-posjogo .lc-mentor-form { flex: 0 0 auto; display: flex; gap: 6px; margin-top: 8px; }
+#lc-posjogo .lc-mentor-form input { flex: 1; min-width: 0; padding: 7px 10px; background: #010a13; border: 1px solid #3c3c41; color: #f0e6d2; font: 13px var(--font-body); outline: none; }
+#lc-posjogo .lc-mentor-form input:focus { border-color: #c8aa6e; }
+#lc-posjogo .lc-mentor-form button { cursor: pointer; padding: 0 12px; background: #1e2328; border: 1px solid #785a28; color: #cdbe91; font: 700 11px var(--font-display); text-transform: uppercase; letter-spacing: .06em; }
+#lc-posjogo .lc-mentor-form.lc-desligado { opacity: .45; }
+#lc-posjogo .lc-mentor-form.lc-desligado * { cursor: default; }
+
+/* Rota: gráficos de ouro e xp */
+#lc-posjogo .lc-graficos { display: flex; gap: 14px; margin: 4px 0 8px; }
+#lc-posjogo .lc-grafico { flex: 1 1 0; min-width: 0; }
+#lc-posjogo .lc-grafico svg, #lc-posjogo .lc-linha-obj { width: 100%; height: auto; display: block; box-sizing: border-box; background: #0a1118; border: 1px solid #1e2328; }
+#lc-posjogo .lc-g-titulo { font: 700 12px var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #c8aa6e; margin-bottom: 4px; }
+#lc-posjogo .lc-g-titulo .lc-nota { font: 11px var(--font-body); letter-spacing: 0; text-transform: none; margin: 0 0 0 8px; }
+#lc-posjogo svg text { font: 11px var(--font-body); fill: #5b5a56; }
+#lc-posjogo svg text.lc-g-morte, #lc-posjogo .lc-g-morte { fill: #e84057; color: #e84057; font-weight: 700; font-size: 12px; }
+#lc-posjogo .lc-rota-baixo { display: grid; grid-template-columns: 1.3fr 1fr; gap: 18px; }
+
+/* Mortes: mapa + lista (layout da v1) */
+#lc-posjogo .lc-mortes { display: grid; grid-template-columns: 330px 1fr; gap: 18px; height: 100%; }
+#lc-posjogo .lc-mortes .lc-mapa-svg { width: 330px; height: 330px; }
+
+/* Objetivos: linha do tempo */
+#lc-posjogo svg text.lc-o-rot { fill: #a09b8c; font-size: 11px; }
+#lc-posjogo svg text.lc-o-mon { font: 700 9px var(--font-body); }
+#lc-posjogo svg text.lc-o-pred { font: 700 9px var(--font-body); }
+#lc-posjogo .lc-lista-obj { margin: 8px 0 0; padding: 0; list-style: none; columns: 4; column-gap: 18px; font-size: 12px; }
+#lc-posjogo .lc-lista-obj li { break-inside: avoid; padding: 1px 0; color: #cdbe91; }
+#lc-posjogo .lc-lista-obj li span { color: #5b5a56; margin-right: 4px; }
+#lc-posjogo .lc-lista-obj li.lc-aliado::before { content: '●'; color: #0ac8b9; margin-right: 5px; }
+#lc-posjogo .lc-lista-obj li.lc-inimigo::before { content: '●'; color: #e84057; margin-right: 5px; }
+
+/* Tendência: 4 indicadores */
+#lc-posjogo .lc-inds { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+#lc-posjogo .lc-ind { padding: 8px 10px; background: #0a1118; border: 1px solid #1e2328; display: flex; flex-direction: column; gap: 4px; }
+#lc-posjogo .lc-ind svg { width: 100%; height: 44px; display: block; }
+#lc-posjogo .lc-ind-rot { font-size: 11px; color: #a09b8c; text-transform: uppercase; letter-spacing: .05em; }
+#lc-posjogo .lc-ind-num b { font: 700 20px/1.1 var(--font-display); color: #f0e6d2; margin-right: 4px; }
+#lc-posjogo .lc-ind-num .lc-nota { margin: 0; }
+#lc-posjogo .lc-tend-baixo { display: grid; grid-template-columns: 1.4fr 1fr; gap: 18px; margin-top: 4px; }
+
+/* Sessão */
+#lc-posjogo .lc-alerta { margin: 4px 0 6px; padding: 8px 12px; border: 1px solid #1e2328; border-left: 3px solid #0ac8b9; background: #0a1118; color: #f0e6d2; font-size: 13px; }
+#lc-posjogo .lc-alerta-medio { border-left-color: #c8aa6e; }
+#lc-posjogo .lc-alerta-forte { border-left-color: #e84057; }
+#lc-posjogo tr.lc-esta td { background: #0f1a20; }

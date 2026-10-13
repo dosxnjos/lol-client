@@ -1,0 +1,66 @@
+{
+ "arquivo": "01162.3.png",
+ "gameTime": 1162.3,
+ "partida": 3292746609,
+ "mapa_no_recorte": [
+  134,
+  133,
+  347
+ ],
+ "anotacao": "à mão, inspeção visual de folha 3x com grade de 25 px (13/10/2026); centro do anel em px do mapa",
+ "mortos": [
+  "Zac",
+  "Annie",
+  "Yasuo"
+ ],
+ "icones": [
+  {
+   "campeao": "Illaoi",
+   "id": 420,
+   "time": "ORDER",
+   "px": [
+    150,
+    27
+   ]
+  },
+  {
+   "campeao": "Riven",
+   "id": 92,
+   "time": "CHAOS",
+   "px": [
+    164,
+    26
+   ]
+  },
+  {
+   "campeao": "Nilah",
+   "id": 895,
+   "time": "ORDER",
+   "px": [
+    217,
+    123
+   ],
+   "marca": "yuumi"
+  },
+  {
+   "campeao": "Seraphine",
+   "id": 147,
+   "time": "CHAOS",
+   "px": [
+    256,
+    315
+   ]
+  },
+  {
+   "campeao": "Tristana",
+   "id": 18,
+   "time": "CHAOS",
+   "px": [
+    263,
+    305
+   ],
+   "marca": "encoberto"
+  }
+ ],
+ "obs": "Seraphine com anel brilhante"
+}

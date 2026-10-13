@@ -441,8 +441,9 @@ def destravar():
 # ---------- laço principal ----------
 
 class Coletor:
-    def __init__(self, args):
+    def __init__(self, args, coach=None):
         self.args = args
+        self.coach = coach  # coach_vivo.Coach (ao vivo, painel, mentor); None nos testes do retrato
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)
@@ -539,6 +540,8 @@ class Coletor:
             if self.cs.sessao(dado, banco.agora_ms()):
                 await self.ler_runa()
                 self.gravar_cs(self.cs.retrato())
+            if self.coach:  # rota provável e força do draft para o selo (GET /draft do servidor local)
+                await asyncio.to_thread(self.coach.champ_select, dado)
 
     async def ler_runa(self):
         try:
@@ -599,14 +602,21 @@ class Coletor:
             self.ultima_cs = None  # ligado: nenhuma partida seguinte cai neste retrato
         if fase == "EndOfGame":
             self.buscar_partida(gid)
+        if self.coach:
+            if fase != "ChampSelect":
+                self.coach.fim_champ_select()
+            # InProgress liga o ao vivo; WaitingForStats para o que olha a tela; EndOfGame ou fora do jogo
+            # desliga tudo (o EndOfGame está em FASES_JOGO: quem decide é o coach_vivo, não esta lista)
+            await self.coach.fase(fase, gid, self.fila_atual, self.lcu)
 
     def buscar_partida(self, gid):
         if self.buscando and not self.buscando.done():
             return
-        self.buscando = asyncio.create_task(self.partida_nova(gid))
+        self.buscando = asyncio.create_task(self.partida_nova(gid, self.fila_atual))
 
-    async def partida_nova(self, gid):
-        """o histórico demora a mostrar a partida: tenta com espera crescente"""
+    async def partida_nova(self, gid, fila=None):
+        """o histórico demora a mostrar a partida: tenta com espera crescente. `fila` = a do fim da
+        partida (o fila_atual muda com o lobby seguinte; o coach ainda prefere a gravada no banco)"""
         for espera in (5, 10, 20, 40, 80, 160):
             await asyncio.sleep(espera)
             try:
@@ -616,6 +626,8 @@ class Coletor:
                 continue
             if not gid or banco.ids_completos(self.c) >= {gid}:
                 log.info("partida nova %s no banco (%d novas)", gid, r["novas"])
+                if self.coach and gid:  # mentor do pós-jogo e revisão da previsão do jungler
+                    await asyncio.to_thread(self.coach.pos_partida, gid, fila)
                 return
         log.warning("partida %s não apareceu no histórico; o próximo backfill recupera", gid)
 
@@ -626,6 +638,11 @@ def principal():
     ap.add_argument("--lockfile", help="caminho do lockfile (desliga a busca pelo processo)")
     ap.add_argument("--db", default=str(banco.DB_PADRAO))
     ap.add_argument("--so-backfill", action="store_true", help="só baixa o histórico e sai (sem trava)")
+    ap.add_argument("--liveclient", default="https://127.0.0.1:2999",
+                    help="URL da Live Client (o simulador: http://127.0.0.1:2998)")
+    ap.add_argument("--porta-painel", type=int, default=8765, help="porta do servidor local (painel, /config, /mentor)")
+    ap.add_argument("--config", default=None, help="config do coach (padrão dados/config.json)")
+    ap.add_argument("--sem-coach", action="store_true", help="só o coletor de partidas (sem ao vivo nem servidor)")
     args = ap.parse_args()
     configurar_log(console=bool(sys.stderr) and not sys.executable.lower().endswith("pythonw.exe"))
 
@@ -645,13 +662,24 @@ def principal():
         return 0
     log.info("iniciado (pid %d, ocioso %g min)", os.getpid(), args.ocioso_min)
     motivo = "erro"
+    coach = None
     try:
-        motivo = asyncio.run(Coletor(args).rodar())
+        if not args.sem_coach:
+            import coach_vivo
+            coach = coach_vivo.Coach(db=args.db, liveclient=args.liveclient, porta=args.porta_painel,
+                                     **({"config": args.config} if args.config else {}))
+            coach.iniciar()
+        motivo = asyncio.run(Coletor(args, coach).rodar())
     except KeyboardInterrupt:
         motivo = "interrompido"
     except Exception:
         log.exception("falha no laço principal")
     finally:
+        if coach is not None:
+            try:
+                coach.encerrar()
+            except Exception:
+                log.exception("coach não encerrou limpo")
         log.info("encerrado (%s)", motivo)
         destravar()
     return 0

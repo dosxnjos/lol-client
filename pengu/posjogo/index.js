@@ -1,22 +1,13 @@
-// Painel pós-jogo: busca partida e linha do tempo na LCU, roda analise.js (spec: docs/INSIGHTS.md) e desenha.
+// Painel pós-jogo v2 (plano v2, passo 7): busca partida e linha do tempo na LCU, roda analise.js (spec:
+// docs/INSIGHTS.md), as lições (licoes.js sobre licoes.md, o mesmo arquivo do coletor) e desenha 6 abas
+// (abas.js). Do coletor (127.0.0.1:8765, opcional): contexto das lições, mentor e revisão do jungler.
 import { analisar, trajeto, FORA_DAS_CONTAS } from './analise.js';
+import { licoes as calcularLicoes } from './licoes.js';
+import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPartida, htmlMentor,
+  abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from './abas.js';
+import regrasMd from './licoes.md?raw';
 
-const LARG = 14870, ALT = 14980, PX = 330;
-const sx = x => (x / LARG * PX).toFixed(1);
-const sy = y => ((ALT - y) / ALT * PX).toFixed(1);
 const esperar = ms => new Promise(r => setTimeout(r, ms));
-
-const REGIAO = {
-  base_aliada: 'base aliada', base_inimiga: 'base inimiga', rota_top: 'rota top', rota_meio: 'rota meio',
-  rota_bot: 'rota bot', rio: 'rio', selva_aliada: 'selva aliada', selva_inimiga: 'selva inimiga',
-};
-const OBJETIVO = {
-  DRAGON: 'dragão', BARON_NASHOR: 'Barão', RIFTHERALD: 'Arauto', HORDE: 'Larva', ATAKHAN: 'Atakhan',
-  TOWER_BUILDING: 'torre', INHIBITOR_BUILDING: 'inibidor',
-};
-const TORRE = { OUTER_TURRET: 'externa', INNER_TURRET: 'interna', BASE_TURRET: 'de base', NEXUS_TURRET: 'do nexus' };
-const ROTA = { TOP_LANE: 'top', MID_LANE: 'meio', BOT_LANE: 'bot' };
-
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
 
 // partida + linha do tempo com retentativa (logo no EndOfGame a LCU ainda não tem)
@@ -33,35 +24,64 @@ async function buscarComRetentativa(gameId, aoEsperar, vivo = () => true) {
 }
 
 let nomes = null;
-async function nomeCampeao(id) {
+async function carregarNomes() {
   if (!nomes) {
     try { nomes = Object.fromEntries((await json('/lol-game-data/assets/v1/champion-summary.json')).map(c => [c.id, c.name])); }
     catch { nomes = {}; }
   }
-  return nomes[id] || `campeão ${id}`;
+  return nomes;
 }
+const nome = id => nomes?.[id] || `campeão ${id}`;
 
-const historico = async () => (await json('/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=19')).games.games;
+// o endpoint ignora os índices e devolve o cache do client (20 ou 200 partidas, conforme o dia): ARMADILHAS.
+// Acumula por gameId na sessão do plugin, para uma leitura de 20 não apagar a de 200 (como o selo do champ select)
+// A leitura de 200 leva até 40 s: com prazo, o painel abre com o que já tem e repinta quando ela chega.
+const cacheHist = new Map();
+let histEmVoo = null;
+const lerHistorico = () => (histEmVoo ||= json('/lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199')
+  .then(d => { for (const g of d.games.games) cacheHist.set(g.gameId, g); return [...cacheHist.values()]; })
+  .finally(() => { histEmVoo = null; }));
+// prazoMs: devolve null se a leitura não terminou a tempo (ela segue e enche o cache)
+const historico = (prazoMs = 0) => (prazoMs ? Promise.race([lerHistorico(), esperar(prazoMs).then(() => null)]) : lerHistorico());
 
 export async function analisarPartida(gameId, { aoEsperar, vivo } = {}) {
-  // histórico só alimenta a média de farm: falha nele não derruba o painel
-  const [eu, hist] = await Promise.all([json('/lol-summoner/v1/current-summoner'), historico().catch(() => [])]);
+  // histórico alimenta média de farm, lições (sessão), tendência e sessão: falha nele não derruba o painel
+  // partida e linha do tempo ANTES do histórico: com uma leitura lenta de 200 partidas em voo o painel levou
+  // ~50 s para abrir (13/10/2026; provável fila do match-history na LCU). Com cache, o histórico tem 1,5 s; sem, 8 s.
+  const [eu] = await Promise.all([json('/lol-summoner/v1/current-summoner'), carregarNomes()]);
   const [partida, linha] = await buscarComRetentativa(gameId, aoEsperar, vivo);
+  const lido = await historico(cacheHist.size ? 1500 : 8000).catch(() => null);
+  const hist = lido || [...cacheHist.values()];
   const r = analisar(partida, linha, eu.puuid, hist);
-  if (!r.erro) r.trajeto = trajeto(linha, r.participantId);
+  if (r.erro) return r;
+  r.historicoIncompleto = !lido;
+  const meu = partida.participants.find(p => p.participantId === r.participantId);
+  r.esta = {
+    gameId: partida.gameId, criacao: partida.gameCreation, duracao: partida.gameDuration, vitoria: r.vitoria,
+    campeao: meu.championId, k: meu.stats.kills, d: meu.stats.deaths, a: meu.stats.assists, fila: partida.queueId,
+  };
+  r.trajeto = trajeto(linha, r.participantId);
   r.campeoes = Object.fromEntries(partida.participants.map(p => [p.participantId, p.championId]));
+  r.curva = curvas(linha, r.participantId, r.adversario?.participantId);
+  r.objetivos = objetivosDaPartida(partida, linha, r.time);
+  r.stats = meu.stats;
+  r.criacao = partida.gameCreation;
+  r.historico = hist;
+  r.tendencia = tendencia(meu.stats, partida.gameDuration, hist, partida.gameId, partida.gameCreation);
+  r.sessao = sessaoDaPartida(hist, r.esta);
   return r;
 }
 
-// ---- desenho ----
+// ---- painel ----
 
-// sessao: cada abertura ganha um número; fechar() o invalida, e análise em voo não reabre o painel
-let sessao = 0;
+// abertura: cada abertura ganha um número; fechar() o invalida, e análise em voo não reabre o painel
+let abertura = 0, painel = null;
 function remover() {
   document.getElementById('lc-posjogo')?.remove();
   window.removeEventListener('keydown', aoTecla, true);
+  painel = null;
 }
-function fechar() { sessao++; remover(); }
+function fechar() { abertura++; remover(); }
 function aoTecla(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); fechar(); } }
 
 function moldura(conteudo) {
@@ -75,112 +95,171 @@ function moldura(conteudo) {
   return el;
 }
 
-const sinal = v => (v > 0 ? `<span class="lc-pos">+${v}</span>` : v < 0 ? `<span class="lc-neg">−${-v}</span>` : '0');
-const esc = s => String(s).replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-
-function svgMapa(r) {
-  const rota = 'fill="none" stroke="#2a3a3a" stroke-width="14" stroke-linecap="round"';
-  const pontos = r.trajeto.map(p => `${sx(p.x)},${sy(p.y)}`).join(' ');
-  const passos = r.trajeto.map((p, i) => `<circle cx="${sx(p.x)}" cy="${sy(p.y)}" r="2.2" fill="#0ac8b9" opacity="${(0.35 + 0.65 * i / r.trajeto.length).toFixed(2)}"/>`).join('');
-  const mortes = r.mortes.map((m, i) => `<g><circle cx="${sx(m.x)}" cy="${sy(m.y)}" r="8" fill="#e84057" stroke="#010a13" stroke-width="1.5"/>
-    <text x="${sx(m.x)}" y="${(+sy(m.y) + 3.5).toFixed(1)}" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">${i + 1}</text></g>`).join('');
-  return `<svg viewBox="0 0 ${PX} ${PX}" xmlns="http://www.w3.org/2000/svg">
-    <path d="M${sx(14925)},${sy(0)} L${sx(0)},${sy(14925)}" stroke="#14303a" stroke-width="40"/>
-    <path d="M${sx(1200)},${sy(3000)} L${sx(1200)},${sy(13780)} L${sx(11870)},${sy(13780)}" ${rota}/>
-    <path d="M${sx(3000)},${sy(1200)} L${sx(13670)},${sy(1200)} L${sx(13670)},${sy(11980)}" ${rota}/>
-    <path d="M${sx(2600)},${sy(2600)} L${sx(12270)},${sy(12380)}" ${rota}/>
-    <circle cx="${sx(0)}" cy="${sy(0)}" r="${(5000 / LARG * PX).toFixed(1)}" fill="${r.time === 100 ? '#0a3a5a' : '#4a1520'}" opacity=".55"/>
-    <circle cx="${sx(LARG)}" cy="${sy(ALT)}" r="${(5000 / LARG * PX).toFixed(1)}" fill="${r.time === 200 ? '#0a3a5a' : '#4a1520'}" opacity=".55"/>
-    <polyline points="${pontos}" fill="none" stroke="#0ac8b9" stroke-width="1.2" opacity=".55"/>
-    ${passos}${mortes}
-  </svg>`;
+// estado do painel aberto; as partes que chegam do coletor repintam só o seu pedaço
+function pintar(p, partes) {
+  const q = s => p.el.querySelector(s);
+  const ctx = p.ctxEstado === 'ok' ? p.ctx : null;
+  for (const parte of partes) {
+    if (parte === 'licoes') {
+      // com o coletor, as lições dele (mesmo licoes.md e mesmo motor, sobre o banco inteiro); sem ele, o motor
+      // daqui com o histórico do client (que às vezes só tem 20 partidas: média de farm sem amostra)
+      p.licoes = p.licoesColetor || calcularLicoes(regrasMd, p.r, p.r.historico, p.r.criacao, ctx, nomes).licoes;
+      const sec = q('[data-painel="resumo"] .lc-res-esq');
+      const novo = document.createElement('div');
+      novo.innerHTML = abaResumo(p.r, p.licoes, p.licoesColetor ? 'coletor' : p.ctxEstado);
+      sec?.replaceWith(novo.querySelector('.lc-res-esq'));
+    } else if (parte === 'mentor') {
+      // repinta só se mudou (a leitura a cada 15 s não pode jogar a rolagem para o topo); conversa nova desce ao fim
+      const m = q('[data-mentor]'), html = htmlMentor(p.mentor);
+      const conv = p.mentor?.conversa || [];
+      const chave = `${conv.length}:${conv[conv.length - 1]?.status}`;
+      if (m && html !== p.mentorHtml) {
+        const topo = m.scrollTop;
+        m.innerHTML = html;
+        m.scrollTop = p.mentorChave !== undefined && chave !== p.mentorChave && conv.length > 1 ? m.scrollHeight : topo;
+        p.mentorHtml = html;
+        if (p.mentor?.conversa) p.mentorChave = chave; // a 1ª leitura de verdade abre no topo
+      }
+      const pronto = p.mentor?.status === 'pronto';
+      const f = q('[data-pergunta]');
+      f?.classList.toggle('lc-desligado', !pronto);
+      if (f) for (const c of f.elements) c.disabled = !pronto;
+    } else if (parte === 'tendencia') {
+      const sec = q('[data-painel="tendencia"]');
+      if (sec) sec.innerHTML = abaTendencia(p.r, nome, ctx, p.ctxEstado, p.revisao, !!p.cfg.traumas?.ligado);
+    } else if (parte === 'sessao') {
+      const sec = q('[data-painel="sessao"]');
+      if (sec) sec.innerHTML = abaSessao(p.r, nome, p.r.sessao, p.ranked, ctx, p.ctxEstado, new Date().getHours());
+    }
+  }
 }
 
-function padroes(r) {
-  const n = r.mortes.length;
-  if (!n) return ['nenhuma morte nesta partida'];
-  const conta = f => r.mortes.filter(f).length;
-  const out = [];
-  const metadeInimiga = conta(m => m.lado === 'inimigo');
-  if (metadeInimiga) out.push(`${metadeInimiga} de ${n} mortes na metade inimiga do mapa`);
-  const sozinho = conta(m => m.aliadosPerto.length === 0);
-  if (sozinho) out.push(`${sozinho} de ${n} mortes sem aliado por perto no minuto mais próximo`);
-  const emDesvantagem = conta(m => m.inimigos > m.aliadosPerto.length + 1);
-  if (emDesvantagem) out.push(`${emDesvantagem} de ${n} mortes com mais inimigos na jogada do que aliados perto`);
-  const comObjetivo = conta(m => m.objetivos.length);
-  if (comObjetivo) out.push(`${comObjetivo} de ${n} mortes seguidas de objetivo inimigo em até 90 s`);
-  const cedo = conta(m => m.ms < 15 * 60000);
-  if (cedo) out.push(`${cedo} de ${n} mortes antes dos 15 min`);
-  return out;
+function trocarAba(p, aba) {
+  if (!ABAS.some(([id]) => id === aba)) return false;
+  p.aba = aba;
+  for (const b of p.el.querySelectorAll('[data-aba]')) b.classList.toggle('lc-ativa', b.dataset.aba === aba);
+  for (const s of p.el.querySelectorAll('[data-painel]')) s.hidden = s.dataset.painel !== aba;
+  return true;
 }
 
-// HTML do painel (async pelos nomes dos campeões); quem desenha é o abrirPainel, depois de conferir a sessão
-async function montar(r) {
-  if (r.erro) return `<div class="lc-carregando">pós-jogo: ${esc(r.erro)} <button class="lc-fechar">fechar</button></div>`;
-  const meu = await nomeCampeao(r.campeao);
-  const adv = r.adversario ? await nomeCampeao(r.adversario.campeao) : null;
-  const nomesAliados = {};
-  for (const m of r.mortes) for (const p of m.aliadosPerto) nomesAliados[p] ??= await nomeCampeao(r.campeoes[p]);
-  const min = Math.floor(r.duracaoS / 60), seg = String(r.duracaoS % 60).padStart(2, '0');
-
-  const linhasMortes = r.mortes.map((m, i) => `<tr class="lc-morte">
-      <td><span class="lc-num">${i + 1}</span></td><td>${m.t}</td>
-      <td>${REGIAO[m.regiao] || m.regiao}${m.regiao.startsWith('rota') ? ` <span class="lc-nota">(${m.lado === 'inimigo' ? 'passou do meio' : 'lado aliado'})</span>` : ''}</td>
-      <td>${m.inimigos}${m.matador === 0 ? ' (execução)' : ''}</td>
-      <td>${m.aliadosPerto.length ? m.aliadosPerto.map(p => esc(nomesAliados[p])).join(', ') : '<span class="lc-neg">ninguém</span>'}</td>
-      <td>${m.objetivos.length ? m.objetivos.map(o => `${OBJETIVO[o.tipo] || o.tipo}${o.tipo === 'TOWER_BUILDING' ? ` ${TORRE[o.detalhe] || ''} ${ROTA[o.rota] || ''}` : ''}`).join(', ') : '—'}</td>
-    </tr>`).join('');
-
-  const linhasDiff = ['10', '15'].filter(k => r.diffs[k]).map(k => {
-    const d = r.diffs[k];
-    return `<tr><td>${k} min</td><td>${sinal(d.ouro)}</td><td>${sinal(d.xp)}</td><td>${sinal(d.farm)}</td>
-      <td class="lc-nota">${d.eu.ouro}/${d.eu.xp}/${d.eu.farm} vs ${d.adv.ouro}/${d.adv.xp}/${d.adv.farm}</td></tr>`;
-  }).join('');
-
-  const f = r.farm, um = v => v.toFixed(1).replace('.', ',').replace('-', '−');
-  const farmTxt = f.media === null
-    ? `${um(f.valor)}/min · amostra insuficiente (${f.n})`
-    : `${um(f.valor)}/min contra tua média de ${um(f.media)} com ${esc(meu)} (${f.n} partidas) · ${f.diferenca >= 0 ? '<span class="lc-pos">+' : '<span class="lc-neg">'}${um(f.diferenca)}</span>`;
-
-  const advTxt = r.adversario
-    ? `${r.adversario.incerto ? 'adversário provável' : 'contra'} ${esc(adv)} · ${r.papel}`
-    : 'sem adversário de rota (papéis não identificados)';
-
-  return `<div class="lc-caixa">
-    <div class="lc-topo">
-      <h2>${esc(meu)}</h2>
-      <span class="${r.vitoria ? 'lc-vitoria' : 'lc-derrota'}">${r.vitoria ? 'vitória' : 'derrota'}</span>
-      <span>${min}:${seg} · ${advTxt} · partida ${r.gameId}</span>
-      <button class="lc-fechar">fechar (Esc)</button>
-    </div>
-    <div class="lc-mapa">${svgMapa(r)}
-      <div class="lc-legenda"><span><i style="background:#0ac8b9"></i>teu trajeto (1 ponto por minuto)</span><span><i style="background:#e84057"></i>mortes</span></div>
-      <div class="lc-nota">posição amostrada 1 vez por minuto: pode estar até 30 s longe do momento real.</div>
-    </div>
-    <div class="lc-direita">
-      <h3>padrões</h3><ul class="lc-padroes">${padroes(r).map(p => `<li>${p}</li>`).join('')}</ul>
-      <h3>mortes (${r.mortes.length})</h3>
-      ${r.mortes.length ? `<table><tr><th></th><th>tempo</th><th>onde</th><th>inimigos</th><th>aliados perto</th><th>objetivo inimigo em 90 s</th></tr>${linhasMortes}</table>` : '<div>nenhuma</div>'}
-      <h3>contra o adversário de rota</h3>
-      ${linhasDiff ? `<table><tr><th></th><th>ouro</th><th>xp</th><th>farm</th><th>tu vs ele (ouro/xp/farm)</th></tr>${linhasDiff}</table>` : '<div>sem dados (partida curta ou sem adversário)</div>'}
-      <h3>farm por minuto</h3><div>${farmTxt}</div>
-      <div class="lc-nota">heurística sobre 1 quadro por minuto: mostra padrões, não veredito. Objetivo depois da morte é coincidência de tempo, não prova de causa.</div>
-    </div>
-  </div>`;
+// contexto das lições (matchup, traumas, histórico): o coletor busca a partida na LCU se o backfill não gravou
+async function cicloContexto(p) {
+  const inicio = Date.now();
+  while (p.vivo()) {
+    const r = await p.coletor(`/contexto/${p.r.gameId}`, { prazoMs: 30000 });
+    if (!p.vivo()) return;
+    if (r.status === 200 && r.dados) {
+      p.ctx = r.dados;
+      p.ctxEstado = 'ok';
+      const l = await p.coletor(`/licoes/${p.r.gameId}`, { prazoMs: 30000 });
+      if (l.status === 200 && Array.isArray(l.dados?.licoes)) {
+        p.licoesColetor = l.dados.licoes;
+        // farm contra a média: a do banco (20 partidas com o campeão) vale mais que a do cache do client
+        const m = l.dados.metricas || {};
+        if (p.r.farm.media === null && m.farm_media !== null && m.farm_media !== undefined) {
+          p.r.farm = { valor: m.farm_min, media: m.farm_media, n: m.farm_n, diferenca: m.farm_dif };
+          const sec = p.el.querySelector('[data-painel="rota"]');
+          if (sec) sec.innerHTML = abaRota(p.r, nome);
+        }
+      }
+      break;
+    }
+    p.ctxEstado = r.status === 0 ? 'fora' : r.dados?.tentarDeNovoS ? 'esperando' : 'erro';
+    pintar(p, ['licoes', 'tendencia', 'sessao']);
+    if (p.ctxEstado === 'erro' || Date.now() - inicio > 300000) return;
+    await esperar(r.status === 0 ? 15000 : (r.dados.tentarDeNovoS || 5) * 1000);
+  }
+  if (p.vivo()) pintar(p, ['licoes', 'tendencia', 'sessao']);
 }
 
-export async function abrirPainel(gameId) {
+// mentor: lê o estado a cada 3 s enquanto pensa (5 s sem nada, 15 s pronto: o coletor pode gerar de novo)
+async function cicloMentor(p) {
+  while (p.vivo()) {
+    const r = await p.coletor(`/mentor/${p.r.gameId}`, { prazoMs: 5000 });
+    if (!p.vivo()) return;
+    p.mentor = r.status === 200 && r.dados?.status ? r.dados : { status: r.status === 0 ? 'fora' : 'indisponivel' };
+    pintar(p, ['mentor']);
+    const pensando = p.mentor.status === 'pensando' || (p.mentor.conversa || []).some(c => c.status === 'pensando');
+    await esperar(pensando ? 3000 : p.mentor.status === 'nada' ? 5000 : 15000);
+  }
+}
+
+async function acaoMentor(p, caminho, corpo) {
+  const aviso = p.el.querySelector('[data-mentor-aviso]');
+  const r = await p.coletor(caminho, { metodo: 'POST', corpo, prazoMs: 8000 });
+  if (aviso) aviso.textContent = r.status === 202 ? '' : r.status === 429 ? 'mentor ocupado com outra chamada: tenta de novo em alguns segundos.'
+    : r.status === 0 ? 'coletor fora do ar.' : `não deu: ${r.dados?.erro || r.status}`;
+  if (r.status === 202) {
+    const m = await p.coletor(`/mentor/${p.r.gameId}`);
+    if (m.status === 200 && p.vivo()) { p.mentor = m.dados; pintar(p, ['mentor']); }
+  }
+  return r.status;
+}
+
+function ligarEventos(p) {
+  p.el.addEventListener('click', e => {
+    const aba = e.target.closest?.('[data-aba]');
+    if (aba) return trocarAba(p, aba.dataset.aba);
+    if (e.target.closest?.('[data-acao="mentor-gerar"]')) acaoMentor(p, `/mentor/${p.r.gameId}`, {});
+  });
+  p.el.addEventListener('submit', e => {
+    e.preventDefault();
+    const input = e.target.querySelector('input');
+    const texto = input?.value.trim();
+    if (!texto) return;
+    acaoMentor(p, `/mentor/${p.r.gameId}/pergunta`, { pergunta: texto }).then(st => { if (st === 202) input.value = ''; });
+  });
+}
+
+function montar(r, cfg, coletor, vivo) {
+  const p = { r, cfg, coletor, vivo, aba: 'resumo', ctx: null, ctxEstado: coletor ? 'carregando' : 'fora', mentor: null, revisao: null, ranked: null };
+  p.licoes = calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes;
+  const html = {
+    resumo: abaResumo(r, p.licoes, p.ctxEstado),
+    rota: abaRota(r, nome),
+    mortes: abaMortes(r, nome),
+    objetivos: abaObjetivos(r),
+    tendencia: abaTendencia(r, nome, null, p.ctxEstado, null, !!cfg.traumas?.ligado),
+    sessao: abaSessao(r, nome, r.sessao, null, null, p.ctxEstado, new Date().getHours()),
+  };
+  p.el = moldura(`<div class="lc-caixa lc-v2">${htmlTopo(r, nome)}
+    <div class="lc-paineis">${ABAS.map(([id]) => `<section class="lc-painel lc-painel-${id}" data-painel="${id}">${html[id]}</section>`).join('')}</div></div>`);
+  trocarAba(p, 'resumo');
+  ligarEventos(p);
+  pintar(p, ['mentor']);
+  return p;
+}
+
+// cfg e coletor do plugin (iniciarPosjogo); abrirPainel(id) do Ctrl+K e dos testes usa os mesmos
+let padrao = { cfg: { traumas: { ligado: true } }, coletor: null };
+
+export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor) {
   moldura('<div class="lc-carregando">analisando a partida…</div>');
-  const minha = ++sessao;
-  const vivo = () => minha === sessao && !!document.getElementById('lc-posjogo');
+  const minha = ++abertura;
+  const vivo = () => minha === abertura && !!document.getElementById('lc-posjogo');
   try {
     const r = await analisarPartida(gameId, {
       vivo,
       aoEsperar: ms => { const c = document.querySelector('#lc-posjogo .lc-carregando'); if (c) c.textContent = `processando a partida (nova tentativa em ${ms / 1000} s)…`; },
     });
     if (!vivo()) return r; // fechou enquanto carregava
-    const html = await montar(r);
-    if (vivo()) moldura(html);
+    if (r.erro) { moldura(`<div class="lc-carregando">pós-jogo: ${esc(r.erro)} <button class="lc-fechar">fechar</button></div>`); return r; }
+    const p = montar(r, cfg, coletor || (async () => ({ status: 0, dados: null })), vivo);
+    painel = p;
+    json('/lol-ranked/v1/current-ranked-stats').then(d => { p.ranked = d; if (vivo()) pintar(p, ['sessao']); }).catch(() => {});
+    // histórico lento (200 partidas): o painel abriu com o cache; quando a leitura chega, refaz tendência e sessão
+    if (r.historicoIncompleto) historico().then(h => {
+      if (!vivo()) return;
+      r.historico = h;
+      r.tendencia = tendencia(r.stats, r.duracaoS, h, r.gameId, r.criacao);
+      r.sessao = sessaoDaPartida(h, r.esta);
+      pintar(p, ['licoes', 'tendencia', 'sessao']);
+    }).catch(() => {});
+    if (coletor) {
+      cicloContexto(p);
+      cicloMentor(p);
+      coletor(`/revisao/${gameId}`).then(rv => { p.revisao = rv.status === 200 ? rv.dados : { status: rv.status }; if (vivo()) pintar(p, ['tendencia']); });
+    } else pintar(p, ['licoes']);
     return r;
   } catch (e) {
     if (!vivo()) return null; // fechado: erro não reabre o painel
@@ -189,18 +268,23 @@ export async function abrirPainel(gameId) {
   }
 }
 
+// troca a aba do painel aberto (teste e prints): aba('rota') -> true
+export const aba = id => (painel ? trocarAba(painel, id) : false);
+export const estadoPainel = () => painel && { aba: painel.aba, ctxEstado: painel.ctxEstado, mentor: painel.mentor?.status, licoes: painel.licoes?.map(l => l.id), revisao: !!painel.revisao?.revisao };
+
 // última partida do Rift no histórico (sem treino, personalizada nem remake: docs/INSIGHTS.md)
 export async function analisarUltima() {
   const ultima = (await historico())
     .filter(g => g.mapId === 11 && g.gameDuration >= 300 && !FORA_DAS_CONTAS.includes(g.queueId)).sort((a, b) => b.gameCreation - a.gameCreation)[0];
   if (!ultima) { moldura('<div class="lc-carregando">nenhuma partida de Summoner\'s Rift no histórico <button class="lc-fechar">fechar</button></div>'); return null; }
-  return abrirPainel(ultima.gameId);
+  return abrirPainel(ultima.gameId, padrao.cfg, padrao.coletor);
 }
 
 export { fechar as fecharPainel };
 
 // abre sozinho no fim da partida (gameId guardado enquanto a partida rolava)
-export function iniciarPosjogo(context, cfg) {
+export function iniciarPosjogo(context, cfg, coletor = null) {
+  padrao = { cfg, coletor };
   let gameId = null, mapa = null;
   context.socket.observe('/lol-gameflow/v1/session', msg => {
     const s = msg?.data;
@@ -216,6 +300,7 @@ export function iniciarPosjogo(context, cfg) {
     if (fase !== 'EndOfGame' || !cfg.posjogo.ligado) return;
     if (mapa && mapa !== 11) return; // ARAM, Arena etc.: sem painel automático
     if (!gameId) gameId = (await json('/lol-end-of-game/v1/eog-stats-block').catch(() => null))?.gameId;
-    if (gameId) abrirPainel(gameId).catch(e => console.error('[lol-client] pós-jogo', e));
+    if (gameId) abrirPainel(gameId, cfg, coletor).catch(e => console.error('[lol-client] pós-jogo', e));
   });
+  return { aba, estado: estadoPainel };
 }

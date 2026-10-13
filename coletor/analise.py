@@ -265,6 +265,51 @@ def matchups(c, campeao=None, puuid=None):
     return {"matchups": out, "partidas": len(ids), "fora": fora}
 
 
+K_TRAUMA = 10         # encolhimento: soma K partidas fictícias com a taxa geral de derrota
+LIFT_TRAUMA = 1.2     # lift encolhido a partir do qual o campeão é "trauma" (docs/INSIGHTS.md § Traumas)
+
+
+def traumas(c, campeao=None, puuid=None, min_partidas=3, antes_de=None):
+    """Lift de derrota contra cada campeão no time inimigo (herança do analise_trauma.py de abril,
+    plano v2 passo 19): taxa de derrota com X no time inimigo ÷ taxa geral, encolhida para a geral
+    com K_TRAUMA partidas fictícias. campeao: meu championId (None = todas as minhas partidas).
+    antes_de (gameCreation em ms): só partidas criadas antes (o pós-jogo não conta a partida que analisa).
+    Devolve {"partidas", "derrotas", "taxa_derrota", "campeoes": [...], "traumas": [...]}; n < min_partidas
+    fica em `campeoes` sem `trauma`. Spec: docs/INSIGHTS.md § Traumas."""
+    puuid = puuid or banco.meta(c, "puuid")
+    sql = ("select pa.game_id, pp.time, pp.vitoria from partidas pa "
+           "join participantes pp on pp.game_id = pa.game_id and pp.puuid = ? "
+           f"where pa.mapa = 11 and pa.fila not in {FORA_DAS_CONTAS} and pa.duracao >= {REMAKE_S}"
+           + (" and pp.campeao = ?" if campeao is not None else "")
+           + (" and pa.criacao < ?" if antes_de is not None else ""))
+    params = [puuid] + ([campeao] if campeao is not None else []) + ([antes_de] if antes_de is not None else [])
+    jogos = c.execute(sql, params).fetchall()
+    n_total = len(jogos)
+    if not n_total:
+        return {"partidas": 0, "derrotas": 0, "taxa_derrota": None, "campeoes": [], "traumas": []}
+    d_total = sum(1 for _, _, v in jogos if not v)
+    taxa = d_total / n_total
+    por = {}
+    for gid, meu_time, vit in jogos:
+        for (cid,) in c.execute("select distinct campeao from participantes where game_id=? and time<>?",
+                                (gid, meu_time)):
+            s = por.setdefault(cid, [0, 0])
+            s[0] += 1
+            s[1] += 0 if vit else 1
+    out = []
+    for cid, (n, d) in por.items():
+        item = {"campeao": cid, "n": n, "vitorias": n - d, "derrotas": d,
+                "taxa_derrota": d / n,
+                "lift_bruto": (d / n) / taxa if taxa else None,
+                "lift": ((d + K_TRAUMA * taxa) / (n + K_TRAUMA)) / taxa if taxa else None}
+        item["trauma"] = bool(n >= min_partidas and item["lift"] is not None and item["lift"] >= LIFT_TRAUMA)
+        out.append(item)
+    out.sort(key=lambda x: (-(x["lift"] or 0), -x["n"], x["campeao"]))
+    return {"partidas": n_total, "derrotas": d_total, "taxa_derrota": taxa, "k": K_TRAUMA,
+            "limiar": LIFT_TRAUMA, "min_partidas": min_partidas,
+            "campeoes": out, "traumas": [x for x in out if x["trauma"]]}
+
+
 if __name__ == "__main__":
     conn = banco.abrir_leitura()
     gid = int(sys.argv[1]) if len(sys.argv) > 1 else None

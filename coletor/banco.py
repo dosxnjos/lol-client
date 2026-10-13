@@ -222,3 +222,47 @@ def gravar_campeoes(c, lista):
         for ch in lista or []:
             if ch.get("id", -1) > 0:
                 c.execute("insert or replace into campeoes values (?,?)", (ch["id"], ch.get("name")))
+
+
+# ---------- ao vivo (plano v2, passo 8; quem grava é coletor/ao_vivo.py) ----------
+# amostra a cada 10 s de gameTime, só o resumo por participante (o allgamedata bruto tem
+# 33 KB/amostra). slot = índice em allPlayers (0–9). Nenhum Riot ID: campeão, time e rota.
+# visto_gt: gameTime da última mudança observada em nível/itens/farm (inimigo congela na fog).
+ESQUEMA_AO_VIVO = """
+create table if not exists ao_vivo (
+  game_id integer, gt real, slot integer, time integer, campeao integer, nome text, rota text,
+  nivel integer, itens text, ouro_est integer, kills integer, deaths integer, assists integer,
+  cs integer, morto integer, renascer real, visto_gt real, eu integer,
+  primary key (game_id, gt, slot));
+create table if not exists eventos_ao_vivo (
+  game_id integer, event_id integer, nome text, gt real, killer text, vitima text,
+  assistentes text, json text, primary key (game_id, event_id));
+"""
+AO_VIVO_COLUNAS = ("game_id", "gt", "slot", "time", "campeao", "nome", "rota", "nivel", "itens",
+                   "ouro_est", "kills", "deaths", "assists", "cs", "morto", "renascer", "visto_gt", "eu")
+
+
+def criar_ao_vivo(c):
+    c.executescript(ESQUEMA_AO_VIVO)
+
+
+def gravar_amostra_ao_vivo(c, game_id, gt, linhas):
+    """uma amostra: linhas = dicts com as chaves de AO_VIVO_COLUNAS (menos game_id e gt)"""
+    with c:
+        for r in linhas:
+            v = {**r, "game_id": game_id, "gt": round(gt, 1)}
+            v["itens"] = json.dumps(v.get("itens") or [], separators=(",", ":"))
+            c.execute(f"insert or replace into ao_vivo ({','.join(AO_VIVO_COLUNAS)}) values "
+                      f"({','.join('?' * len(AO_VIVO_COLUNAS))})",
+                      tuple(int(v[k]) if isinstance(v.get(k), bool) else v.get(k) for k in AO_VIVO_COLUNAS))
+
+
+def gravar_eventos_ao_vivo(c, game_id, eventos):
+    """eventos da Live Client já sem Riot ID (nomes trocados pelo campeão); dedupe pela chave"""
+    with c:
+        for e in eventos:
+            c.execute("insert or ignore into eventos_ao_vivo values (?,?,?,?,?,?,?,?)",
+                      (game_id, e.get("EventID"), e.get("EventName"), e.get("EventTime"),
+                       e.get("KillerName"), e.get("VictimName"),
+                       json.dumps(e.get("Assisters") or [], ensure_ascii=False),
+                       json.dumps(e, ensure_ascii=False, separators=(",", ":"))))

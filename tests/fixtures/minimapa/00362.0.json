@@ -1,0 +1,62 @@
+{
+ "arquivo": "00362.0.png",
+ "gameTime": 362.0,
+ "partida": 3292746609,
+ "mapa_no_recorte": [
+  134,
+  133,
+  347
+ ],
+ "anotacao": "à mão, inspeção visual de folha 3x com grade de 25 px (13/10/2026); centro do anel em px do mapa",
+ "mortos": [
+  "Yasuo"
+ ],
+ "icones": [
+  {
+   "campeao": "Riven",
+   "id": 92,
+   "time": "CHAOS",
+   "px": [
+    81,
+    29
+   ]
+  },
+  {
+   "campeao": "Illaoi",
+   "id": 420,
+   "time": "ORDER",
+   "px": [
+    41,
+    114
+   ]
+  },
+  {
+   "campeao": "Annie",
+   "id": 1,
+   "time": "ORDER",
+   "px": [
+    117,
+    122
+   ]
+  },
+  {
+   "campeao": "Zac",
+   "id": 154,
+   "time": "ORDER",
+   "px": [
+    47,
+    323
+   ]
+  },
+  {
+   "campeao": "Yuumi",
+   "id": 350,
+   "time": "ORDER",
+   "px": [
+    291,
+    295
+   ]
+  }
+ ],
+ "obs": "Nilah no mesmo lugar da Yuumi (ícone mostra a Yuumi)"
+}

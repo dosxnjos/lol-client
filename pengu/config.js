@@ -15,6 +15,14 @@ export const PADRAO = {
   posjogo: { ligado: true },
   extras: { esconderEvento: false, esconderClassic: false, esconderLoja: false },
   champSelect: { ligado: true },
+  traumas: { ligado: true }, // linha "X é trauma" no selo e bloco na aba Tendência (só o plugin)
+  // chaves do coach: vão inteiras para o coletor (POST 127.0.0.1:8765/config, coach.js); mesmos nomes e
+  // padrões do servidor_local.CONFIG_PADRAO. Mentor: sonnet + medium = vencedor da comparação (plano v2, passo 20)
+  coach: {
+    painelAoVivo: true, amostrasAoVivo: true, voz: true, tomVoz: 'serio', minimapa: true, overlayMinimapa: true,
+    alertasTela: true, feiticos: true, carregamento: true, mentor: true, mentorModelo: 'sonnet', mentorEffort: 'medium',
+    avisosDesligados: [],
+  },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -110,6 +118,12 @@ const ALTERNAVEIS = [
   ['posjogo.ligado', 'painel pós-jogo'],
   ['champSelect.ligado', 'winrate no champ select'],
   ['runas.ligado', 'runa por campeão ao travar'],
+  ['traumas.ligado', 'traumas no selo e no pós-jogo'],
+  ['coach.painelAoVivo', 'painel ao vivo na 2ª tela'],
+  ['coach.voz', 'voz do coach'],
+  ['coach.alertasTela', 'moldura de alertas na tela'],
+  ['coach.overlayMinimapa', 'overlay do jungler no minimapa'],
+  ['coach.mentor', 'mentor no pós-jogo'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],

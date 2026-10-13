@@ -1,0 +1,54 @@
+{
+  "_sobre": "gabarito anotado à mão dos pings no chat das 35 telas inteiras da partida 3292746609 (temp/gravacao/20261013-071040/telas/, 2560x1080; as imagens têm nome de terceiros e ficam fora do git). Só pings: sem nome de jogador nem texto de conversa. tipo: feitico (conta para a prova), ult/outro (tem de ser descartado). jogo=false: print do navegador/desktop/fim de jogo. chat=false: jogo na tela sem linha de chat.",
+  "partida": 3292746609,
+  "telas": {
+    "00000.0": {"jogo": false, "chat": false, "pings": []},
+    "00021.8": {"jogo": true, "chat": true, "pings": []},
+    "00081.9": {"jogo": true, "chat": true, "pings": []},
+    "00141.9": {"jogo": true, "chat": false, "pings": []},
+    "00201.9": {"jogo": true, "chat": false, "pings": []},
+    "00261.9": {"jogo": true, "chat": false, "pings": []},
+    "00321.9": {"jogo": true, "chat": true, "pings": []},
+    "00382.0": {"jogo": true, "chat": false, "pings": []},
+    "00442.0": {"jogo": true, "chat": true, "pings": [
+      {"ts": "07:05", "aliado": "Annie", "inimigo": "Yasuo", "feitico": "Incendiar", "tipo": "feitico"},
+      {"ts": "07:06", "aliado": "Annie", "inimigo": "Yasuo", "feitico": "Flash", "tipo": "feitico"},
+      {"ts": "07:06", "aliado": "Annie", "inimigo": "Yasuo", "texto": "usou R - Último Suspiro", "tipo": "ult"}]},
+    "00502.0": {"jogo": true, "chat": false, "pings": []},
+    "00562.0": {"jogo": true, "chat": true, "pings": [
+      {"ts": "07:06", "aliado": "Annie", "inimigo": "Yasuo", "feitico": "Flash", "tipo": "feitico", "obs": "linha cortada no topo do chat"},
+      {"ts": "07:06", "aliado": "Annie", "inimigo": "Yasuo", "texto": "usou R - Último Suspiro", "tipo": "ult"},
+      {"ts": "07:24", "aliado": "Yuumi", "inimigo": "Seraphine", "feitico": "Exaustão", "tipo": "sem_usou", "obs": "variante sem 'usou': não liga cronômetro"}]},
+    "00622.1": {"jogo": false, "chat": false, "pings": []},
+    "00682.1": {"jogo": true, "chat": true, "pings": []},
+    "00742.1": {"jogo": true, "chat": false, "pings": []},
+    "00802.1": {"jogo": true, "chat": true, "pings": []},
+    "00862.2": {"jogo": false, "chat": false, "pings": []},
+    "00922.2": {"jogo": true, "chat": true, "pings": []},
+    "00982.2": {"jogo": true, "chat": false, "pings": []},
+    "01042.2": {"jogo": true, "chat": true, "pings": [
+      {"ts": "16:25", "aliado": "Nilah", "inimigo": "Seraphine", "texto": "- Vivo(a)", "tipo": "outro"},
+      {"ts": "16:25", "aliado": "Nilah", "inimigo": "Seraphine", "texto": "- Vivo(a)", "tipo": "outro"},
+      {"ts": "17:01", "aliado": "Annie", "texto": "Espere por R - 2s", "tipo": "outro"}]},
+    "01102.3": {"jogo": true, "chat": false, "pings": []},
+    "01162.3": {"jogo": true, "chat": true, "pings": [
+      {"ts": "19:14", "aliado": "Annie", "inimigo": "Tristana", "feitico": "Flash", "tipo": "feitico"},
+      {"ts": "19:15", "aliado": "Annie", "inimigo": "Tristana", "feitico": "Flash", "tipo": "feitico", "obs": "repetição do mesmo gasto"}]},
+    "01222.3": {"jogo": true, "chat": true, "pings": []},
+    "01282.3": {"jogo": true, "chat": true, "pings": [
+      {"ts": "20:44", "aliado": "Nilah", "inimigo": "Tristana", "texto": "usou R - Tiro Destruidor", "tipo": "ult", "vezes": 6}]},
+    "01342.3": {"jogo": true, "chat": false, "pings": []},
+    "01402.4": {"jogo": true, "chat": true, "pings": []},
+    "01462.4": {"jogo": false, "chat": false, "pings": []},
+    "01522.4": {"jogo": true, "chat": true, "pings": []},
+    "01582.4": {"jogo": true, "chat": true, "pings": []},
+    "01642.4": {"jogo": true, "chat": true, "pings": []},
+    "01702.5": {"jogo": true, "chat": true, "pings": []},
+    "01762.5": {"jogo": false, "chat": false, "pings": []},
+    "01822.5": {"jogo": true, "chat": true, "pings": []},
+    "01882.6": {"jogo": false, "chat": false, "pings": []},
+    "01942.6": {"jogo": true, "chat": true, "pings": [
+      {"ts": "31:50", "aliado": "Illaoi", "texto": "Dança da Morte - Precisa de 347 de ouro", "tipo": "outro"}]},
+    "02002.6": {"jogo": false, "chat": true, "pings": []}
+  }
+}

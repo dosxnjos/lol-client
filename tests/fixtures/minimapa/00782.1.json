@@ -1,0 +1,63 @@
+{
+ "arquivo": "00782.1.png",
+ "gameTime": 782.1,
+ "partida": 3292746609,
+ "mapa_no_recorte": [
+  134,
+  133,
+  347
+ ],
+ "anotacao": "à mão, inspeção visual de folha 3x com grade de 25 px (13/10/2026); centro do anel em px do mapa",
+ "mortos": [
+  "Annie",
+  "Riven"
+ ],
+ "icones": [
+  {
+   "campeao": "Illaoi",
+   "id": 420,
+   "time": "ORDER",
+   "px": [
+    51,
+    40
+   ]
+  },
+  {
+   "campeao": "Zac",
+   "id": 154,
+   "time": "ORDER",
+   "px": [
+    175,
+    250
+   ]
+  },
+  {
+   "campeao": "Yuumi",
+   "id": 350,
+   "time": "ORDER",
+   "px": [
+    183,
+    306
+   ]
+  },
+  {
+   "campeao": "Nilah",
+   "id": 895,
+   "time": "ORDER",
+   "px": [
+    288,
+    290
+   ]
+  },
+  {
+   "campeao": "Tristana",
+   "id": 18,
+   "time": "CHAOS",
+   "px": [
+    307,
+    260
+   ]
+  }
+ ],
+ "obs": ""
+}

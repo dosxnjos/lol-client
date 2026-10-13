@@ -1,0 +1,57 @@
+{
+ "partida": 3292746609,
+ "versao": "16.20.824.8524",
+ "eu": "Zac",
+ "campeoes": [
+  {
+   "campeao": "Illaoi",
+   "id": 420,
+   "time": "ORDER"
+  },
+  {
+   "campeao": "Zac",
+   "id": 154,
+   "time": "ORDER"
+  },
+  {
+   "campeao": "Annie",
+   "id": 1,
+   "time": "ORDER"
+  },
+  {
+   "campeao": "Nilah",
+   "id": 895,
+   "time": "ORDER"
+  },
+  {
+   "campeao": "Yuumi",
+   "id": 350,
+   "time": "ORDER"
+  },
+  {
+   "campeao": "Riven",
+   "id": 92,
+   "time": "CHAOS"
+  },
+  {
+   "campeao": "Ekko",
+   "id": 245,
+   "time": "CHAOS"
+  },
+  {
+   "campeao": "Yasuo",
+   "id": 157,
+   "time": "CHAOS"
+  },
+  {
+   "campeao": "Tristana",
+   "id": 18,
+   "time": "CHAOS"
+  },
+  {
+   "campeao": "Seraphine",
+   "id": 147,
+   "time": "CHAOS"
+  }
+ ]
+}

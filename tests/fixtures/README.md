@@ -22,3 +22,20 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
   identidade de jogador nem `chatDetails`; 29 identificadores dos 10 conferidos: 0 achados). Tem
   seleção desfeita por dodge, troca de ordem de pick e ban não feito (`championId` -1). Esperado
   conferido contra a partida e `/lol-perks/v1/pages`. Detalhe: [MEDICAO-2026-10-13](../../docs/MEDICAO-2026-10-13.md).
+
+## Minimapa (passos 13, 14, 15b e 15d)
+
+- `minimapa/*.png` + `*.json`: 14 recortes **reais** (497×497, mapa em (134,133) com 347 px) da
+  partida 3292746609, com o centro de cada ícone **anotado à mão** (folha 3× com grade de 25 px; 77
+  ícones, marca `yuumi` = anel grosso da Yuumi presa, `encoberto` = menos da metade visível) e os
+  mortos do instante (Live Client). Sem nome de jogador (só retratos dos aliados acima do mapa).
+  `partida.json` = os 10 campeões e times; `icones/{id}.png` = ícone base da LCU. Usados por
+  `teste-minimapa.py` (prova), `teste-alcance.py` e `teste-jungler.py` (grade regerada da mediana).
+
+## Feitiços e sugestões (passos 15e e 15f)
+
+- `chat-pings-20261013.json`: gabarito anotado à mão dos pings no chat das 35 telas da partida
+  3292746609 (`tools/teste-ocr-chat.py`). Só horário, campeões e feitiço: as imagens têm nome de
+  terceiros e ficam em `temp/gravacao/` (fora do git). 20 com chat, 6 com ping, 3 com ping de feitiço.
+- `jogo-estatico.json`: `sugestoes.montar_estatico()` da LCU no patch 16.20 (recarga dos feitiços
+  CLASSIC, 112 itens lendários, 173 campeões com dano/controle/papéis); usado por `tools/teste-sugestoes.py`.
