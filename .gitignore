@@ -1,0 +1,5 @@
+dados/
+node_modules/
+__pycache__/
+*.pyc
+temp/
