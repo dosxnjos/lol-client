@@ -142,7 +142,8 @@ C:\Dev\lol-client\
 (`net session` ok). Passos:
 
 - habilitar a auditoria "Criação de processo" (subcategoria
-  `{0CCE922B-69AE-11D9-BED3-00C04FD9BE6E}`; o Windows é pt-BR, então usar o GUID, não o nome);
+  `{0CCE922B-69AE-11D9-BED3-505054503030}`; o Windows é pt-BR, então usar o GUID, não o nome;
+  **correção:** o `…-00C04FD9BE6E` escrito antes aqui não existe nesta máquina);
 - criar uma tarefa no Agendador com **gatilho de evento** Security 4688 filtrado por
   `NewProcessName` terminando em `\LeagueClientUx.exe`, ação `pythonw coletor\coletor.py`,
   "não iniciar nova instância se já estiver rodando".
@@ -162,8 +163,10 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
 - **SQLite** (stdlib) e não DuckDB: zero dependência e um arquivo só. Para análise pesada,
   o DuckDB lê SQLite direto depois.
 - **Tarefa por evento 4688** e não um vigia residente, porque o Gabriel pediu nada ligado o
-  tempo todo. Custo: a auditoria grava um evento por processo criado no log de Segurança
-  (volume pequeno; o log rotaciona sozinho).
+  tempo todo. Custo: a auditoria grava um evento por processo criado no log de Segurança.
+  **correção (revisão 13/10/2026):** o log aqui é circular de 200 MB e já está cheio (~2,5 h de
+  retenção), e com `ProcessCreationIncludeCmdLine_Enabled=1` (ligado antes, pelo harness) o 4688
+  do client grava o token da LCU: [COLETOR.md](../docs/COLETOR.md) § Segurança.
 - **Aceite**: o atraso conta pelo `timer` do servidor, não pelo relógio local, porque o
   evento pode chegar atrasado.
 - Conceitos do acervo: **via-negativa** (enxugar a interface é tirar, não pôr; os extras
@@ -191,20 +194,21 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
 
 ### Fase 1 — interface (plugin)
 
-4. [ ] `pengu/config.js`: defaults
+4. [x] `pengu/config.js`: defaults
    `{esconderTft:true, colunaLarga:true, aceite:{ligado:true, atrasoS:10}, filaRapida:{ligado:true, fila:420, pos1:'TOP', pos2:'JUNGLE'}, posjogo:{ligado:true}, extras:{esconderEvento:false, esconderClassic:false, esconderLoja:false}}`,
    persistidos em `DataStore`; cada chave booleana vira classe no `<html>` (`lc-esconder-tft` etc.);
    ações no `CommandBar` para alternar cada uma e para editar atraso e posições.
    **prova:** eval `[...document.documentElement.classList].filter(c=>c.startsWith('lc-')).sort().join(',')` → contém `lc-coluna-larga,lc-esconder-tft`
    **reprova se:** string vazia
-5. [ ] `pengu/estilo.css`: o CSS do protótipo, prefixado pelas classes do passo 4. Cuidar do
+5. [x] `pengu/estilo.css`: o CSS do protótipo, prefixado pelas classes do passo 4. Cuidar do
    último card visível: a lista de 340 px não pode passar da borda direita da área central
    (alinhar pela direita quando estouraria).
-   **prova:** eval com a tela de modos aberta (seta do lobby, px CSS ≈ (37,108)):
+   **prova:** eval com a tela de modos aberta (seta do lobby, px CSS ≈ (37,108); ⚠️ na tela do
+   lobby o ponto (445,685) é o ENCONTRAR PARTIDA, conferir o alvo antes: [ARMADILHAS](../docs/ARMADILHAS.md)):
    `getComputedStyle(document.querySelector('.menu_item_navbar_tft')).display + '|' + document.querySelector('.game-type-card.selected .parties-game-type-lower-half').getBoundingClientRect().width`
    → `none|340`
    **reprova se:** `block|180` (ou qualquer largura 180)
-6. [ ] `pengu/aceite.js` (+ janela calculada): `context.socket.observe('/lol-matchmaking/v1/ready-check', ...)`.
+6. [x] `pengu/aceite.js` (+ janela calculada): `context.socket.observe('/lol-matchmaking/v1/ready-check', ...)`.
    Com `state==='InProgress' && playerResponse==='None'`, mostrar overlay com contagem e botões
    "aceitar agora" e "não aceitar"; aceitar em `min(atrasoS, limite − 2)` segundos medidos pelo
    `timer` do payload (limite padrão 12 s até medir o real; registrar no ARMADILHAS o valor
@@ -215,7 +219,7 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    (sem ready-check; InProgress/None em t=0 → agenda ~10 s; t=11 → aceita já; Accepted → cancela;
    Declined → cancela) → `5/5 ok`
    **reprova se:** qualquer `FALHOU`
-7. [ ] `pengu/fila-rapida.js`: botão "FILA RÁPIDA" ao lado do `.play-button-component`,
+7. [x] `pengu/fila-rapida.js`: botão "FILA RÁPIDA" ao lado do `.play-button-component`,
    reinjetado por `MutationObserver` quando o Ember re-renderiza. Ao clicar:
    - fase em `ChampSelect`/`InProgress`/`ReadyCheck` → toast e nada;
    - lobby com outro membro → toast e nada (+ proteção do grupo);
@@ -229,13 +233,66 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    `secondPositionPreference:"JUNGLE"`; `GET /lol-lobby/v2/lobby` com `gameConfig.queueId:420`
    **reprova se:** botão ausente ou fila ≠ 420. Clique real com busca: só o Gabriel, avisado.
 
+7b. [ ] **Seção "lol-client" nas Configurações do client** (pedido do Gabriel, 13/10/2026: "o que
+   der para ativar e desativar direto pela aba de configurações do client"). Injetar um item
+   novo na navegação do modal de configurações (mesmo padrão dos plugins do Pengu que criam
+   seção própria: observar o modal de settings e acrescentar `lol-uikit-navigation-item` +
+   painel de conteúdo, com componentes do uikit: `lol-uikit-flat-checkbox`,
+   `lol-uikit-flat-input`/dropdown). Controles: cada chave booleana do `config.js` (esconder
+   TFT, coluna larga, aceite ligado, fila rápida ligada, pós-jogo ligado, extras) + atraso do
+   aceite (s) + fila e posições da fila rápida. Mudança aplica na hora (classes no `<html>`,
+   módulos ligam e desligam sem recarregar) e persiste no `DataStore`. O Ctrl+K continua como atalho.
+   **prova:** abrir as configurações (engrenagem no topo direito), eval
+   `!!document.querySelector('#lc-config-nav') + '|' + document.querySelectorAll('#lc-config-painel input[type=checkbox], #lc-config-painel lol-uikit-flat-checkbox').length`
+   → `true|<≥6>`; desmarcar "esconder TFT" por eval de clique e conferir
+   `getComputedStyle(document.querySelector('.menu_item_navbar_tft')).display !== 'none'` → `true`, e remarcar
+   **reprova se:** `false|0`, ou o TFT continuar escondido após desmarcar
+
+7c. [ ] **Winrate no champ select** (pedido do Gabriel, 13/10/2026; era proposta v2). Em
+   `ChampSelect`, observar `/lol-champ-select/v1/session`; para o campeão em hover ou escolhido
+   pelo jogador local (`myTeam[].championPickIntent`/`championId` do `localPlayerCellId`), mostrar
+   num selo discreto perto do retrato: partidas, winrate e KDA médio com aquele campeão, e o
+   mesmo recorte na posição atribuída (`assignedPosition`), tirados do histórico da LCU (200
+   partidas, cache em memória por sessão). Sem dado → "sem partidas". Liga/desliga na seção do 7b.
+   Só dados do próprio jogador; nada sobre aliados ou inimigos (fronteira do hub).
+   **prova:** função pura `estatisticasCampeao(historico, championId, posicao)` testada em
+   `node tools/teste-winrate.mjs` contra contagem feita em Python sobre o mesmo histórico → `ok`;
+   ao vivo, numa **partida personalizada sozinho** (`POST /lol-lobby/v2/lobby` com
+   `customGameLobby`, depois iniciar a seleção; sem penalidade e sem ranque), hover num campeão
+   jogado e eval `document.querySelector('#lc-winrate')?.textContent` → contém `%`; sair da sala depois.
+   **reprova se:** teste unitário diverge ou selo ausente em champ select
+
+7d. [ ] **Runa certa por campeão e posição** (pedido do Gabriel, 13/10/2026: joga Renekton
+   no top e às vezes cai de jungle com Zac; esquece de trocar a página e joga com a runa do outro).
+   - Config `runas`: lista de `{championId, posicao ('*' ou TOP/JUNGLE/MIDDLE/BOTTOM/UTILITY), paginas: [id da página]}`,
+     editável na seção do 7b (campeão + posição + páginas existentes de `GET /lol-perks/v1/pages`).
+     Semente medida em 13/10/2026 (ids estáveis; nome só para exibir):
+     Renekton (58), `*` → `1409260191` ("☝️🐊") e `2147419287` ("Nova Página de Runas 9");
+     Zac (154), `*` → `1540029809` ("🤢").
+   - Gatilho: em `ChampSelect`, quando o jogador local **trava** o campeão (ação `pick` com
+     `completed:true` do `localPlayerCellId` em `/lol-champ-select/v1/session`), uma vez por campeão.
+     Candidatas = regra da posição atribuída (`assignedPosition`), senão a regra `*`.
+     - 1 candidata → `PUT /lol-perks/v1/currentpage` com o id + toast "runa X aplicada".
+     - 2+ candidatas → popup sobre o champ select com um botão por página (nome + estilos
+       primário e secundário), clique aplica e fecha; focar a janela com `POST /riotclient/ux-show`
+       e piscar a barra com `POST /riotclient/ux-flash`.
+     - + Sem regra para o campeão, mas a página atual pertence a regra de **outro** campeão →
+       toast de aviso "tua runa atual é do Zac" (o erro que ele descreveu).
+     - + Página da regra apagada no client → ignora a página e avisa uma vez.
+   - Liga/desliga na seção do 7b.
+   **prova:** função pura `escolherRunas(regras, championId, posicao, paginas)` em
+   `node tools/teste-runas.mjs`: Renekton/TOP → 2 ids; Zac/JUNGLE → `[1540029809]`; Ahri → `[]`;
+   regra com id inexistente → filtrada → `4/4 ok`; ao vivo, na partida personalizada sozinho do 7c,
+   travar Zac e conferir `GET /lol-perks/v1/currentpage` → `id 1540029809`
+   **reprova se:** teste diverge ou a página atual não muda
+
 ### Fase 2 — coletor e ciclo de vida
 
 8. [ ] `docs/INSIGHTS.md`: spec das heurísticas (as do passo 12), regiões do mapa e
    limites conhecidos. É a dona; JS e Python a citam.
    **prova:** `grep -c '^### ' docs/INSIGHTS.md` → `≥ 6`
    **reprova se:** arquivo ausente ou `< 6`
-9. [ ] `coletor/coletor.py` + `coletor/banco.py`:
+9. [x] `coletor/coletor.py` + `coletor/banco.py`:
    - descobre o lockfile (`C:\Games\Riot Games\League of Legends\lockfile`; fallback pelo
      `--install-directory` da linha de comando do `LeagueClientUx.exe`);
    - instância única (arquivo de trava com pid em `dados/`);
@@ -252,7 +309,7 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    `python -c "import sqlite3;c=sqlite3.connect('dados/lol.db');print(c.execute('select count(*) from partidas').fetchone()[0]>=150, c.execute('select count(distinct game_id) from frames').fetchone()[0]>=100)"`
    → `True True`
    **reprova se:** `False` em qualquer um, ou exceção
-10. [ ] Saída por ociosidade testável.
+10. [x] Saída por ociosidade testável.
     **prova:** `timeout 60 python coletor/coletor.py --ocioso-min 0.1 --lockfile C:/nao/existe; echo rc=$?` → `rc=0`
     **reprova se:** `rc=124` (não saiu)
 11. [ ] `tools/instalar-gatilho.ps1` e `tools/remover-gatilho.ps1`: salvam a auditoria atual,
@@ -263,10 +320,15 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
     Gabriel avisado, fechar e reabrir o client e ver `dados/coletor.log` com uma linha nova de
     "iniciado" posterior à reabertura.
     **reprova se:** tarefa ausente, ou log sem linha nova após reabrir
+    Parcial (13/10/2026 05:03): tarefa instalada, `grep -c 4688` → `1`, `schtasks /run` gerou
+    "iniciado" + "conectado" no log, remover→instalar testado. Falta a reabertura do client.
+    Atenção: se um coletor ainda estiver vivo (client fechado há < 10 min), a reabertura não
+    gera "iniciado" novo, só "conectado ao client"; fechar, esperar 10 min ou checar
+    `dados/coletor.lock` ausente, e então reabrir.
 
 ### Fase 3 — pós-jogo
 
-12. [ ] `pengu/posjogo/`: ao entrar em `EndOfGame` (e pela ação "analisar última partida" do
+12. [x] `pengu/posjogo/`: ao entrar em `EndOfGame` (e pela ação "analisar última partida" do
     Ctrl+K), busca `games/{id}` e `game-timelines/{id}` (com retentativa), acha o próprio
     participante pelo puuid e o adversário de rota (mesma `timeline.lane`/`role` no time
     inimigo; fallback pela posição média nos minutos 3–10). Painel sobreposto com:
@@ -281,14 +343,14 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
     `document.querySelectorAll('#lc-posjogo .lc-morte').length + '|' + !!document.querySelector('#lc-posjogo svg')`
     → `<N>|true`, com N igual ao número de `CHAMPION_KILL` cujo `victimId` é o próprio participante na timeline (conferir por curl)
     **reprova se:** painel ausente ou contagem diferente
-13. [ ] `coletor/analise.py`: as mesmas heurísticas sobre o SQLite.
+13. [x] `coletor/analise.py`: as mesmas heurísticas sobre o SQLite.
     **prova:** `analisar(game_id)` sobre o mesmo `gameId` do passo 12 → mesmo número de
     mortes e as mesmas diferenças aos 10 min do painel
     **reprova se:** números diferentes do painel
 
 ### Fase 4 — MCP
 
-14. [ ] `mcp/servidor.py` (FastMCP, stdio), ferramentas:
+14. [x] `mcp/servidor.py` (FastMCP, stdio), ferramentas:
     - `resumo(dias=7)`: partidas, vitórias, LP, campeões, posições;
     - `partidas(limite=20, campeao=None, fila=None)`;
     - `analise_partida(game_id=None)` (padrão: a última);

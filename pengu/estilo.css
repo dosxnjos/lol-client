@@ -1,0 +1,80 @@
+/* lol-client: CSS do plugin. Cada regra depende da classe que o config.js põe no <html>.
+   Seletores do client medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md. */
+
+/* esconder TFT: card na tela de modos e aba na barra de cima */
+html.lc-esconder-tft .game-type-card:has(.parties-game-type-icon.map-22),
+html.lc-esconder-tft .main-navigation-menu-item.menu_item_navbar_tft { display: none !important; }
+
+/* coluna larga das filas (protótipo aprovado pelo Gabriel: "ficou boa a questão do width") */
+html.lc-coluna-larga .game-type-card.selected .parties-game-type-lower-half { width: 340px; height: 360px; position: relative; z-index: 2; }
+html.lc-coluna-larga .game-type-card.selected .parties-game-type-card-categories { width: 100%; max-height: none; }
+html.lc-coluna-larga .game-type-card.selected .parties-game-type-card-category-div { width: auto; }
+/* os 2 últimos cards abrem para a esquerda (340 - 180), senão passam da borda direita */
+html.lc-coluna-larga .game-type-card.selected:nth-last-child(-n+2) .parties-game-type-lower-half { margin-left: -160px; }
+
+/* extras (desligados por padrão) */
+html.lc-esconder-evento .main-navigation-menu-item.menu_item_event_hub_generic_nav_name,
+html.lc-esconder-classic .main-navigation-menu-item.menu_item_navbar_demacia,
+html.lc-esconder-loja .main-navigation-menu-item.menu_item_navbar_store { display: none !important; }
+
+/* botão fila rápida: ao lado do "!" do jogar; a barra da esquerda anda para dar lugar */
+html.lc-fila-rapida .left-nav-menu { margin-left: 118px; }
+html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
+#lc-fila-rapida {
+  position: absolute; left: 250px; top: 24px; height: 34px; padding: 0 12px; box-sizing: border-box; z-index: 2;
+  display: flex; align-items: center; white-space: nowrap; cursor: pointer; user-select: none;
+  font: 700 12px/1 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #cdbe91;
+  background: linear-gradient(180deg, #1e2328, #0f1317);
+  border: 2px solid transparent; border-image: linear-gradient(180deg, #c8aa6e, #785a28) 1;
+}
+#lc-fila-rapida:hover { color: #f0e6d2; border-image: linear-gradient(180deg, #f0e6d2, #c8aa6e) 1; box-shadow: 0 0 8px rgba(200, 170, 110, .35); }
+#lc-fila-rapida.lc-buscando { color: #0ac8b9; border-image: linear-gradient(180deg, #0ac8b9, #005a82) 1; }
+#lc-fila-rapida.lc-ocupado { opacity: .6; pointer-events: none; }
+
+/* overlay do aceite automático: acima do painel pós-jogo (100001), que também fecha no ReadyCheck */
+#lc-aceite {
+  position: fixed; left: 50%; top: 96px; transform: translateX(-50%); z-index: 100002;
+  display: flex; align-items: center; gap: 14px; padding: 10px 14px;
+  background: rgba(1, 10, 19, .94); border: 1px solid #c8aa6e; box-shadow: 0 0 18px rgba(0, 0, 0, .7);
+  font: 13px var(--font-body); color: #a09b8c;
+}
+#lc-aceite .lc-contagem { font: 700 22px/1 var(--font-display); color: #f0e6d2; min-width: 32px; text-align: center; }
+#lc-aceite button {
+  font: 700 11px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase; cursor: pointer;
+  padding: 8px 10px; background: #1e2328; color: #cdbe91; border: 1px solid #785a28;
+}
+#lc-aceite button:hover { color: #f0e6d2; border-color: #c8aa6e; }
+#lc-aceite button.lc-primario { color: #0ac8b9; border-color: #0ac8b9; }
+
+/* painel pós-jogo */
+#lc-posjogo {
+  position: fixed; inset: 0; z-index: 100001; display: flex; align-items: center; justify-content: center;
+  background: rgba(1, 10, 19, .78); font: 12px/1.4 var(--font-body); color: #a09b8c;
+}
+#lc-posjogo .lc-caixa {
+  width: 1180px; max-width: calc(100vw - 32px); height: 640px; max-height: calc(100vh - 40px); box-sizing: border-box;
+  display: grid; grid-template-columns: 330px 1fr; grid-template-rows: auto 1fr; gap: 10px 18px; padding: 14px 18px;
+  background: #010a13; border: 1px solid #785a28; box-shadow: 0 0 30px rgba(0, 0, 0, .8);
+}
+#lc-posjogo .lc-topo { grid-column: 1 / -1; display: flex; align-items: baseline; gap: 14px; border-bottom: 1px solid #1e2328; padding-bottom: 8px; }
+#lc-posjogo h2 { margin: 0; font: 700 18px/1 var(--font-display); letter-spacing: .05em; text-transform: uppercase; color: #f0e6d2; }
+#lc-posjogo .lc-vitoria { color: #0ac8b9; } #lc-posjogo .lc-derrota { color: #e84057; }
+#lc-posjogo .lc-fechar { margin-left: auto; cursor: pointer; background: none; border: 1px solid #785a28; color: #cdbe91; font: 700 11px var(--font-display); padding: 6px 10px; text-transform: uppercase; }
+#lc-posjogo .lc-fechar:hover { border-color: #c8aa6e; color: #f0e6d2; }
+#lc-posjogo .lc-mapa { position: relative; align-self: start; }
+#lc-posjogo svg { width: 330px; height: 330px; display: block; background: #0a1a14; border: 1px solid #1e2328; }
+#lc-posjogo .lc-legenda { margin-top: 6px; font-size: 11px; display: flex; gap: 10px; flex-wrap: wrap; }
+#lc-posjogo .lc-legenda i { display: inline-block; width: 10px; height: 10px; border-radius: 50%; margin-right: 4px; vertical-align: -1px; }
+#lc-posjogo .lc-direita { overflow: auto; min-height: 0; padding-right: 6px; }
+#lc-posjogo h3 { margin: 10px 0 6px; font: 700 12px var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #c8aa6e; }
+#lc-posjogo h3:first-child { margin-top: 0; }
+#lc-posjogo table { border-collapse: collapse; width: 100%; }
+#lc-posjogo th { text-align: left; font-weight: 600; color: #785a28; font-size: 11px; padding: 3px 6px; border-bottom: 1px solid #1e2328; }
+#lc-posjogo td { padding: 4px 6px; border-bottom: 1px solid #0f1a20; color: #cdbe91; vertical-align: top; }
+#lc-posjogo .lc-morte:hover td { background: #0f1a20; }
+#lc-posjogo .lc-num { display: inline-block; width: 18px; height: 18px; line-height: 18px; text-align: center; border-radius: 50%; background: #e84057; color: #fff; font-weight: 700; font-size: 11px; }
+#lc-posjogo .lc-pos { color: #0ac8b9; } #lc-posjogo .lc-neg { color: #e84057; }
+#lc-posjogo .lc-padroes li { color: #cdbe91; margin-bottom: 3px; }
+#lc-posjogo .lc-padroes { margin: 0; padding-left: 18px; }
+#lc-posjogo .lc-nota { font-size: 11px; color: #5b5a56; margin-top: 8px; }
+#lc-posjogo .lc-carregando { font: 14px var(--font-body); color: #cdbe91; padding: 30px; background: #010a13; border: 1px solid #785a28; }

@@ -1,4 +1,4 @@
-// uso: node cdp.mjs eval <arquivo.js>   |   node cdp.mjs shot <saida.png>
+// uso: node cdp.mjs eval <arquivo.js> | click <x> <y> (px CSS) | key <Escape|Enter> | shot <saida.png>
 import { readFileSync, writeFileSync } from 'node:fs';
 const [, , mode, arg] = process.argv;
 const list = await (await fetch('http://127.0.0.1:8888/json/list')).json();
@@ -18,6 +18,11 @@ if (mode === 'eval') {
   for (const type of ['mouseMoved', 'mousePressed', 'mouseReleased'])
     await send('Input.dispatchMouseEvent', { type, x, y, button: 'left', clickCount: 1 });
   console.log('clicked', x, y);
+} else if (mode === 'key') { // node cdp.mjs key Escape
+  const key = arg, code = arg, vk = { Escape: 27, Enter: 13 }[arg] ?? 0;
+  for (const type of ['keyDown', 'keyUp'])
+    await send('Input.dispatchKeyEvent', { type, key, code, windowsVirtualKeyCode: vk, nativeVirtualKeyCode: vk });
+  console.log('key', key);
 } else if (mode === 'shot') {
   const r = await send('Page.captureScreenshot', { format: 'png' });
   writeFileSync(arg, Buffer.from(r.result.data, 'base64')); console.log('ok', arg);
