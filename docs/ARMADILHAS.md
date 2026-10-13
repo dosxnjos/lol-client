@@ -457,6 +457,27 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   zona mais provável**. Nenhum dos dois passou de 2/26 a ≤ 1000 no ensaio (zona certa 4/29), mas lá o
   minimapa é 1 recorte a cada 10 s e a fog tem até 10 s: quem mede de verdade é o passo 15, ao vivo a 6 fps.
 
+- **Plugin e painel param de falar com o coletor** sem erro no coletor (13/10/2026) → um `python -m
+  http.server 8765` de teste subiu na mesma porta do `servidor_local` (127.0.0.1:8765): no Windows os dois
+  dividem a porta (SO_REUSEADDR) e o intruso rouba parte das requisições. Servidor de teste: porta 0 ou 8799,
+  nunca 8765/8766, e encerrar ao terminar.
+
+## Voz pré-gravada (bancada de vozes, `tools/bancada-vozes.py`, 13/10/2026)
+
+- **`coqui-tts` 0.27.5 não importa** (`isin_mps_friendly`) → o `uv` puxa `transformers` 5.x e `torch` sem
+  par com o `torchaudio`. Fixar `transformers>=4.57,<5` e `torch==2.11.*` + `torchaudio==2.11.*` (índice CPU).
+- **XTTS para no download** → pergunta a licença CPML no terminal; `COQUI_TOS_AGREED=1` no ambiente.
+- **YourTTS "repete" locutor** → `female-en-5` e `female-en-5\n` são locutores diferentes no `speakers.json`
+  (embeddings distintos); o nome com `\n` é o que se passa ao `tts()`.
+- **`pocket-tts` morre com `UnicodeDecodeError` (charmap)** → lê o YAML com o codec padrão (cp1252):
+  rodar com `PYTHONUTF8=1`.
+- **Gemini TTS lê a instrução em voz alta** → "Fale em português...: <frase>" virou 6 s de áudio para 1,3 s
+  de frase (`silencedetect`). Mandar só a frase. **Cota grátis diária é por modelo** (~10 pedidos/dia cada,
+  `GenerateRequestsPerDayPerProjectPerModel-FreeTier`) e acaba em minutos; `GEMINI_API_KEY` mora no Doppler
+  `harness/dev`, não no `pessoal`.
+- **XTTS no processador**: 13 s por frase, RTF 3,6 (58 locutores × 6 frases = 89 min). Gênero pelo nome
+  erra: Andrew Chipper e Badr Odhiambo medem ~230 Hz (o HTML marca "?").
+
 ## Riot API (servidores da Riot, não a LCU)
 
 - **Chave**: `LOL_RIOT_API_KEY` no Doppler **pessoal** (`--scope ~/.doppler-pessoal`, projeto

@@ -144,7 +144,7 @@
    Estimativa de 13/10: ~500 frases. Com o tempo por frase da bancada, decide: pacote completo na voz
    escolhida, ou só os tipos urgentes nela e o resto numa voz rápida. **prova:** contagem impressa por
    `python -c "from coletor.avisos import catalogo; print(len(catalogo()))"`.
-4. [ ] **Bancada de vozes** (`tools/bancada-vozes.py`, venv isolado em
+4. [x] **Bancada de vozes** (`tools/bancada-vozes.py`, venv isolado em
    `%LOCALAPPDATA%\lol-client\voz\venv` com Python 3.11 do `uv`, nunca no Python do coletor): as
    mesmas 6 frases do catálogo em cada candidata, com o tempo de geração por frase:
    - **Coqui inteiro em português** (Gabriel, 13/10: "todas as vozes disponíveis pelo app, não só 4
@@ -163,6 +163,10 @@
    Saída: `temp/vozes/` + **`temp/vozes/2026-10-13-vozes.html` standalone** (áudio em data URI
    Opus via `ffmpeg`, lado a lado, com o tempo de geração). Só roda com o jogo fechado.
    **prova:** o HTML abre sem rede e toca todas; tabela de tempos no § Relatório.
+   **Feito em 13/10/2026 (14:00–17:28):** `temp/vozes/2026-10-13-vozes.html`, 11,1 MB, 540 clipes de 97 vozes;
+   `grep -c "https\?://"` = 0; Edge headless em `file://` monta os 97 cartões; no navegador, 4 clipes de 4 motores
+   carregam (`loadedmetadata`) e tocam, "tocar as 6", estrela, filtro e "copiar favoritas" conferidos. Escolha
+   da voz: passo 5 (Gabriel).
 5. [ ] **Escolha (dono: Gabriel):** voz e tom, ouvindo o HTML.
 6. [ ] **Gerador do pacote** (`tools/gerar-pacote-voz.py --voz <id> [--tom serio|descontraido|ambos]`):
    gera o catálogo inteiro, retomável (pula o que já existe), normaliza volume (`ffmpeg loudnorm`),
@@ -222,3 +226,29 @@
   do print" do `teste-alertas.py` (código não tocado nesta leva), que passou 3/3 sozinho e 2/2 pelo `rodar-testes.py
   alertas aviso`: intermitente. Ensaio a 20x: 0 falhas. Nada provado no client real: falta uma fila com o Gabriel
   olhando (piscar e volta no champ select, janelinha aceitar/recusar, popup escondido, loop calado).
+- **Passo 4, bancada de vozes (13/10/2026):** `tools/bancada-vozes.py` no venv
+  `%LOCALAPPDATA%\lol-client\voz\venv` (CPython 3.11, `coqui-tts` 0.27.5, torch 2.11 CPU, `transformers` 4.57),
+  prioridade BELOW_NORMAL, 1 subprocesso por motor. "s/frase" = só a síntese (sem carga do modelo); RTF = tempo
+  de geração ÷ duração do áudio (acima de 1 = mais lento que a fala).
+
+  | motor | vozes | s/frase | RTF | falhas / observação |
+  | --- | --- | --- | --- | --- |
+  | Coqui XTTS-v2 | 58 de 58 (26 M, 28 F, 4 "?") | 13,3 | 3,58 | 0 |
+  | Coqui YourTTS (`pt-br`) | 6 de 6 | 1,2 | 0,28 | 0 |
+  | Coqui VITS `pt/cv` | 1 de 1 | 1,5 | 0,48 | 0 |
+  | Coqui Bark (presets `pt_speaker_*`) | 10 de 10, só frases 1 e 6 (+ 2 em 2 vozes) | 249 | 32,5 | teto de 90 min |
+  | Piper (`pt_BR` ×4 + tugão `pt_PT`) | 5 de 5 | 0,39 | 0,13 | 0 |
+  | Microsoft neurais (`edge-tts`, `pt-*`) | 5 de 5 | 1,7 | 0,48 | 0 |
+  | Gemini TTS | 4 completas + Puck 2/6, Orus 0 | 4,2 | 1,22 | cota grátis diária de 4 modelos esgotada |
+  | Kyutai Pocket TTS (`portuguese`) | 4 de 4 | 2,8 | 0,93 | 0 |
+  | Windows (Maria SAPI, Maria e Daniel OneCore) | 3 de 3 | 0,03 | 0,01 | 0 |
+
+  - Fora do Coqui (listados no HTML com o motivo): 90 modelos do catálogo (outras línguas, vocoders, conversão
+    de voz; XTTS v1.1 fala `pt` mas não tem locutor embutido). Zira (en-US) fora do Windows.
+  - Pausas pelo jogo: 2 (14:00, 210 s; 17:24, 60 s), registradas em `temp/vozes/pausas.jsonl`.
+  - Para o 3b/6: pacote de ~500 frases no XTTS ≈ 500 × 13 s ≈ 1 h 50 min no processador (cabe, fora da partida);
+    Bark (~4 min por frase e às vezes inventa: 14 s de áudio para "gank provável no rio top") não serve.
+  - Retomar o que faltou: `...\venv\Scripts\python.exe tools\bancada-vozes.py --motores gemini` (amanhã, cota
+    renovada) ou `--motores bark` (mais 90 min); clipe existente não é refeito.
+  - Modelos em disco (fora do repo): `%LOCALAPPDATA%\tts` 15 GB (Bark 13 GB, XTTS ~2 GB), cache do Hugging Face
+    (Pocket), `%LOCALAPPDATA%\lol-client\voz\` (venv, Piper, presets do Bark). Limpeza: decisão do Gabriel.
