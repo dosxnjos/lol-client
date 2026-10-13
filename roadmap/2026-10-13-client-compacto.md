@@ -235,7 +235,9 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
 
 ## Passos
 
-0. [ ] **Aprovação tela a tela pelo Gabriel** (bloqueia todos os outros). Ele abre o protótipo, marca cada tela
+0. [x] **Aprovado em 13/10/2026 (2ª rodada), palavras dele: "tudo aprovado, pode construir."** As 7 telas,
+   incluindo a 3 e a 5 ajustadas. Construção liberada.
+   **Aprovação tela a tela pelo Gabriel** (bloqueia todos os outros). Ele abre o protótipo, marca cada tela
    "aprovar" ou "pedir ajuste" e cola o parecer no chat. **Formato do parecer** (gerado pelo botão "copiar meu
    parecer"), uma linha por tela:
    `tela N <nome>: aprovada` ou `tela N <nome>: ajuste: <texto dele>` ou `tela N <nome>: sem parecer`, com os nomes
