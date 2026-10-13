@@ -420,6 +420,32 @@ Chave: `LOL_RIOT_API_KEY` no Doppler pessoal ([ARMADILHAS](../docs/ARMADILHAS.md
     contagem de chamadas por partida ≤ orçamento da § 7 (contador no log)
     **reprova se:** tag errada ou orçamento estourado
 
+### Fase G — herança do projeto antigo do Gabriel (abril de 2026)
+
+Dois scripts dele de 30/04/2026 (cópia em `OneDrive\Aplicativos\remotely-save\dosxnjos\league of legends\`;
+a pasta original saiu na limpeza de 31/07): `analise_trauma.py` ("Neural Trauma Analyzer": nas
+derrotas com um campeão, quais campeões mais aparecem, ponderado por pickrate e counters de um
+site de meta, em um índice "IBP"; depois pede 3 dicas a um LLM com a persona "mentor ácido") e
+`telemetria_partida.py` (resumo da última partida pela Riot API + diagnóstico e conversa com o
+mesmo mentor). O conceito vale; o método e a fonte não:
+
+- conta os 9 outros campeões da partida perdida, inclusive aliados, sem comparar com as
+  vitórias (campeão popular aparece em tudo) → aqui vira **lift** de derrota contra o
+  campeão inimigo (taxa de derrota com ele no time inimigo ÷ taxa geral), n ≥ 3, encolhido
+  para a média quando a amostra é pequena;
+- pickrate e counters vinham de raspagem com bypass de Cloudflare → fora (mesma régua de
+  [MERCADO](../docs/MERCADO.md) § 4).
+
+19. [ ] **Teus traumas**: ferramenta `traumas(campeao=None, min_partidas=3)` no MCP + bloco no
+    pós-jogo (aba Tendência) e no selo do champ select ("Darius é trauma: 2V/7D") com o lift
+    acima; nome "trauma" mantido, é dele.
+    **prova:** `python tools/teste-traumas.py` com histórico sintético (campeão X em 6 de 8
+    derrotas e 1 de 8 vitórias → trauma; campeão popular em tudo → não) → `ok`
+    **reprova se:** campeão popular aparece como trauma
+20. [ ] (proposta, depende do Gabriel) **mentor com LLM** no pós-jogo: 3 frases no tom
+    "mentor ácido" a partir das lições do passo 6. A chave do Gemini já existe no Doppler
+    (`harness`), camada grátis; ou só o MCP com o Claude, que já existe e não custa nada a mais.
+
 ### Fase E — fechamento
 
 16. [ ] README (o coach: o que faz, como ligar/desligar cada parte), ARMADILHAS, COLETOR, hub,
