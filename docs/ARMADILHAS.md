@@ -173,3 +173,15 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Token da LCU no log Security** → com `ProcessCreationIncludeCmdLine_Enabled=1` (ligado
   pelo harness em 10/10/2026), o 4688 do client grava `--remoting-auth-token`. O log de 200 MB
   é circular e retém ~2,5 h. Detalhe e desligar: [COLETOR.md](COLETOR.md) § Segurança.
+
+## Riot API (servidores da Riot, não a LCU)
+
+- **Chave**: `LOL_RIOT_API_KEY` no Doppler **pessoal** (`--scope ~/.doppler-pessoal`, projeto
+  `pessoal`, literal no `prd`, referência no `dev`). Rodar com
+  `doppler run --project pessoal --config prd --scope ~/.doppler-pessoal -- <cmd>`.
+- **Chave de desenvolvimento vence em 24 h** → o Gabriel regenera no painel developer.riotgames.com
+  e o valor novo vai só no `prd`. A Personal API Key não vence (pedido de aprovação; ver docs/MERCADO.md).
+- **`401 Unknown apikey` logo depois de gerar** → a chave nova leva alguns minutos para valer
+  (13/10/2026: 401 às ~07:15, 200 às 07:21). Esperar e tentar de novo, não regenerar.
+- **`403 error code: 1010`** → a Cloudflare da Riot bloqueia requisição sem `User-Agent`
+  (o padrão do `urllib` é barrado). Mandar `User-Agent: lol-client/<versão>`.
