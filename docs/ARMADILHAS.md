@@ -347,6 +347,16 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   WDA_EXCLUDEFROMCAPTURE=0x11)`: segue na tela e some do print (medido 13/10/2026, `teste-alertas.py`).
   Vale para o overlay do minimapa (15b) também (`overlay_minimapa.py --demo`: área quente 100% no
   print sem a exclusão, 0% com ela).
+- **Print de tela nunca mostra o overlay nem a moldura** (é a exclusão acima funcionando; pedido do Gabriel de
+  13/10/2026 de "printar o funcionamento") → **nunca** desligar a exclusão para mostrar: o modo vitrine
+  (`python tools\vitrine.py ligar`, 1 partida) compõe a camada que o coach desenhou sobre o print do jogo
+  ([COLETOR](COLETOR.md) § Coach na partida). Só com o jogo já na frente; a tela inteira sai com chat e topo pixelados.
+- **Vitrine sem nenhum print no fim da partida** (revisão de 13/10/2026, corrigido) → três causas caladas: (1) o
+  coach recomeçava a mesma partida no processo (GET da sessão falhou → `game_id` None, depois o id real) e o
+  recomeço apagava a marca; (2) `ligar` no meio de uma partida gravando era apagado no fim dela; (3) com 2 telas o
+  `monitor_do_jogo` (game.cfg) escolhia a outra tela e o recorte saía vazio, sem log. Hoje: recomeço mantém, `ligar`
+  recusa, recorte pela lista de monitores e log "fora de todo monitor". Alt-tab entre a conferência e o print
+  descarta (o print teria a área de trabalho).
 - **Overlay "não aparece" no canto do minimapa da área de trabalho** → um `Windows.UI.Core.CoreWindow`
   sempre-no-topo (painel do sistema) cobria (2197, 716) em 13/10/2026: até uma janela branca opaca
   saía (50, 50, 50) no print. Testar o desenho em outro ponto (`--demo --left 1000 --top 300`).
@@ -396,6 +406,11 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **Thread que morre não deixa rastro** → exceção não tratada numa thread vai só para o stderr, que a
   tarefa agendada não guarda (atalho, overlay, Tk). `coletor.configurar_log` põe `threading.excepthook`
   no log ("thread X morreu"), e o overlay e o atalho logam a própria morte (13/10/2026).
+- **Prova que abre janela, rodada com o jogo aberto, pinta por cima da partida** (13/10/2026, sessão da vitrine:
+  `(tasklist | grep … || echo fechado) && rodar-testes` seguiu com o jogo aberto; a moldura do `teste-alertas` em
+  (40, 40, 480, 270) por ~2 s, duas vezes, e o Tk escondido do ensaio nasceu durante a partida) → o
+  `rodar-testes.py` recusa (rc 2) com `League of Legends.exe` aberto; `--com-jogo` força. Teste avulso que abre
+  janela Win32 põe ela fora da área visível (`teste-vitrine`: (-4000, -4000)).
 - **"dado estático sem cache (FileNotFoundError)" na 1ª partida** (13/10/2026, 14:00:24) → o cache
   `dados\cache\jogo-estatico.json` só era montado no `InProgress`, em thread: gravou 3,5 s depois (14:00:27)
   e a partida já tinha começado com recarga padrão e sem picos de força. Era a 1ª partida com o coach v2

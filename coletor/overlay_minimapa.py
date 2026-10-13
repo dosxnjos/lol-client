@@ -104,6 +104,7 @@ class OverlayMinimapa:
         self.ligado = True
         self.atalho = atalho
         self.ao_alternar = None   # callback(ligado) do F8: retorno ao jogador ("overlay ligado" na moldura)
+        self.ao_desenhar = None   # callback(img, (left, top, lado), quadro) a cada quadro mostrado (vitrine)
         # o overlay fica EM CIMA do minimapa que o passo 13 captura: sem isto o print veria o próprio
         # mapa de calor (fog e ícones errados). WDA_EXCLUDEFROMCAPTURE: some do print, segue na tela.
         self.excluir = excluir_do_print
@@ -182,11 +183,17 @@ class OverlayMinimapa:
                     if geo != estado["geo"]:
                         root.geometry(geo)
                         estado["geo"] = geo
-                    foto = ImageTk.PhotoImage(Image.fromarray(renderizar(f.get("calor"), lado, f.get("texto"))))
+                    img = renderizar(f.get("calor"), lado, f.get("texto"))
+                    foto = ImageTk.PhotoImage(Image.fromarray(img))
                     rot.configure(image=foto)
                     estado["img"] = foto
                     root.deiconify()
                     root.attributes("-topmost", True)
+                    if self.ao_desenhar is not None:   # só enfileira (vitrine): o pixel que acabou de ir à tela
+                        try:
+                            self.ao_desenhar(img, ret, f)
+                        except Exception as e:
+                            log.warning("overlay: gancho da vitrine falhou: %s", e)
             except Exception as e:
                 log.warning("overlay: %s", e)
             root.after(self.intervalo, passo)

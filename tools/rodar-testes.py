@@ -30,6 +30,7 @@ TESTES = [
     ["node", "tools/teste-runas.mjs"],
     [PY, "tools/teste-coach.py"],
     [PY, "tools/teste-alertas.py"],
+    [PY, "tools/teste-vitrine.py"],
     [PY, "tools/teste-aviso-partida.py"],
     [PY, "tools/teste-minimapa.py"],
     [PY, "tools/teste-jungler.py"],
@@ -57,8 +58,16 @@ def principal():
         i = args.index("--log")
         log = RAIZ / args[i + 1]
         del args[i:i + 2]
-    filtros = args
     sys.stdout.reconfigure(encoding="utf-8")
+    # teste-alertas, teste-aviso-partida e o ensaio abrem janelas (moldura, Tk) na tela: com o jogo aberto elas
+    # aparecem por cima da partida do Gabriel (13/10/2026, ARMADILHAS § Windows). --com-jogo passa por cima.
+    if "--com-jogo" in args:
+        args.remove("--com-jogo")
+    elif "League of Legends.exe" in subprocess.run(["tasklist", "/FI", "IMAGENAME eq League of Legends.exe"],
+                                                   capture_output=True, text=True, errors="replace").stdout:
+        print("League of Legends.exe aberto: provas que abrem janela ficam para depois da partida (--com-jogo força)")
+        return 2
+    filtros = args
     saida = []
     falhas = 0
     for cmd in TESTES:

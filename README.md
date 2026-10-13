@@ -107,6 +107,8 @@ escondido, som calado, jogar de novo, a coleta de recompensas, o chat do pós-jo
 [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md),
 [voz e foco](roadmap/2026-10-13-voz-pregravada-e-foco.md), [jogar de novo](roadmap/2026-10-13-jogar-de-novo.md) e
 [coleta](roadmap/2026-10-13-coleta-automatica-de-recompensas.md).
+**Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
+antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 
 ## Provas
 

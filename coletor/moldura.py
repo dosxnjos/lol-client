@@ -102,6 +102,83 @@ def _rgb(c):
     return r | (g << 8) | (b << 16)
 
 
+def criar_fonte():
+    return gdi32.CreateFontW(-40, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI")
+
+
+def desenhar(hdc, w, h, cor, rotulo, espessura, fonte):
+    """o que a moldura pinta num hdc w×h: fundo CHAVE (transparente), borda e rótulo. A janela
+    (_pintar) e a vitrine (renderizar, num bitmap) usam esta mesma rotina: o print bate com a tela."""
+    fundo = gdi32.CreateSolidBrush(CHAVE)
+    user32.FillRect(hdc, ctypes.byref(wt.RECT(0, 0, w, h)), fundo)
+    gdi32.DeleteObject(fundo)
+    if cor is None:
+        return
+    e = espessura
+    pincel = gdi32.CreateSolidBrush(_rgb(cor))
+    for ret in ((0, 0, w, e), (0, h - e, w, h), (0, 0, e, h), (w - e, 0, w, h)):
+        user32.FillRect(hdc, ctypes.byref(wt.RECT(*ret)), pincel)
+    if rotulo:
+        antiga = gdi32.SelectObject(hdc, fonte)
+        medida = wt.RECT(0, 0, 0, 0)
+        user32.DrawTextW(hdc, rotulo, -1, ctypes.byref(medida), 0x400 | 0x20)   # DT_CALCRECT | DT_SINGLELINE
+        cx, cy = e + 24, e + 24
+        caixa = wt.RECT(cx, cy, cx + medida.right + 36, cy + medida.bottom + 16)
+        user32.FillRect(hdc, ctypes.byref(caixa), pincel)
+        gdi32.SetBkMode(hdc, 1)                                                # TRANSPARENT
+        gdi32.SetTextColor(hdc, 0x00101010 if cor in TEXTO_ESCURO else 0x00FFFFFF)
+        user32.DrawTextW(hdc, rotulo, -1, ctypes.byref(caixa), 0x1 | 0x4 | 0x20)  # centro, vcentro, 1 linha
+        gdi32.SelectObject(hdc, antiga)
+    gdi32.DeleteObject(pincel)
+
+
+class _BITMAPINFOHEADER(ctypes.Structure):
+    _fields_ = [("biSize", wt.DWORD), ("biWidth", wt.LONG), ("biHeight", wt.LONG), ("biPlanes", wt.WORD),
+                ("biBitCount", wt.WORD), ("biCompression", wt.DWORD), ("biSizeImage", wt.DWORD),
+                ("biXPelsPerMeter", wt.LONG), ("biYPelsPerMeter", wt.LONG), ("biClrUsed", wt.DWORD),
+                ("biClrImportant", wt.DWORD)]
+
+
+def renderizar(w, h, cor, rotulo, espessura=None):
+    """a moldura como imagem RGB h×w (num bitmap em memória, sem janela): fundo magenta (255, 0, 255) =
+    transparente, borda e rótulo com a mesma rotina da janela. É o que a vitrine compõe sobre o print."""
+    import numpy as np
+    gdi32.CreateCompatibleDC.argtypes = [wt.HDC]
+    gdi32.CreateCompatibleDC.restype = wt.HDC
+    gdi32.CreateDIBSection.argtypes = [wt.HDC, ctypes.c_void_p, wt.UINT, ctypes.POINTER(ctypes.c_void_p),
+                                       wt.HANDLE, wt.DWORD]
+    gdi32.CreateDIBSection.restype = wt.HBITMAP
+    gdi32.DeleteDC.argtypes = [wt.HDC]
+    user32.GetDC.argtypes = [wt.HWND]
+    user32.GetDC.restype = wt.HDC
+    user32.ReleaseDC.argtypes = [wt.HWND, wt.HDC]
+    tela = user32.GetDC(None)
+    mem = gdi32.CreateCompatibleDC(tela)
+    bih = _BITMAPINFOHEADER(biSize=ctypes.sizeof(_BITMAPINFOHEADER), biWidth=w, biHeight=-h, biPlanes=1,
+                            biBitCount=32, biCompression=0)
+    bits = ctypes.c_void_p()
+    dib = gdi32.CreateDIBSection(mem, ctypes.byref(bih), 0, ctypes.byref(bits), None, 0)
+    fonte = None
+    try:
+        if not dib:
+            raise OSError("CreateDIBSection falhou")
+        antigo = gdi32.SelectObject(mem, dib)
+        fonte = criar_fonte()
+        desenhar(mem, w, h, cor, rotulo, espessura or Moldura.ESPESSURA, fonte)
+        gdi32.GdiFlush()
+        buf = (ctypes.c_ubyte * (w * h * 4)).from_address(bits.value)
+        img = np.frombuffer(buf, np.uint8).reshape(h, w, 4)[:, :, 2::-1].copy()   # BGRA -> RGB
+        gdi32.SelectObject(mem, antigo)
+        return img
+    finally:
+        if fonte:
+            gdi32.DeleteObject(fonte)
+        if dib:
+            gdi32.DeleteObject(dib)
+        gdi32.DeleteDC(mem)
+        user32.ReleaseDC(None, tela)
+
+
 def janela_do_jogo():
     """(hwnd, (x, y, largura, altura)) da janela do jogo se ela está em primeiro plano; senão None.
     Coordenadas em px físicos (o fio da moldura é per-monitor DPI aware)."""
@@ -138,6 +215,7 @@ class Moldura:
         self._pronto = threading.Event()
         self._fio = None
         self._atual = None              # (cor, rotulo, t0, fim)
+        self.ao_mostrar = None          # f(cor, rotulo, (x, y, l, a), espessura) a cada alerta exibido (vitrine)
         self._proc = WNDPROC(self._wndproc)   # referência viva: o GC não pode levar o callback
 
     def iniciar(self):
@@ -179,7 +257,7 @@ class Moldura:
         if self.fora_do_print:   # a borda passa por cima da faixa (16,28,27) que o minimapa procura
             self.excluida = bool(user32.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUDEFROMCAPTURE))
         user32.SetTimer(self.hwnd, 1, self.TICK_MS, None)
-        self._fonte = gdi32.CreateFontW(-40, 0, 0, 0, 700, 0, 0, 0, 0, 0, 0, 4, 0, "Segoe UI")
+        self._fonte = criar_fonte()
         self._pronto.set()
         msg = wt.MSG()
         while user32.GetMessageW(ctypes.byref(msg), None, 0, 0) > 0:
@@ -213,6 +291,12 @@ class Moldura:
         user32.SetWindowPos(self.hwnd, HWND_TOPMOST, x, y, l, a, SWP_NOACTIVATE | SWP_SHOWWINDOW)
         user32.InvalidateRect(self.hwnd, None, True)
         self._pulsar(agora)
+        if self.ao_mostrar is not None:   # só enfileira (vitrine); nunca segura o fio da janela
+            try:
+                self.ao_mostrar(cor, rotulo, (x, y, l, a), self.espessura)
+            except Exception as e:
+                if self.log:
+                    self.log.warning("moldura: gancho da vitrine falhou: %s", e)
 
     def _pulsar(self, agora):
         cor, rotulo, t0, fim = self._atual
@@ -228,27 +312,8 @@ class Moldura:
         hdc = user32.BeginPaint(hwnd, ctypes.byref(ps))
         r = wt.RECT()
         user32.GetClientRect(hwnd, ctypes.byref(r))
-        fundo = gdi32.CreateSolidBrush(CHAVE)
-        user32.FillRect(hdc, ctypes.byref(r), fundo)
-        gdi32.DeleteObject(fundo)
-        if self._atual:
-            cor, rotulo = self._atual[0], self._atual[1]
-            e, w, h = self.espessura, r.right, r.bottom
-            pincel = gdi32.CreateSolidBrush(_rgb(cor))
-            for ret in ((0, 0, w, e), (0, h - e, w, h), (0, 0, e, h), (w - e, 0, w, h)):
-                user32.FillRect(hdc, ctypes.byref(wt.RECT(*ret)), pincel)
-            if rotulo:
-                antiga = gdi32.SelectObject(hdc, self._fonte)
-                medida = wt.RECT(0, 0, 0, 0)
-                user32.DrawTextW(hdc, rotulo, -1, ctypes.byref(medida), 0x400 | 0x20)   # DT_CALCRECT | DT_SINGLELINE
-                cx, cy = e + 24, e + 24
-                caixa = wt.RECT(cx, cy, cx + medida.right + 36, cy + medida.bottom + 16)
-                user32.FillRect(hdc, ctypes.byref(caixa), pincel)
-                gdi32.SetBkMode(hdc, 1)                                                # TRANSPARENT
-                gdi32.SetTextColor(hdc, 0x00101010 if cor in TEXTO_ESCURO else 0x00FFFFFF)
-                user32.DrawTextW(hdc, rotulo, -1, ctypes.byref(caixa), 0x1 | 0x4 | 0x20)  # centro, vcentro, 1 linha
-                gdi32.SelectObject(hdc, antiga)
-            gdi32.DeleteObject(pincel)
+        cor, rotulo = (self._atual[0], self._atual[1]) if self._atual else (None, None)
+        desenhar(hdc, r.right, r.bottom, cor, rotulo, self.espessura, self._fonte)
         user32.EndPaint(hwnd, ctypes.byref(ps))
 
     def _wndproc(self, hwnd, msg, wp, lp):

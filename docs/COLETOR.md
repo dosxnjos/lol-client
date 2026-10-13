@@ -423,6 +423,29 @@ cada mudança e, com o coletor fora, de novo a cada 30 s (`pengu/coach.js`); cha
 errado ou valor fora da lista é ignorada (volta ao padrão). Depois que o jogo sai da tela, um `POST /config`
 não religa captura nem OCR daquela partida.
 
+**Modo vitrine** (`coletor\vitrine.py`; `python tools\vitrine.py ligar|estado|desligar`): prints que mostram o
+overlay e a moldura funcionando, que o print comum nunca vê (`WDA_EXCLUDEFROMCAPTURE`, ARMADILHAS § Tela).
+`ligar` grava `dados\vitrine.json` (marca na pasta do banco: ensaio e testes, com banco em `temp\`, nunca a
+consomem), válida 3 h até a partida começar; a partida consome e o fim dela apaga (coletor que caiu no meio
+retoma na mesma partida; reinício limpo do coletor encerra a vitrine). A mesma partida recomeçada dentro do processo
+(Reconnect, `AoVivo` morto, fase relida) segue gravando: o coach só apaga a marca com outro `game_id` ou no fim; marca
+consumida sem `game_id` (GET da sessão falhou no `InProgress`) é adotada pela partida que vier com id. `ligar` com uma
+partida gravando (marca consumida há < 2 h) recusa (rc 1); o fim de uma partida só apaga a marca que ela consumiu.
+Vale só com o coletor iniciado com estes ganchos. Ganchos: `OverlayMinimapa.ao_desenhar(img, ret, quadro)` a cada quadro mostrado e
+`Moldura.ao_mostrar(cor, rotulo, geo, espessura)` a cada alerta; só enfileiram, a thread `vitrine` faz o resto:
+jogo **já** em primeiro plano (`minimapa.janela_do_jogo_em_primeiro_plano`; nunca traz janela para a frente) →
+print `mss` → primeiro plano conferido de novo (alt-tab no meio = descartado) → composição com o pixel desenhado (overlay: a imagem do `renderizar`, chave transparente, alfa 140
+= o `-alpha 0.55` do Tk; moldura: `moldura.renderizar`, a mesma rotina GDI da janela, alfa 255 = início do pulso).
+Saída em `temp\vitrine\<data>\`: `*-minimapa-composto.png` (mapa + 40 px de margem) e `*-camada.png` (RGBA exata),
+`*-moldura-<cor>-tela.png` (tela inteira em 1280 px, chat medido, canto de baixo à esquerda e topo central
+pixelados antes de compor), `vitrine.jsonl` (gameTime, tipo, aviso, rótulo, `revisao_privacidade: "pendente"`) e
+`LEIA-ME-privacidade.txt`. No máximo 1 print a cada 20 s por tipo (`overlay-calor`, `overlay-texto`,
+`moldura-<cor>`) e 25 por partida; falha de disco ou `mss` só loga. O recorte usa o monitor que contém a
+região (lista do `mss`, não o `monitor_do_jogo` do game.cfg, que com 2 telas pode errar); região fora de todo
+monitor é logada e espera o intervalo do tipo. Custo medido no fio de quem chama: gancho < 0,1 ms com a tela
+inteira; laço de 50 ms em paralelo atrasou no pior 2,8 ms (o ensaio não liga a vitrine). Prova:
+`python tools\teste-vitrine.py`.
+
 **Ensaio** (`python tools\ensaio-coach.py`): o `Coletor` com LCU falsa + o simulador tocando a partida
 3292746609 inteira (carregamento, 30 s a 1x, o resto a 10x), banco copiado em `temp\ensaio\` (a partida
 chega pelo backfill no `EndOfGame`), portas 8766/2996. Som, tela, teclado e rede trocados por registros

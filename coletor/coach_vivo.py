@@ -120,9 +120,16 @@ def _icones(lcu, ids):
     minimapa.baixar_icones(lcu, ids)
 
 
+def _vitrine(coach, game_id, relogio):
+    """modo vitrine (tools/vitrine.py): marca na pasta do banco (dados/ no coletor; o ensaio e os testes
+    usam banco em temp/ e nunca consomem a marca do Gabriel). None = desligada"""
+    import vitrine
+    return vitrine.da_partida(Path(coach.db).parent / vitrine.MARCA_NOME, game_id, relogio)
+
+
 FABRICAS = {"voz": _voz, "moldura": _moldura, "captura": _captura, "overlay": _overlay, "atalhos": _atalhos,
             "leitor_chat": _leitor_chat, "carregamento": _carregamento, "mentor": _mentor, "janela": _janela,
-            "estatico": _estatico, "icones": _icones}
+            "estatico": _estatico, "icones": _icones, "vitrine": _vitrine}
 
 
 # ---------- uma partida ----------
@@ -150,6 +157,14 @@ class _Partida:
         self.moldura = fab["moldura"](log)
         self.motor = avisos.MotorAvisos(tom=cfg["tomVoz"], relogio=self.relogio, voz=self.voz,
                                         moldura=self.moldura, log=log)
+        self.vitrine = None
+        try:
+            self.vitrine = fab["vitrine"](coach, game_id, self.relogio)
+            if self.vitrine is not None:
+                self.vitrine.tipo_aviso = self._tipo_na_moldura
+                self.moldura.ao_mostrar = self.vitrine.moldura
+        except Exception as e:
+            coach.avisa("vitrine", e)
         self.live = avisos.GatilhosLive(self.motor)
         self.pos = None                   # AlertasPosicao: no 1º allgamedata com GameStart
         self.estatico = None              # sugestoes.carregar_estatico (cache; LCU refaz por patch em thread)
@@ -278,6 +293,8 @@ class _Partida:
             self.ov = self.coach.fab["overlay"](fonte)
             self.ov.ligado = bool(self.cfg["overlayMinimapa"])
             self.ov.ao_alternar = self._overlay_alternado   # F8: "overlay ligado/desligado" na moldura
+            if self.vitrine is not None:
+                self.ov.ao_desenhar = self.vitrine.overlay
             self.ov.iniciar()
         except Exception as e:
             self.coach.avisa("overlay", e)
@@ -582,9 +599,22 @@ class _Partida:
         except Exception as e:
             self.coach.avisa("moldura", e)
 
-    def parar(self):
+    def _tipo_na_moldura(self, rotulo):
+        """tipo do aviso que pintou este rótulo (thread da vitrine; o deque muda junto: falha = None)"""
+        try:
+            return next((a.tipo for _, d, a in reversed(list(self.motor.emitidos))
+                         if d == "moldura" and a.rotulo == rotulo), None)
+        except RuntimeError:
+            return None
+
+    def parar(self, fim=True):
         self.parando.set()
         self.parar_tela()
+        if self.vitrine is not None:   # fim da partida: a vitrine desliga sozinha (apaga a marca); recomeço não
+            try:
+                self.vitrine.parar(apagar_marca=fim)
+            except Exception as e:
+                self.coach.avisa("vitrine", e)
         try:
             self.voz.parar()
         except Exception as e:
@@ -771,8 +801,9 @@ class Coach:
         with self.trava:
             if self.partida is not None and self.partida.game_id == game_id and self.av.ativo():
                 return self.partida  # Reconnect/InProgress repetido: segue a mesma
-            if self.partida is not None:
-                self._encerrar_partida()
+            if self.partida is not None:   # mesma partida recomeçada (ou id desconhecido): a vitrine retoma
+                velho = self.partida.game_id
+                self._encerrar_partida(fim=velho is not None and game_id is not None and velho != game_id)
             cfg = self.cfg()
             import sugestoes
             if cfg["carregamento"] and self.car is None:
@@ -807,7 +838,7 @@ class Coach:
         with self.trava:
             self._encerrar_partida()
 
-    def _encerrar_partida(self):
+    def _encerrar_partida(self, fim=True):
         from voz import prioridade_do_processo
         p, self.partida = self.partida, None
         if p is None and not self.av.ativo():
@@ -815,7 +846,7 @@ class Coach:
         t0 = time.monotonic()
         self.av.parar()
         if p is not None:
-            p.parar()
+            p.parar(fim=fim)
         if self.car is not None:
             try:
                 self.car.encerrar()  # esquece puuid e Riot ID de todo mundo
