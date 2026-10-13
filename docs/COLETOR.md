@@ -12,6 +12,7 @@ Regras do pós-jogo: [INSIGHTS.md](INSIGHTS.md). Pegadinhas: [ARMADILHAS.md](ARM
    falta e assina o websocket WAMP (fase do gameflow, `eog-stats-block`, ranqueada).
 3. Em cada mudança de fase: linha em `sessoes` e snapshot de LP em `lp`. No `EndOfGame`:
    grava o `eog` e busca a partida nova com espera de 5, 10, 20, 40, 80 e 160 s.
+   Champ select: § Retrato do champ select.
 4. Websocket caiu (recarga da interface) → reconecta. Sem lockfile ou LCU muda por
    `--ocioso-min` (padrão 10) → grava "encerrado (ocioso …)" e sai com rc 0.
 
@@ -25,6 +26,8 @@ Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fa
 | backfill avulso (sem trava, client aberto) | `python coletor\coletor.py --so-backfill` |
 | teste de ociosidade | `python coletor\coletor.py --ocioso-min 0.1 --lockfile C:\nao\existe` |
 | análise de uma partida | `python coletor\analise.py [gameId]` |
+| gravar uma partida real (só leitura) | `python tools\gravador.py` (`--ensaio`: 5 s e sai) |
+| teste do retrato do champ select | `python tools\teste-champselect.py` |
 | instalar / remover o gatilho | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\instalar-gatilho.ps1` (ou `remover-gatilho.ps1`) |
 | parar o coletor agora | `schtasks /end /tn lol-client-coletor` |
 | MCP | `claude mcp add --scope user lol-client -- python C:\Dev\lol-client\mcp\servidor.py` (remover: `claude mcp remove --scope user lol-client`) |
@@ -39,14 +42,93 @@ Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fa
 | `participantes` | os 10 de cada partida, com puuid, `eu`, KDA, CS de tropa e de selva |
 | `frames` | 1 linha por (partida, frame, participante): posição, ouro, xp, CS, nível |
 | `eventos` | eventos da linha do tempo em ordem (`seq`), colunas + json do evento |
-| `lp`, `sessoes`, `eog` | telemetria ao vivo: só existe das sessões em que o coletor rodou |
+| `lp`, `sessoes`, `eog` | telemetria ao vivo: só existe das sessões em que o coletor rodou (`eog` bruto, com o Riot ID dos 10) |
 | `campeoes`, `meta` | nomes dos campeões; puuid e Riot ID do jogador |
+| `champ_select` | um retrato por seleção de campeão (abaixo); só existe das sessões em que o coletor rodou |
+
+## Retrato do champ select
+
+O coletor assina `OnJsonApiEvent_lol-champ-select_v1_session` e alimenta
+`coletor.RetratoChampSelect` (sem IO; o teste usa a mesma classe):
+
+- entra em `FINALIZATION` → grava a 1ª versão; `GameStart`/`InProgress` no gameflow → regrava
+  com a última sessão e a runa final e liga o `game_id`. Seleção desfeita (dodge: o gameflow
+  volta a lobby/fila) → regrava com `desfeita=1`, ou não grava se nem chegou à finalização.
+  Quem decide é a fase do gameflow, não o `Delete` da sessão (a ordem dos dois não é garantida).
+  Sessão fechada não reabre: `Update` atrasado com a mesma chave é ignorado (`fechadas`, últimas
+  50). Chave = `id` da sessão; vazio → `g<gameId>`.
+- colunas: `chave` (id da sessão), `ts` (1ª sessão vista), `game_id`, `fila`, `posicao`
+  (`assignedPosition` do jogador local, maiúsculo; vazio = às cegas), `preferidas` (`TOP,JUNGLE`,
+  do `GET /lol-lobby/v2/lobby` lido em `Lobby`/`Matchmaking`/`ReadyCheck`), `autofill` (posição
+  fora das preferidas, `FILL` nas preferidas = nunca; sem posição = null), `autofill_riot`
+  (`isAutofilled` da Riot, para conferir), `campeao`, `aliados`/`inimigos` (json `{cell,
+  campeao, posicao}`, **só ids**), `bans_aliados`/`bans_inimigos` (das ações `ban` completas;
+  sem elas, de `session.bans`), `runa_id`/`runa_nome` (`/lol-perks/v1/currentpage`), `feiticos`,
+  `seg_ate_travar` (1ª sessão → pick local completo; null se já veio travado), `desfeita`.
+- `posicao` e `autofill` são da **última** sessão, depois de trocas de posição: autofill para
+  UTILITY trocado para TOP grava `posicao=TOP`, `autofill=0`, `autofill_riot=1`. O `champ_select()`
+  do MCP separa o winrate por `autofill` (o que ele jogou), não pelo `autofill_riot`.
+- O retrato nunca grava `chatDetails` (senha e jwt da sala) nem nome/puuid de ninguém
+  (`limpar_sessao()`): na ranqueada o nome dos outros fica oculto na seleção. Já `partidas.json`,
+  `participantes.puuid` e `eog` guardam o que o histórico e o fim de jogo mostram (Riot ID e puuid
+  dos 10), só em `dados\` (fora do git). Fixture para `tests/` sai sem identidade de terceiros.
+- Prova: `python tools/teste-champselect.py` (fixtures `tests/fixtures/champselect-*.json`,
+  banco de teste em `temp/`).
+
+## Gravador (`tools\gravador.py`)
+
+Processo à parte, **só leitura**, para o Gabriel deixar rodando numa partida normal (plano v2,
+passo 0). Não usa o log nem a trava do coletor; prioridade abaixo do normal; pode nascer antes
+do client (espera ele abrir); sai sozinho 30 s depois do client fechar ou 10 min após o
+`EndOfGame` (jogou de novo antes: segue). GET que falha (timeout, conexão caída) vira `erro_lcu`
+no resumo e o laço segue; erro inesperado encerra, mas a conferência de credencial roda igual
+(rc 1). Saída em `temp\gravacao\<AAAAMMDD-HHMMSS>\`, resumo no console ao sair.
+
+| fase | o quê | arquivo |
+| --- | --- | --- |
+| todas | cada mudança de fase | `fases.jsonl` |
+| `Lobby`/`None`/`Matchmaking` | fila, preferidas, nº de membros (na mudança de fase e a cada 5 s, se mudou; sem preferidas ao entrar no champ select, relê) | `lobby.jsonl` |
+| `Matchmaking`/`ReadyCheck` | `GET /lol-matchmaking/v1/ready-check` a cada 200 ms (`timer`, `state`, `playerResponse`) | `readycheck.jsonl` |
+| `ChampSelect` | sessão limpa a cada mudança (o relógio não conta) + runa + a fase seguinte | `champselect.jsonl` (**já é o `eventos` de uma fixture do passo 1**) |
+| `InProgress` | `allgamedata` da Live Client a cada 1 s (recusada = sem partida), com o nome de cada jogador trocado pelo campeão também nos eventos (`coletor.limpar_live`); recorte do minimapa a cada 10 s e tela inteira a cada 60 s, com o `gameTime` no nome | `live.jsonl`, `minimapa/`, `telas/`, `calibracao.json` |
+| `EndOfGame` | `game-timelines/{id}` e `games/{id}` (bruto: Riot ID e puuid dos 10), com espera de 5…160 s | `timeline-{id}.json`, `partida-{id}.json` |
+
+`python tools\gravador.py --ensaio` grava 5 s da fase atual, tenta a Live Client, tira 1 recorte
+do minimapa e confere em memória que a credencial não está em nenhum arquivo ("credencial nos
+arquivos: 0"; o valor nunca é impresso). Antes de uma partida, o orquestrador reinicia a tarefa
+`lol-client-coletor` para o coletor com champ select ser o que roda. Disco: estimativa de ~100 MB
+de `live.jsonl` por partida de 30 min, mais ~5 MB por print de tela inteira (1 por minuto); apagar
+`temp\gravacao\` depois de extrair o que interessa.
+
+### Minimapa (retângulo de recorte)
+
+Lido do `Config\game.cfg` do jogo: `[General] Width`, `Height`, `WindowMode`; `[HUD]`
+`MinimapScale`, `FlipMiniMap`. O monitor do jogo é o que tem `Width×Height` (`mss` 10 já devolve
+px físicos: 2560×1080 aqui, mesmo com escala de 125%).
+
+```
+lado    = altura × (0,194 + 0,0648 × MinimapScale)       # CHUTE inicial, não medido
+recorte = min(altura, lado × 1,3), quadrado preso ao canto de baixo (direito; FlipMiniMap=1: esquerdo)
+```
+
+Em 13/10/2026 (2560×1080, `MinimapScale` 2,46, `FlipMiniMap` 0): lado estimado 382 px, recorte
+497×497 em (2063, 583). O recorte é folgado de propósito: o minimapa cabe mesmo com o lado errado
+em ±30%. **Calibrar** com o 1º print de `telas/`: medir o lado `L` do minimapa em px e a distância
+até o canto; com um print, `MINI_A = L / altura − MINI_B × MinimapScale`; com dois prints em
+escalas diferentes, resolve `MINI_A` e `MINI_B`. Constantes no topo de `tools/gravador.py` (o
+passo 13 leva para `coletor/minimapa.py`). `GlobalScale` (escala do HUD) fica fora da fórmula
+até um print mostrar que mexe no minimapa.
 
 ## MCP (`mcp\servidor.py`)
 
 Ferramentas: `resumo(dias)`, `partidas(limite, campeao, fila)`, `analise_partida(game_id)`,
-`tilt()`, `campeoes(min_partidas)`, `sincronizar()`. Tudo abre o banco com `mode=ro`, exceto
-`sincronizar()` (precisa do client aberto). Winrate, tilt e campeões ignoram remake
+`tilt()`, `campeoes(min_partidas)`, `matchups(campeao, min_partidas)` (regra em
+[INSIGHTS.md](INSIGHTS.md) § Matchups), `champ_select(limite)` (retratos + winrate com e sem
+autofill; banco sem a tabela → "sem retratos ainda"), `sessao_hoje()` (partidas desde 00:00, ou
+desde o início da sessão em andamento se ela começou antes, com a mesma regra de pausa do tilt,
+mais a que terminou depois da meia-noite; sequência, LP do período, alertas pelo histórico de tilt
+e de horário), `sincronizar()`. Tudo abre o banco com `mode=ro`, exceto `sincronizar()` (precisa
+do client aberto). `LOL_CLIENT_DB` aponta outro banco (teste em `temp/`), `sincronizar()` incluso. Winrate, tilt e campeões ignoram remake
 (< 5 min), personalizada e treino; no tilt a sequência de derrotas zera numa pausa ≥ 2 h.
 
 ## Segurança: token da LCU no log Security

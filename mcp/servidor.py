@@ -1,6 +1,8 @@
 # servidor MCP do lol-client (stdio): perguntas sobre as partidas do Gabriel no dados/lol.db
 # registro: claude mcp add --scope user lol-client -- python C:\Dev\lol-client\mcp\servidor.py
 # só leitura no banco (mode=ro), exceto sincronizar(). Nunca print em stdout: é o canal do MCP.
+import json
+import os
 import sys
 import time
 from collections import Counter, defaultdict
@@ -24,7 +26,8 @@ SESSAO_GAP_MS = 2 * 3600 * 1000  # derrotas seguidas só contam dentro de uma se
 
 
 def _conn():
-    return banco.abrir_leitura()
+    """LOL_CLIENT_DB aponta outro banco (teste em temp/); padrão dados/lol.db"""
+    return banco.abrir_leitura(os.environ.get("LOL_CLIENT_DB") or banco.DB_PADRAO)
 
 
 def _sem_banco():
@@ -198,6 +201,14 @@ def tilt() -> dict:
         c = _conn()
     except FileNotFoundError:
         return _sem_banco()
+    return _tilt(c)
+
+
+def _faixa(h):
+    return "00-06" if h < 6 else "06-12" if h < 12 else "12-18" if h < 18 else "18-24"
+
+
+def _tilt(c):
     ps = [p for p in _minhas(c) if p["duracao"] >= REMAKE_S]
     apos, ordem, horario = defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0]), defaultdict(lambda: [0, 0])
     seq = pos = 0
@@ -209,8 +220,7 @@ def tilt() -> dict:
         for chave, d in ((min(seq, 3), apos), (min(pos, 5), ordem)):
             d[chave][0] += p["vitoria"]
             d[chave][1] += 1
-        h = datetime.fromtimestamp(p["criacao"] / 1000).hour
-        faixa = "00-06" if h < 6 else "06-12" if h < 12 else "12-18" if h < 18 else "18-24"
+        faixa = _faixa(datetime.fromtimestamp(p["criacao"] / 1000).hour)
         horario[faixa][0] += p["vitoria"]
         horario[faixa][1] += 1
         seq = 0 if p["vitoria"] else seq + 1
@@ -252,6 +262,169 @@ def campeoes(min_partidas: int = 3) -> list | dict:
     return sorted(out, key=lambda x: -x["partidas"])
 
 
+FEITICOS = {1: "Purificar", 3: "Exaustão", 4: "Flash", 6: "Fantasma", 7: "Curar", 11: "Golpear",
+            12: "Teleporte", 13: "Clareza", 14: "Incendiar", 21: "Barreira", 32: "Bola de Neve"}
+
+
+def _r(v, casas=0):
+    if v is None:
+        return None
+    return round(v) if casas == 0 else round(v, casas)
+
+
+@mcp.tool()
+def matchups(campeao: str | None = None, min_partidas: int = 3) -> dict:
+    """Como o Gabriel vai contra cada campeão adversário de rota (o do mesmo papel no time
+    inimigo, pela posição na linha do tempo). `campeao` = o campeão DELE (nome, ex. "Renekton",
+    ou id; vazio = todos). Por (campeão dele, papel, adversário): n, vitórias, winrate, diferença
+    média eu − adversário de ouro/xp/farm aos 10 e 15 min, mortes antes dos 10 (solo = 1
+    inimigo, gank = 2+). Grupos com n < `min_partidas` (padrão 3) vão para `pouca_amostra`, só
+    com n e vitórias: sem conclusão. Remake, personalizada, treino e adversário incerto ficam fora
+    (contados em `fora`). Regras: docs/INSIGHTS.md § Matchups."""
+    try:
+        c = _conn()
+    except FileNotFoundError:
+        return _sem_banco()
+    nomes = _nomes(c)
+    cid = _campeao_id(c, campeao)
+    if cid == -1:
+        return {"erro": f"campeão '{campeao}' não encontrado (use o nome como aparece no client, ex. 'Renekton', ou o id)"}
+    r = analise.matchups(c, cid)
+    corte = max(min_partidas, 1)
+    linhas, pouca = [], []
+    for m in r["matchups"]:
+        base = {"contra": nomes.get(m["adversario"], m["adversario"]), "papel": m["papel"], "n": m["n"],
+                "vitorias": m["vitorias"]}
+        if cid is None:
+            base = {"campeao": nomes.get(m["campeao"], m["campeao"]), **base}
+        if m["n"] < corte or not m["conclusao"]:
+            quem = f"{base['campeao']} x " if cid is None else ""
+            pouca.append(f"{quem}{base['contra']} ({m['papel']}): n={m['n']}, {m['vitorias']}V")
+            continue
+        base.update({"winrate": _r(m["winrate"], 1), "ouro10": _r(m["ouro10"]), "xp10": _r(m["xp10"]),
+                     "farm10": _r(m["farm10"], 1), "ouro15": _r(m["ouro15"]), "xp15": _r(m["xp15"]),
+                     "farm15": _r(m["farm15"], 1), "mortes10": _r(m["mortes10"], 1),
+                     "solo10": _r(m["solo10"], 1), "gank10": _r(m["gank10"], 1)})
+        if m["n10"] != m["n"] or m["n15"] != m["n"]:
+            base["n10"], base["n15"] = m["n10"], m["n15"]
+        linhas.append(base)
+    return {"campeao": nomes.get(cid, cid) if cid is not None else "todos", "partidas": r["partidas"],
+            "fora": r["fora"], "matchups": linhas, "pouca_amostra": pouca,
+            "obs": "diferenças = eu − adversário (positivo = à frente); média só onde há o minuto (n10/n15 "
+                   "aparecem quando diferem de n); n < 3 não tira conclusão"}
+
+
+@mcp.tool()
+def champ_select(limite: int = 20) -> dict:
+    """Retratos das últimas seleções de campeão (gravados pelo coletor no fim de cada champ
+    select, da mais nova para a mais velha): fila, posição recebida, posições preferidas,
+    autofill (posição fora das preferidas), campeão, runa, feitiços, segundos até travar,
+    se a seleção foi desfeita (dodge) e o resultado da partida quando ela já está no banco.
+    Traz também o resumo: quantas foram autofill e o winrate com e sem autofill."""
+    try:
+        c = _conn()
+    except FileNotFoundError:
+        return _sem_banco()
+    nomes = _nomes(c)
+    try:
+        rows = c.execute(
+            "select cs.ts, cs.fila, cs.posicao, cs.preferidas, cs.autofill, cs.campeao, cs.runa_nome, cs.feiticos, "
+            "cs.seg_ate_travar, cs.desfeita, cs.game_id, pa.vitoria, pa.duracao from champ_select cs "
+            "left join partidas pa on pa.game_id = cs.game_id order by cs.ts desc").fetchall()
+    except Exception:  # banco anterior ao passo 1 do plano v2: tabela ainda não existe
+        rows = []
+    if not rows:
+        return {"selecoes": [], "obs": "sem retratos ainda: o coletor grava a partir da próxima seleção de campeão"}
+    out = []
+    for ts, fila, pos, pref, auto, camp, runa, feit, seg, desf, gid, vit, dur in rows[:limite]:
+        res = None if vit is None else ("remake" if dur < REMAKE_S else "vitória" if vit else "derrota")
+        out.append({"data": _data(ts), "fila": FILAS.get(fila, fila), "posicao": pos, "preferidas": pref,
+                    "autofill": None if auto is None else bool(auto), "campeao": nomes.get(camp, camp),
+                    "runa": runa, "feiticos": [FEITICOS.get(f, f) for f in json.loads(feit or "[]")],
+                    "seg_ate_travar": seg, "desfeita": bool(desf), "game_id": gid, "resultado": res})
+
+    def wr(lista):
+        jog = [r for r in lista if r[11] is not None and r[12] >= REMAKE_S]
+        return {"n": len(jog), "winrate": _wr(sum(r[11] for r in jog), len(jog))}
+    com = [r for r in rows if r[4] == 1]
+    sem = [r for r in rows if r[4] == 0]
+    return {"total": len(rows), "autofill": len(com), "com_autofill": wr(com), "sem_autofill": wr(sem),
+            "selecoes": out}
+
+
+@mcp.tool()
+def sessao_hoje() -> dict:
+    """A sessão de hoje do Gabriel (desde 00:00, horário do PC, ou desde o início da sessão em
+    andamento se ela começou antes da meia-noite: pausa < 2 h, como no tilt; só Summoner's Rift,
+    fora personalizada e treino): cada partida (hora, campeão, resultado, KDA), vitórias e derrotas,
+    sequência atual, LP da Solo/Duo no período (quando o coletor rodou), minutos desde a última
+    partida e alertas tirados do próprio histórico: winrate depois de N derrotas seguidas e na
+    faixa de horário atual, contra o normal. Use para "como tá minha sessão?" ou "paro ou sigo?"."""
+    try:
+        c = _conn()
+    except FileNotFoundError:
+        return _sem_banco()
+    return _sessao(c, time.time() * 1000)
+
+
+def _sessao(c, agora):
+    """sessao_hoje() com o relógio explícito (teste). A sessão segue a regra do _tilt (pausa < 2 h,
+    atravessa a meia-noite): se a sessão em andamento começou ontem, "hoje" começa nela"""
+    nomes = _nomes(c)
+    meia_noite = int(datetime.fromtimestamp(agora / 1000).replace(hour=0, minute=0, second=0,
+                                                                  microsecond=0).timestamp() * 1000)
+    recentes = [p for p in _minhas(c, meia_noite - 86400 * 1000) if p["duracao"] >= REMAKE_S]
+    seq, ant, inicio_sessao = 0, None, None  # seq positivo = vitórias seguidas, negativo = derrotas
+    for p in recentes:
+        if ant is None or p["criacao"] - (ant["criacao"] + ant["duracao"] * 1000) >= SESSAO_GAP_MS:
+            seq, inicio_sessao = 0, p["criacao"]
+        seq = (max(seq, 0) + 1) if p["vitoria"] else (min(seq, 0) - 1)
+        ant = p
+    pausa_min = round((agora - (ant["criacao"] + ant["duracao"] * 1000)) / 60000) if ant else None
+    if pausa_min is not None and pausa_min * 60000 >= SESSAO_GAP_MS:
+        seq, inicio_sessao = 0, None  # sessão encerrada
+    desde = min(meia_noite, inicio_sessao) if inicio_sessao else meia_noite
+    # hoje = desde o início acima, mais a partida que começou antes da meia-noite e terminou depois
+    ps = [p for p in _minhas(c, meia_noite - 86400 * 1000)
+          if p["criacao"] >= desde or p["criacao"] + p["duracao"] * 1000 >= meia_noite]
+    jogos = [p for p in ps if p["duracao"] >= REMAKE_S]
+    v = sum(p["vitoria"] for p in jogos)
+    lps = c.execute("select tier, divisao, pontos from lp where fila='RANKED_SOLO_5x5' and ts >= ? order by id",
+                    (desde,)).fetchall()
+    lp = None
+    if lps:
+        (t0, d0, p0), (t1, d1, p1) = lps[0], lps[-1]
+        lp = {"inicio": f"{t0} {d0} {p0} LP", "agora": f"{t1} {d1} {p1} LP"}
+        if (t0, d0) == (t1, d1):
+            lp["variacao"] = p1 - p0
+    hist = _tilt(c)
+    geral = _wr(sum(p["vitoria"] for p in _minhas(c) if p["duracao"] >= REMAKE_S), hist["partidas"])
+    alertas = []
+    if seq < 0:
+        k = min(-seq, 3)
+        b = next((x for x in hist["apos_derrotas_seguidas"] if x["derrotas_antes"] == ("3+" if k == 3 else k)), None)
+        if b and b["partidas"] >= 10 and b["winrate"] is not None and geral is not None and b["winrate"] < geral - 5:
+            alertas.append(f"depois de {-seq} derrota(s) seguida(s) teu histórico é {b['winrate']}% "
+                           f"(n={b['partidas']}) contra {geral}% no geral: pausa?")
+    faixa = _faixa(datetime.fromtimestamp(agora / 1000).hour)
+    h = next((x for x in hist["por_horario"] if x["faixa"] == faixa), None)
+    if h and h["partidas"] >= 15 and h["winrate"] is not None and geral is not None and h["winrate"] < geral - 5:
+        alertas.append(f"na faixa {faixa}h teu histórico é {h['winrate']}% (n={h['partidas']}) contra {geral}% no geral")
+    return {
+        "desde": _data(desde) if desde < meia_noite else "00:00",
+        "partidas": [{"hora": datetime.fromtimestamp(p["criacao"] / 1000).strftime("%H:%M"),
+                      "fila": FILAS.get(p["fila"], p["fila"]), "campeao": nomes.get(p["campeao"], p["campeao"]),
+                      "resultado": "remake" if p["duracao"] < REMAKE_S else ("vitória" if p["vitoria"] else "derrota"),
+                      "kda": f"{p['k']}/{p['d']}/{p['a']}"} for p in ps],
+        "vitorias": v, "derrotas": len(jogos) - v,
+        "sequencia": (f"{seq} vitória(s) seguida(s)" if seq > 0 else f"{-seq} derrota(s) seguida(s)" if seq < 0
+                      else "nenhuma em andamento"),
+        "minutos_desde_a_ultima": pausa_min, "lp_solo": lp,
+        "historico": {"winrate_geral": geral, "faixa_agora": faixa, "winrate_na_faixa": h and h["winrate"]},
+        "alertas": alertas,
+    }
+
+
 @mcp.tool()
 def sincronizar() -> dict:
     """Baixa para o banco as partidas do histórico do client que ainda faltam (partida + linha
@@ -263,7 +436,7 @@ def sincronizar() -> dict:
     lcu = coletor.conectar()
     if not lcu:
         return {"erro": "client do LoL fechado: abra o client e tente de novo"}
-    c = banco.abrir()
+    c = banco.abrir(os.environ.get("LOL_CLIENT_DB") or banco.DB_PADRAO)  # o mesmo banco das outras ferramentas
     try:
         return coletor.backfill(lcu, c, trabalhadores=6, limite=40)
     finally:

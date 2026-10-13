@@ -206,6 +206,51 @@ Sem papéis → `papel: null`, `adversario: null`, `diffs: {}`. As chaves de `di
 **strings** `"10"` e `"15"` (no Python também, nunca `int`). `n < 3` → `media` e
 `diferenca` = `null`.
 
+### Matchups
+
+Agregado do histórico por **(meu campeão, meu papel, campeão adversário de rota)**, com filtro
+opcional pelo meu campeão. Python: `analise.matchups(c, campeao=None)`; MCP: `matchups()`; o selo do champ
+select (passo 4 do plano v2) segue a mesma regra.
+
+- **Partidas elegíveis**: `mapId == 11`, com linha do tempo, `queueId ∉ FORA_DAS_CONTAS`,
+  `gameDuration ≥ 300` (fora remake). Cada uma passa pela análise acima.
+- **Fora da conta** (contadas em `fora`, nunca somem caladas): sem papéis (`sem_papel`, ex.:
+  sem `f(10)`) e adversário incerto (`incerto`). Soma dos `n` = elegíveis − `fora`.
+- Por grupo: `n`, `vitorias`; `ouroM`, `xpM`, `farmM` (M = 10 e 15) = média aritmética das
+  diferenças `eu − adv` da seção "Diferenças", só das partidas que têm `f(M)` (`n10`, `n15`
+  dizem quantas); `mortes10` = média de mortes com `ms < 600000`, separadas em `solo10`
+  (`inimigos == 1`) e `gank10` (`inimigos ≥ 2`); execução (`inimigos == 0`) só entra no total.
+- **Amostra mínima**: `n < 3` → `winrate` e todas as médias = `null` e `conclusao: false`
+  (mostra só `n` e `vitorias`, "pouca amostra"). Mesmo corte do farm por minuto. **`n` aparece sempre.**
+- Ordem: `n` decrescente, depois vitórias, meu campeão, papel e id do adversário.
+- Arredondar só na exibição (ouro e xp inteiros, farm e mortes com 1 casa).
+
+Conferência (13/10/2026, banco com 172 partidas elegíveis): Renekton (58) → 86 elegíveis, 1
+incerta, 85 em 43 grupos (soma dos `n` = 85); o maior é TOP contra Aatrox (266), n = 7.
+
+### Winrate no champ select (selo `#lc-winrate`)
+
+Plano v1, passo 7c. JS em `pengu/champselect.js` (`estatisticasCampeao`); conferência
+independente em Python: `tools/teste-winrate.py` (par do `tools/teste-winrate.mjs`).
+
+- **Fonte**: lista do histórico da LCU (`.../current-summoner/matches`), sem linha do tempo.
+  Cada leitura soma ao cache por `gameId` (a LCU devolve 20 ou 200, ARMADILHAS); o cache só cresce na sessão.
+- **Conta**: `mapId == 11`, `gameType == "MATCHED_GAME"` (fora personalizada e treino) e sem
+  `stats.gameEndedInEarlySurrender` (remake). Qualquer fila com matchmaking entra.
+- **Posição da partida** = `stats.roleBoundItem` (item da missão de função, nomes conferidos
+  em `items.json` em 13/10/2026): 1200, 1220, 1221, 1222 → `TOP`; 1201, 1206 → `MIDDLE`;
+  1202, 1207 → `BOTTOM`; 1203, 1208, 2055 → `UTILITY` (2055, sentinela de controle, ocupa o
+  espaço da missão de suporte); 1204, 1205, 1209, 1210 → `JUNGLE`. Outro valor (0 em
+  treino) → Golpear (feitiço 11) = `JUNGLE`, senão posição desconhecida (só entra no geral).
+  `timeline.lane/role` não serve (ver acima). A posição pedida vem de
+  `myTeam[].assignedPosition` (minúscula: `"top"`); vazia → só a linha geral.
+- **Números**: `n`, `vitorias`, `winrate` = `round(v/n·100)`, `k`, `d`, `a` médios e
+  `kda = (K+A)/max(1,D)` sobre os totais, com 1 casa (meia unidade para cima, como `Math.round`).
+  Sem partida → "sem partidas". O selo mostra o tamanho do histórico lido.
+
+Conferência (13/10/2026, 200 partidas): Renekton 86 · 49% · KDA 1,5 (topo, as mesmas 86);
+Zac 63 · 49% · 2,4, na selva 61 · 48% · 2,5; 24/24 recortes iguais ao Python.
+
 ### Limites conhecidos
 
 - **1 frame por minuto**: posição, ouro e farm são amostras de até 30 s de distância do
@@ -227,8 +272,9 @@ Sem papéis → `papel: null`, `adversario: null`, `diffs: {}`. As chaves de `di
 
 **gameId 3292712362** — ranqueada solo/duo (420), 13/10/2026 03:25 UTC, 1826 s (30:26),
 vitória do time 100. Calculado por `temp/insights_calc.py` (gitignored) sobre os JSON
-baixados em `temp/insights/` (também gitignored; a LCU guarda só 20 partidas, então esta
-sai do histórico depois de umas 18 partidas novas).
+baixados da LCU, que ficam versionados em [tests/fixtures/](../tests/fixtures/README.md)
+(a LCU guarda só 20 partidas e esta sai do histórico depois de umas 18 novas); os dois
+testes (`tools/teste-posjogo.mjs`, `tools/teste-analise.py`) leem de lá.
 
 Identificação: eu = `participantId` 1, time 100, `championId` 58 (Renekton), papel `TOP`.
 Adversário = `participantId` 6, `championId` 83, `incerto: false`

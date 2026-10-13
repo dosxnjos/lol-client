@@ -36,6 +36,11 @@ create table if not exists sessoes (
 create table if not exists eog (
   id integer primary key autoincrement, ts integer, game_id integer, json text);
 create table if not exists campeoes (id integer primary key, nome text);
+create table if not exists champ_select (
+  chave text primary key, ts integer, game_id integer, fila integer, posicao text, preferidas text,
+  autofill integer, autofill_riot integer, campeao integer, aliados text, inimigos text,
+  bans_aliados text, bans_inimigos text, runa_id integer, runa_nome text, feiticos text,
+  seg_ate_travar real, desfeita integer default 0);
 create index if not exists ix_partidas_criacao on partidas (criacao);
 create index if not exists ix_part_eu on participantes (eu, campeao);
 """
@@ -181,6 +186,35 @@ def gravar_eog(c, dado):
     with c:
         c.execute("insert into eog (ts, game_id, json) values (?,?,?)",
                   (agora_ms(), (dado or {}).get("gameId"), json.dumps(dado, ensure_ascii=False)))
+
+
+CS_COLUNAS = ("chave", "ts", "game_id", "fila", "posicao", "preferidas", "autofill", "autofill_riot",
+              "campeao", "aliados", "inimigos", "bans_aliados", "bans_inimigos", "runa_id", "runa_nome",
+              "feiticos", "seg_ate_travar", "desfeita")
+
+
+def gravar_champ_select(c, r):
+    """retrato do champ select (coletor.RetratoChampSelect.retrato()); substitui pela chave.
+    listas viram json; preferidas vira 'TOP,JUNGLE'; booleanos viram 0/1 (None fica null)"""
+    def col(k):
+        v = r.get(k)
+        if k == "preferidas":
+            return ",".join(v) if v else None
+        if isinstance(v, bool):
+            return int(v)
+        if isinstance(v, (list, dict)):
+            return json.dumps(v, separators=(",", ":"))
+        return v
+    with c:
+        c.execute(f"insert or replace into champ_select ({','.join(CS_COLUNAS)}) values "
+                  f"({','.join('?' * len(CS_COLUNAS))})", tuple(col(k) for k in CS_COLUNAS))
+
+
+def ligar_game_id(c, chave, game_id):
+    """preenche o game_id do retrato quando a partida aparece (só se ainda está vazio)"""
+    with c:
+        c.execute("update champ_select set game_id=? where chave=? and game_id is null and desfeita=0",
+                  (game_id, chave))
 
 
 def gravar_campeoes(c, lista):

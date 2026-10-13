@@ -211,6 +211,60 @@ def analisar(c, game_id=None, puuid=None, amostra_ids=None):
             "diffs": diffs, "farm": farm}
 
 
+MIN_MATCHUP = 3      # abaixo disso: só n e vitórias, médias null (docs/INSIGHTS.md § Matchups)
+MS_10 = 600000
+
+
+def _media(vals):
+    return sum(vals) / len(vals) if vals else None
+
+
+def matchups(c, campeao=None, puuid=None):
+    """matchups por (meu campeão, meu papel, campeão adversário de rota), spec em docs/INSIGHTS.md § Matchups.
+    campeao: meu championId (None = todos). Devolve {"matchups": [...], "partidas": N, "fora": {...}}"""
+    puuid = puuid or banco.meta(c, "puuid")
+    sql = ("select game_id from partidas where mapa=11 and tem_timeline=1 and eu is not null "
+           f"and fila not in {FORA_DAS_CONTAS} and duracao >= {REMAKE_S}"
+           + (" and campeao = ?" if campeao is not None else "") + " order by criacao")
+    ids = [r[0] for r in c.execute(sql, (campeao,) if campeao is not None else ())]
+    fora = {"sem_papel": 0, "incerto": 0}
+    grupos = {}
+    for gid in ids:
+        r = analisar(c, gid, puuid)
+        if "erro" in r or not r["adversario"]:
+            fora["sem_papel"] += 1
+            continue
+        if r["adversario"]["incerto"]:
+            fora["incerto"] += 1
+            continue
+        vit = c.execute("select vitoria from partidas where game_id=?", (gid,)).fetchone()[0]
+        cedo = [m for m in r["mortes"] if m["ms"] < MS_10]
+        g = grupos.setdefault((r["campeao"], r["papel"], r["adversario"]["campeao"]),
+                              {"jogos": [], "d": {"10": [], "15": []}})
+        g["jogos"].append({"vitoria": vit, "mortes10": len(cedo),
+                           "solo10": sum(m["inimigos"] == 1 for m in cedo),
+                           "gank10": sum(m["inimigos"] >= 2 for m in cedo)})
+        for m in ("10", "15"):
+            if m in r["diffs"]:
+                g["d"][m].append(r["diffs"][m])
+    out = []
+    for (meu, papel, adv), g in grupos.items():
+        n = len(g["jogos"])
+        v = sum(j["vitoria"] for j in g["jogos"])
+        item = {"campeao": meu, "papel": papel, "adversario": adv, "n": n, "vitorias": v,
+                "winrate": 100 * v / n if n >= MIN_MATCHUP else None, "conclusao": n >= MIN_MATCHUP}
+        for m in ("10", "15"):
+            ds = g["d"][m]
+            item[f"n{m}"] = len(ds)
+            for k in ("ouro", "xp", "farm"):
+                item[f"{k}{m}"] = _media([d[k] for d in ds]) if n >= MIN_MATCHUP else None
+        for k in ("mortes10", "solo10", "gank10"):
+            item[k] = _media([j[k] for j in g["jogos"]]) if n >= MIN_MATCHUP else None
+        out.append(item)
+    out.sort(key=lambda x: (-x["n"], -x["vitorias"], x["campeao"], x["papel"], x["adversario"]))
+    return {"matchups": out, "partidas": len(ids), "fora": fora}
+
+
 if __name__ == "__main__":
     conn = banco.abrir_leitura()
     gid = int(sys.argv[1]) if len(sys.argv) > 1 else None

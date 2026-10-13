@@ -133,7 +133,7 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
 
 ### Fase 0 — gravador passivo (antes da 1ª partida real)
 
-0. [ ] `tools/gravador.py`: um processo só leitura que o Gabriel deixa rodando numa partida
+0. [x] `tools/gravador.py`: um processo só leitura que o Gabriel deixa rodando numa partida
    **normal** para fechar de uma vez tudo o que só uma partida real responde:
    - em `Matchmaking`/`ReadyCheck`: `GET /lol-matchmaking/v1/ready-check` a cada ~200 ms →
      `temp/gravacao/readycheck.jsonl` (`timer`, `state`, `playerResponse`, hora local), para medir
@@ -150,10 +150,17 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
    **prova:** `python tools/gravador.py --ensaio` (sem partida: grava 5 s da fase atual e sai) →
    `temp/gravacao/` com o arquivo da fase e nenhuma credencial (`grep` da credencial vazio)
    **reprova se:** pasta vazia ou credencial encontrada
+   Feito 13/10/2026 06:12 (fase `Lobby`): `fases.jsonl`, `lobby.jsonl` (fila 420, TOP/JUNGLE),
+   `calibracao.json` e 1 recorte do minimapa; Live Client recusada = "sem partida 1x";
+   "credencial nos arquivos: 0" (conferência em memória, sem `grep` na linha de comando: o 4688
+   grava a linha de comando no log Security) e `temp/v2/conferir_credencial.py` → 0. Também grava
+   a tela inteira a cada 60 s para calibrar o minimapa (fórmula e calibração:
+   [COLETOR.md](../docs/COLETOR.md) § Minimapa); sai 30 s após o client fechar ou 10 min após o
+   `EndOfGame`. **Falta a gravação de uma partida real** (só ela fecha readycheck, champ select real, live e timeline).
 
 ### Fase A — champ select e matchups
 
-1. [ ] Retrato do champ select no coletor: assinar `OnJsonApiEvent_lol-champ-select_v1_session`;
+1. [x] Retrato do champ select no coletor: assinar `OnJsonApiEvent_lol-champ-select_v1_session`;
    na transição para `FINALIZATION` (ou na última sessão antes de `GameStart`) gravar na tabela
    `champ_select`: `game_id` (preenchido quando a partida aparece), `fila`, `assigned_position`
    do local, posições preferidas do lobby, `autofill` (assigned fora das preferidas), campeões e
@@ -162,16 +169,30 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
    `tests/fixtures/champselect-*.json` (gravar uma real da personalizada do 7c e montar 2
    variações) → `3/3 ok` (autofill certo, ids certos)
    **reprova se:** qualquer `FALHOU`
-2. [ ] `coletor/analise.py` + `docs/INSIGHTS.md` § Matchups: por campeão inimigo adversário
+   **correção:** sem sessão real disponível, as 3 fixtures (`preferida`, `autofill`, `blind`) foram
+   **montadas** no formato do `GET /help?format=Full` (`TeamBuilderDirect-ChampSelectSession`);
+   **a fixture real virá do gravador** (passo 0): o `champselect.jsonl` dele já é a lista
+   `eventos` de uma fixture (conferido com `temp/v2/gravador_compat.py`). Feito 13/10/2026:
+   `3/3 ok` + extras ok (seleção desfeita, reconexão no meio, fluxo pelo `Coletor` com LCU falsa,
+   banco em `temp/`). Regras do retrato: [COLETOR.md](../docs/COLETOR.md) § Retrato do champ select.
+   Coletor real **não reiniciado** (fica para o orquestrador antes da partida).
+2. [x] `coletor/analise.py` + `docs/INSIGHTS.md` § Matchups: por campeão inimigo adversário
    de rota (posição pela heurística da v1): n, vitórias, ouro, xp e farm aos 10/15 médios, mortes
    antes dos 10, mortes solo (1 inimigo) contra gank (2+); filtro por campeão próprio.
    **prova:** `python -c "from coletor.analise import matchups; ..."` para Renekton → lista
    ordenada por n, e a soma dos n = nº de partidas de Renekton com adversário não-incerto (conferir por SQL)
    **reprova se:** soma diferente
-3. [ ] MCP: `matchups(campeao='Renekton', min_partidas=3)`, `champ_select(limite=20)`,
+   Feito 13/10/2026: Renekton → 43 grupos ordenados por n, soma 85 = 86 elegíveis por SQL − 1
+   incerto (conferido também rodando `analisar` em cada uma) → `ok`. Grupo = (meu campeão, papel,
+   adversário); `n < 3` → médias null: [INSIGHTS.md](../docs/INSIGHTS.md) § Matchups.
+3. [x] MCP: `matchups(campeao='Renekton', min_partidas=3)`, `champ_select(limite=20)`,
    `sessao_hoje()` (partidas de hoje, sequência, LP, horário, e o alerta de tilt do histórico).
    **prova:** chamada stdio (como na v1) de `matchups` → JSON com `n`, `winrate`, `ouro10`
    **reprova se:** erro ou campos ausentes
+   Feito 13/10/2026: `python tools/teste-mcp.py temp/teste-champselect.db` sobe o servidor por
+   stdio (SDK `mcp`), lista as 9 ferramentas e chama as 3 novas → `ok` (matchups ~3 KB com `n`,
+   `winrate`, `ouro10`; `champ_select` no banco real sem a tabela → "sem retratos ainda", no
+   banco de teste → retrato com autofill; `sessao_hoje` com partidas, sequência e LP).
 4. [ ] Selo do champ select (v1 7c) + matchup: quando o top inimigo travar (campeão visível no
    time inimigo com `assignedPosition` igual à minha, ou o único sem posição em blind), o selo
    ganha a linha "contra X: aV/bD · ouro10 ±N" (n ≥ 3; senão "contra X: n=1").
@@ -271,6 +292,70 @@ mcp\servidor.py      + matchups(), champ_select(), sessao_hoje()
     pós-jogo, conferir contra a timeline (o jungler apareceu perto em ≤ 30 s?). Reportar precisão.
     **prova:** `python tools/avaliar-gank.py <game_id>` → precisão e cobertura impressas
     **reprova se:** relatório vazio
+15b. [ ] **Overlay no minimapa** (pedido do Gabriel, 13/10/2026: "círculo crescendo da última
+    posição vista, baseado no move speed"). Janela própria, transparente, sempre no topo e que
+    **ignora clique** (`WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW` via
+    ctypes), posicionada exatamente sobre o retângulo do minimapa do passo 13. Sem injeção e sem
+    tocar no processo do jogo; só funciona em modo sem borda (`WindowMode=2`, o atual).
+    - **Área alcançável, não círculo**: a partir da última posição vista, distância percorrível
+      = velocidade × tempo, propagada por uma grade de caminhável do Rift (máscara gerada uma vez
+      a partir do minimapa; paredes bloqueiam), não em linha reta através de parede.
+      Velocidade = base do campeão (`/lol-game-data/assets/v1/champions/{id}.json`) + bota
+      visível no TAB (itens da Live Client).
+    - **Menos a área que tu enxerga**: a fog do minimapa é mais escura; o que está iluminado e
+      sem o ícone dele, ele não está. Alcançável ∩ fog.
+    - **Peso pelas pistas** do passo 14 (farm subindo → campos; abate com assistência dele → lugar
+      e hora) vira mapa de calor em vez de mancha uniforme.
+    - Some sozinha depois de ~30 s sem pista nova (a área cobre o mapa e vira ruído) e
+      troca por "sumido há Xs". Só para o jungler por padrão; laners opcionais.
+    - Liga/desliga na seção do 7b e por atalho global (ex.: F8).
+    - **Mapa dinâmico** (pedido do Gabriel): a grade de caminhável não é fixa. Ela é gerada do
+      próprio minimapa (o terreno aparece até na fog, só mais escuro) no início da partida e
+      refeita quando o terreno muda: evento `DragonKill` que define a alma (Fenda Química, Hextec,
+      Oceano, Infernal muda paredes e passagens) e a cada 5 min por garantia. Mudança de season
+      ou patch vira só "regerar a máscara", nada fixo no código. Máscaras salvas em `dados/mapas/`
+      com o patch e o tipo de fenda, para comparar.
+    - **Dash e Flash por cima da parede** (pedido do Gabriel): tabela curada `docs/MOBILIDADE.md`
+      por campeão (alcance do salto, se atravessa parede, recarga aproximada; ex.: Kayn E anda
+      dentro da parede, Zac E, Elise E, Kindred Q, Nidalee W, Lee Sin W com sentinela, Graves E);
+      a propagação deixa cruzar parede de espessura ≤ alcance do salto, uma vez por recarga.
+      Flash (400) entra para todo mundo como "talvez" (sem saber se está pronto), com peso menor.
+    **prova:** `python tools/teste-alcance.py`: ponto no azul inimigo, 10 s a 345 de velocidade →
+    área não atravessa a parede da base, raio máximo ≤ 3450 unidades; o mesmo com Kayn → cruza a
+    parede; 4 cenários → `4/4 ok`; ao vivo na normal, print do overlay alinhado com o minimapa
+    (erro ≤ 1 ícone)
+    **reprova se:** área atravessa parede sem dash, ou overlay desalinhado
+15c. [ ] **Alertas visuais na tela** (pedido do Gabriel, 13/10/2026). Overlay de tela inteira,
+    click-through, que só desenha uma **moldura colorida pulsando na borda da tela** + um
+    rótulo curto no canto (≤ 3 palavras) por ~2 s, com a voz do passo 12 junto:
+    - **jungler apareceu** em qualquer zona (rótulo com a zona: "jungler rio top");
+    - **mid fora do mid** ("mid sumiu" quando some; "mid indo top" quando reaparece fora da rota);
+    - **intruso na minha rota**: qualquer inimigo que **não é** meu adversário de rota visto perto
+      da minha rota, ou a **primeira aparição** de qualquer inimigo (inclusive o meu adversário
+      voltando da base) numa faixa perto da minha rota. Cor por gravidade: vermelho (jungler ou 2+
+      inimigos), amarelo (1 laner intruso), azul (adversário voltou).
+    - "Minha rota": a posição atribuída no champ select (passo 1) + a zona do meu ícone no
+      minimapa quando detectado (ícone próprio tem moldura distinta).
+    - Anti-spam do passo 12; liga/desliga por tipo na seção do 7b.
+    **prova:** `python tools/teste-alertas.py` com sequências sintéticas de detecções (jungler
+    aparece no rio top; mid some 8 s e reaparece no top; suporte inimigo entra na rota top) → os 3
+    alertas certos, sem repetição em 10 s → `3/3 ok`
+    **reprova se:** alerta errado, faltando ou repetido
+15d. [ ] **Inteligência de selva inimiga** (pedido do Gabriel, 13/10/2026). Tabela curada
+    `docs/SELVA.md` (campos, ouro e farm por campo, nascimento e renascimento do patch atual, com
+    fonte e data; conferir na wiki a cada patch) + estado por campo inimigo:
+    - **lado de início do jungler** pelo 1º avistamento, pelo farm aos ~1:45 e pelo nível 2/3;
+    - **campos provavelmente limpos**: farm do inimigo subindo (se o passo 9 confirmar) somado ao
+      horário e à posição, com renascimento contado a partir daí;
+    - **previsões úteis**: "jungler nível 3 por volta de 3:15 perto do top" (janela de gank),
+      "campos top inimigos livres" quando ele foi visto no bot (para contra-selva quando o Gabriel
+      joga de Zac), "caranguejo do rio nasce em 30 s";
+    - o minimapa já mostra o timer dos campos que tu viu morrer (`MinimapEnableAllTimers=1`): ler
+      esses timers por OCR como confirmação, quando aparecerem.
+    **prova:** `python tools/teste-selva.py`: farm 0→4→8→12 aos 1:45/2:05/2:30 + visto no
+    vermelho inimigo aos 1:35 → início no vermelho, 3 campos limpos na ordem certa, nível 3 previsto
+    entre 3:00 e 3:30 → `ok`
+    **reprova se:** lado ou ordem errados
 
 ### Fase E — fechamento
 

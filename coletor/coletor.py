@@ -29,7 +29,10 @@ EVENTOS = (
     "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase",
     "OnJsonApiEvent_lol-end-of-game_v1_eog-stats-block",
     "OnJsonApiEvent_lol-ranked_v1_current-ranked-stats",
+    "OnJsonApiEvent_lol-champ-select_v1_session",
 )
+FASES_LOBBY = ("Lobby", "Matchmaking", "ReadyCheck")
+FASES_JOGO = ("GameStart", "InProgress", "Reconnect", "WaitingForStats", "PreEndOfGame", "EndOfGame")
 log = logging.getLogger("coletor")
 
 
@@ -200,6 +203,181 @@ def backfill(lcu, c, trabalhadores=4, limite=None):
             "sem_timeline": sem_tl, "restam": len(todas) - len(faltam), "total": total}
 
 
+# ---------- champ select ----------
+
+# campos de identidade de outros jogadores e o chat (senha + jwt da sala): nunca vão para disco
+_IDENTIDADE = ("puuid", "summonerId", "gameName", "tagLine", "playerAlias", "internalName",
+               "obfuscatedPuuid", "obfuscatedSummonerId", "nameVisibilityType")
+
+
+def limpar_sessao(s):
+    """cópia de /lol-champ-select/v1/session sem chatDetails nem identidade de jogador"""
+    if not isinstance(s, dict):
+        return s
+    s = {k: v for k, v in s.items() if k != "chatDetails"}
+    for lado in ("myTeam", "theirTeam"):
+        s[lado] = [{k: v for k, v in (p or {}).items() if k not in _IDENTIDADE} for p in s.get(lado) or []]
+    return s
+
+
+_NOMES_LIVE = ("riotId", "riotIdGameName", "summonerName")
+
+
+def limpar_live(dados):
+    """allgamedata da Live Client com o nome de cada jogador trocado pelo campeão (espelho no
+    mesmo time: "Campeão ORDER"); os eventos citam jogador só pelo nome (KillerName, VictimName,
+    Assisters…) e passam pelo mesmo mapa. Nome que não é de jogador (torre, tropa) fica."""
+    if not isinstance(dados, dict):
+        return dados
+    jogadores = dados.get("allPlayers") or []
+    campeoes = [str(p.get("championName") or "?") for p in jogadores]
+    mapa = {}
+    for p, camp in zip(jogadores, campeoes):
+        apelido = camp if campeoes.count(camp) == 1 else f"{camp} {p.get('team') or '?'}"
+        for k in _NOMES_LIVE:
+            if p.get(k):
+                mapa[p[k]] = apelido
+        if p.get("riotIdGameName") and p.get("riotIdTagLine"):
+            mapa[f"{p['riotIdGameName']}#{p['riotIdTagLine']}"] = apelido
+
+    def troca(v):
+        if isinstance(v, str):
+            return mapa.get(v) or mapa.get(v.split("#", 1)[0]) or v
+        if isinstance(v, list):
+            return [troca(x) for x in v]
+        return v
+
+    def jogador(p):
+        p = {k: troca(v) if k in _NOMES_LIVE else v for k, v in p.items()}
+        if "riotIdTagLine" in p:
+            p["riotIdTagLine"] = ""
+        return p
+    out = {**dados, "allPlayers": [jogador(p) for p in jogadores]}
+    if isinstance(dados.get("activePlayer"), dict):
+        out["activePlayer"] = jogador(dados["activePlayer"])
+    ev = dados.get("events")
+    if isinstance(ev, dict) and isinstance(ev.get("Events"), list):
+        out["events"] = {**ev, "Events": [{k: troca(v) for k, v in e.items()} if isinstance(e, dict) else e
+                                          for e in ev["Events"]]}
+    return out
+
+
+def _acoes(s):
+    """actions chega como lista de listas (um turno por lista); achata"""
+    out = []
+    for a in s.get("actions") or []:
+        out.extend(a if isinstance(a, list) else [a])
+    return [a for a in out if isinstance(a, dict)]
+
+
+def _posicao(p):
+    v = str((p or {}).get("assignedPosition") or "").upper()
+    return v or None
+
+
+class RetratoChampSelect:
+    """retrato de uma seleção de campeões, sem IO: o coletor (e o teste) alimentam as sessões
+    na ordem; `sessao()` devolve True ao entrar em FINALIZATION (hora de gravar a 1ª vez) e
+    `fechar()` devolve o retrato final (início da partida ou seleção desfeita)"""
+
+    def __init__(self):
+        self.prefs = None  # preferências do lobby, guardadas entre seleções
+        self.fechadas = []  # chaves já fechadas: Update atrasado delas não reabre a seleção
+        self.limpar()
+
+    def limpar(self):
+        self.s = None
+        self.ts0 = self.ts_trava = None
+        self.finalizou = False
+        self.runa_id = self.runa_nome = None
+        self.chave = None
+
+    @property
+    def ativo(self):
+        return self.s is not None
+
+    def preferidas(self, lista):
+        lista = [str(x).upper() for x in lista or [] if x and str(x).upper() not in ("UNSELECTED", "NONE")]
+        self.prefs = lista or None  # lobby lido sem posição (às cegas, ARAM): sem preferidas
+
+    def runa(self, rid, nome):
+        self.runa_id, self.runa_nome = rid, nome
+
+    def _local(self):
+        cell = self.s.get("localPlayerCellId")
+        return next((p for p in self.s.get("myTeam") or [] if p.get("cellId") == cell), {})
+
+    def sessao(self, s, ts):
+        if not isinstance(s, dict) or s.get("isSpectating"):
+            return False
+        # id é obrigatório no /help; vazio na prática → o gameId (também obrigatório) identifica
+        sid = s.get("id") or (f"g{s['gameId']}" if s.get("gameId") else None)
+        if sid and sid in self.fechadas:
+            return False  # chegou depois da mudança de fase que fechou: regravar apagaria o retrato final
+        if self.s is not None and sid and sid != self.chave:
+            self.limpar()  # sessão nova sem o fim da anterior ter passado pelo gameflow
+        primeira = self.s is None
+        if primeira:
+            self.ts0 = ts
+            self.chave = sid or f"cs-{ts}"
+        self.s = limpar_sessao(s)
+        cell = s.get("localPlayerCellId")
+        if self.ts_trava is None and any(a.get("actorCellId") == cell and a.get("type") == "pick"
+                                         and a.get("completed") for a in _acoes(s)):
+            # já travado na 1ª sessão vista (coletor reconectou no meio): tempo desconhecido (-1)
+            self.ts_trava = -1 if primeira else ts
+        fase = ((s.get("timer") or {}).get("phase") or "").upper()
+        if fase == "FINALIZATION" and not self.finalizou:
+            self.finalizou = True
+            return True
+        return False
+
+    def retrato(self, game_id=None, desfeita=False):
+        s, eu = self.s, self._local()
+        pos = _posicao(eu)
+        riot = eu.get("isAutofilled")
+        if pos is None:
+            auto = None  # às cegas / personalizada: não há posição
+        elif self.prefs:
+            auto = pos not in self.prefs and "FILL" not in self.prefs
+        else:
+            auto = None if riot is None else bool(riot)
+        bans = {True: [], False: []}
+        for a in _acoes(s):
+            if a.get("type") == "ban" and a.get("completed") and a.get("championId"):
+                bans[bool(a.get("isAllyAction"))].append(a["championId"])
+        b = s.get("bans") or {}
+        if not bans[True] and not bans[False]:  # sem ações de ban: usa o resumo da sessão
+            bans = {True: list(b.get("myTeamBans") or []), False: list(b.get("theirTeamBans") or [])}
+        aliados = [{"cell": p.get("cellId"), "campeao": p.get("championId") or 0, "posicao": _posicao(p)}
+                for p in s.get("myTeam") or []]
+        inimigos = [{"cell": p.get("cellId"), "campeao": p.get("championId") or 0, "posicao": _posicao(p)}
+                    for p in s.get("theirTeam") or []]
+        seg = None
+        if self.ts_trava not in (None, -1):
+            seg = round((self.ts_trava - self.ts0) / 1000, 1)
+        gid = None if desfeita else (game_id or s.get("gameId") or None)  # dodge: a partida não existiu
+        return {"chave": self.chave, "ts": self.ts0, "game_id": gid,
+                "fila": s.get("queueId") or None, "posicao": pos, "preferidas": self.prefs,
+                "autofill": auto, "autofill_riot": None if riot is None else bool(riot),
+                "campeao": eu.get("championId") or None, "aliados": aliados, "inimigos": inimigos,
+                "bans_aliados": bans[True], "bans_inimigos": bans[False],
+                "runa_id": self.runa_id, "runa_nome": self.runa_nome,
+                "feiticos": [eu.get("spell1Id"), eu.get("spell2Id")], "seg_ate_travar": seg,
+                "desfeita": desfeita}
+
+    def fechar(self, game_id=None, desfeita=False):
+        """retrato final e zera o estado; None se não havia seleção (ou desfeita antes de finalizar)"""
+        if self.chave:
+            self.fechadas = (self.fechadas + [self.chave])[-50:]
+        if not self.ativo or (desfeita and not self.finalizou):
+            self.limpar()
+            return None
+        r = self.retrato(game_id, desfeita)
+        self.limpar()
+        return r
+
+
 # ---------- instância única ----------
 
 def pid_vivo(pid, trava_ts=None):
@@ -272,6 +450,9 @@ class Coletor:
         self.backfill_feito = False
         self.inicial = None   # task do backfill da conexão
         self.buscando = None  # task da partida nova após EndOfGame
+        self.cs = RetratoChampSelect()
+        self.fila_atual = None
+        self.ultima_cs = None  # chave do último retrato, para ligar o game_id
 
     def ocioso(self):
         return time.monotonic() - self.ultimo_ok >= self.ocioso_s
@@ -353,6 +534,36 @@ class Coletor:
             self.buscar_partida(dado.get("gameId"))
         elif uri == "/lol-ranked/v1/current-ranked-stats" and dado:
             banco.gravar_lp(self.c, "evento", dado)
+        elif uri == "/lol-champ-select/v1/session" and dado and corpo.get("eventType") != "Delete":
+            # o Delete não decide nada: a ordem dele contra o gameflow não é garantida; quem fecha é fase()
+            if self.cs.sessao(dado, banco.agora_ms()):
+                await self.ler_runa()
+                self.gravar_cs(self.cs.retrato())
+
+    async def ler_runa(self):
+        try:
+            p = await asyncio.to_thread(self.lcu.get, "/lol-perks/v1/currentpage")
+            self.cs.runa((p or {}).get("id"), (p or {}).get("name"))
+        except Exception:
+            pass
+
+    async def ler_preferidas(self):
+        """posições do lobby (o GET dá 404 sem lobby: normal); guarda para o próximo champ select"""
+        try:
+            lobby = await asyncio.to_thread(self.lcu.get, "/lol-lobby/v2/lobby")
+            m = (lobby or {}).get("localMember") or {}
+            self.cs.preferidas([m.get("firstPositionPreference"), m.get("secondPositionPreference")])
+        except Exception:
+            pass
+
+    def gravar_cs(self, r, final=False):
+        if not r:
+            return
+        r["fila"] = r["fila"] or self.fila_atual
+        banco.gravar_champ_select(self.c, r)
+        self.ultima_cs = r["chave"]
+        log.info("champ select %s (posição %s, autofill %s%s)", "final" if final else "gravado",
+                 r["posicao"], r["autofill"], ", desfeito" if r["desfeita"] else "")
 
     async def fase(self, fase):
         if not isinstance(fase, str):
@@ -371,6 +582,21 @@ class Coletor:
         except Exception as e:
             log.warning("snapshot de LP falhou: %s", e)
         log.info("fase %s (partida %s)", fase, gid)
+        self.fila_atual = fila or self.fila_atual
+        if fase in FASES_LOBBY or (fase == "ChampSelect" and not self.cs.prefs):
+            await self.ler_preferidas()
+        if self.cs.ativo and fase in FASES_JOGO:
+            await self.ler_runa()  # última página antes do jogo: pode ter mudado na finalização
+            self.gravar_cs(self.cs.fechar(gid), final=True)
+        elif self.cs.ativo and fase != "ChampSelect":  # voltou para lobby/fila/nada: seleção desfeita
+            r = self.cs.fechar(desfeita=True)
+            if r:
+                self.gravar_cs(r, final=True)
+            else:
+                log.info("champ select desfeito antes da finalização (não gravado)")
+        if fase in FASES_JOGO and gid and self.ultima_cs:
+            banco.ligar_game_id(self.c, self.ultima_cs, gid)
+            self.ultima_cs = None  # ligado: nenhuma partida seguinte cai neste retrato
         if fase == "EndOfGame":
             self.buscar_partida(gid)
 
