@@ -181,7 +181,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `doppler run --project pessoal --config prd --scope ~/.doppler-pessoal -- <cmd>`.
 - **Chave de desenvolvimento vence em 24 h** → o Gabriel regenera no painel developer.riotgames.com
   e o valor novo vai só no `prd`. A Personal API Key não vence (pedido de aprovação; ver docs/MERCADO.md).
-- **`401 Unknown apikey` logo depois de gerar** → a chave nova leva alguns minutos para valer
-  (13/10/2026: 401 às ~07:15, 200 às 07:21). Esperar e tentar de novo, não regenerar.
+- **`401 Unknown apikey`** → duas causas, olhar o painel antes: (1) a chave **venceu** (o painel
+  mostra a validade; regenerar); (2) a chave **acabou de ser gerada** e ainda não vale: leva
+  alguns minutos (13/10/2026: a 1ª tinha vencido; a regenerada deu 401 por ~5 min e 200 às 07:21).
+  Chave recém-gerada com 401: esperar, não regenerar de novo.
 - **`403 error code: 1010`** → a Cloudflare da Riot bloqueia requisição sem `User-Agent`
   (o padrão do `urllib` é barrado). Mandar `User-Agent: lol-client/<versão>`.
