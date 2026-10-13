@@ -103,8 +103,11 @@ def estado(caminho=MARCA_PADRAO, agora=None):
     if not m:
         return {"ligada": False, "motivo": "desligada (sem marca)", "marca": None}
     c = m.get("consumida_por")
-    if c:
+    if c and em_uso(m, agora) is not None:
         return {"ligada": True, "motivo": f"em uso na partida {c.get('game_id')} ({m.get('gravados', 0)} prints)",
+                "marca": m}
+    if c:
+        return {"ligada": False, "motivo": f"sobra da partida {c.get('game_id')} (coletor caiu?); `ligar` sobrescreve",
                 "marca": m}
     if agora > float(m.get("expira_em") or 0):
         return {"ligada": False, "motivo": "expirada (nenhuma partida começou em 3 h)", "marca": m}

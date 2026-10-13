@@ -169,7 +169,10 @@ def caso_marca(tmp):
     vitrine.desligar(marca)
     vitrine.ligar(marca, agora=agora)
     vitrine._gravar(marca, {**vitrine.ler(marca), "consumida_por": {"game_id": 1, "em": agora - 3 * 3600}})
-    caso("ligar com marca consumida há mais de 2 h (sobra de queda): liga", vitrine.ligar(marca) is not None)
+    e_sobra = vitrine.estado(marca)
+    caso("ligar com marca consumida há mais de 2 h (sobra de queda): estado diz sobra, ligar liga",
+         e_sobra["ligada"] is False and "sobra" in e_sobra["motivo"] and vitrine.ligar(marca) is not None,
+         e_sobra["motivo"])
     vitrine.desligar(marca)
 
 
