@@ -22,6 +22,7 @@ TESTES = [
     ["node", "tools/teste-winrate.mjs"],
     ["node", "tools/teste-matchup.mjs"],
     ["node", "tools/teste-aceite.mjs"],
+    ["node", "tools/teste-config.mjs"],
     ["node", "tools/teste-runas.mjs"],
     [PY, "tools/teste-coach.py"],
     [PY, "tools/teste-alertas.py"],

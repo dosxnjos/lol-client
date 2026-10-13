@@ -135,13 +135,14 @@ export function blocoRunas(corpo, ctx) {
 // As chaves moram em cfg.coach (mesmos nomes do servidor_local.CONFIG_PADRAO) e vão ao coletor em
 // POST 127.0.0.1:8765/config na carga e a cada mudança (coach.js). Traumas é só do plugin.
 
-// avisos.TIPOS do coletor: tipo -> rótulo. Desmarcado = calado na voz, no painel e na moldura
+// avisos.TIPOS_LIGAVEIS do coletor: tipo -> rótulo. Duas caixas por tipo: voz e tela (painel + moldura)
 const AVISOS = [
   ['gank', 'Gank provável'], ['intruso_grupo', '2+ inimigos chegando'], ['intruso', 'Intruso na tua rota'],
   ['jungler_apareceu', 'Jungler inimigo apareceu'], ['mid_indo', 'Mid inimigo saiu da rota'], ['mid_sumiu', 'Mid inimigo sumiu'],
   ['adversario_voltou', 'Adversário de rota voltou'], ['janela_objetivo', 'Janela de objetivo (inimigos mortos)'],
   ['objetivo_60s', 'Objetivo em 60 s'], ['mortes_cedo', 'Mortes antes dos 10'], ['inimigo_fed', 'Inimigo forte na tua rota'],
-  ['ouro_guardado', 'Ouro guardado (hora de voltar?)'],
+  ['ouro_guardado', 'Ouro guardado (hora de voltar?)'], ['feitico_voltou', 'Feitiço inimigo voltou (Flash...)'],
+  ['pico_nivel', 'Inimigo no nível de pico'], ['pico_item', 'Inimigo fechou item'], ['regra', 'Outras dicas do coach'],
 ];
 const MODELOS = [['sonnet', 'Sonnet (padrão)'], ['haiku', 'Haiku'], ['opus', 'Opus']];
 const EFFORTS = [['low', 'Baixo'], ['medium', 'Médio (padrão)'], ['high', 'Alto']];
@@ -169,10 +170,20 @@ export const blocoVoz = (corpo, ctx) => corpo.append(
 export function blocoAlertas(corpo, ctx) {
   const { cfg, definir, ui } = ctx;
   corpo.append(caixaCoach(ctx, 'alertasTela', 'Moldura de alertas na tela', 'Borda colorida pulsando + rótulo curto por ~2 s, só com o jogo em primeiro plano.'),
-    ui.explica('Por tipo (desmarcado cala o aviso na voz, no painel e na moldura):'));
+    ui.explica('Por tipo: "voz" fala o aviso; "tela" mostra no painel e na moldura. Desmarcar os dois cala o aviso.'));
   const desl = cfg.coach.avisosDesligados;
-  for (const [tipo, rotulo] of AVISOS) corpo.append(ui.caixa('coach.aviso.' + tipo, rotulo, '', !desl.includes(tipo), v =>
-    definir('coach.avisosDesligados', v ? desl.filter(t => t !== tipo) : [...desl.filter(t => t !== tipo), tipo])));
+  const trocar = (destino, tipo, ligado) => {  // lê o valor vivo: duas caixas seguidas sem remontar o painel
+    const atual = cfg.coach.avisosDesligados, resto = atual[destino].filter(t => t !== tipo);
+    definir('coach.avisosDesligados', { ...atual, [destino]: ligado ? resto : [...resto, tipo] });
+  };
+  const coluna = (...filhos) => { const d = document.createElement('div'); d.className = 'lc-campo'; d.append(...filhos); return d; };
+  for (const [tipo, rotulo] of AVISOS) {
+    const nome = document.createElement('div');
+    nome.className = 'lol-settings-window-size-text';
+    nome.textContent = rotulo;
+    corpo.append(ui.linha(coluna(nome),
+      ...['voz', 'tela'].map(d => coluna(ui.caixa(`coach.aviso.${d}.${tipo}`, d, '', !desl[d].includes(tipo), v => trocar(d, tipo, v))))));
+  }
 }
 
 export const blocoMinimapa = (corpo, ctx) => corpo.append(

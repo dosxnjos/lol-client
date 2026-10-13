@@ -38,6 +38,20 @@ TIPOS = {
 # regra do coach.py que chega pelo motor sem tipo próprio usa este molde
 TIPO_REGRA = dict(prio=20, validade=15, repetir=180, urgente=False, destinos="vp", cor="azul", icone="dica")
 
+# chave por tipo e por destino na configuração (plugin: pengu/blocos.js AVISOS, mesma lista). "tela" =
+# painel + moldura. Tipo publicado fora desta lista conta como "regra". Formato: {"voz": [...], "tela": [...]}
+DESTINOS_CONFIG = ("voz", "tela")
+TIPOS_LIGAVEIS = tuple(TIPOS) + ("feitico_voltou", "pico_nivel", "pico_item", "regra")
+
+
+def normalizar_desligados(v):
+    """{'voz': set, 'tela': set} de tipos calados. Lista/conjunto (formato até 13/10/2026) = calado nos dois."""
+    def tipos(x):
+        return {t for t in x if isinstance(t, str)} if isinstance(x, (list, tuple, set, frozenset)) else set()
+    if isinstance(v, dict):
+        return {d: tipos(v.get(d)) for d in DESTINOS_CONFIG}
+    return {d: tipos(v) for d in DESTINOS_CONFIG}
+
 # textos padrão: tipo -> tom -> (fala, rótulo ≤ 3 palavras). Placeholders: {campeao}, {zona}
 # (fala: "no rio top"), {zc} (rótulo: "rio top"), {zt} (1 palavra: "rio"), {objetivo}, {n}, {ouro}.
 # A versão editável mora no arquivo de lições (seção "Avisos ao vivo", formato em carregar_textos).
@@ -184,7 +198,7 @@ class MotorAvisos:
         self.relogio = relogio or time.monotonic
         self.voz, self.moldura, self.log = voz, moldura, log
         self.ligado = {"voz": True, "moldura": True, "painel": True}
-        self.desligados = set()
+        self.desligados = normalizar_desligados(None)
         self.emitidos = deque(maxlen=500)   # (em, destino, Aviso)
         self.suprimidos = Counter()
         self._lock = threading.RLock()
@@ -202,7 +216,7 @@ class MotorAvisos:
                 if v is not None:
                     self.ligado[k] = bool(v)
             if desligados is not None:
-                self.desligados = set(desligados)
+                self.desligados = normalizar_desligados(desligados)
 
     def _preparar(self, a, agora):
         p = TIPOS.get(a.tipo, TIPO_REGRA)
@@ -222,7 +236,9 @@ class MotorAvisos:
         """True = aceito (vai para as filas); False = desligado ou repetido dentro de `repetir`."""
         with self._lock:
             agora = self.relogio() if agora is None else agora
-            if aviso.tipo in self.desligados:
+            tipo_cfg = aviso.tipo if aviso.tipo in TIPOS_LIGAVEIS else "regra"
+            sem_voz, sem_tela = (tipo_cfg in self.desligados[d] for d in DESTINOS_CONFIG)
+            if sem_voz and sem_tela:
                 self.suprimidos["desligado"] += 1
                 return False
             self._preparar(aviso, agora)
@@ -231,11 +247,11 @@ class MotorAvisos:
                 self.suprimidos["repetido"] += 1
                 return False
             self._ultimo[aviso.chave] = agora
-            if "p" in aviso.destinos and self.ligado["painel"]:
+            if "p" in aviso.destinos and self.ligado["painel"] and not sem_tela:
                 self._painel.append(aviso)
-            if "v" in aviso.destinos and self.ligado["voz"]:
+            if "v" in aviso.destinos and self.ligado["voz"] and not sem_voz:
                 self._fila_voz.append(aviso)
-            if "m" in aviso.destinos and self.ligado["moldura"]:
+            if "m" in aviso.destinos and self.ligado["moldura"] and not sem_tela:
                 self._fila_moldura.append(aviso)
             self._distribuir(agora)
             return True
@@ -293,7 +309,7 @@ class MotorAvisos:
     def estado(self, agora=None):
         """Bloco para o /estado do servidor do passo 8."""
         return {"aviso": self.painel(agora), "tom": self.tom, "ligado": dict(self.ligado),
-                "desligados": sorted(self.desligados)}
+                "desligados": {d: sorted(s) for d, s in self.desligados.items()}}
 
 
 # --------------------------------------------------------------------------------------------

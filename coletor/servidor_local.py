@@ -23,6 +23,7 @@ from pathlib import Path
 from urllib.parse import urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import avisos  # noqa: E402
 import banco  # noqa: E402
 
 PORTA = 8765
@@ -45,7 +46,8 @@ CONFIG_PADRAO = {
     "mentor": True,            # passo 20
     "mentorModelo": "sonnet",  # passo 20: vencedor da comparação de 13/10/2026 (sonnet, effort medium)
     "mentorEffort": "medium",
-    "avisosDesligados": [],    # tipos de aviso calados (avisos.TIPOS; "feitico_voltou", "pico_nivel"...)
+    # tipos calados por destino (avisos.TIPOS_LIGAVEIS; "tela" = painel + moldura); lista antiga = os dois
+    "avisosDesligados": {"voz": [], "tela": []},
 }
 ESCOLHAS = {"tomVoz": ("serio", "descontraido"), "mentorModelo": ("sonnet", "haiku", "opus"),
             "mentorEffort": ("low", "medium", "high")}
@@ -61,7 +63,13 @@ def ler_config(caminho=CONFIG):
         salvo = {}
     cfg = {k: (salvo[k] if isinstance(salvo, dict) and type(salvo.get(k)) is type(v) else v)
            for k, v in CONFIG_PADRAO.items()}
+    cfg["avisosDesligados"] = _desligados(salvo.get("avisosDesligados") if isinstance(salvo, dict) else None)
     return {k: list(v) if isinstance(v, list) else v for k, v in cfg.items()}  # lista do padrão não vaza
+
+
+def _desligados(v):
+    """formato salvo de avisosDesligados: {voz: [...], tela: [...]} ordenado; migra a lista antiga"""
+    return {d: sorted(s) for d, s in avisos.normalizar_desligados(v).items()}
 
 
 def salvar_config(parcial, caminho=CONFIG):
@@ -71,7 +79,10 @@ def salvar_config(parcial, caminho=CONFIG):
     with _trava_cfg:
         cfg = ler_config(caminho)
         for k, v in parcial.items():
-            if k in CONFIG_PADRAO and type(v) is type(CONFIG_PADRAO[k]):
+            if k == "avisosDesligados":    # plugin antigo ainda manda a lista: migra em vez de descartar
+                if isinstance(v, (list, dict)):
+                    cfg[k] = _desligados(v)
+            elif k in CONFIG_PADRAO and type(v) is type(CONFIG_PADRAO[k]):
                 cfg[k] = [x for x in v if isinstance(x, str)] if isinstance(v, list) else v
         for k, validos in ESCOLHAS.items():
             if cfg[k] not in validos:

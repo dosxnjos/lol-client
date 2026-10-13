@@ -380,10 +380,12 @@ async def ensaio(a):
             if not mudou_cfg and gt >= 1000:
                 mudou_cfg = True
                 st, cfg, _ = http(a.porta, "/config", "POST", {"esconderTft": True, "coach": {
-                    "tomVoz": "descontraido", "avisosDesligados": ["ouro_guardado"]}})
-                conferir(st == 200 and p.motor.tom == "descontraido" and "ouro_guardado" in p.motor.desligados,
+                    "tomVoz": "descontraido", "avisosDesligados": {"voz": ["ouro_guardado"], "tela": []}}})
+                desl = p.motor.desligados
+                conferir(st == 200 and p.motor.tom == "descontraido" and "ouro_guardado" in desl["voz"]
+                         and "ouro_guardado" not in desl["tela"],
                          f"POST /config com o cfg do plugin aplicado ao vivo: tom {p.motor.tom}, "
-                         f"desligados {sorted(p.motor.desligados)}")
+                         f"desligados { {d: sorted(s) for d, s in desl.items()} }")
             if est.get("fase") == "fim":
                 break
         cpu_rapido = (time.process_time() - cpu0) / (time.time() - w0)

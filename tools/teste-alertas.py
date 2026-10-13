@@ -222,6 +222,50 @@ def extra_contra_gank():
          res == [[("intruso", "vermelho", True)]] * 2, f"{res}")
 
 
+def extra_destinos():
+    """chave por tipo e destino (plano 2026-10-13-voz-pregravada-e-foco.md, passo 8)"""
+    from avisos import Aviso, normalizar_desligados
+    import servidor_local
+    dados = {"zona": "no top", "zc": "top", "zt": "top"}
+
+    def destinos(desligados, tipo="gank", d=dados):
+        m = MotorAvisos(textos=TEXTOS)
+        mol = MolduraFalsa()
+        m.moldura = mol
+        m.configurar(desligados=desligados)
+        aceito = m.publicar(Aviso(tipo, dict(d), "k"), 0.0)
+        return aceito, sorted({dst for _, dst, _ in m.emitidos}), m.painel(0.0) is not None, m
+
+    aceito, dst, painel, _ = destinos({"voz": ["gank"], "tela": []})
+    caso("extra: só a voz do gank desligada → moldura e painel continuam", aceito and dst == ["moldura"] and painel,
+         f"aceito={aceito}, destinos {dst}, painel={painel}")
+    aceito, dst, painel, _ = destinos({"voz": [], "tela": ["gank"]})
+    caso("extra: só a tela do gank desligada → só a voz", aceito and dst == ["voz"] and not painel,
+         f"aceito={aceito}, destinos {dst}, painel={painel}")
+    aceito, dst, painel, m = destinos(["gank"])
+    caso("extra: lista antiga ['gank'] migra para voz e tela (calado nos dois)",
+         not aceito and dst == [] and not painel and m.suprimidos["desligado"] == 1
+         and normalizar_desligados(["gank"]) == {"voz": {"gank"}, "tela": {"gank"}}, f"aceito={aceito}, destinos {dst}")
+    aceito, dst, painel, _ = destinos({"voz": ["regra"], "tela": []}, tipo="dica_qualquer", d={})
+    caso("extra: tipo fora da lista conta como 'regra'", aceito and dst == [] and painel,
+         f"aceito={aceito}, destinos {dst}, painel={painel}")
+    import tempfile
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        arq.write_text('{"avisosDesligados": ["ouro_guardado", 7], "voz": false}', encoding="utf-8")
+        lido = servidor_local.ler_config(arq)
+        salvo = servidor_local.salvar_config({"coach": {"avisosDesligados": ["mid_sumiu"]}}, arq)
+        salvo2 = servidor_local.salvar_config({"avisosDesligados": {"voz": ["gank"], "tela": "x"}}, arq)
+        padrao = servidor_local.ler_config(Path(tmp) / "nao-existe.json")
+    ok = (lido["avisosDesligados"] == {"voz": ["ouro_guardado"], "tela": ["ouro_guardado"]} and lido["voz"] is False
+          and salvo["avisosDesligados"] == {"voz": ["mid_sumiu"], "tela": ["mid_sumiu"]}
+          and salvo2["avisosDesligados"] == {"voz": ["gank"], "tela": []}
+          and padrao["avisosDesligados"] == {"voz": [], "tela": []}
+          and padrao["avisosDesligados"] is not servidor_local.CONFIG_PADRAO["avisosDesligados"])
+    caso("extra: servidor_local migra a lista salva e a lista do plugin antigo para {voz, tela}", ok,
+         f"lido {lido['avisosDesligados']}, salvo {salvo['avisosDesligados']}, salvo2 {salvo2['avisosDesligados']}")
+
+
 def janela_real():
     import ctypes
     import mss
@@ -282,6 +326,7 @@ def principal():
     extra_lista_acumulada()
     extra_eu_entro_na_rota()
     extra_contra_gank()
+    extra_destinos()
     if not a.sem_janela:
         janela_real()
     n = sum(resultados)

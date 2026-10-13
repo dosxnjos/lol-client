@@ -278,8 +278,14 @@ pos = AlertasPosicao.do_live(motor, dados)                # 1º allgamedata com 
 pos.observar(cap.deteccoes(max_idade=1), relogio(), quadro_valido=cap.no_ar, mortos=live.mortos)  # ≥ 1/s
 motor.publicar(Aviso("gank", {"zona": "no top", "zc": "top"}, "top"))   # jungler.py; regra do coach.py: Aviso(id, textos={tom: (fala, rótulo)})
 motor.estado()                                            # bloco "aviso" do /estado (faixa do painel)
-motor.configurar(tom=, voz=, moldura=, painel=, desligados={tipos})  # seção do 7b
+motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela": [...]})  # seção do 7b
 ```
+
+- **Tipos calados por destino** (`avisos.normalizar_desligados`): `{"voz": [tipos], "tela": [tipos]}`,
+  "tela" = painel + moldura. Tipo nos dois = descartado (`suprimidos["desligado"]`); só num = os outros
+  destinos seguem. Tipos ligáveis: `avisos.TIPOS_LIGAVEIS` (os 12 de `TIPOS` + `feitico_voltou`,
+  `pico_nivel`, `pico_item`, `regra`); tipo publicado fora da lista conta como `regra`. Lista simples
+  (formato até 13/10/2026) = calado nos dois: o motor, o `servidor_local` e o plugin migram.
 
 - **Detecções do minimapa** (contrato do passo 13): lista de `{campeao, time, x, y, visto_em}`
   (`minimapa.Captura.deteccoes(max_idade=1)`); visível agora = `visto_em` a ≤ 0,6 s do `gt`, o
@@ -376,7 +382,8 @@ na hora a cada `POST /config`): `painelAoVivo`, `amostrasAoVivo`, `voz`, `tomVoz
 `minimapa` (captura, jungler, alertas de posição), `overlayMinimapa`, `alertasTela` (moldura), `feiticos`
 (OCR e F9), `carregamento` (Riot API), `mentor`, `mentorModelo` (`sonnet`|`haiku`|`opus`) e `mentorEffort`
 (`low`|`medium`|`high`; padrão sonnet + medium, o vencedor do passo 20; aplicados no `Mentor` na criação e a
-cada `POST /config`), `avisosDesligados` (lista de tipos). O plugin manda `{"coach": cfg.coach}` na carga, a
+cada `POST /config`), `avisosDesligados` (`{"voz": [...], "tela": [...]}`; a lista antiga é migrada para os
+dois, no arquivo salvo e no `POST`). O plugin manda `{"coach": cfg.coach}` na carga, a
 cada mudança e, com o coletor fora, de novo a cada 30 s (`pengu/coach.js`); chave desconhecida, de tipo
 errado ou valor fora da lista é ignorada (volta ao padrão). Depois que o jogo sai da tela, um `POST /config`
 não religa captura nem OCR daquela partida.

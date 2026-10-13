@@ -21,7 +21,7 @@ export const PADRAO = {
   coach: {
     painelAoVivo: true, amostrasAoVivo: true, voz: true, tomVoz: 'serio', minimapa: true, overlayMinimapa: true,
     alertasTela: true, feiticos: true, carregamento: true, mentor: true, mentorModelo: 'sonnet', mentorEffort: 'medium',
-    avisosDesligados: [],
+    avisosDesligados: { voz: [], tela: [] }, // tipos calados por destino ("tela" = painel + moldura)
   },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
@@ -48,13 +48,20 @@ function mesclar(padrao, salvo) {
   return out;
 }
 
+// avisosDesligados até 13/10/2026 era uma lista só (calado na voz e na tela): vira {voz, tela}
+export function migrar(salvo) {
+  const d = salvo?.coach?.avisosDesligados;
+  if (Array.isArray(d)) salvo.coach.avisosDesligados = { voz: [...d], tela: [...d] };
+  return salvo;
+}
+
 export const cfg = clonar(PADRAO);
 const ouvintes = new Set();
 
 export function carregar() {
   let salvo = null;
   try { salvo = DataStore.get(CHAVE); } catch { /* sem DataStore: fica o padrão */ }
-  Object.assign(cfg, mesclar(PADRAO, salvo));
+  Object.assign(cfg, mesclar(PADRAO, migrar(salvo)));
   // limiteS não é editável: dono é o PADRAO (ajuste depois de medir a janela chega a quem já salvou)
   cfg.aceite.limiteS = PADRAO.aceite.limiteS;
   aplicarClasses();

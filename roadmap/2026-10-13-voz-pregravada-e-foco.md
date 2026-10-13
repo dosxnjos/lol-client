@@ -121,10 +121,15 @@
 
 ### Fase C: tipos ligáveis por destino
 
-8. [ ] Configuração lista **todos** os tipos publicados (os 12 + `feitico_voltou`, `pico_nivel`,
+8. [x] Configuração lista **todos** os tipos publicados (os 12 + `feitico_voltou`, `pico_nivel`,
    `pico_item`, `regra`), cada um com duas caixas: **voz** e **tela**. `avisosDesligados` vira
    `{voz: [...], tela: [...]}` com migração da lista antiga (lista antiga = desligado nos dois).
    **prova:** `tools/teste-alertas.py` (desligar só a voz de `gank` mantém a moldura) + teste do plugin.
+   **Feito em 13/10/2026:** `python tools/teste-alertas.py --sem-janela` → ok (16/16, 5 casos novos de
+   destino e migração); `python tools/teste-coach.py` → ok (13/13); `node tools/teste-config.mjs` (novo) →
+   6/6; `node tools/teste-abas.mjs` → ok; render do `blocoAlertas` com UI falsa → 33 caixas (1 + 16 × 2).
+   Não rodado (o Gabriel estava em partida): `tools/ensaio-coach.py` (a conferência do `POST /config` foi
+   ajustada para o formato novo) e a janela real do `teste-alertas.py`.
 
 ### Fase D: fechamento
 
@@ -152,4 +157,7 @@
 
 ## Relatório de execução
 
-(preencher)
+- **Fase C (13/10/2026):** `avisos.normalizar_desligados` + `TIPOS_LIGAVEIS` (16 tipos; desconhecido = `regra`);
+  o motor corta só o destino calado. `servidor_local` e `pengu/config.js` (`migrar`) convertem a lista antiga.
+- Configurações › Alertas: uma linha por tipo com caixas "voz" e "tela". Provas no passo 8.
+- Pendente: o coletor de pé roda o código antigo até reiniciar (fora de partida); ensaio completo idem.
