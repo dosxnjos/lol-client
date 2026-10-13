@@ -46,15 +46,22 @@ central de atividades ou o pós-jogo. Ele seleciona **todos** os itens, inclusiv
 
 ## Passos
 
-1. [ ] Leitura de prova (sem coletar): função `levantar()` que devolve tudo o que está pendente por fonte,
+1. [x] Leitura de prova (sem coletar): função `levantar()` que devolve tudo o que está pendente por fonte,
    com o motivo de pular cada item. **prova:** `node tools/cdp.mjs eval` mostra a lista que bate com a tabela.
-2. [ ] Coleta de **1** item de cada fonte com o client aberto, conferindo o efeito na leitura seguinte
-   (o item sai da lista). Registrar aqui o corpo que funcionou. **prova:** antes/depois.
-3. [ ] **Código pronto (13/10/2026), falta prova no client** (passos 2 e 4). `pengu/recompensas.js` (gatilhos, filas, regras acima) + chave em `config.js`/`blocos.js` + `index.js`.
+   (13/10, 16:30: antes do recarregamento, 57 `PENDING_SELECTION` + 3 `FULFILLED`; as 3 da trilha do evento já
+   tinham saído antes da leva, origem não identificada: nenhum agente escreveu na LCU real.)
+2. [x] Coleta de **1** item de cada fonte com o client aberto, conferindo o efeito na leitura seguinte
+   (o item sai da lista). Registrar aqui o corpo que funcionou. **prova:** antes/depois. (13/10, 16:31: o
+   recarregamento da interface disparou a coleta automática; 1 amostra de cada tipo — `cap.wallets`,
+   `loot.lootserver`, `store.purchase`, `cap.entitlements` — com o corpo `{rewardGroupId, selections}`;
+   leitura seguinte: 53 pendentes + 7 `FULFILLED`.)
+3. [x] **Código pronto (13/10/2026), provado no client em 13/10** (passos 2 e 4). `pengu/recompensas.js` (gatilhos, filas, regras acima) + chave em `config.js`/`blocos.js` + `index.js`.
    **prova:** `tools/teste-recompensas.mjs` com LCU falsa: coleta sem escolha, pula escolha real, não chama
    nenhuma rota de gasto, um erro não para o resto, gatilho no carregamento e depois do `EndOfGame`.
-4. [ ] Rodada real: carregar o client → 60 concessões + 3 do evento coletadas; o client não mostra mais as
-   celebrações paradas. **prova:** leitura do passo 1 zerada (menos as de escolha).
+4. [x] Rodada real: carregar o client → 60 concessões + 3 do evento coletadas; o client não mostra mais as
+   celebrações paradas. **prova:** leitura do passo 1 zerada (menos as de escolha). (13/10, 16:33:
+   `__lolClient.recompensas.rodar('manual-orquestrador')` → `{coletadas: 53, falhas: 0, escolher: 0}`; os 4
+   tipos "liberado"; `GET /lol-rewards/v1/grants` → 60 de 60 `FULFILLED`. A trilha do evento já estava zerada.)
 5. [ ] Docs: README (o que coleta e o que nunca faz), `docs/ARMADILHAS.md` (o que a coleta real revelou),
    este plano com o relatório. Commit por pathspec + push.
 
