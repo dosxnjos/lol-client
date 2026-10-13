@@ -112,12 +112,49 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Lição com texto diferente no JS e no Python** → `%` e `//` de negativo diferem (`-1 % 60` = 59 no
   Python, −1 no JS) e `round` do Python é bancário: os motores de lições formatam sobre o valor
   absoluto e arredondam com `floor(v + 0,5)`. O cruzado de `tools/teste-licoes.mjs` pega (13/10/2026).
+- **Client pula na frente no ReadyCheck e não dá para impedir** → o pedido é nativo (`ux-state` "ShowMain" sem
+  chamada JS; `window.riotInvoke` não é gravável). O `aceite.js` só devolve: `POST /riotclient/ux-minimize` no
+  foco ganho até 2 s depois da fase (ou até 1 s antes), e `ux-show` no `ChampSelect`. O Gabriel vê um
+  **piscar**. Não ler o texto do `ux-state` para saber se está minimizado ("Quit" no lobby, "MinimizeAll" na
+  partida, significado não medido): o `aceite.js` usa a própria marca (13/10/2026).
+- **Com o foco no iframe do chat, a página de cima não recebe `focus`/`blur`** → nem o alt-tab para outro app nem
+  o roubo nativo do ReadyCheck disparam evento na janela de cima; só `document.hasFocus()` vê. O `aceite.js` sonda
+  `hasFocus()` a cada 250 ms (`FOCO.sondaMs`) além dos eventos, e o `blur` só conta com `hasFocus()` false (13/10/2026,
+  achado de revisão; não medido no client).
+- **Popup de partida escondido sem aceite de verdade = partida perdida** → com `aceite.esconderPopup` o Gabriel fica
+  sem botão se o aceite automático não vier ("não aceitar", POST de accept que falhou, GET do ready-check que falhou).
+  O CSS vale só em `html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual)`, e o `aceite.js` põe `lc-aceite-manual`
+  nesses três casos para o popup voltar (13/10/2026).
+- **Sons do ready-check** (rcp-fe-lol-navigation, patch 16.20): intro (`sfx-readycheck-lowspec-intro.ogg`, canal
+  `sfx-notifications`), `ringmagic-countdown` e `ringmagic-accepted-loop` (`sfx-ui`, `isLoop`), criados uma vez no
+  `init` do componente: calar no `play()`, não no `createSound` (`aceite.embrulharAudio`, 13/10/2026).
+- **Referências de terceiros (13/10/2026, não medidas aqui; conferir antes de depender):**
+  - `textarea.focus()` rola o client inteiro: focar com `{ preventScroll: true }` ou guardar e repor o `scrollTop`;
+  - `context.fs` do Pengu não escreve fora da pasta do plugin: arquivo do coletor vai pelo `127.0.0.1:8765`;
+  - o placar do pós-jogo tem DOM diferente por modo (SR, ARAM, Arena): seletor de um modo quebra no outro;
+  - o chat do pós-jogo pinta todo mundo como inimigo: time sai da partida (LCU), nunca da cor do chat;
+  - o iframe do chat expira: guardar referência a ele morre; procurar de novo a cada uso;
+  - nunca `<script>` de CDN no plugin nem `innerHTML` com texto da LCU sem `esc()` (nome de jogador, título de
+    recompensa): o plugin roda com a LCU sem credencial.
 
 ## LCU API
 
 - **`/help` não tem URL** → `GET /help?format=Full` lista funções por nome
   (`PutLolLobbyV2LobbyMembersLocalMemberPositionPreferences` = `PUT /lol-lobby/v2/lobby/members/localMember/position-preferences`).
 - **`GET /lol-matchmaking/v1/ready-check` dá 404** fora da fila ("Not attached to a matchmaking queue"): é o normal.
+- **`GET /lol-rewards/v1/grants` traz as já coletadas** (`info.status` `FULFILLED`) junto das pendentes
+  (`PENDING_SELECTION`): filtrar pelo status. Sem escolha = `rewards.length ≤ selectionStrategyConfig.maxSelectionsAllowed`
+  (13/10/2026: todas 1/1 ou 2/2). Trilha do evento: `unclaimed-rewards.rewardsCount`; passe do TFT:
+  `milestones[].status` `REWARDABLE` e o id em `info.passId` (`pengu/recompensas.js`).
+- **`state` dos itens da trilha do evento vem `"Locked"` em todos**, até em trilha com progresso: não serve para
+  decidir nada. Escolha na trilha = marco com `rewardOptions.length > 1` e nenhuma opção `selected` (lido em
+  `/reward-track/items` e `/bonus-items` antes do `claim-all`; 13/10/2026).
+- **2xx no `select` não prova que a recompensa saiu** (formato do corpo vem de plugin de terceiro): a coleta manda 1
+  item de cada tipo de entrega por sessão do client e só libera o resto do tipo quando a leitura seguinte não o
+  mostra mais; continuou pendente → o tipo trava até recarregar (`recompensas.planejarColeta`, 13/10/2026, não medido).
+- **"Jogar de novo"** → a fila da partida anterior está em `GET /lol-gameflow/v1/gameflow-metadata/player-status`
+  `.lastQueuedLobbyStatus` (`queueId`, `isLeader`, `allowedPlayAgain`, `memberSummonerIds`); penalidade = o lobby com
+  `canStartActivity` false (o motivo em `restrictions[]`: `restrictionCode`, `expiredTimestamp`) (13/10/2026).
 - **`GET /lol-lobby/v2/lobby` sem lobby dá 404** (medido 13/10/2026): a fila rápida trata 404 como
   "sem lobby" e recusa qualquer outro erro (falha fechada, para não substituir um grupo que não leu).
 - **Timeline sem wards nem compras** → a versão da LCU só traz `CHAMPION_KILL`,
@@ -330,6 +367,17 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   saída (`GetAsyncKeyState`, ainda só leitura) é decisão: a linha da casa hoje é "só RegisterHotKey".
   O retorno ao jogador também faltava: no treino não há inimigo, o F9 + n devolvia `None` calado e o F8
   só muda um overlay vazio; hoje todo aperto tem rótulo na moldura ([COLETOR](COLETOR.md) § Feitiços).
+- **Janela Tk rouba o foco ao nascer, mesmo com `WS_EX_NOACTIVATE`** (13/10/2026, janelinha do ready check)
+  → o `update_idletasks` que cria a janela (ou o `tk.Tk(use=...)` embutido numa janela NOACTIVATE) põe ela em
+  primeiro plano quando o processo tem direito de primeiro plano (medido: lançado pelo `rodar-testes.py`/terminal
+  em foco). Só a 1ª janela do processo roubou; a 2ª não. Suspeita, **não provada**: o coletor da tarefa agendada
+  também ganharia esse direito depois de ~200 s sem entrada do usuário (`ForegroundLockTimeout`), o caso de quem
+  espera a fila sem mexer. Janela que não pode roubar foco: Win32 por ctypes, mostrada só por
+  `SetWindowPos(SWP_NOACTIVATE)` ([COLETOR](COLETOR.md) § Aviso de partida). Prova: `tools\teste-aviso-partida.py`
+  (E9) pelo `rodar-testes.py`, onde a versão Tk falhava.
+- **Clique postado (`PostMessage WM_LBUTTONUP`) cai no lugar errado** → thread sem DPI postando para janela
+  com DPI por monitor: o Windows reescala as coordenadas (125%: 25% mais abaixo). Postar com a thread no
+  mesmo contexto de DPI (`AvisoPartida.clicar_por_mensagem`).
 - **Thread que morre não deixa rastro** → exceção não tratada numa thread vai só para o stderr, que a
   tarefa agendada não guarda (atalho, overlay, Tk). `coletor.configurar_log` põe `threading.excepthook`
   no log ("thread X morreu"), e o overlay e o atalho logam a própria morte (13/10/2026).

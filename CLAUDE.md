@@ -5,6 +5,8 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 
 - **Nunca** `POST .../matchmaking/search` em teste automatizado; recarregar a interface só
   em fase `None`/`Lobby`. Detalhe: [docs/ARMADILHAS.md](docs/ARMADILHAS.md).
+- Busca na fila só por clique do Gabriel (fila rápida, jogar de novo); escrita da coleta de recompensas só por
+  `ROTAS_COLETA` (`pengu/recompensas.js`), nunca rota que gasta (baú, criação, fichas, passe).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,
   com rede de segurança na página; `cancel-champ-select` não cancela e o client põe hover sozinho.
 - Coach ao vivo (`coletor/coach_vivo.py`): provar com `python tools/ensaio-coach.py` (sem client, banco e

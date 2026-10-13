@@ -48,7 +48,13 @@ CONFIG_PADRAO = {
     "mentorEffort": "medium",
     # tipos calados por destino (avisos.TIPOS_LIGAVEIS; "tela" = painel + moldura); lista antiga = os dois
     "avisosDesligados": {"voz": [], "tela": []},
+    # plano voz/foco, passo 2b: janelinha de "partida encontrada" fora do client (coletor/aviso_partida.py)
+    "aceiteFlutuante": True,
+    # atraso do aceite automático do plugin, espelhado (cfg.aceite.atrasoS); None = aceite automático
+    # desligado (a janelinha conta até o ready check expirar). Padrão = PADRAO.aceite.atrasoS do plugin
+    "aceiteAtrasoS": 10,
 }
+ATRASO_MAX_S = 60
 ESCOLHAS = {"tomVoz": ("serio", "descontraido"), "mentorModelo": ("sonnet", "haiku", "opus"),
             "mentorEffort": ("low", "medium", "high")}
 log = logging.getLogger("coletor.servidor")
@@ -64,7 +70,22 @@ def ler_config(caminho=CONFIG):
     cfg = {k: (salvo[k] if isinstance(salvo, dict) and type(salvo.get(k)) is type(v) else v)
            for k, v in CONFIG_PADRAO.items()}
     cfg["avisosDesligados"] = _desligados(salvo.get("avisosDesligados") if isinstance(salvo, dict) else None)
+    if isinstance(salvo, dict) and "aceiteAtrasoS" in salvo:   # número ou null: o teste de tipo acima não serve
+        a = _atraso(salvo["aceiteAtrasoS"])
+        cfg["aceiteAtrasoS"] = CONFIG_PADRAO["aceiteAtrasoS"] if a is _INVALIDO else a
     return {k: list(v) if isinstance(v, list) else v for k, v in cfg.items()}  # lista do padrão não vaza
+
+
+_INVALIDO = object()
+
+
+def _atraso(v):
+    """aceiteAtrasoS: None (aceite automático desligado) ou número 0–ATRASO_MAX_S; outra coisa = _INVALIDO"""
+    if v is None:
+        return None
+    if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v or not 0 <= v <= ATRASO_MAX_S:
+        return _INVALIDO
+    return v
 
 
 def _desligados(v):
@@ -82,6 +103,10 @@ def salvar_config(parcial, caminho=CONFIG):
             if k == "avisosDesligados":    # plugin antigo ainda manda a lista: migra em vez de descartar
                 if isinstance(v, (list, dict)):
                     cfg[k] = _desligados(v)
+            elif k == "aceiteAtrasoS":         # null = aceite desligado; valor inválido mantém o atual
+                a = _atraso(v)
+                if a is not _INVALIDO:
+                    cfg[k] = a
             elif k in CONFIG_PADRAO and type(v) is type(CONFIG_PADRAO[k]):
                 cfg[k] = [x for x in v if isinstance(x, str)] if isinstance(v, list) else v
         for k, validos in ESCOLHAS.items():

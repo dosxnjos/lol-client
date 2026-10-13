@@ -6,6 +6,7 @@ import { licoes as calcularLicoes } from './licoes.js';
 import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPartida, htmlMentor,
   abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from './abas.js';
 import regrasMd from './licoes.md?raw';
+import { jogarDeNovo } from '../fila-rapida.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -196,11 +197,45 @@ async function acaoMentor(p, caminho, corpo) {
   return r.status;
 }
 
+// "jogar de novo e buscar": só o clique chama (fila-rapida.js jogarDeNovo). Freio de tilt: o 1º clique com
+// N derrotas seguidas na sessão (a mesma regra do tilt do projeto: pausa < 2 h) só pede confirmação.
+const avisarToast = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(msg); } catch { console.log('[lol-client]', msg); } };
+async function acaoJogarDeNovo(p, botao) {
+  if (botao.disabled) return;
+  const confirmado = botao.dataset.confirmar === '1';
+  const textoOriginal = 'jogar de novo e buscar';
+  botao.disabled = true;
+  botao.textContent = 'voltando ao lobby…';
+  let r;
+  try {
+    // histórico que não carregou: a sequência é incerta (null) e o freio pede confirmação em vez de chutar 1
+    const seq = p.r.vitoria ? 0 : (p.r.historicoIncompleto || !p.r.sessao ? null : p.r.sessao.seq);
+    r = await jogarDeNovo(p.cfg, { derrotasSeguidas: seq, confirmado, queueIdEsperado: p.r.esta?.fila });
+  } catch (e) { r = { status: 'recusa', motivo: e?.message || String(e) }; }
+  botao.disabled = false;
+  botao.classList.remove('lc-confirmar');
+  delete botao.dataset.confirmar;
+  botao.textContent = textoOriginal;
+  if (r.status === 'confirmar') {
+    botao.dataset.confirmar = '1';
+    botao.classList.add('lc-confirmar');
+    botao.textContent = r.derrotas === null ? 'sequência de derrotas incerta (histórico não carregou): clicar de novo para jogar'
+      : `${r.derrotas} derrotas seguidas: clicar de novo para jogar mesmo assim`;
+    setTimeout(() => { if (botao.dataset.confirmar) { delete botao.dataset.confirmar; botao.classList.remove('lc-confirmar'); botao.textContent = textoOriginal; } }, 10000);
+    return;
+  }
+  if (r.status === 'buscando') { avisarToast('de volta à fila'); fechar(); return; }
+  if (r.status === 'grupo') { avisarToast(r.motivo); return; }
+  avisarToast(`jogar de novo: ${r.motivo}`, true);
+}
+
 function ligarEventos(p) {
   p.el.addEventListener('click', e => {
     const aba = e.target.closest?.('[data-aba]');
     if (aba) return trocarAba(p, aba.dataset.aba);
     if (e.target.closest?.('[data-acao="mentor-gerar"]')) acaoMentor(p, `/mentor/${p.r.gameId}`, {});
+    const jd = e.target.closest?.('[data-acao="jogar-de-novo"]');
+    if (jd) acaoJogarDeNovo(p, jd);
   });
   p.el.addEventListener('submit', e => {
     e.preventDefault();
@@ -211,7 +246,8 @@ function ligarEventos(p) {
   });
 }
 
-function montar(r, cfg, coletor, vivo) {
+// fimDePartida: painel aberto pelo EndOfGame (só ele tem o "jogar de novo": o do Ctrl+K pode ser de partida antiga)
+function montar(r, cfg, coletor, vivo, fimDePartida = false) {
   const p = { r, cfg, coletor, vivo, aba: 'resumo', ctx: null, ctxEstado: coletor ? 'carregando' : 'fora', mentor: null, revisao: null, ranked: null };
   p.licoes = calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes;
   const html = {
@@ -222,7 +258,7 @@ function montar(r, cfg, coletor, vivo) {
     tendencia: abaTendencia(r, nome, null, p.ctxEstado, null, !!cfg.traumas?.ligado),
     sessao: abaSessao(r, nome, r.sessao, null, null, p.ctxEstado, new Date().getHours()),
   };
-  p.el = moldura(`<div class="lc-caixa lc-v2">${htmlTopo(r, nome)}
+  p.el = moldura(`<div class="lc-caixa lc-v2">${htmlTopo(r, nome, { jogarDeNovo: fimDePartida && !!cfg.filaRapida?.jogarDeNovo })}
     <div class="lc-paineis">${ABAS.map(([id]) => `<section class="lc-painel lc-painel-${id}" data-painel="${id}">${html[id]}</section>`).join('')}</div></div>`);
   trocarAba(p, 'resumo');
   ligarEventos(p);
@@ -233,7 +269,7 @@ function montar(r, cfg, coletor, vivo) {
 // cfg e coletor do plugin (iniciarPosjogo); abrirPainel(id) do Ctrl+K e dos testes usa os mesmos
 let padrao = { cfg: { traumas: { ligado: true } }, coletor: null };
 
-export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor) {
+export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor, { fimDePartida = false } = {}) {
   moldura('<div class="lc-carregando">analisando a partida…</div>');
   const minha = ++abertura;
   const vivo = () => minha === abertura && !!document.getElementById('lc-posjogo');
@@ -244,13 +280,14 @@ export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.col
     });
     if (!vivo()) return r; // fechou enquanto carregava
     if (r.erro) { moldura(`<div class="lc-carregando">pós-jogo: ${esc(r.erro)} <button class="lc-fechar">fechar</button></div>`); return r; }
-    const p = montar(r, cfg, coletor || (async () => ({ status: 0, dados: null })), vivo);
+    const p = montar(r, cfg, coletor || (async () => ({ status: 0, dados: null })), vivo, fimDePartida);
     painel = p;
     json('/lol-ranked/v1/current-ranked-stats').then(d => { p.ranked = d; if (vivo()) pintar(p, ['sessao']); }).catch(() => {});
     // histórico lento (200 partidas): o painel abriu com o cache; quando a leitura chega, refaz tendência e sessão
     if (r.historicoIncompleto) historico().then(h => {
       if (!vivo()) return;
       r.historico = h;
+      r.historicoIncompleto = false; // o freio do "jogar de novo" passa a confiar na sequência
       r.tendencia = tendencia(r.stats, r.duracaoS, h, r.gameId, r.criacao);
       r.sessao = sessaoDaPartida(h, r.esta);
       pintar(p, ['licoes', 'tendencia', 'sessao']);
@@ -300,7 +337,7 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
     if (fase !== 'EndOfGame' || !cfg.posjogo.ligado) return;
     if (mapa && mapa !== 11) return; // ARAM, Arena etc.: sem painel automático
     if (!gameId) gameId = (await json('/lol-end-of-game/v1/eog-stats-block').catch(() => null))?.gameId;
-    if (gameId) abrirPainel(gameId, cfg, coletor).catch(e => console.error('[lol-client] pós-jogo', e));
+    if (gameId) abrirPainel(gameId, cfg, coletor, { fimDePartida: true }).catch(e => console.error('[lol-client] pós-jogo', e));
   });
   return { aba, estado: estadoPainel };
 }

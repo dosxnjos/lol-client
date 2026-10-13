@@ -50,7 +50,7 @@ central de atividades ou o pós-jogo. Ele seleciona **todos** os itens, inclusiv
    com o motivo de pular cada item. **prova:** `node tools/cdp.mjs eval` mostra a lista que bate com a tabela.
 2. [ ] Coleta de **1** item de cada fonte com o client aberto, conferindo o efeito na leitura seguinte
    (o item sai da lista). Registrar aqui o corpo que funcionou. **prova:** antes/depois.
-3. [ ] `pengu/recompensas.js` (gatilhos, filas, regras acima) + chave em `config.js`/`blocos.js` + `index.js`.
+3. [ ] **Código pronto (13/10/2026), falta prova no client** (passos 2 e 4). `pengu/recompensas.js` (gatilhos, filas, regras acima) + chave em `config.js`/`blocos.js` + `index.js`.
    **prova:** `tools/teste-recompensas.mjs` com LCU falsa: coleta sem escolha, pula escolha real, não chama
    nenhuma rota de gasto, um erro não para o resto, gatilho no carregamento e depois do `EndOfGame`.
 4. [ ] Rodada real: carregar o client → 60 concessões + 3 do evento coletadas; o client não mostra mais as
@@ -71,4 +71,27 @@ central de atividades ou o pós-jogo. Ele seleciona **todos** os itens, inclusiv
 
 ## Relatório de execução
 
-(preencher)
+- **Passo 3 (13/10/2026, sem coleta real):** `pengu/recompensas.js` com a lista de rotas de escrita permitidas
+  (`ROTAS_COLETA`: select de concessão, `claim-all` da trilha, `claim-all-rewards` do TFT; qualquer outra escrita
+  é recusada antes do fetch). Gatilho pós-jogo relê a fase na hora e adia fora de `None`/`Lobby` (o "jogar de
+  novo" leva direto à fila). Aviso de escolha uma vez por concessão por sessão do client. Missões, marcos do
+  loot, maestria e honra ficam fora (formato não confirmado ou vazio). `node tools/teste-recompensas.mjs` 24/24.
+- Leitura de 13/10 (GET, client aberto): 60 concessões pendentes (1/1 e 2/2, nenhuma escolha real), trilha dos 5
+  eventos com `rewardsCount` 0 (as 3 paradas da tabela já não estão), passe do TFT com 1 `REWARDABLE`.
+- `window.__lolClient.recompensas.levantar()` é o passo 1 (só GET). Passos 1, 2, 4 e 5 seguem com o orquestrador.
+- **Revisão do passo 3 (13/10/2026, sem coleta real):** o passo 2 virou código (`planejarColeta`): por sessão do
+  client, a coleta manda **1 item de cada tipo de entrega** (`concessão:cap.wallets`, `loot.lootserver`,
+  `cap.entitlements`, `store.purchase`…); na rodada seguinte, o item fora da lista libera o tipo; ainda pendente apesar
+  do 2xx trava o tipo até recarregar (toast vermelho). Leitura que falha não conta como prova. Trilha e passe liberam
+  no 2xx (o id volta a ter prêmio depois de outra partida). Concessão sem `maxSelectionsAllowed` numérico vira
+  "escolher". Antes do `claim-all` da trilha, lê `/reward-track/items` e `/bonus-items`: marco com mais de uma opção e
+  nenhuma `selected` manda o evento para "escolher"; leitura que falha pula o evento. Toast de falha uma vez por
+  recompensa; depois de `MAX_FALHAS` = 3 falhas ela sai da fila da sessão. `node tools/teste-recompensas.mjs` 39/39.
+- **Leitura da revisão (13/10, só GET):** 57 concessões pendentes em 4 tipos (`cap.wallets` 34, `loot.lootserver` 17,
+  `cap.entitlements` 4, `store.purchase` 2), nenhuma sem máximo nem escolha de verdade; trilhas dos eventos zeradas.
+  Logo, a próxima carga do client manda **4 selects e nenhum claim-all**; o resto vai na rodada seguinte (30 s depois
+  da próxima partida ou `__lolClient.recompensas.rodar()`). O atraso da LCU para tirar o item da lista não foi medido:
+  rodada manual cedo demais pode travar o tipo até recarregar.
+- **Fechamento da leva (13/10/2026):** README (o que coleta e o que nunca faz) e `docs/ARMADILHAS.md` (grants, trilha
+  "Locked", 2xx não prova) atualizados; `python tools/rodar-testes.py` com o jogo fechado (resultado no plano de
+  [voz e foco](2026-10-13-voz-pregravada-e-foco.md) § Relatório). Passos 2 e 4 dependem do client.

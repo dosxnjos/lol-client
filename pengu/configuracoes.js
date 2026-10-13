@@ -4,7 +4,7 @@
 // Grupo próprio na navegação, nunca item dentro de uma barra nativa: o Ember mapeia índice -> seção.
 // Módulos novos plugam controles sem editar este arquivo: registrarBloco(nome, renderizar).
 // Seletores medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md.
-import { ATRASOS } from './config.js';
+import { ATRASOS, FREIOS } from './config.js';
 
 const SEL = {
   container: '.lol-settings-container',
@@ -101,12 +101,24 @@ function montar(painel, cfg, definir, restaurar) {
   add(ui.secao('Aceitar partida'),
     caixa('aceite.ligado', 'Aceitar partida automaticamente', 'Mostra a contagem quando a partida aparece e aceita sozinho; "não aceitar" cancela daquela vez.'),
     ui.linha(ui.lista('aceite.atrasoS', 'Aceitar depois de', ATRASOS.map(s => [s, s + ' s']), cfg.aceite.atrasoS, v => definir('aceite.atrasoS', v))),
-    ui.explica(`Conta pelo relógio do servidor; ${cfg.aceite.limiteS - 2} s é o máximo seguro (a janela da Riot é de ~${cfg.aceite.limiteS} s).`));
+    ui.explica(`Conta pelo relógio do servidor; ${cfg.aceite.limiteS - 2} s é o máximo seguro (a janela da Riot é de ~${cfg.aceite.limiteS} s).`),
+    caixa('aceite.trazerClient', 'Trazer o client para a frente ao achar partida', 'Desligado (padrão), com o aceite automático: se tu estava em outra janela, o client pisca e some de novo (o Windows devolve a janela de antes); no champ select ele volta sozinho.'),
+    caixa('aceite.esconderPopup', 'Esconder o popup de partida encontrada', 'Some a janela de aceitar do client; a contagem do lol-client continua. Só vale com o aceite automático ligado.'),
+    caixa('aceite.silenciarSom', 'Silenciar o som de partida encontrada', 'Corta o som em loop que toca depois que tu aceita, até todos aceitarem. O aviso de partida encontrada continua tocando.'),
+    caixa('coach.aceiteFlutuante', 'Aceitar ou recusar fora do client', 'Janelinha no canto da tela, por cima de tudo e sem roubar o foco, com a contagem e os botões "aceitar agora" e "recusar". Precisa do coletor ligado.'));
 
   add(ui.secao('Fila rápida'),
     caixa('filaRapida.ligado', 'Botão fila rápida', 'Botão ao lado do jogar: um clique monta o lobby com as tuas posições e entra na fila.'),
     ui.linha(ui.lista('filaRapida.fila', 'Fila ranqueada', FILAS, cfg.filaRapida.fila, v => definir('filaRapida.fila', v)),
-      posicao('pos1', 'pos2', '1ª posição'), posicao('pos2', 'pos1', '2ª posição')));
+      posicao('pos1', 'pos2', '1ª posição'), posicao('pos2', 'pos1', '2ª posição')),
+    caixa('filaRapida.jogarDeNovo', 'Botão "jogar de novo" no pós-jogo', 'Um clique volta ao lobby da mesma fila da partida, põe as tuas posições e busca. Em grupo só volta ao lobby: quem busca é o líder. Nunca busca sozinho.'),
+    ui.linha(ui.lista('filaRapida.freioTilt', 'Pedir confirmação depois de', FREIOS.map(n => [n, n ? `${n} derrotas seguidas` : 'nunca']),
+      cfg.filaRapida.freioTilt, v => definir('filaRapida.freioTilt', v))),
+    ui.explica('Freio de tilt: com essa sequência de derrotas na sessão, o "jogar de novo" pede um segundo clique.'));
+
+  add(ui.secao('Recompensas'),
+    caixa('recompensas.ligado', 'Coletar recompensas sozinho', 'Ao abrir o client e 30 s depois de cada partida, pega as recompensas que não têm escolha (concessões, trilha do evento); de cada tipo, pega uma primeiro e confere antes do resto. Nunca abre baú, cria, desencanta nem compra; recompensa de escolher fica para ti, com aviso.'),
+    caixa('recompensas.tft', 'Incluir o passe do TFT', 'Também coleta os prêmios liberados do passe do TFT.'));
 
   add(ui.secao('Pós-jogo'),
     caixa('posjogo.ligado', 'Painel pós-jogo', 'Ao fim da partida, abre a análise: mapa com o trajeto, mortes e diferença contra o adversário de rota.'));

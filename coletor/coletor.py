@@ -140,6 +140,20 @@ class LCU:
             corpo = r.read()
         return json.loads(corpo) if corpo else None
 
+    def post(self, caminho, corpo=None, timeout=10):
+        """única escrita do coletor na LCU: aceitar/recusar o ready check por clique na janelinha
+        (aviso_partida.py). Nada aqui chama POST sozinho."""
+        dados = json.dumps(corpo).encode() if corpo is not None else b""
+        req = urllib.request.Request(f"https://127.0.0.1:{self.porta}{caminho}", data=dados, method="POST",
+                                     headers={"Authorization": self.auth, "Accept": "application/json",
+                                              "Content-Type": "application/json"})
+        with urllib.request.urlopen(req, context=self.ctx, timeout=timeout) as r:
+            resp = r.read()
+        try:
+            return json.loads(resp) if resp else None
+        except ValueError:
+            return None
+
     def vivo(self):
         """True se a LCU responde (qualquer status HTTP conta)"""
         try:
@@ -451,10 +465,18 @@ def destravar():
 
 # ---------- laço principal ----------
 
+def _aviso_padrao(lcu, atraso_s):
+    import aviso_partida
+    return aviso_partida.AvisoPartida(lcu, atraso_s)
+
+
 class Coletor:
-    def __init__(self, args, coach=None):
+    def __init__(self, args, coach=None, fab_aviso=None):
         self.args = args
         self.coach = coach  # coach_vivo.Coach (ao vivo, painel, mentor); None nos testes do retrato
+        # janelinha de "partida encontrada" (aviso_partida.py): f(lcu, atraso_s) -> objeto com mostrar()/fechar()
+        self.fab_aviso = fab_aviso or _aviso_padrao
+        self.aviso = None
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)
@@ -579,9 +601,38 @@ class Coletor:
         log.info("champ select %s (posição %s, autofill %s%s)", "final" if final else "gravado",
                  r["posicao"], r["autofill"], ", desfeito" if r["desfeita"] else "")
 
+    def _cfg_aviso(self):
+        """(aceiteFlutuante, aceiteAtrasoS) lidos na hora do ReadyCheck (o plugin pode ter mudado agora)"""
+        import servidor_local
+        try:
+            cfg = self.coach.cfg() if self.coach else servidor_local.ler_config(
+                getattr(self.args, "config", None) or servidor_local.CONFIG)
+        except Exception:
+            cfg = servidor_local.CONFIG_PADRAO
+        return bool(cfg.get("aceiteFlutuante")), cfg.get("aceiteAtrasoS")
+
+    async def aviso_partida(self, fase):
+        """ReadyCheck liga a janelinha (se coach.aceiteFlutuante); qualquer outra fase fecha. Nunca derruba fase()"""
+        try:
+            if fase == "ReadyCheck":
+                ligado, atraso = self._cfg_aviso()
+                if ligado and self.lcu is not None:
+                    if self.aviso is None:   # websocket reconectado no meio do ReadyCheck: segue a mesma
+                        self.aviso = self.fab_aviso(self.lcu, atraso)
+                        self.aviso.mostrar()
+                        log.info("aviso de partida aberto (aceite automático %s)",
+                                 "desligado" if atraso is None else f"em {atraso:g} s")
+                    return
+            a, self.aviso = self.aviso, None
+            if a is not None:
+                await asyncio.to_thread(a.fechar)
+        except Exception as e:
+            log.warning("aviso de partida: %s: %s", type(e).__name__, e)
+
     async def fase(self, fase):
         if not isinstance(fase, str):
             return
+        await self.aviso_partida(fase)   # antes das leituras abaixo: o ready check dura 12 s
         gid = fila = None
         try:
             s = await asyncio.to_thread(self.lcu.get, "/lol-gameflow/v1/session")

@@ -417,7 +417,8 @@ na hora a cada `POST /config`): `painelAoVivo`, `amostrasAoVivo`, `voz`, `tomVoz
 (OCR e F9), `carregamento` (Riot API), `mentor`, `mentorModelo` (`sonnet`|`haiku`|`opus`) e `mentorEffort`
 (`low`|`medium`|`high`; padrão sonnet + medium, o vencedor do passo 20; aplicados no `Mentor` na criação e a
 cada `POST /config`), `avisosDesligados` (`{"voz": [...], "tela": [...]}`; a lista antiga é migrada para os
-dois, no arquivo salvo e no `POST`). O plugin manda `{"coach": cfg.coach}` na carga, a
+dois, no arquivo salvo e no `POST`), `aceiteFlutuante` e `aceiteAtrasoS` (§ Aviso de partida). O plugin manda `{"coach": {...cfg.coach, aceiteAtrasoS}}`
+(`coach.corpoConfig`: o atraso efetivo do aceite, derivado na hora e nunca salvo no plugin) na carga, a
 cada mudança e, com o coletor fora, de novo a cada 30 s (`pengu/coach.js`); chave desconhecida, de tipo
 errado ou valor fora da lista é ignorada (volta ao padrão). Depois que o jogo sai da tela, um `POST /config`
 não religa captura nem OCR daquela partida.
@@ -437,6 +438,38 @@ thread; `dados\` intocado. Prints do painel em `temp\ensaio\painel-*.png`.
 real na 8765, banco copiado em `temp\pengu\` e config em `temp\pengu\config.json`; lê o champ select da LCU (só
 GET). Serve para provar selo, pós-jogo e a seção LOL-CLIENT com o coletor real ainda no código antigo (sem a
 8765); com o coletor novo de pé a porta está ocupada e ele sai.
+
+## Aviso de partida fora do client (`coletor\aviso_partida.py`, plano voz/foco, passo 2b)
+
+No `ReadyCheck`, o `Coletor.fase` abre uma janelinha Win32 (ctypes, como a `moldura.py`) no canto inferior direito da tela principal (área
+útil, acima da barra de tarefas): "partida encontrada", a contagem e dois botões, **aceitar agora**
+(`POST /lol-matchmaking/v1/ready-check/accept`) e **recusar** (`.../decline`). Qualquer outra fase fecha;
+ela também se fecha sozinha em 20 s (o ready check dura 12), caso o websocket caia no meio.
+
+- **Sem roubar o foco:** nasce escondida com `WS_EX_NOACTIVATE | WS_EX_TOPMOST | WS_EX_TOOLWINDOW`, aparece
+  só por `SetWindowPos(SWP_NOACTIVATE | SWP_SHOWWINDOW)` e responde `MA_NOACTIVATE` ao clique. Não é Tk: o Tk
+  ativa a própria janela ao nascer ([ARMADILHAS](ARMADILHAS.md) § Windows). DPI por thread
+  (`SetThreadDpiAwarenessContext`), não no processo. Cores do `painel\painel.css`; botões desenhados (GDI),
+  com mão e realce ao passar o mouse.
+- **Contagem:** com `aceiteAtrasoS` = número, "aceito em N s" até `min(atraso, 10)` pelo `timer` do
+  `GET /lol-matchmaking/v1/ready-check` (o mesmo alvo do `pengu\aceite.js`); com `null` (aceite automático
+  desligado), "expira em N s" até os 12 s. O `timer` é inteiro: a janela ancora o início pelo menor
+  `agora − timer` e conta pelo relógio local (o 1º GET pode dar 404 antes do payload).
+- **O espelho pode mentir:** o `aceiteAtrasoS` é o último que o plugin mandou (plugin fora do ar, "não aceitar"
+  no overlay, POST que nunca chegou). Passado o alvo + `TOLERANCIA_S` (1 s) com `playerResponse` ainda `None`,
+  volta a "expira em N s" com o alerta vermelho "o aceite automático não veio: clique" (fase `sem_aceite`).
+- **Depois do clique:** "aceita" (+ "esperando os outros") ou "recusada", sem botões; um POST por ready
+  check; POST que falha devolve os botões com "o client não respondeu".
+  O aceite automático do plugin respeita o recusar: ele para com `playerResponse` `Declined` e, antes de
+  aceitar, relê o ready check e só aceita com `None`.
+- **Única escrita do coletor na LCU** (`LCU.post`), e só pelo clique do Gabriel.
+- **Config:** `aceiteFlutuante` (padrão `true`) e `aceiteAtrasoS` (número 0–60 ou `null`; padrão 10 =
+  `PADRAO.aceite.atrasoS` do plugin, que manda o valor espelhado). Lidas na hora do `ReadyCheck`.
+
+| o quê | comando |
+| --- | --- |
+| ver a janelinha com um ready check falso | `python coletor\aviso_partida.py --demo [--atraso 10 \| -1] [--segundos 12]` |
+| prova (contagem, config, `Coletor.fase`, janela real; a janela é pulada com o jogo aberto) | `python tools\teste-aviso-partida.py [--sem-janela]` |
 
 ## Segurança: token da LCU no log Security
 

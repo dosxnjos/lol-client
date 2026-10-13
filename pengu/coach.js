@@ -28,6 +28,15 @@ export async function coletor(caminho, { metodo = 'GET', corpo, prazoMs = 8000 }
   } finally { clearTimeout(t); }
 }
 
+// corpo do POST /config: as chaves do coach + aceiteAtrasoS espelhado do aceite do plugin (a janelinha
+// flutuante do coletor conta o mesmo tempo): o atraso efetivo, min(atrasoS, limiteS − 2), ou null com o aceite
+// automático desligado. Derivado na hora: não fica salvo no cfg.coach (dono é cfg.aceite).
+export function corpoConfig(cfg) {
+  const a = cfg.aceite || {};
+  const atraso = a.ligado ? Math.max(0, Math.min(Number(a.atrasoS) || 0, (a.limiteS ?? 12) - 2)) : null;
+  return { coach: { ...cfg.coach, aceiteAtrasoS: atraso } };
+}
+
 // manda as chaves do coach (cfg.coach) ao coletor: na carga, a cada mudança e, enquanto ele estiver fora,
 // de novo a cada 30 s (o coletor sobe depois do client: a config tem de chegar sem o Gabriel mexer)
 let pendente = null, espera = null;
@@ -36,7 +45,7 @@ export function sincronizarConfig(cfg) {
   // várias mudanças seguidas (lista de tipos) viram um POST só
   espera = setTimeout(async () => {
     if (pendente) await pendente;
-    pendente = coletor('/config', { metodo: 'POST', corpo: { coach: cfg.coach } }).then(r => {
+    pendente = coletor('/config', { metodo: 'POST', corpo: corpoConfig(cfg) }).then(r => {
       if (r.status === 200) conexao.enviadoEm = Date.now();
       else espera = setTimeout(() => sincronizarConfig(cfg), 30000);
       return r;

@@ -83,7 +83,7 @@
    ⚠️ A sonda injetada morre quando o client fecha ou recarrega: reinjetar antes de cada fila de teste.
    Se o foco for nativo, a rota `ux-minimize` dá um **piscar** (o client aparece e some), não "nunca
    ganhar foco"; dizer isso ao Gabriel antes de fechar o passo 2.
-2. [ ] **Chave `focoNaPartida`** em `pengu/aceite.js` + `pengu/config.js` + `pengu/blocos.js`
+2. [ ] **Código pronto (13/10/2026), falta prova no client.** Chave `focoNaPartida` (virou `aceite.trazerClient`) em `pengu/aceite.js` + `pengu/config.js` + `pengu/blocos.js`
    ("trazer o client para a frente ao achar partida", padrão **desligado**, só vale com o aceite
    automático ligado):
    - se o foco vem do JS: bloquear a chamada no embrulho de `fetch`/XHR durante o `ReadyCheck`;
@@ -94,7 +94,7 @@
    **prova:** teste em `tools/teste-aceite.mjs` com LCU falsa (minimiza só quando não tinha foco; não
    minimiza com a chave ligada; `ux-show` no champ select) + uma fila real com o Gabriel olhando.
 
-2b. [ ] **Aceitar/recusar fora do client** (`coletor/aviso_partida.py`, Tk como `moldura.py`): no
+2b. [ ] **Código pronto (13/10/2026), falta prova no client.** **Aceitar/recusar fora do client** (`coletor/aviso_partida.py`; previsto em Tk, saiu em Win32 por ctypes, ver abaixo): no
    `ReadyCheck`, janelinha **sempre por cima e que não rouba o foco** (`WS_EX_NOACTIVATE | WS_EX_TOPMOST`)
    no canto da tela principal, com a contagem do aceite automático (10 s) e dois botões: **aceitar agora**
    (`POST /lol-matchmaking/v1/ready-check/accept`) e **recusar** (`.../decline`, que também cancela o aceite
@@ -105,6 +105,29 @@
    mexe no foco da janela, lidos em 13/10; o SimpleAccept de Ku-Tadao/IPostWeirdStuffHere dá 404). **prova:**
    teste com LCU falsa (botões chamam a rota certa, recusar cancela o aceite automático, a janela não muda
    o `GetForegroundWindow`) + uma fila real com o Gabriel.
+   **Plugin feito em 13/10/2026** (sem o client): chaves com os nomes do contrato da leva, `aceite.trazerClient`
+   (passo 2, no lugar de `focoNaPartida`), `aceite.esconderPopup` (CSS só com o aceite ligado:
+   `html.lc-aceite.lc-esconder-popup`, popup escondido sem aceite = partida perdida) e `coach.aceiteFlutuante` +
+   `coach.aceiteAtrasoS` (derivado, `null` com o aceite desligado) no `POST /config` (`coach.corpoConfig`).
+   `node tools/teste-aceite.mjs` 27/27 (12 de foco). Falta: a janelinha do coletor e a prova numa fila real.
+   **Revisão do plugin (13/10/2026):** o foco no iframe do chat esconde `focus`/`blur` da página de cima, então
+   entrou uma sonda de `document.hasFocus()` a cada 250 ms (`FOCO.sondaMs`); o popup volta (`html.lc-aceite-manual`)
+   no "não aceitar", no accept que falhou e no GET do ready-check que falhou. `teste-aceite.mjs` 35/35.
+   **Janelinha do coletor feita em 13/10/2026:** Win32 por ctypes, **não Tk**: medido, o Tk ativa a própria janela
+   ao nascer mesmo com `WS_EX_NOACTIVATE` (também embutido por `tk.Tk(use=)`), e o E9 do teste falhava sempre. A
+   nova nasce escondida (`NOACTIVATE|TOPMOST|TOOLWINDOW`), aparece por `SetWindowPos(SWP_NOACTIVATE)` e responde
+   `MA_NOACTIVATE`; contagem igual à do plugin (`coach.aceiteAtrasoS`, `null` = "expira em N s"); fecha sozinha em
+   20 s; `LCU.post` é a única escrita do coletor, só no clique. Voltar a Tk é trocar a classe. Detalhe:
+   [COLETOR](../docs/COLETOR.md) § Aviso de partida. `python tools/teste-aviso-partida.py` 53/53 (janela real,
+   jogo fechado). Falta: a prova numa fila real com o Gabriel.
+2c. [ ] **Código pronto (13/10/2026), falta prova no client.** **Silenciar o som de partida encontrada** (`aceite.silenciarSom`, padrão desligado; referência de
+   terceiro sem licença, reescrita do zero): embrulho do `createSound` dos canais do `rcp-fe-audio`
+   (`context.rcp.postInit`/`whenReady`), o som vira Proxy com `play()` mudo, decidido na hora do play; erro cai no
+   original. Por padrão só o loop pós-aceite (`sfx-readycheck-ringmagic-accepted-loop.ogg`); o aviso de partida
+   encontrada segue. **Feito no plugin em 13/10/2026** (`aceite.embrulharAudio`, 8 casos no `teste-aceite.mjs`).
+   **prova:** fila real com a chave ligada: o loop não toca depois do aceite e a intro toca.
+2d. [ ] **"Jogar de novo e buscar" no pós-jogo, freio de tilt e guarda de penalidade da fila rápida:** plano
+   próprio, [2026-10-13-jogar-de-novo.md](2026-10-13-jogar-de-novo.md) (código pronto, falta prova no client).
 
 ### Fase B: voz pré-gravada
 
@@ -193,3 +216,9 @@
   o motor corta só o destino calado. `servidor_local` e `pengu/config.js` (`migrar`) convertem a lista antiga.
 - Configurações › Alertas: uma linha por tipo com caixas "voz" e "tela". Provas no passo 8.
 - Pendente: o coletor de pé roda o código antigo até reiniciar (fora de partida); ensaio completo idem.
+- **Fase A, passos 2, 2b e 2c (13/10/2026, sem client):** código pronto no plugin (`aceite.js`, `config.js`,
+  `coach.js`, `configuracoes.js`, `estilo.css`) e no coletor (`aviso_partida.py`, `coletor.py`, `servidor_local.py`).
+  `python tools/rodar-testes.py` com o jogo fechado: 30/31 na rodada inteira; a falha foi o caso "moldura real: fora
+  do print" do `teste-alertas.py` (código não tocado nesta leva), que passou 3/3 sozinho e 2/2 pelo `rodar-testes.py
+  alertas aviso`: intermitente. Ensaio a 20x: 0 falhas. Nada provado no client real: falta uma fila com o Gabriel
+  olhando (piscar e volta no champ select, janelinha aceitar/recusar, popup escondido, loop calado).

@@ -48,6 +48,11 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 #lc-aceite button:hover { color: #f0e6d2; border-color: #c8aa6e; }
 #lc-aceite button.lc-primario { color: #0ac8b9; border-color: #0ac8b9; }
 
+/* esconder o popup nativo de partida encontrada: só com o aceite automático ligado (sem ele, popup escondido =
+   partida perdida); a contagem #lc-aceite e a janelinha flutuante do coletor seguem. lc-aceite-manual (aceite.js):
+   "não aceitar" ou accept que falhou devolvem o popup até o fim daquele ready check */
+html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual) #lol-uikit-layer-manager-wrapper .modal:has(.ready-check-root-element) { display: none !important; }
+
 /* painel pós-jogo */
 #lc-posjogo {
   position: fixed; inset: 0; z-index: 100001; display: flex; align-items: center; justify-content: center;
@@ -63,6 +68,12 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 #lc-posjogo .lc-vitoria { color: #0ac8b9; } #lc-posjogo .lc-derrota { color: #e84057; }
 #lc-posjogo .lc-fechar { margin-left: auto; cursor: pointer; background: none; border: 1px solid #785a28; color: #cdbe91; font: 700 11px var(--font-display); padding: 6px 10px; text-transform: uppercase; }
 #lc-posjogo .lc-fechar:hover { border-color: #c8aa6e; color: #f0e6d2; }
+/* jogar de novo: logo antes do fechar (que tem margin-left: auto); o fechar encosta nele */
+#lc-posjogo .lc-jogar-de-novo { margin-left: auto; cursor: pointer; background: linear-gradient(180deg, #1e2328, #0f1317); border: 1px solid #0ac8b9; color: #0ac8b9; font: 700 11px var(--font-display); padding: 6px 10px; text-transform: uppercase; letter-spacing: .06em; }
+#lc-posjogo .lc-jogar-de-novo:hover { color: #f0e6d2; border-color: #f0e6d2; }
+#lc-posjogo .lc-jogar-de-novo.lc-confirmar { border-color: #e84057; color: #e84057; }
+#lc-posjogo .lc-jogar-de-novo[disabled] { opacity: .6; pointer-events: none; }
+#lc-posjogo .lc-jogar-de-novo + .lc-fechar { margin-left: 0; }
 #lc-posjogo .lc-mapa { position: relative; align-self: start; }
 #lc-posjogo .lc-mapa svg { width: 330px; height: 330px; display: block; background: #0a1a14; border: 1px solid #1e2328; }
 #lc-posjogo .lc-legenda { margin-top: 6px; font-size: 11px; display: flex; gap: 10px; flex-wrap: wrap; }

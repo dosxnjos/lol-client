@@ -8,6 +8,7 @@ import { iniciarFilaRapida } from './fila-rapida.js';
 import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel } from './posjogo/index.js';
 import { iniciarChampSelect } from './champselect.js';
 import { iniciarRunas } from './runas.js';
+import { iniciarRecompensas, levantar, criarLcu } from './recompensas.js';
 import { blocoChampSelect, blocoRunas, blocoConexao, blocoPainel, blocoVoz, blocoAlertas, blocoMinimapa, blocoMentor,
   blocoCarregamento, blocoTraumas } from './blocos.js';
 import { coletor, sincronizarConfig, estadoConexao } from './coach.js';
@@ -22,6 +23,7 @@ export function init(context) {
   const posjogo = seguro('pós-jogo', () => iniciarPosjogo(context, cfg, coletor));
   const champ = seguro('champ select', () => iniciarChampSelect(context, cfg, coletor));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
+  const recompensas = seguro('recompensas', () => iniciarRecompensas(context, cfg));
   seguro('configurações', () => iniciarConfiguracoes({ cfg, definir, aoMudar, restaurar }));
   seguro('blocos', () => {
     registrarBloco('champSelect', blocoChampSelect(champ));
@@ -60,6 +62,9 @@ export function init(context) {
     aceite: { mostrarOverlay, esconderOverlay }, // overlay só desenha; quem aceita é o observador
     winrate: champ, // estado(), estatisticas(championId, posicao), lerHistorico()
     runas, // aoTravar(championId, posicao) simula o travamento: aplica a runa ou abre o popup
+    // levantar() só lê (GET): o que está pendente e o motivo de pular cada item; rodar() coleta de verdade
+    recompensas: { levantar: () => levantar(criarLcu(), cfg), rodar: () => recompensas?.rodar('manual'), estado: () => recompensas?.estado() },
+    foco: () => aceite?.foco?.estado(),
   };
   document.documentElement.dataset.lolClient = 'ok';
   console.log('[lol-client] ok');
