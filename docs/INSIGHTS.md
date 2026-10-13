@@ -245,7 +245,8 @@ independente em Python: `tools/teste-winrate.py` (par do `tools/teste-winrate.mj
   `timeline.lane/role` não serve (ver acima). A posição pedida vem de
   `myTeam[].assignedPosition` (minúscula: `"top"`); vazia → só a linha geral.
 - **Números**: `n`, `vitorias`, `winrate` = `round(v/n·100)`, `k`, `d`, `a` médios e
-  `kda = (K+A)/max(1,D)` sobre os totais, com 1 casa (meia unidade para cima, como `Math.round`).
+  `kda = (K+A)/D` sobre os totais, com 1 casa (meia unidade para cima, como `Math.round`); com
+  `D = 0` o kda é nulo e o selo diz "KDA perfeito" (`(K+A)/1` cresceria com o número de partidas).
   Sem partida → "sem partidas". O selo mostra o tamanho do histórico lido.
 
 Conferência (13/10/2026, 200 partidas): Renekton 86 · 49% · KDA 1,5 (topo, as mesmas 86);

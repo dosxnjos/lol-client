@@ -1,0 +1,165 @@
+{
+ "gameId": 3292712362,
+ "eu": 1,
+ "time": 100,
+ "campeao": 58,
+ "papel": "TOP",
+ "folgas": {
+  "folga_100": 4778,
+  "folga_200": 7810
+ },
+ "adv_incerto": false,
+ "amostra_ids": [
+  3292673407,
+  3292656408,
+  3292611857,
+  3292592702,
+  3291749162,
+  3291733499,
+  3291720658,
+  3291708550,
+  3291333732,
+  3291279167,
+  3291267798,
+  3291245839,
+  3291218155,
+  3291213848,
+  3291213653,
+  3291211660
+ ],
+ "adv": 6,
+ "adv_campeao": 83,
+ "duracao_s": 1826,
+ "mortes": [
+  {
+   "t": "09:21",
+   "ms": 561338,
+   "pos": [
+    13098,
+    3301
+   ],
+   "regiao": "rota_bot",
+   "lado": "inimigo",
+   "inimigos": 2,
+   "matador": 10,
+   "aliados_perto": [
+    4,
+    5
+   ],
+   "frame_ms": 540210,
+   "objetivos": [
+    "HORDE@09:26",
+    "HORDE@09:30"
+   ]
+  },
+  {
+   "t": "11:07",
+   "ms": 667090,
+   "pos": [
+    1126,
+    10559
+   ],
+   "regiao": "rota_top",
+   "lado": "aliado",
+   "inimigos": 1,
+   "matador": 6,
+   "aliados_perto": [],
+   "frame_ms": 660236,
+   "objetivos": []
+  },
+  {
+   "t": "16:07",
+   "ms": 967911,
+   "pos": [
+    1026,
+    9790
+   ],
+   "regiao": "rota_top",
+   "lado": "aliado",
+   "inimigos": 1,
+   "matador": 6,
+   "aliados_perto": [
+    3
+   ],
+   "frame_ms": 960324,
+   "objetivos": [
+    "TOWER_BUILDING/MID_LANE/OUTER_TURRET@16:19",
+    "DRAGON/HEXTECH_DRAGON@17:18"
+   ]
+  },
+  {
+   "t": "24:05",
+   "ms": 1445508,
+   "pos": [
+    7324,
+    8832
+   ],
+   "regiao": "rio",
+   "lado": "inimigo",
+   "inimigos": 2,
+   "matador": 9,
+   "aliados_perto": [
+    4,
+    5
+   ],
+   "frame_ms": 1440453,
+   "objetivos": [
+    "TOWER_BUILDING/TOP_LANE/INNER_TURRET@24:35"
+   ]
+  },
+  {
+   "t": "29:45",
+   "ms": 1785889,
+   "pos": [
+    12677,
+    13791
+   ],
+   "regiao": "base_inimiga",
+   "lado": "inimigo",
+   "inimigos": 4,
+   "matador": 9,
+   "aliados_perto": [
+    3,
+    4,
+    5
+   ],
+   "frame_ms": 1800548,
+   "objetivos": []
+  }
+ ],
+ "diffs": {
+  "10": {
+   "ouro": 171,
+   "xp": -134,
+   "farm": 0,
+   "eu": [
+    3334,
+    4670,
+    67
+   ],
+   "adv": [
+    3163,
+    4804,
+    67
+   ]
+  },
+  "15": {
+   "ouro": -368,
+   "xp": -554,
+   "farm": 1,
+   "eu": [
+    4678,
+    7959,
+    108
+   ],
+   "adv": [
+    5046,
+    8513,
+    107
+   ]
+  }
+ },
+ "fpm": 7.8861,
+ "fpm_media": 7.4437,
+ "fpm_n": 16
+}

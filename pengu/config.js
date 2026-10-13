@@ -5,7 +5,7 @@
 const CHAVE = 'lol-client.config';
 const POSICOES = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
 const FILAS = [420, 440];
-const ATRASOS = [3, 5, 7, 8, 9, 10];
+export const ATRASOS = [3, 4, 5, 6, 7, 8, 9, 10]; // dona única: painel (configuracoes.js) e Ctrl+K
 
 export const PADRAO = {
   esconderTft: true,
@@ -14,6 +14,15 @@ export const PADRAO = {
   filaRapida: { ligado: true, fila: 420, pos1: 'TOP', pos2: 'JUNGLE' },
   posjogo: { ligado: true },
   extras: { esconderEvento: false, esconderClassic: false, esconderLoja: false },
+  champSelect: { ligado: true },
+  // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
+  runas: {
+    ligado: true,
+    regras: [
+      { championId: 58, posicao: '*', paginas: [1409260191, 2147419287] }, // Renekton: ☝️🐊 e Nova Página de Runas 9
+      { championId: 154, posicao: '*', paginas: [1540029809] }, // Zac: 🤢
+    ],
+  },
 };
 
 const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
@@ -24,7 +33,9 @@ function mesclar(padrao, salvo) {
   const out = {};
   for (const [k, v] of Object.entries(padrao)) {
     const s = salvo?.[k];
-    out[k] = v && typeof v === 'object' ? mesclar(v, s) : (s === undefined || typeof s !== typeof v ? v : s);
+    // lista é dado do usuário: vale a salva inteira (até vazia); sem lista salva, a do padrão
+    if (Array.isArray(v)) out[k] = clonar(Array.isArray(s) ? s : v);
+    else out[k] = v && typeof v === 'object' ? mesclar(v, s) : (s === undefined || typeof s !== typeof v ? v : s);
   }
   return out;
 }
@@ -49,6 +60,14 @@ export function salvar() {
 }
 
 export const aoMudar = fn => (ouvintes.add(fn), () => ouvintes.delete(fn));
+
+// as regras de runa ficam: são dado do Gabriel, não preferência (plano v1, passo 7d)
+export function restaurar() {
+  const regras = cfg.runas?.regras;
+  Object.assign(cfg, clonar(PADRAO));
+  if (Array.isArray(regras)) cfg.runas.regras = clonar(regras);
+  salvar();
+}
 
 // lista [classe, ligado] de todas as chaves booleanas
 export function classes(c = cfg) {
@@ -76,7 +95,11 @@ export function definir(caminho, valor) {
   salvar();
 }
 
-const proximo = (lista, atual) => lista[(lista.indexOf(atual) + 1) % lista.length];
+// valor fora da lista (salvo por versão antiga): vai ao próximo maior, não volta ao começo
+const proximo = (lista, atual) => {
+  const i = lista.indexOf(atual);
+  return i >= 0 ? lista[(i + 1) % lista.length] : (lista.find(v => v > atual) ?? lista[0]);
+};
 const avisar = msg => { try { Toast.success(msg); } catch { console.log('[lol-client]', msg); } };
 
 const ALTERNAVEIS = [
@@ -85,6 +108,8 @@ const ALTERNAVEIS = [
   ['aceite.ligado', 'aceitar partida automático'],
   ['filaRapida.ligado', 'botão fila rápida'],
   ['posjogo.ligado', 'painel pós-jogo'],
+  ['champSelect.ligado', 'winrate no champ select'],
+  ['runas.ligado', 'runa por campeão ao travar'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],
@@ -112,7 +137,7 @@ export function registrarAcoes(extras = []) {
   ciclo('filaRapida.pos2', POSICOES, '2ª posição da fila rápida', undefined, 'filaRapida.pos1');
   CommandBar.addAction({
     name: 'lol-client: restaurar configuração padrão', group: grupo, tags: ['lol-client'],
-    perform: () => { Object.assign(cfg, clonar(PADRAO)); salvar(); avisar('configuração padrão restaurada'); },
+    perform: () => { restaurar(); avisar('configuração padrão restaurada'); },
   });
   for (const a of extras) CommandBar.addAction({ group: grupo, ...a });
 }

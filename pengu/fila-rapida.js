@@ -54,6 +54,7 @@ export function iniciarFilaRapida(context, cfg) {
   let buscando = false, ocupado = false;
 
   const atualizar = b => {
+    if (!b) return; // desligado na configuração: sem botão
     b.textContent = buscando ? 'cancelar fila' : 'fila rápida';
     b.classList.toggle('lc-buscando', buscando);
     b.classList.toggle('lc-ocupado', ocupado);
@@ -75,13 +76,21 @@ export function iniciarFilaRapida(context, cfg) {
   const botao = () => document.querySelector(SELETORES.botao) || criar();
   const criar = () => {
     const ancora = document.querySelector(SELETORES.ancora);
-    if (!ancora) return null;
+    if (!ancora || !cfg.filaRapida.ligado) return null;
     const b = document.createElement('div');
     b.id = 'lc-fila-rapida';
     b.addEventListener('click', clique);
     ancora.appendChild(b);
     atualizar(b);
     return b;
+  };
+
+  // desligado na configuração: o botão sai do DOM; religado: volta sem recarregar
+  const sincronizar = () => {
+    const b = document.querySelector(SELETORES.botao);
+    if (!cfg.filaRapida.ligado) b?.remove();
+    else if (b) atualizar(b);
+    else criar();
   };
 
   // o Ember re-renderiza a barra: reinjeta quando some (guarda: só cria se não existir)
@@ -108,5 +117,5 @@ export function iniciarFilaRapida(context, cfg) {
     const b = document.querySelector(SELETORES.botao);
     if (b) atualizar(b);
   });
-  return { prepararLobby: () => prepararLobby(cfg) };
+  return { prepararLobby: () => prepararLobby(cfg), sincronizar };
 }

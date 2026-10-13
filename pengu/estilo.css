@@ -78,3 +78,82 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 #lc-posjogo .lc-padroes { margin: 0; padding-left: 18px; }
 #lc-posjogo .lc-nota { font-size: 11px; color: #5b5a56; margin-top: 8px; }
 #lc-posjogo .lc-carregando { font: 14px var(--font-body); color: #cdbe91; padding: 30px; background: #010a13; border: 1px solid #785a28; }
+
+/* seção "lol-client" nas Configurações (configuracoes.js): o conteúdo nativo só fica escondido */
+.lol-settings-container.lc-ativo .lol-settings-options > :not(#lc-config-painel) { display: none !important; }
+.lol-settings-container.lc-ativo .lol-settings-reset-button { visibility: hidden; }
+.lol-settings-container:not(.lc-ativo) .lol-settings-title > .lc-titulo,
+.lol-settings-container.lc-ativo .lol-settings-title > :not(.lc-titulo) { display: none; }
+#lc-config-painel { height: 100%; overflow-x: hidden; }
+#lc-config-painel .lol-settings-general-section-title { margin-top: 22px; }
+#lc-config-painel .lol-settings-general-section-title:first-child { margin-top: 0; }
+#lc-config-painel .lc-explica { margin: 3px 0 0 24px; font: 12px/16px var(--font-body); color: #a09b8c; }
+#lc-config-painel .lc-campos { display: flex; gap: 12px; }
+#lc-config-painel .lc-campo { flex: 0 0 calc((100% - 24px) / 3); min-width: 0; }
+#lc-config-painel > .lc-explica { margin-left: 0; }
+#lc-config-painel .lc-campo lol-uikit-framed-dropdown { display: block; width: 100%; margin-top: 6px; }
+#lc-config-painel .lc-bloco > .lc-explica { margin-left: 0; }
+#lc-config-painel .lc-rodape { margin: 26px 0 8px; }
+#lc-config-painel .lc-restaurar { display: inline-block; width: auto; min-width: 190px; }
+
+/* selo do winrate no champ select (champselect.js); some com o champSelect desligado */
+html:not(.lc-champ-select) #lc-winrate { display: none; }
+#lc-winrate {
+  position: fixed; left: 50%; top: 92px; transform: translateX(-50%); z-index: 100000; pointer-events: none;
+  min-width: 210px; padding: 7px 12px 8px; box-sizing: border-box; text-align: center;
+  background: linear-gradient(180deg, rgba(1, 10, 19, .92), rgba(1, 10, 19, .82));
+  border: 1px solid #463714; border-top-color: #785a28; box-shadow: 0 0 12px rgba(0, 0, 0, .6);
+  font: 12px/1.45 var(--font-body); color: #a09b8c;
+}
+#lc-winrate .lc-wr-titulo { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; margin-bottom: 2px; }
+#lc-winrate .lc-wr-nome { font: 700 12px/1.3 var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #c8aa6e; }
+#lc-winrate .lc-wr-linha { color: #f0e6d2; }
+#lc-winrate .lc-wr-amostra { font-size: 10px; color: #5b5a56; white-space: nowrap; }
+/* ancorado acima da coluna do meu time: alinhado à esquerda, compacto */
+#lc-winrate.lc-wr-coluna { transform: none; min-width: 0; padding: 5px 10px 6px; text-align: left; line-height: 1.35; }
+
+/* popup das runas (runas.js): 2+ páginas na regra do campeão travado. Sem fundo bloqueante: só a
+   caixa recebe clique, o champ select (troca, feitiços, chat) segue usável; abaixo do #lc-aceite (100002) */
+#lc-runas {
+  position: fixed; inset: 0; z-index: 100000; display: flex; align-items: center; justify-content: center;
+  pointer-events: none;
+}
+#lc-runas .lc-runas-caixa {
+  pointer-events: auto;
+  width: 340px; padding: 16px 18px 14px; box-sizing: border-box; display: flex; flex-direction: column; gap: 8px;
+  background: #010a13; border: 2px solid transparent; border-image: linear-gradient(180deg, #c8aa6e, #785a28) 1;
+  box-shadow: 0 0 30px rgba(0, 0, 0, .8); font: 12px/1.4 var(--font-body); color: #a09b8c;
+}
+#lc-runas .lc-runas-titulo { font: 700 16px/1.2 var(--font-display); letter-spacing: .05em; text-transform: uppercase; color: #f0e6d2; }
+#lc-runas .lc-runas-sub { margin-bottom: 4px; }
+#lc-runas button {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 9px 12px; cursor: pointer; text-align: left;
+  background: linear-gradient(180deg, #1e2328, #0f1317); border: 1px solid #785a28; color: #cdbe91;
+}
+#lc-runas button:hover { border-color: #c8aa6e; color: #f0e6d2; box-shadow: 0 0 8px rgba(200, 170, 110, .35); }
+#lc-runas .lc-runas-nome { font: 700 14px/1.2 var(--font-display); color: #f0e6d2; }
+#lc-runas .lc-runas-estilos { font-size: 11px; color: #a09b8c; }
+#lc-runas .lc-runas-fechar { align-items: center; margin-top: 2px; padding: 6px; background: none; border-color: #3c3c41; color: #a09b8c; font: 700 11px var(--font-display); text-transform: uppercase; letter-spacing: .06em; }
+
+/* blocos das regras de runa na seção lol-client (blocos.js) */
+#lc-config-painel .lc-regras { display: flex; flex-direction: column; gap: 10px; margin-top: 12px; }
+#lc-config-painel .lc-regra { padding: 8px 10px; border: 1px solid #1e2328; background: rgba(30, 35, 40, .35); }
+#lc-config-painel .lc-regra-nova { margin-top: 12px; border-style: dashed; border-color: #3c3c41; }
+#lc-config-painel .lc-regra-cab { display: flex; align-items: center; gap: 10px; }
+#lc-config-painel .lc-regra-campeao { flex: 1; font: 700 13px var(--font-display); letter-spacing: .05em; text-transform: uppercase; color: #f0e6d2; }
+#lc-config-painel .lc-regra .lol-settings-window-size-text:empty { display: none; }
+#lc-config-painel .lc-regra-pos { flex: 0 0 170px; }
+#lc-config-painel .lc-regra-pos lol-uikit-framed-dropdown { margin-top: 0; }
+#lc-config-painel .lc-regra-remover, #lc-config-painel .lc-regra-adicionar { flex: 0 0 auto; min-width: 110px; }
+#lc-config-painel .lc-busca { flex: 1; }
+#lc-config-painel .lc-fichas { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; margin-top: 8px; }
+#lc-config-painel .lc-fichas > .lc-explica { margin: 0; }
+#lc-config-painel .lc-ficha { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; border: 1px solid #785a28; background: #1e2328; color: #f0e6d2; font: 12px var(--font-body); }
+#lc-config-painel .lc-ficha.lc-apagada { border-color: #5b2a2a; color: #e84057; }
+#lc-config-painel .lc-ficha-x { cursor: pointer; padding: 0 4px; color: #a09b8c; }
+#lc-config-painel .lc-ficha-x:hover { color: #f0e6d2; }
+#lc-config-painel .lc-ficha-add { flex: 0 0 190px; }
+#lc-config-painel .lc-sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+#lc-config-painel .lc-sugestoes:empty { display: none; }
+#lc-config-painel .lc-sugestao { cursor: pointer; padding: 3px 8px; border: 1px solid #3c3c41; color: #cdbe91; font: 12px var(--font-body); }
+#lc-config-painel .lc-sugestao:hover { border-color: #c8aa6e; color: #f0e6d2; }

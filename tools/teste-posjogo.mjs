@@ -1,12 +1,12 @@
 // Confere pengu/posjogo/analise.js contra o caso de referência de docs/INSIGHTS.md (gameId 3292712362).
-// Os JSON vêm de temp/insights/ (baixados da LCU, gitignored). uso: node tools/teste-posjogo.mjs [pasta]
+// Os JSON vêm de tests/fixtures/ (versionados; origem: LCU, 13/10/2026). uso: node tools/teste-posjogo.mjs [pasta]
 import { readFileSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { analisar } from '../pengu/posjogo/analise.js';
 
-const pasta = process.argv[2] || fileURLToPath(new URL('../temp/insights/', import.meta.url));
+const pasta = process.argv[2] || fileURLToPath(new URL('../tests/fixtures/', import.meta.url));
 const ler = n => JSON.parse(readFileSync(pasta + '/' + n, 'utf8'));
-if (!existsSync(pasta + '/game-3292712362.json')) { console.log('FALHOU: sem temp/insights/game-3292712362.json'); process.exit(1); }
+if (!existsSync(pasta + '/game-3292712362.json')) { console.log(`FALHOU: sem ${pasta}/game-3292712362.json`); process.exit(1); }
 
 const ID = 3292712362;
 const AMOSTRA = [3292673407, 3292656408, 3292611857, 3292592702, 3291749162, 3291733499, 3291720658, 3291708550,

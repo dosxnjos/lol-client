@@ -1,8 +1,13 @@
 # prova do passo 13: confere coletor/analise.py contra o caso de referência de docs/INSIGHTS.md (gameId 3292712362)
+# lê de tests/fixtures/ (versionados) num SQLite em memória; não depende de dados/lol.db.
+# uso: python tools/teste-analise.py [pasta]
+import json
+import sqlite3
 import sys
 from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "coletor"))
+RAIZ = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(RAIZ / "coletor"))
 import analise, banco
 
 AMOSTRA = [3292673407, 3292656408, 3292611857, 3292592702, 3291749162, 3291733499, 3291720658,
@@ -20,7 +25,16 @@ def conf(nome, obtido, esperado):
     if obtido != esperado:
         falhas.append(f"{nome}: obtido {obtido!r}, esperado {esperado!r}")
 
-c = banco.abrir_leitura()
+PASTA = Path(sys.argv[1]) if len(sys.argv) > 1 else RAIZ / "tests" / "fixtures"
+ler = lambda n: json.loads((PASTA / n).read_text(encoding="utf-8"))
+puuid = ler("summoner.json")["puuid"]
+c = sqlite3.connect(":memory:")
+c.executescript(banco.ESQUEMA)
+banco.meta(c, "puuid", puuid)
+for g in ler("historico.json")["games"]["games"]:  # só o próprio participante: basta para a média de farm
+    if g["gameId"] != 3292712362:
+        banco.gravar_partida(c, g, puuid)
+banco.gravar_partida(c, ler("game-3292712362.json"), puuid, ler("timeline-3292712362.json"))
 r = analise.analisar(c, 3292712362, amostra_ids=AMOSTRA)
 conf("eu", (r["participantId"], r["time"], r["campeao"], r["papel"]), (1, 100, 58, "TOP"))
 conf("adversario", r["adversario"], {"participantId": 6, "campeao": 83, "incerto": False})
@@ -39,7 +53,7 @@ conf("farm valor", abs(f["valor"] - 7.8861) < 0.01, True)
 conf("farm media", f["media"] is not None and abs(f["media"] - 7.4437) < 0.01, True)
 conf("farm n", f["n"], 16)
 livre = analise.analisar(c, 3292712362)["farm"]
-print(f"amostra livre (banco inteiro): n={livre['n']} media={livre['media']:.4f}")
+print(f"amostra livre (todas as fixtures): n={livre['n']} media={livre['media']:.4f}")
 print(f"farm: valor={f['valor']:.4f} media={f['media']:.4f} n={f['n']}")
 print("mortes:", [(m["t"], m["regiao"]) for m in r["mortes"]], "| diffs 10:", d["10"], "| 15:", d["15"])
 print("\n".join(falhas) if falhas else "referência ok (0 falhas)")

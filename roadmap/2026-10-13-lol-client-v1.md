@@ -116,6 +116,9 @@ Descartado: revelar o lobby (privacidade de terceiros, ban); trocar skin dentro 
   conta na fila e um aceite perdido gera penalidade. Teste de busca só com o Gabriel no
   teclado e avisado.
 - Nunca recarregar a interface fora das fases `None`/`Lobby`.
+- Personalizada de teste: nunca travar campeão; sair só por
+  `POST /lol-lobby-team-builder/champ-select/v1/session/quit` com rede de segurança na página
+  (`cancel-champ-select` devolve 204 e não cancela; o client põe hover sozinho e o timer inicia o jogo).
 - Credencial do lockfile e tokens não vão para arquivo versionado, log nem diário.
 - Nada roda o tempo todo: o coletor só existe enquanto o LoL está aberto (+ 10 min).
 
@@ -169,6 +172,16 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
   do client grava o token da LCU: [COLETOR.md](../docs/COLETOR.md) § Segurança.
 - **Aceite**: o atraso conta pelo `timer` do servidor, não pelo relógio local, porque o
   evento pode chegar atrasado.
+- **Winrate (7c) pela LCU, não pelo banco do coletor**: o plugin não pode depender do coletor
+  (gatilho pode falhar). A lista da LCU vem com 20 ou 200 partidas; o cache soma por `gameId`
+  (só cresce) e o selo mostra o tamanho do histórico lido. Posição pela `roleBoundItem`
+  (INSIGHTS § Winrate), não pela `timeline`. Quem: opus 5.5 (subagente, advisor consultado);
+  confiança média-alta; reverteria se o histórico vier com 20 com frequência na hora do champ
+  select: aí o selo passa a ler do banco por HTTP local como bônus opcional (mesma regra).
+- **Restaurar padrão (painel e Ctrl+K) mantém `runas.regras`** (7d): regra de runa é dado do
+  Gabriel, não preferência; apagar é pela própria lista. Lista salva vale inteira, até vazia; sem
+  lista salva, entra a semente do `PADRAO`. Quem: opus 5.5; confiança alta; reverteria se ele
+  pedir um "zerar regras" explícito (botão próprio, não o restaurar).
 - Conceitos do acervo: **via-negativa** (enxugar a interface é tirar, não pôr; os extras
   ficam desligados por padrão) e **falácia da previsão** (o "por que errei" é heurística
   sobre 1 frame por minuto; o painel mostra padrões, não veredito).
@@ -233,7 +246,7 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    `secondPositionPreference:"JUNGLE"`; `GET /lol-lobby/v2/lobby` com `gameConfig.queueId:420`
    **reprova se:** botão ausente ou fila ≠ 420. Clique real com busca: só o Gabriel, avisado.
 
-7b. [ ] **Seção "lol-client" nas Configurações do client** (pedido do Gabriel, 13/10/2026: "o que
+7b. [x] **Seção "lol-client" nas Configurações do client** (pedido do Gabriel, 13/10/2026: "o que
    der para ativar e desativar direto pela aba de configurações do client"). Injetar um item
    novo na navegação do modal de configurações (mesmo padrão dos plugins do Pengu que criam
    seção própria: observar o modal de settings e acrescentar `lol-uikit-navigation-item` +
@@ -242,13 +255,30 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    TFT, coluna larga, aceite ligado, fila rápida ligada, pós-jogo ligado, extras) + atraso do
    aceite (s) + fila e posições da fila rápida. Mudança aplica na hora (classes no `<html>`,
    módulos ligam e desligam sem recarregar) e persiste no `DataStore`. O Ctrl+K continua como atalho.
-   **prova:** abrir as configurações (engrenagem no topo direito), eval
+   **prova:** abrir as configurações (engrenagem no topo direito), clicar em LOL-CLIENT na
+   navegação (o painel só existe com a seção selecionada, como as nativas), eval
    `!!document.querySelector('#lc-config-nav') + '|' + document.querySelectorAll('#lc-config-painel input[type=checkbox], #lc-config-painel lol-uikit-flat-checkbox').length`
    → `true|<≥6>`; desmarcar "esconder TFT" por eval de clique e conferir
    `getComputedStyle(document.querySelector('.menu_item_navbar_tft')).display !== 'none'` → `true`, e remarcar
    **reprova se:** `false|0`, ou o TFT continuar escondido após desmarcar
+   Feito (13/10/2026, `pengu/configuracoes.js`): grupo "Plugins > LOL-CLIENT" no topo da
+   navegação; prova → `true|16` (8 caixas, input + componente), desmarcar → TFT `flex`, remarcar
+   → `none`, DataStore acompanha. Também conferido ao vivo: aceite desligado → `decidir` dá
+   `parar/desligado` e a contagem em curso some; fila rápida desligada → botão sai do DOM e
+   volta ao religar; 1ª = 2ª posição troca as duas; "restaurar padrão do lol-client" (clique
+   real) volta o `cfg` ao `PADRAO`; troca de seção nativa ↔ lol-client e
+   fechar/reabrir voltam ao nativo certo. Detalhes do modal: [ARMADILHAS](../docs/ARMADILHAS.md).
+   Revisão adversarial (13/10/2026): lista de atrasos única (`ATRASOS` do `config.js`, 3 a 10 s) no painel
+   e no Ctrl+K, que antes voltava a 3 s com 4 ou 6; re-prova → `true|20` (10 caixas, já com os blocos
+   7c/7d), desmarcar → TFT `flex`, remarcar → `none`; Ctrl+K no node: `4->5 6->7 10->3`.
+   **Para 7c e 7d**: não editar o painel; o módulo novo chama
+   `registrarBloco('champSelect' | 'runas', (el, { cfg, definir, ui }) => ...)` (de
+   `configuracoes.js`, também em `window.__lolClient`), com `ui.caixa`/`ui.lista`/`ui.linha`
+   para controles com cara nativa. A chave nova vai no `PADRAO` do `config.js`. Atenção: o
+   "restaurar padrão" (painel e Ctrl+K) volta o `cfg` inteiro ao `PADRAO`, inclusive as regras
+   de runas do 7d; decidir no 7d se a lista fica de fora.
 
-7c. [ ] **Winrate no champ select** (pedido do Gabriel, 13/10/2026; era proposta v2). Em
+7c. [x] **Winrate no champ select** (pedido do Gabriel, 13/10/2026; era proposta v2). Em
    `ChampSelect`, observar `/lol-champ-select/v1/session`; para o campeão em hover ou escolhido
    pelo jogador local (`myTeam[].championPickIntent`/`championId` do `localPlayerCellId`), mostrar
    num selo discreto perto do retrato: partidas, winrate e KDA médio com aquele campeão, e o
@@ -261,8 +291,23 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    `customGameLobby`, depois iniciar a seleção; sem penalidade e sem ranque), hover num campeão
    jogado e eval `document.querySelector('#lc-winrate')?.textContent` → contém `%`; sair da sala depois.
    **reprova se:** teste unitário diverge ou selo ausente em champ select
+   Feito (13/10/2026, `pengu/champselect.js`, bloco em `pengu/blocos.js`): `node tools/teste-winrate.mjs`
+   (padrão: `tests/fixtures/historico.json`, versionado) → `17 partidas no histórico, 12/12 recortes
+   iguais ao Python` + `ok`; com `temp/historico.json` do dia → `200 …, 24/24` + `ok`; ao vivo (personalizada
+   sozinho, hover em Renekton por `PATCH` sem completar) → selo `Renekton / histórico: 200
+   partidas / 86 partidas · 49% · KDA 1,5 / topo: 86 partidas · 49% · KDA 1,5`, acima da coluna
+   do time (`temp/7c-selo.png`). Regra da amostra e da posição: [INSIGHTS](../docs/INSIGHTS.md) § Winrate.
+   **Atenção**: a 1ª tentativa ao vivo iniciou uma personalizada (3 min, sem penalidade): o
+   `cancel-champ-select` não cancela e o client põe hover sozinho. Saída certa e protocolo:
+   [ARMADILHAS](../docs/ARMADILHAS.md). Criar a sala exige `queueId: 3100` (não `mutators {id:1}`).
+   Revisão adversarial (13/10/2026): erro HTTP do histórico não conta mais como lido (relê a cada 15 s,
+   "histórico indisponível" no selo); remoção do selo invalida o desenho em voo; `D = 0` → "KDA perfeito"
+   (INSIGHTS § Winrate). Provas sintéticas (`temp/e-revisao-sintetico.js`): 503 → `ultimaLeitura=0`, selo
+   "histórico indisponível agora", relê após 15 s (20 partidas); desenho em voo + `Delete` → sem selo.
+   Ao vivo de novo: selo `Renekton / histórico: 20 partidas / 17 partidas · 47% · KDA 0,9 / topo: …`.
 
-7d. [ ] **Runa certa por campeão e posição** (pedido do Gabriel, 13/10/2026: joga Renekton
+7d. [ ] **Runa certa por campeão e posição** (parcial: falta o travamento real, ver o fim do passo;
+   pedido do Gabriel, 13/10/2026: joga Renekton
    no top e às vezes cai de jungle com Zac; esquece de trocar a página e joga com a runa do outro).
    - Config `runas`: lista de `{championId, posicao ('*' ou TOP/JUNGLE/MIDDLE/BOTTOM/UTILITY), paginas: [id da página]}`,
      editável na seção do 7b (campeão + posição + páginas existentes de `GET /lol-perks/v1/pages`).
@@ -271,7 +316,9 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
      Zac (154), `*` → `1540029809` ("🤢").
    - Gatilho: em `ChampSelect`, quando o jogador local **trava** o campeão (ação `pick` com
      `completed:true` do `localPlayerCellId` em `/lol-champ-select/v1/session`), uma vez por campeão.
-     Candidatas = regra da posição atribuída (`assignedPosition`), senão a regra `*`.
+     Candidatas = regra da posição atribuída (`assignedPosition`) se ainda tem página viva, senão a
+     regra `*` (regra de posição vazia ou toda apagada não esconde a `*`). Campeão = `myTeam[].championId`
+     do jogador local, senão o da ação (troca depois de travar muda só o `myTeam`).
      - 1 candidata → `PUT /lol-perks/v1/currentpage` com o id + toast "runa X aplicada".
      - 2+ candidatas → popup sobre o champ select com um botão por página (nome + estilos
        primário e secundário), clique aplica e fecha; focar a janela com `POST /riotclient/ux-show`
@@ -285,6 +332,31 @@ permanente (`Win32_ProcessStartTrace`), também nativa.
    regra com id inexistente → filtrada → `4/4 ok`; ao vivo, na partida personalizada sozinho do 7c,
    travar Zac e conferir `GET /lol-perks/v1/currentpage` → `id 1540029809`
    **reprova se:** teste diverge ou a página atual não muda
+   Feito (13/10/2026, `pengu/runas.js` + editor em `pengu/blocos.js`): `node tools/teste-runas.mjs`
+   → `4/4 ok` (+6 extras: posição vence `*`, minúscula, sem posição, dono da página). Ao vivo na
+   personalizada, **"travar Zac" virou a chamada direta** `__lolClient.runas.aoTravar(154, '')`
+   (travar de verdade pode iniciar a partida) → `{acao:aplicou,id:1540029809}` e `currentpage` =
+   `1540029809 🤢` + toast; `aoTravar(58, '')` → popup com ☝️🐊 (Precisão + Determinação) e Nova
+   Página de Runas 9 (Feitiçaria + Dominação), clique → `currentpage 2147419287`
+   (`temp/7d-popup.png`). Fora do champ select: página apagada avisa uma vez (2ª chamada calada),
+   campeão sem regra com a página do Renekton → "tua runa atual é do Renekton". Editor: adicionar
+   (busca "ahr" → Ahri, Meio), recusar duplicada, pôr página, remover; restaurar padrão manteve
+   as regras (`temp/7d-config*.png`). Gatilho do socket com contexto falso (sessão sintética):
+   hover sem travar → nada; pick `completed` de 58 → popup com 2; mesmo evento de novo → nada;
+   após `Delete` → popup de novo.
+   Revisão adversarial (13/10/2026): regra da posição sem página viva cai na `*` (`consultarRunas`);
+   troca depois de travar lê `myTeam`; `Delete`/fase nova no meio dos awaits não abre popup nem aplica;
+   popup sem fundo bloqueante, fecha com Esc e fora de `ChampSelect`; aviso neutro "é a de Ahri".
+   `node tools/teste-runas.mjs` → `4/4 ok` (+9 extras). Sintético (`temp/e-revisao-sintetico.js`, PUT
+   interceptado): ação 58 + `myTeam` 154 → `PUT 1540029809`; destroca → popup de 2; canto da tela fora do
+   popup, caixa clicável, fundo transparente; Esc fecha; fase `Lobby` fecha; `Delete` no mesmo tick →
+   nada; Zac/selva com regra da selva vazia → aplica 1540029809. Ao vivo (personalizada, hover sem
+   travar): `aoTravar(154)` → `currentpage 1540029809 🤢`; `aoTravar(58)` → popup de 2 (`temp/7d-popup.png`),
+   clique → `2147419287`; popup aberto + quit → fase `Lobby`, popup e selo somem. Editor: regra "Zac / Selva"
+   sem página mostra "vale a regra de qualquer posição" (`temp/7d-config.png`); atraso 6 s + restaurar →
+   atraso 10 s e as 3 regras ficam (`temp/7d-config-restaurado.png`); regra de teste removida.
+   **Falta** (só com o Gabriel, travar em teste pode iniciar a partida): travar Zac de verdade numa
+   partida e conferir `currentpage`, e uma troca de campeão real depois de travar.
 
 ### Fase 2 — coletor e ciclo de vida
 
