@@ -59,7 +59,23 @@
 
 ### Fase A: foco ao achar partida
 
-1. [ ] **Sonda** (`tools/sonda-foco.js`, injetada por `node tools/cdp.mjs eval`, sem ficar no plugin):
+1. [x] **Resultado (13/10/2026, 14:43, fila real recusada pelo Gabriel):** o foco vem do **lado nativo**.
+   Sem nenhuma chamada JS a `/riotclient/*` no ReadyCheck; o `ux-state` vai a `"ShowMain"` 0,06 s depois da
+   fase mudar e a página recebe `focus` junto (−0,20 s no registro de 250 ms). A janela "League of Legends"
+   foi para a frente por cima do navegador (vigia de `GetForegroundWindow` a cada 50 ms,
+   `tools/sonda-foco.js` + vigia em `%TEMP%`). Antes: último `blur` 32 s antes. Logo: bloquear no JS não
+   serve; o passo 2 segue pela rota nativa (`ux-minimize` ao detectar o roubo, com o piscar).
+   **Segunda leitura (13/10, ~15:00, Gabriel: "tenho certeza que dá para desabilitar o autofoco, já
+   instalei algum plugin no passado que fazia isso"):** as chamadas nativas do JS do client passam por
+   `window.riotInvoke` (`Window.Show`, `Window.Activate`, `Window.Flash`…), que a 1ª sonda não via. Mas
+   `riotInvoke` é **não gravável e não configurável** (não dá para embrulhar), e nenhum script carregado
+   trata `ux-state`: o backend manda `OnJsonApiEvent_riotclient_ux-state_request` e quem mostra a janela é
+   o executável nativo, que confirma por `PUT /riotclient/ux-state/ack`. Pesquisa na web (13/10) não achou
+   o plugin antigo. Sem rota para impedir o pedido, segue `ux-minimize` logo depois do roubo.
+   **Pedido novo do Gabriel na mesma mensagem:** "esses botões para aceitar ou não nem precisam ficar no
+   cliente, sim fora dele, no meio da minha tela, no canto" → passo 2b.
+   Texto original do passo:
+   **Sonda** (`tools/sonda-foco.js`, injetada por `node tools/cdp.mjs eval`, sem ficar no plugin):
    grava em `window.__sondaFoco` a cada 100 ms `document.hasFocus()`, `document.visibilityState`,
    `GET /riotclient/ux-state` e a fase do gameflow, e embrulha `fetch`/`XMLHttpRequest` para registrar
    toda chamada a `/riotclient/*`. Ler depois de um ready check real com o client atrás de outra janela.
@@ -77,6 +93,18 @@
    - no `ChampSelect`, trazer o client de volta (`ux-show`), porque aí ele precisa escolher.
    **prova:** teste em `tools/teste-aceite.mjs` com LCU falsa (minimiza só quando não tinha foco; não
    minimiza com a chave ligada; `ux-show` no champ select) + uma fila real com o Gabriel olhando.
+
+2b. [ ] **Aceitar/recusar fora do client** (`coletor/aviso_partida.py`, Tk como `moldura.py`): no
+   `ReadyCheck`, janelinha **sempre por cima e que não rouba o foco** (`WS_EX_NOACTIVATE | WS_EX_TOPMOST`)
+   no canto da tela principal, com a contagem do aceite automático (10 s) e dois botões: **aceitar agora**
+   (`POST /lol-matchmaking/v1/ready-check/accept`) e **recusar** (`.../decline`, que também cancela o aceite
+   automático). Some quando a fase sai do `ReadyCheck`. Chave `aceiteFlutuante` no plugin. Junto, chave
+   `esconderPopupPartida`: CSS `#lol-uikit-layer-manager-wrapper .modal:has(.ready-check-root-element)
+   { display: none !important }` (o que os auto-accept antigos do Gabriel faziam: "Xerekton-AutoAccept",
+   variante do AutoAccept do MTZ, e o AutoAcceptEnhanced de asherathegod/penguplugins; nenhum dos dois
+   mexe no foco da janela, lidos em 13/10; o SimpleAccept de Ku-Tadao/IPostWeirdStuffHere dá 404). **prova:**
+   teste com LCU falsa (botões chamam a rota certa, recusar cancela o aceite automático, a janela não muda
+   o `GetForegroundWindow`) + uma fila real com o Gabriel.
 
 ### Fase B: voz pré-gravada
 
@@ -96,14 +124,18 @@
 4. [ ] **Bancada de vozes** (`tools/bancada-vozes.py`, venv isolado em
    `%LOCALAPPDATA%\lol-client\voz\venv` com Python 3.11 do `uv`, nunca no Python do coletor): as
    mesmas 6 frases do catálogo em cada candidata, com o tempo de geração por frase:
-   - Coqui XTTS-v2 (`coqui-tts`, licença CPML, uso pessoal): 4 locutores masculinos e 4 femininos
-     embutidos, idioma `pt`;
-   - Piper pt-BR (todas as vozes publicadas: faber e as que houver);
-   - Kyutai Pocket TTS, se tiver voz em português;
-   - Gemini TTS: Aoede + 2 masculinas (chave do Doppler, só texto das frases sai da máquina);
-   - Microsoft neurais pt-BR (`edge-tts`: Antonio, Francisca, Thalita; grátis, sem chave, serviço de
-     leitura em voz alta do Edge, não oficial para uso por código);
-   - Daniel (OneCore, já instalado) e Maria do Windows (controle).
+   - **Coqui inteiro em português** (Gabriel, 13/10: "todas as vozes disponíveis pelo app, não só 4
+     ou 8"): XTTS-v2 com **todos** os locutores embutidos (`pt`), YourTTS com todos os locutores
+     (`pt-br`), `tts_models/pt/cv/vits` e Bark com os 10 presets `pt_speaker_*`; os outros modelos do
+     catálogo ficam listados no HTML com o motivo (outro idioma, vocoder, conversão de voz, XTTS v1.1
+     sem locutor embutido);
+   - Piper (todas as vozes `pt_*` publicadas: faber, cadu, jeff, edresson + tugão pt-PT);
+   - Kyutai Pocket TTS (tem `portuguese`: voz rafael, modelo 6 e 24 camadas, + 2 vozes de outro idioma);
+   - Gemini TTS: Aoede + 5 variadas (chave `GEMINI_API_KEY` no Doppler `harness/dev`, não no `pessoal`;
+     só o texto das frases sai da máquina);
+   - Microsoft neurais (`edge-tts`: todas as `pt-*`; grátis, sem chave, serviço de leitura em voz alta
+     do Edge, não oficial para uso por código);
+   - Windows (controle): Maria Desktop (SAPI), Maria e Daniel (OneCore).
    Conferir antes se o `coqui-tts` aceita Python 3.11; o XTTS baixa ~2 GB na primeira rodada.
    Saída: `temp/vozes/` + **`temp/vozes/2026-10-13-vozes.html` standalone** (áudio em data URI
    Opus via `ffmpeg`, lado a lado, com o tempo de geração). Só roda com o jogo fechado.

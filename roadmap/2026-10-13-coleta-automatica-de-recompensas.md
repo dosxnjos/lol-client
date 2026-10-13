@@ -23,7 +23,11 @@ A LCU tem 1.447 funções (`GET /help?format=Console`). As de coleta e o estado 
 | maestria, honra | `GET /lol-champion-mastery/v1/reward-grants`, `GET /lol-honor-v2/v1/reward-granted` | `POST /lol-honor-v2/v1/reward-granted/ack` | vazio |
 | TFT (passe) | `GET /lol-tft-pass/v1/active-passes` | `PUT /lol-tft-pass/v1/pass/{id}/milestone/claim-all-rewards` | não lido (TFT fica escondido) |
 
-Os nomes das funções vêm do `/help`; o formato exato dos corpos de `select`, `select-bulk` e `PUT
+Referência de terceiro (lida em 13/10, plugin `autoClaimPassReward.js` de Elaina Da Catto, na pasta de
+plugins antigos do Gabriel): `POST /lol-rewards/v1/grants/{info.id}/select` com corpo
+`{rewardGroupId: info.rewardGroupId, selections: [ids de rewardGroup.rewards]}`, disparado ao abrir a
+central de atividades ou o pós-jogo. Ele seleciona **todos** os itens, inclusive quando é "escolha 1 de N"
+(defeito que este plano evita). Os nomes das funções vêm do `/help`; o formato exato dos corpos de `select`, `select-bulk` e `PUT
 /lol-missions/v1/player/{id}` se confirma na 1ª coleta real, com 1 item, antes do lote.
 
 ## Decisões

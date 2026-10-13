@@ -3,8 +3,9 @@
 // Não fica no plugin: morre quando o client fecha ou recarrega. Só registra mudanças (fase, ux-state,
 // foco da página, visibilidade) e toda chamada a /riotclient/* feita pelo JS do client.
 (() => {
-  if (window.__sondaFoco) return 'sonda já estava ativa (' + window.__sondaFoco.eventos.length + ' eventos)';
-  const s = window.__sondaFoco = { inicio: Date.now(), eventos: [], ultimo: {} };
+  if (window.__sondaFoco && window.__sondaFoco.versao === 2) return 'sonda já estava ativa (' + window.__sondaFoco.eventos.length + ' eventos)';
+  if (window.__sondaFoco) clearInterval(window.__sondaFoco.timer);   // v1 injetada antes: troca pela v2
+  const s = window.__sondaFoco = { versao: 2, inicio: Date.now(), eventos: [], ultimo: {} };
   const reg = (tipo, valor) => {
     s.eventos.push({ t: Date.now(), tipo, valor });
     if (s.eventos.length > 2000) s.eventos.splice(0, 500);
@@ -22,6 +23,29 @@
   XMLHttpRequest.prototype.open = function (metodo, url) {
     if (String(url).includes('/riotclient/')) reg('xhr', metodo + ' ' + url + ' | ' + pilha());
     return abrirOrig.apply(this, arguments);
+  };
+  // chamadas nativas do JS do client (Window.Show, Window.Activate, Window.Flash...) passam pelo riotInvoke,
+  // não por fetch/XHR: a 1ª sonda (13/10, 14:43) não via esse caminho
+  if (typeof window.riotInvoke === 'function') {
+    const invOrig = window.riotInvoke;
+    window.riotInvoke = function (arg) {
+      let nome = '?';
+      try { nome = JSON.parse(arg && arg.request).name; } catch (e) {}
+      if (!/^Mouse\./.test(nome)) reg('riotInvoke', nome + ' | ' + (arg && arg.request || '').slice(0, 120) + ' | ' + pilha());
+      return invOrig.apply(this, arguments);
+    };
+  }
+  // pedido de estado da janela vindo do backend (OnJsonApiEvent_riotclient_ux-state_request) e qualquer
+  // mensagem de websocket que fale de ux-state
+  const wsSend = WebSocket.prototype.send;
+  WebSocket.prototype.send = function (d) {
+    if (!this.__sondaFoco) {
+      this.__sondaFoco = true;
+      this.addEventListener('message', ev => { const t = String(ev.data); if (/ux-state|ux-show|ux-flash/.test(t)) reg('ws<-', t.slice(0, 200)); });
+    }
+    const t = String(d);
+    if (/ux-state|ux-show|ux-flash|ux-minimize/.test(t)) reg('ws->', t.slice(0, 200));
+    return wsSend.apply(this, arguments);
   };
   const focoOrig = window.focus;
   window.focus = function () { reg('window.focus', pilha()); return focoOrig.apply(this, arguments); };
