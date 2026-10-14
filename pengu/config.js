@@ -1,6 +1,7 @@
 // Configuração do plugin: defaults + DataStore + classes no <html> + ações no Ctrl+K (CommandBar).
 // Classe: chave booleana em camelCase vira lc-kebab (esconderTft -> lc-esconder-tft);
 // <modulo>.ligado vira lc-<modulo> (aceite.ligado -> lc-aceite, filaRapida.ligado -> lc-fila-rapida).
+import { avisar as avisarComum } from './compacto/comum.js';
 
 const CHAVE = 'lol-client.config';
 const POSICOES = ['TOP', 'JUNGLE', 'MIDDLE', 'BOTTOM', 'UTILITY'];
@@ -183,7 +184,9 @@ const proximo = (lista, atual) => {
   const i = lista.indexOf(atual);
   return i >= 0 ? lista[(i + 1) % lista.length] : (lista.find(v => v > atual) ?? lista[0]);
 };
-const avisar = msg => { try { Toast.success(msg); } catch { console.log('[lol-client]', msg); } };
+// confirmação das ações do Ctrl+K: dentro da camada compacta quando ela está à vista (o Toast pode ficar embaixo dela),
+// senão o Toast do Pengu (compacto/comum.js avisar; plano do compacto, passo 11 b3)
+const avisar = msg => avisarComum(msg);
 
 const ALTERNAVEIS = [
   ['esconderTft', 'esconder TFT'],

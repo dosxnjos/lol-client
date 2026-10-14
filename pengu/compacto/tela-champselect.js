@@ -24,6 +24,7 @@
 //   GET  /lol-perks/v1/pages, /lol-perks/v1/currentpage; PUT /lol-perks/v1/currentpage <id puro> (ARMADILHAS § LCU)
 import { h, fotoCampeao, campeoes, estilo } from './comum.js';
 import { consultarRunas } from '../runas.js';
+import { textoSelo } from '../champselect.js';
 import { botaoChat } from './chat-botao.js';
 
 const CS = '/lol-champ-select/v1';
@@ -335,6 +336,9 @@ export const CSS = `
 #lc-compacto .lc-cp-sel-trocas button.lc-cp-sel-busy[disabled] { color:#8a7a52; }
 #lc-compacto .lc-cp-sel-pend { font-size:10.5px; color:var(--lc-amarelo); text-align:right; line-height:1.3; }
 #lc-compacto .lc-cp-sel-pend.lc-cp-sel-ruim { color:#ff8a9a; }
+#lc-compacto .lc-cp-sel-selo { font-size:10.5px; line-height:1.3; color:var(--lc-mudo); text-align:right; white-space:nowrap; }
+#lc-compacto .lc-cp-sel-selo span { display:block; }
+#lc-compacto .lc-cp-sel-selo span:first-child { color:var(--lc-txt); }
 #lc-compacto .lc-cp-sel-pend.lc-cp-sel-bom { color:var(--lc-azul); }
 #lc-compacto .lc-cp-sel-pend button { background:none; border:1px solid #6b5a2e; color:var(--lc-ouro2); font-family:inherit; font-size:10px;
   padding:1px 6px; margin-top:2px; cursor:pointer; }
@@ -845,6 +849,10 @@ function pintarTime(st) {
     else det = el('i', {}, agindo ? 'escolhendo…' : 'ainda não escolheu');
     const nome = el('div', { class: 'lc-cp-sel-n' }, t.rotulo, el('small', {}, `${nomePos(t.pos)} · `, det));
     let dir = '';
+    // selo do meu campeão (hover ou travado), à direita da linha "tu" (onde os aliados têm as trocas): passo 11 b6
+    const selo = t.eu && c && estatLigada(st) ? textoSeloTela(ctx.servicos?.champ, c, t.pos, nomeDe(st, c)) : null;
+    if (selo) dir = el('div', { class: 'lc-cp-sel-selo', dataset: { a: 'selo' }, title: selo.titulo || undefined },
+      ...selo.linhas.map(l => el('span', {}, l)));
     if (!t.eu) {
       const res = mem.resultados.get(t.cellId);
       const estados = TROCAS.map(tr => [tr, estadoTroca(s, tr, t.cellId, st.slots.get(t.cellId))]);
@@ -900,8 +908,41 @@ function pintarSel(st) {
   st.partes.sel.replaceChildren(st.el('div', { class: 'lc-cp-nota' }, `fase da seleção que eu não conheço (${l.fase || 'sem leitura'}): usa ⤢ expandir para a tela da Riot.`));
 }
 
+// "winrate no champ select" (champSelect.ligado) vale nos dois modos: desligado, nem os números dos favoritos nem o selo
+const estatLigada = st => st.ctx.cfg?.champSelect?.ligado !== false;
+
+// Selo do campeão em hover ou travado (plano, passo 11 b6): os números do champselect.js (servicos.champ.estatisticas,
+// o mesmo histórico do selo do client normal; nenhuma leitura nova) à direita da linha "tu", na coluna em que os
+// aliados têm os botões de troca (vazia na minha linha). Altura zero: 2 linhas de 10,5 px cabem nos 42 px da linha
+// (harness temp/compacto-harness em 420×680, fontes de reserva, 14/10/2026: 42 px e 0 de rolagem em 6 fases; uma 3ª
+// linha embaixo do nome levava a linha a 50 px). Falta conferir com as fontes da Riot. Texto inteiro (textoSelo, as
+// linhas do selo do client normal) no title. Matchup, trauma e draft do coletor ficam para o protótipo do grupo 2 (d2).
+// -> {linhas: [geral, posição?], texto, titulo} | null (sem campeão ou sem o serviço)
+export function textoSeloTela(champ, id, pos, nome = '') {
+  if (!(id > 0) || typeof champ?.estatisticas !== 'function') return null;
+  const so = (texto, titulo) => ({ linhas: [texto], texto, titulo });
+  try {
+    if (typeof champ.partidas === 'function' && champ.partidas() === null) {
+      // leitura que falhou (sem outra em voo): o mesmo texto do selo do client normal, não "carregando" para sempre
+      const e = typeof champ.estado === 'function' ? champ.estado() : null;
+      return e?.falhou && !e.carregando ? so('histórico indisponível agora', 'tento ler o histórico de novo em instantes')
+        : so('histórico carregando', 'lendo o histórico do client');
+    }
+    const est = champ.estatisticas(id, pos);
+    const g = est?.geral;
+    const titulo = () => { const t = textoSelo(est, nome); return [t.titulo, ...t.linhas].filter(Boolean).join('\n'); };
+    if (!g?.n) return so('sem partidas com ele', titulo());
+    const kda = v => (v === null ? ' · KDA perfeito' : typeof v === 'number' ? ` · KDA ${String(v).replace('.', ',')}` : '');
+    const linhas = [`${g.n} ${g.n === 1 ? 'partida' : 'partidas'} · ${g.winrate}%${kda(g.kda)}`];
+    const p = est.posicao;
+    if (p?.pos) linhas.push(`${nomePos(p.pos).toLowerCase()}: ${p.n ? `${p.n} ${p.n === 1 ? 'partida' : 'partidas'} · ${p.winrate}%` : 'sem partidas'}`);
+    return { linhas, texto: linhas.join(' · '), titulo: titulo() };
+  } catch { return so('histórico indisponível', ''); }
+}
+
 function estatFav(st, id) {
   const champ = st.ctx.servicos?.champ;
+  if (!estatLigada(st)) return '';
   try {
     if (!champ?.estatisticas || (typeof champ.partidas === 'function' && champ.partidas() === null)) return 'histórico carregando';
     const g = champ.estatisticas(id, st.l.eu?.pos)?.geral;
@@ -1107,7 +1148,9 @@ function pintarRuna(st, runa, champ) {
   if (runa.estado === 'desligada') return linha(el('span', { class: 'lc-cp-nota' }, 'runa por campeão desligada nas configurações: fica a atual'));
   if (runa.estado === 'erro') return linha(el('span', { class: 'lc-cp-nota' }, 'não consegui ler as páginas: fica a atual'));
   const c = runa.candidatas, atual = runa.atual?.id;
-  const aplicar = pg => escrever(st, 'runa', [['PUT', '/lol-perks/v1/currentpage', pg.id, `não consegui aplicar a runa ${pg.nome}`]],
+  // escolha feita aqui: o runas.js esquece a pendência no clique (um ⤢ logo depois não reabre o popup; passo 11 b4)
+  const aplicar = pg => { try { ctx.servicos?.runas?.escolheu?.(); } catch { /* segue */ } return aplicarPut(pg); };
+  const aplicarPut = pg => escrever(st, 'runa', [['PUT', '/lol-perks/v1/currentpage', pg.id, `não consegui aplicar a runa ${pg.nome}`]],
     `runa ${pg.nome} aplicada`, () => { if (st.runa?.campeao === champ) st.runa = { ...st.runa, atual: { id: pg.id, nome: pg.nome } }; });
   if (!c.length) return linha(el('span', { class: 'lc-cp-nota' }, `sem página para ${nome}: fica a atual${runa.atual?.nome ? ` (${runa.atual.nome})` : ''}`));
   if (c.length === 1) {

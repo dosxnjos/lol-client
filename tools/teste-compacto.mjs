@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada, criarBotaoModo, criarArrasto, ehAtalho, tamanho, CSS_MODO, GRACA_MEDIDA_MS } from '../pengu/compacto/modo.js';
-import { criarRoteador, destinoDaFase, infoDaSessao, classificarCamada, criarVigiaModais, FASES, CLASSE, ESPERA_SESSAO_MS, TELAS, CONTAGEM_MS, MODAL_RC_MS } from '../pengu/compacto/index.js';
+import { criarRoteador, destinoDaFase, infoDaSessao, classificarCamada, criarVigiaModais, FASES, CLASSE, ESPERA_SESSAO_MS, TELAS, CONTAGEM_MS, MODAL_RC_MS, expandirAntes } from '../pengu/compacto/index.js';
 import { esc, h, avisar, lcu, campeoes, iconeCampeao, _zerarCatalogo, CSS_BASE } from '../pengu/compacto/comum.js';
 
 // ---------- DOM mínimo ----------
@@ -821,6 +821,39 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   await tick(4);
   caso('aviso ao coletor: coletor fora não lança; ligado reavisa a cada volta; desligado avisa 1 vez e para',
     ligadoN === 3 && aoColetor.length === 4 && aoColetor.at(-1)?.compacto === false, JSON.stringify(aoColetor));
+}
+
+// ---------- 7b. Ctrl+K "analisar última partida" com a camada à vista (plano, passo 11 b2) ----------
+// o painel nasceria embaixo da camada (display:none): o clique fora dele fecharia no 1º clique e o Esc seria comido.
+// expandirAntes expande (roteador de verdade) e só então abre; se a camada não sai, não abre e avisa
+{
+  const s = cenario();
+  s.rot.marcarPronto();
+  await s.ir('EndOfGame'); await tick(); await s.ir('EndOfGame');
+  const antes = s.foto();
+  const vistoNaAbertura = [];
+  const abrir = () => { vistoNaAbertura.push({ ...s.foto(), aVista: s.doc.documentElement.classList.contains(CLASSE) }); return 'aberto'; };
+  const r = expandirAntes({ compacto: s.rot, abrir, aVista: () => s.doc.documentElement.classList.contains(CLASSE), avisar: (m, e) => s.avisos.push([m, !!e]) });
+  caso('b2: Ctrl+K com a camada à vista: expande (sem camada, janela 1280×720) ANTES de abrir o painel',
+    antes.efetivo === 'compacto' && vistoNaAbertura.length === 1 && vistoNaAbertura[0].efetivo === 'expandido' && !vistoNaAbertura[0].camada
+    && !vistoNaAbertura[0].aVista && !s.janela.ehCompacta() && r === 'aberto', JSON.stringify({ antes, vistoNaAbertura }));
+  caso('b2: o expandir do Ctrl+K vale como "⤢ expandir" dele (override), não como erro', s.rot.estado().override === 'expandido' && !s.avisos.some(([, e]) => e));
+  // já expandido: só abre
+  const s2 = cenario({ cfg: { compacto: { ligado: false } } });
+  await s2.ir('Lobby');
+  let n = 0;
+  expandirAntes({ compacto: s2.rot, abrir: () => { n++; }, aVista: () => false, avisar: () => {} });
+  caso('b2: client normal à vista: abre direto, sem mexer na janela', n === 1 && s2.pedidos.length === 0, s2.nomes().join());
+  // compacto que quebrou no init (null): abre como antes
+  let m = 0;
+  expandirAntes({ compacto: null, abrir: () => { m++; }, aVista: () => false, avisar: () => {} });
+  caso('b2: sem o compacto (módulo quebrado): abre como antes', m === 1);
+  // a camada não sai (expandir sem efeito): não abre por baixo dela, avisa
+  let k = 0;
+  const preso = { estado: () => ({ efetivo: 'compacto' }), expandir() {} };
+  const avisosPreso = [];
+  expandirAntes({ compacto: preso, abrir: () => { k++; }, aVista: () => true, avisar: (msg, e) => avisosPreso.push([msg, !!e]) });
+  caso('b2: camada que não sai: o painel NÃO abre embaixo dela e o aviso diz o que fazer', k === 0 && avisosPreso.length === 1 && avisosPreso[0][1], JSON.stringify(avisosPreso));
 }
 
 // ---------- 8. guardrails no código ----------

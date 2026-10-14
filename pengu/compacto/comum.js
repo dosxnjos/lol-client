@@ -110,6 +110,23 @@ export function avisar(msg, erro = false, doc = globalThis.document) {
   try { (erro ? Toast.error : Toast.success)(texto); } catch { console.log('[lol-client] compacto:', texto); }
 }
 
+// vigia uma classe do <html> e chama aoSair() a cada vez que ela sai (tinha -> não tem). Ex.: lc-modo-compacto (a camada
+// compacta saiu: expandido por ele, regra 7, erro). doc/MO injetáveis; sem MutationObserver vira no-op. -> {parar()}
+export function vigiarClasse(classe, aoSair, { doc = globalThis.document, MO = globalThis.MutationObserver } = {}) {
+  const el = doc?.documentElement;
+  if (typeof MO !== 'function' || !el?.classList) return { parar() {} };
+  let tinha = !!el.classList.contains(classe), vivo = true;
+  const obs = new MO(() => {
+    if (!vivo) return;
+    const tem = !!el.classList.contains(classe);
+    const saiu = tinha && !tem;
+    tinha = tem;
+    if (saiu) try { aoSair(); } catch (e) { console.error('[lol-client] vigiarClasse', e); }
+  });
+  obs.observe(el, { attributes: true, attributeFilter: ['class'] });
+  return { parar() { if (vivo) { vivo = false; obs.disconnect(); } } };
+}
+
 // CSS base compartilhado pelas telas (mesmo visual do protótipo aprovado em 13/10/2026). Prefixo lc-cp- para não
 // colidir com classe da Riot nem com as outras partes do plugin. Telas acrescentam o próprio CSS por estilo().
 export const CSS_BASE = `

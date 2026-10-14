@@ -122,7 +122,7 @@ const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(r 
 // lcu: estado mutável do client falso. Rotas não listadas = 404.
 function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus, ranked = null, notificacao = null,
   licoes = [{ status: 404, dados: { erro: 'partida ainda fora do banco', tentarDeNovoS: 5 } }, { status: 200, dados: FX.licoes }],
-  derrotas = 0, lcuQuebrada = false, coletorFora = false } = {}) {
+  derrotas = 0, lcuQuebrada = false, coletorFora = false, semColetor = false, licoesLocais } = {}) {
   const rel = relogio();
   tela._relogio.agora = () => rel.agora;
   tela._relogio.data = () => new Date(2026, 9, 13, 15, 0, 0); // tarde: o freio de madrugada não entra por acaso
@@ -150,7 +150,7 @@ function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus,
   const pedidos = [];
   const win = { innerWidth: 1280, riotInvoke: arg => { const p = JSON.parse(arg.request); pedidos.push(p); if (p.name === 'Window.ResizeTo') win.innerWidth = p.params[0]; } };
   const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => [win.innerWidth, 720] });
-  const s = { rel, doc, est, falsa, pedidos, avisos: [], subs: new Map(), abertos: [], coletorPedidos: [] };
+  const s = { rel, doc, est, falsa, pedidos, avisos: [], subs: new Map(), abertos: [], coletorPedidos: [], locaisPedidos: [] };
   const coletor = async caminho => {
     s.coletorPedidos.push(caminho);
     if (coletorFora) return { status: 0, dados: null };
@@ -162,7 +162,9 @@ function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus,
   s.rot = criarRoteador({
     cfg, janela, camada,
     carregarTela: async nome => { if (nome === 'posjogo') return tela; throw new Error('404 ' + nome); },
-    servicos: { coletor, fila: { derrotasSeguidas: async () => derrotas }, posjogo: { abrirPainel: (id, o) => { s.abertos.push([id, o]); return Promise.resolve(); } } },
+    servicos: { coletor: semColetor ? undefined : coletor, fila: { derrotasSeguidas: async () => derrotas },
+      posjogo: { abrirPainel: (id, o) => { s.abertos.push([id, o]); return Promise.resolve(); },
+        ...(licoesLocais ? { licoesLocais: async id => { s.locaisPedidos.push(id); return licoesLocais(id); } } : {}) } },
     avisar: (m, e) => s.avisos.push([m, !!e]), log: () => {},
     assinar: (uri, cb) => s.subs.set(uri, cb),
     classe: on => doc.documentElement.classList.toggle(CLASSE, on),
@@ -415,6 +417,84 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   await s.rel.avancar(300000);
   caso('coletor fora por 5 min: desiste das lições sem expandir', s.foto().efetivo === 'compacto' && s.texto().includes('sem lições: coletor fora do ar'), s.texto());
 }
+// paridade (passo 11 b5): sem o coletor, as 3 lições do motor local do painel (posjogo/index.js licoesLocais), como no
+// client normal; o coletor segue tentado e a resposta dele vence
+const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b', tipo: 'negativa', texto: 'Ouro aos 10 abaixo' }, { id: 'c', tipo: 'positiva', texto: 'Farm acima da média' }];
+{
+  tela._esquecer();
+  const s = cenario({ coletorFora: true, licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  let lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
+  caso('b5: coletor fora → as 3 lições do motor local (⚠/⚠/✓), com a origem no title, pedidas pelo gameId da partida',
+    lis.length === 3 && lis.map(l => l.textContent[0]).join('') === '⚠⚠✓' && lis[0].textContent.includes('Morreu 9 vezes')
+    && /motor local/.test(lis[0].getAttribute('title') || '') && igual(s.locaisPedidos, [GID]) && !s.texto().includes('coletor fora do ar: as lições'),
+    s.texto());
+  caso('b5: rótulo diz que é sem o coletor', /sem o coletor/.test(s.camada().querySelector('.lc-cp-pj .lc-cp-rot')?.textContent || ''), s.camada().querySelector('.lc-cp-pj .lc-cp-rot')?.textContent);
+  await s.rel.avancar(300000);
+  lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
+  caso('b5: coletor fora por 5 min: as lições locais ficam (sem "sem lições"), pedidas uma vez só',
+    lis.length === 3 && !s.texto().includes('sem lições') && s.locaisPedidos.length === 1, s.texto());
+}
+{
+  tela._esquecer();
+  // coletor volta depois de 15 s: as lições dele (banco inteiro) trocam as locais
+  const s = cenario({ licoes: [{ status: 0, dados: null }, { status: 200, dados: FX.licoes }], licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  const antes = s.camada().querySelectorAll('ul.lc-cp-lic li').map(l => l.textContent).join(' | ');
+  await s.rel.avancar(15000);
+  const lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
+  caso('b5: coletor que volta: as lições dele trocam as do motor local',
+    antes.includes('Morreu 9 vezes') && lis.length === 3 && lis.every((l, i) => l.getAttribute('title') === FX.licoes.licoes[i].texto), `${antes} -> ${lis.map(l => l.textContent).join(' | ')}`);
+}
+{
+  tela._esquecer();
+  // coletor que volta "esperando" (banco ainda sem a partida): as locais ficam até as dele chegarem, como o painel
+  // (achado 4 da revisão do passo 11)
+  const s = cenario({ licoes: [{ status: 0, dados: null }, { status: 404, dados: { erro: 'partida ainda fora do banco', tentarDeNovoS: 5 } },
+    { status: 200, dados: FX.licoes }], licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  await s.rel.avancar(15000);
+  const esperando = s.camada().querySelectorAll('ul.lc-cp-lic li').map(l => l.textContent).join(' | ');
+  await s.rel.avancar(5000);
+  const lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
+  caso('b5: coletor que volta "esperando" não apaga as locais; as dele trocam quando chegam',
+    esperando.includes('Morreu 9 vezes') && lis.length === 3 && lis.every((l, i) => l.getAttribute('title') === FX.licoes.licoes[i].texto),
+    `${esperando} -> ${lis.map(l => l.textContent).join(' | ')}`);
+}
+{
+  tela._esquecer();
+  // ARAM (mapa 12): o motor não tem lição fora do Rift; nem lê a partida (achado 3 da revisão do passo 11)
+  const s = cenario({ sessao: { ...FX.sessao, map: { id: 12 } }, coletorFora: true, licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  caso('b5: fora do Rift (ARAM) o motor local nem é pedido; segue "coletor fora do ar"',
+    s.locaisPedidos.length === 0 && s.texto().includes('coletor fora do ar'), JSON.stringify(s.locaisPedidos));
+}
+{
+  tela._esquecer();
+  const s = cenario({ semColetor: true, licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  caso('b5: sem o serviço do coletor (módulo fora): lições do motor local', s.camada().querySelectorAll('ul.lc-cp-lic li').length === 3 && s.texto().includes('Morreu 9 vezes'), s.texto());
+}
+{
+  tela._esquecer();
+  const s = cenario({ coletorFora: true, licoesLocais: async () => null });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  caso('b5: motor local sem resposta (análise falhou): segue "coletor fora do ar" como antes, sem erro de tela',
+    s.texto().includes('coletor fora do ar: as lições ficam na análise completa') && s.foto().efetivo === 'compacto' && s.avisos.every(([, e]) => !e), s.texto());
+}
+{
+  tela._esquecer();
+  const s = cenario({ licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.rel.avancar(5000);
+  caso('b5: com o coletor de pé o motor local nem é pedido', s.locaisPedidos.length === 0 && s.camada().querySelectorAll('ul.lc-cp-lic li').length === 3);
+}
 {
   tela._esquecer();
   const eog = { gameId: GID, localPlayer: { stats: { CHAMPIONS_KILLED: 'x' }, championId: 'abc' }, teams: 'lixo', gameLength: -5 };
@@ -505,6 +585,34 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   const e = await rodada({ compacto: true, avista: true });
   caso('posjogo/index.js: só lc-compacto (chave ligada) sem lc-modo-compacto não segura o painel',
     (() => { const dd = novoDoc(); dd.documentElement.classList.add('lc-compacto'); globalThis.document = dd; return !pj.compactoAVista(); })() && !e.aberto);
+  // paridade (plano do compacto, passo 11 b1): com a camada à vista a análise começa a carregar sozinha, sem desenhar
+  // nada embaixo dela; o "ver análise completa" abre o painel pronto, sem ler a partida de novo
+  {
+    let leituras = 0;
+    const rotas = { ...ROTAS_REF, [`GET /lol-match-history/v1/games/${GREF}`]: () => { leituras++; return fxRef('game-3292712362.json'); } };
+    const f = await rodada({ compacto: true, avista: true, rotas });
+    await tick(20);
+    caso('b1: EndOfGame com a camada à vista → a análise começa sozinha (1 leitura da partida), sem painel nem botão',
+      leituras === 1 && !f.doc.getElementById('lc-posjogo') && !f.doc.getElementById('lc-posjogo-reabrir'), `leituras ${leituras}`);
+    f.ret.abrirPainel(GREF, { fimDePartida: true }).catch(() => {});
+    await tick(10);
+    caso('b1: "ver análise completa" depois: painel pronto na hora (sem caixa de carregamento) e sem 2ª leitura',
+      !!f.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo') && leituras === 1, `leituras ${leituras}`);
+    // b5: as lições do motor local (as mesmas do painel sem coletor) para a tela 4
+    const painel = f.ret.estado()?.licoes || [];
+    const loc = await f.ret.licoesLocais?.(GREF);
+    caso('b5: licoesLocais(gameId) = as lições do painel sem coletor (mesmos ids, texto e tipo), sem 2ª leitura',
+      Array.isArray(loc?.licoes) && loc.licoes.length > 0 && loc.licoes.length <= 3 && igual(loc.licoes.map(l => l.id), painel)
+      && loc.licoes.every(l => typeof l.texto === 'string' && l.texto && typeof l.tipo === 'string') && leituras === 1,
+      JSON.stringify({ loc, painel, leituras }));
+    const semId = await f.ret.licoesLocais?.(null);
+    caso('b5: licoesLocais sem gameId = null (nada lido)', semId === null && leituras === 1);
+    // partida fora do Rift: analisar() devolve erro na hora (LCU sem a partida levaria ~75 s de novas tentativas)
+    const g = await rodada({ compacto: true, avista: true,
+      rotas: { ...ROTAS_REF, [`GET /lol-match-history/v1/games/${GREF}`]: () => ({ ...fxRef('game-3292712362.json'), mapId: 12 }) } });
+    const erro = await g.ret.licoesLocais?.(GREF);
+    caso('b5: licoesLocais com a análise falhando (LCU sem a partida) = null, sem lançar', erro === null, JSON.stringify(erro));
+  }
   // ---- painel que não prende (roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md, D1/D3/D4) ----
   // partida de referência 3292712362 (tests/fixtures) com a leitura do jogo presa num portão: dá para fechar no meio
   {
@@ -574,10 +682,12 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
       !s.painelEl() && s.botao()?.textContent === '📊 análise pronta', s.botao()?.textContent);
     s.botao()?.click(); await tick(10);
     caso('...e o clique no botão abre o painel', s.painelPronto());
-    // o "mexeu" daquela abertura não vale para a próxima: abertura automática com a análise já pronta abre na hora
+    // abertura automática com a análise já pronta (2º EndOfGame, camada compacta que cai depois do pré-carregamento):
+    // nada abre sozinho por cima do client (D4, achado 1 da revisão do passo 11); fica o botão, sem ler a LCU de novo
     s.janela.disparar('pointerdown', s.doc.body);
     s.ret.abrirPainel(GJ, { fimDePartida: true, automatico: true }); await tick(10);
-    caso('abertura automática seguinte, com a análise pronta: abre (o clique da anterior não segura)', s.painelPronto() && leituras === 1);
+    caso('abertura automática seguinte, com a análise pronta: não cobre o client; fica o "reabrir análise"',
+      !s.painelEl() && s.botao()?.textContent === '📊 reabrir análise' && leituras === 1, s.botao()?.textContent);
 
     // aceite no meio do carregamento: some tudo e a análise em voo não abre nada depois
     s = await nova();
@@ -630,12 +740,66 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   globalThis.MutationObserver = class { constructor(cb) { this.cb = cb; this.on = false; obs.push(this); } observe(el) { this.el = el; this.on = true; } disconnect() { this.on = false; } };
   const mudouClasse = () => { for (const o of [...obs]) if (o.on) o.cb([{ attributeName: 'class' }]); };
   try {
+    // com a análise já pronta (pré-carregada desde o EndOfGame, b1): o expandir dele ou o modal da Riot que derruba a
+    // camada não ganham o painel por cima na hora (D4, achado 1 da revisão do passo 11); fica o botão "análise pronta"
     const f = await rodada({ compacto: true, avista: true });
     const fechadoAntes = !f.aberto;
+    await tick(20);
     f.doc.documentElement.classList.remove('lc-modo-compacto');
     mudouClasse(); await tick(10);
-    caso('posjogo/index.js: camada cai depois da decisão (modal tardio/erro/expandir) no EndOfGame → o painel abre',
-      fechadoAntes && !!f.doc.getElementById('lc-posjogo') && obs.every(o => !o.on));
+    const btF = f.doc.getElementById('lc-posjogo-reabrir');
+    caso('posjogo/index.js: camada cai depois da decisão com a análise pronta → nada por cima; botão "análise pronta"',
+      fechadoAntes && !f.doc.getElementById('lc-posjogo') && btF?.textContent === '📊 análise pronta' && obs.every(o => !o.on), btF?.textContent);
+    btF?.click(); await tick(10);
+    caso('...e o clique no "análise pronta" abre o painel', !!f.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo'));
+    // com a análise ainda em voo: como antes (D4), abre quando fica pronta se ele não mexeu no client nesse meio tempo
+    {
+      let soltar = null;
+      const portao = new Promise(r => { soltar = r; });
+      const rotas = { ...ROTAS_REF, [`GET /lol-match-history/v1/games/${GREF}`]: async () => { await portao; return fxRef('game-3292712362.json'); } };
+      const v = await rodada({ compacto: true, avista: true, rotas });
+      v.doc.documentElement.classList.remove('lc-modo-compacto');
+      mudouClasse(); await tick(10);
+      const btV = v.doc.getElementById('lc-posjogo-reabrir')?.textContent;
+      soltar(); await esperarReal(50); await tick(20);
+      caso('posjogo/index.js: camada cai com a análise em voo → "analisando" e, sem clique dele, o painel abre quando fica pronta',
+        btV === '⏳ analisando a partida…' && !!v.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo'), btV);
+    }
+    // Ctrl+K "analisar última partida" no fim de partida compacto (achado 2): a partida que acabou, um painel só
+    {
+      let leituras = 0;
+      // o match-history ainda sem a partida que acabou (por isso existe o buscarComRetentativa): o "última do histórico"
+      // abriria outra partida; o Ctrl+K no fim de partida tem de abrir a que acabou
+      const H = 'GET /lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199';
+      const semEla = { ...ROTAS_REF[H], games: { ...ROTAS_REF[H].games, games: ROTAS_REF[H].games.games.filter(g => g.gameId !== GREF) } };
+      let leiturasH = 0;
+      const rotas = { ...ROTAS_REF, [H]: () => { leiturasH++; return semEla; }, [`GET /lol-match-history/v1/games/${GREF}`]: () => { leituras++; return fxRef('game-3292712362.json'); } };
+      const k = await rodada({ compacto: true, avista: true, rotas });
+      await tick(20);
+      const vigias = obs.filter(o => o.on).length;
+      const hAntes = leiturasH;
+      // o expandirAntes: expande (a classe sai) e chama na mesma volta, antes do observador rodar
+      k.doc.documentElement.classList.remove('lc-modo-compacto');
+      const p = k.ret.analisarAgora();
+      mudouClasse(); await p; await tick(10);
+      caso('b2/Ctrl+K no fim de partida compacto: para a vigia, abre a partida que acabou (cache do b1, 1 leitura, sem reler o histórico de ~40 s), sem 2º painel nem botão',
+        vigias === 1 && obs.every(o => !o.on) && !!k.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo')
+        && !k.doc.getElementById('lc-posjogo-reabrir') && leituras === 1 && leiturasH === hAntes, JSON.stringify({ vigias, leituras, hAntes, leiturasH }));
+      // fora do fim de partida: a última do histórico, com a caixa de carregamento antes da leitura (até ~40 s)
+      let soltarH = null;
+      const portaoH = new Promise(r => { soltarH = r; });
+      const hist = ROTAS_REF['GET /lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199'];
+      const rotasH = { ...ROTAS_REF, 'GET /lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199': async () => { await portaoH; return hist; } };
+      const u = await rodada({ compacto: true, avista: true, rotas: rotasH });
+      u.emitir('/lol-gameflow/v1/gameflow-phase', 'Lobby'); await tick(5);
+      u.doc.documentElement.classList.remove('lc-modo-compacto'); // o expandirAntes já tirou a camada
+      const pu = u.ret.analisarAgora(); await tick(5);
+      const carregando = /procurando a última partida/.test(u.doc.getElementById('lc-posjogo')?.textContent || '');
+      u.doc.documentElement.classList.add('lc-modo-compacto'); // a camada voltou durante a leitura
+      soltarH(); const ru = await pu; await tick(10);
+      caso('b2/Ctrl+K fora do fim de partida: caixa "procurando a última partida" na hora; a camada que volta no meio = nada nasce embaixo dela',
+        carregando && ru === null && !u.doc.getElementById('lc-posjogo'), JSON.stringify({ carregando, ru: !!ru }));
+    }
     const g = await rodada({ compacto: true, avista: true });
     const ligadas = obs.filter(o => o.on).length;
     // fase mudou (fechar = dismiss-stats -> Lobby): a vigia para e a camada que cai depois não abre nada

@@ -6,6 +6,7 @@
 // adia se não for None/Lobby (o "jogar de novo" leva direto a Matchmaking/ReadyCheck/ChampSelect).
 // Prova antes do lote (planejarColeta): por sessão, 1 item de cada tipo; o resto só depois de conferir que ele saiu.
 // Importável no node (tools/teste-recompensas.mjs): nada de window/document no topo do módulo.
+import { avisar as avisarComum } from './compacto/comum.js';
 
 export const ROTAS_COLETA = [
   /^POST \/lol-rewards\/v1\/grants\/[\w-]+\/select$/,
@@ -218,7 +219,9 @@ export function criarRecompensas({ cfg, lcu, avisar = () => {}, log = () => {}, 
 }
 
 export function iniciarRecompensas(context, cfg) {
-  const avisar = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(msg); } catch { console.log('[lol-client]', msg); } };
+  // aviso dentro da camada compacta quando ela está à vista (a coleta roda com a tela 1 à frente e o Toast pode ficar
+  // embaixo dela), senão o Toast do Pengu (compacto/comum.js avisar; plano do compacto, passo 11 b3)
+  const avisar = (msg, erro) => avisarComum(msg, erro);
   const r = criarRecompensas({ cfg, lcu: criarLcu(), avisar, log: m => console.log('[lol-client]', m) });
   context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => r.aoFase(msg?.data));
   // carga: depois da fase responder (o rodar lê a fase); 5 s para o client assentar

@@ -620,6 +620,21 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   };
 }
 
+// Ação que abre tela do plugin por cima do client normal (Ctrl+K "analisar última partida", plano passo 11 b2): com a
+// camada à vista o #lc-posjogo nasceria escondido (html.lc-modo-compacto), o clique fora dele fecharia no 1º clique na
+// camada e o keydown de captura comeria o Esc. Expande antes (vale como o "⤢ expandir" dele: o roteador é síncrono) e
+// só então abre; se a camada não sair, não abre por baixo dela e avisa. compacto null (quebrou no init) = abre direto.
+// aVista: html.lc-modo-compacto (a classe que o CSS usa para esconder o painel). -> o retorno de abrir() | null
+export function expandirAntes({ compacto, abrir, aVista = () => !!globalThis.document?.documentElement?.classList?.contains(CLASSE),
+  avisar = avisarPadrao }) {
+  const naCamada = () => { try { return aVista() || compacto?.estado?.().efetivo === 'compacto'; } catch { return false; } };
+  if (naCamada()) {
+    try { compacto?.expandir?.(); } catch (e) { console.error('[lol-client] compacto: expandir', e); }
+    if (naCamada()) { avisar('não consegui sair do modo compacto: usa ⤢ expandir e chama de novo pelo Ctrl+K', true); return null; }
+  }
+  return abrir();
+}
+
 export const CHAT_REAVISO_MS = 60000;
 // aviso do modo ao coletor (testável). coletor: fetch do coach.js (injetado; sem ele, o padrão da chat-ponte)
 export function criarAvisoChat({ cfg, coletor, repetir = setInterval, intervaloMs = CHAT_REAVISO_MS }) {

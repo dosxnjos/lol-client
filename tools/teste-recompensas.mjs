@@ -208,5 +208,36 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
     classificarConcessao(G[2]).tipo === 'coletar' && classificarConcessao(G[4]).tipo === 'escolher' && classificarConcessao(G[6]).tipo === 'escolher');
   caso('classificar: grupo pelo tipo de entrega', classificarConcessao(G[2]).grupo === 'concessão:loot.lootserver' && classificarConcessao(G[0]).grupo === 'concessão:cap.wallets');
 }
+// paridade com o expandido (plano do compacto, passo 11 b3): com a camada compacta à vista os avisos da coleta saem
+// dentro dela (compacto/comum.js avisar), não no Toast que pode ficar embaixo; sem ela, no Toast como antes
+{
+  const { iniciarRecompensas } = await import('../pengu/recompensas.js');
+  const novoEl = () => { const e = { filhos: [], dataset: {}, style: {}, className: '', id: '', _t: '', pai: null,
+    append(...ns) { for (const n of ns) { if (n && typeof n === 'object') n.pai = e; e.filhos.push(n); } }, appendChild(n) { e.append(n); return n; },
+    remove() { if (e.pai) e.pai.filhos.splice(e.pai.filhos.indexOf(e), 1); e.pai = null; }, addEventListener() {}, setAttribute() {},
+    querySelector: sel => e.filhos.find(f => typeof f === 'object' && String(f.className).split(' ').includes(sel.slice(1))) || null,
+    get textContent() { return e._t + e.filhos.map(f => (typeof f === 'object' ? f.textContent : String(f))).join(''); }, set textContent(v) { e._t = String(v); e.filhos = []; } };
+    return e; };
+  const rodada = async comCamada => {
+    const m = montar();
+    const camada = novoEl(); camada.id = 'lc-compacto';
+    const toasts = [];
+    const antes = { document: globalThis.document, fetch: globalThis.fetch, Toast: globalThis.Toast };
+    globalThis.document = { createElement: () => novoEl(), getElementById: id => (comCamada && id === 'lc-compacto' ? camada : null) };
+    globalThis.fetch = m.falsa.fetch;
+    globalThis.Toast = { success: t => toasts.push(t), error: t => toasts.push('[erro] ' + t) };
+    const timeoutOriginal = globalThis.setTimeout;
+    globalThis.setTimeout = (fn, ms, ...a) => (ms >= 5000 ? 0 : timeoutOriginal(fn, ms, ...a)); // a coleta da carga (5 s) não roda aqui
+    try {
+      const r = iniciarRecompensas({ socket: { observe() {} } }, m.cfg);
+      await r.rodar('teste');
+    } finally { globalThis.setTimeout = timeoutOriginal; Object.assign(globalThis, antes); }
+    return { camada: camada.filhos.map(f => f.textContent), toasts };
+  };
+  const a = await rodada(true);
+  caso('b3: camada à vista: avisos da coleta dentro do #lc-compacto, nenhum Toast', a.camada.length === 1 && /recompensa/.test(a.camada[0]) && a.toasts.length === 0, JSON.stringify(a));
+  const b = await rodada(false);
+  caso('b3: client normal: avisos da coleta no Toast, como antes', b.toasts.some(t => /para escolher/.test(t)) && b.camada.length === 0, JSON.stringify(b));
+}
 
 relatar(casos);

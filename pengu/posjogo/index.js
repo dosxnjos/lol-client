@@ -95,6 +95,18 @@ function obterAnalise(gameId) {
   return a;
 }
 function esquecerAnalises() { geracao++; analises.clear(); }
+
+// lições do motor daqui (licoes.md, docs/INSIGHTS.md) sobre a análise em cache, as mesmas do painel sem coletor (montar
+// e pintar 'licoes' com ctx null). Para a tela 4 do compacto quando o coletor está fora (plano do compacto, passo 11
+// b5). -> {licoes: [{id, tipo, prioridade, texto}]} | null (sem gameId, análise com erro). Nunca lança.
+export async function licoesLocais(gameId) {
+  if (!(Number(gameId) > 0)) return null;
+  try {
+    const r = await obterAnalise(Number(gameId)).promessa;
+    if (!r || r.erro) return null;
+    return { licoes: calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes };
+  } catch { return null; }
+}
 const textoCarregando = a => (a?.esperaMs ? `processando a partida (nova tentativa em ${a.esperaMs / 1000} s)…` : 'analisando a partida…');
 function aoMudarAnalise(gameId) {
   if (ultimaAberta?.gameId !== gameId) return;
@@ -386,6 +398,10 @@ export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.col
   if (ultimaAberta?.gameId !== gameId) ultimaAberta = { gameId, fimDePartida, vista: false };
   else ultimaAberta.fimDePartida ||= fimDePartida;
   const ana = obterAnalise(gameId);
+  // abertura automática com a análise JÁ pronta (camada compacta que cai no EndOfGame depois do pré-carregamento do
+  // passo 11 b1: o "⤢ expandir" dele, a regra 7 de um modal da Riot): abrir na hora cobriria o que ele foi ver, sem a
+  // janela do "mexeu" (D4). Fica o botão do topo ("análise pronta"). pronta aqui = sem erro (obterAnalise refaz com erro)
+  if (automatico && ana.pronta) { vigiarInteracao(false); mostrarReabrir(); return ana.r; }
   if (!ana.pronta) {
     if (repetida) { if (!document.getElementById('lc-posjogo')) mostrarReabrir(); }
     else if (automatico) { remover(); vigiarInteracao(true); mostrarReabrir(); }
@@ -429,8 +445,17 @@ export const aba = id => (painel ? trocarAba(painel, id) : false);
 export const estadoPainel = () => painel && { aba: painel.aba, ctxEstado: painel.ctxEstado, mentor: painel.mentor?.status, licoes: painel.licoes?.map(l => l.id), revisao: !!painel.revisao?.revisao };
 
 // última partida do Rift no histórico (sem treino, personalizada nem remake: docs/INSIGHTS.md)
+// A leitura do histórico leva até ~40 s: a caixa de carregamento aparece antes (com ✕), e nada abre se ele a fechou ou se a
+// camada compacta voltou nesse meio tempo (o painel nasceria escondido embaixo dela; passo 11 b2, achado 2 da revisão).
 export async function analisarUltima() {
-  const ultima = (await historico())
+  const minha = abertura;
+  moldura(htmlCarregando('procurando a última partida…'));
+  let hist = null;
+  try { hist = await historico(); } catch (e) { console.error('[lol-client] pós-jogo: histórico', e); }
+  if (minha !== abertura) return null; // fechou a caixa (✕, Esc, clique fora)
+  if (compactoAVista()) { remover(); console.log('[lol-client] pós-jogo: a camada compacta voltou; a análise não abre por baixo dela'); return null; }
+  if (!hist) { moldura(htmlErro('não consegui ler o histórico do client: tenta de novo pelo Ctrl+K')); return null; }
+  const ultima = hist
     .filter(g => g.mapId === 11 && g.gameDuration >= 300 && !FORA_DAS_CONTAS.includes(g.queueId)).sort((a, b) => b.gameCreation - a.gameCreation)[0];
   if (!ultima) { moldura(htmlErro('nenhuma partida de Summoner\'s Rift no histórico')); return null; }
   return abrirPainel(ultima.gameId, padrao.cfg, padrao.coletor);
@@ -447,8 +472,10 @@ export const compactoAVista = () => !!globalThis.document?.documentElement?.clas
 
 // Camada compacta que cai DEPOIS da decisão (celebração de nível/maestria que chega depois dos 400 ms e a regra 7
 // expande, erro da tela 4, ou o ⤢ expandir/Ctrl+Shift+M dele): o client normal segue "como hoje" (plano § Decisões),
-// com o painel. Vigia a classe do <html> até a camada sair ou a fase mudar. Decisão (13/10/2026): o expandir manual no
-// EndOfGame também abre o painel, igual ao client sem compacto; o "ver análise completa" já abre antes e não duplica.
+// com o painel. Vigia a classe do <html> até a camada sair ou a fase mudar. Decisão (13/10/2026, revista em 14/10 no
+// passo 11): com a análise ainda em voo, o expandir no EndOfGame abre o painel quando ela chega se ele não mexeu (D4);
+// com ela já pronta (pré-carregada desde o EndOfGame, b1), fica o botão "análise pronta" no topo, sem cobrir o que ele
+// foi ver. O "ver análise completa" e o Ctrl+K param a vigia antes de expandir (abrir/analisarAgora) e não duplicam.
 // -> {parar()}. doc/MO injetáveis (teste).
 export function vigiarSaidaDoCompacto({ aoSair, doc = globalThis.document, MO = globalThis.MutationObserver }) {
   if (typeof MO !== 'function' || !doc?.documentElement) return { parar() {} };
@@ -491,6 +518,9 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
       if (compactoAVista()) {
         console.log('[lol-client] pós-jogo: tela compacta à vista; o painel abre no "ver análise completa"');
         const gid = gameId;
+        // a análise começa já, como no client normal (plano do compacto, passo 11 b1): o "ver análise completa" abre na
+        // hora em vez de esperar até ~75 s. Nada se desenha: aoMudarAnalise só pinta com ultimaAberta desta partida
+        obterAnalise(gid);
         vigiaCompacto?.parar();
         vigiaCompacto = vigiarSaidaDoCompacto({ aoSair: () => {
           vigiaCompacto = null;
@@ -503,7 +533,21 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
     abrirPainel(gameId, cfg, coletor, { fimDePartida: true, automatico: true }).catch(e => console.error('[lol-client] pós-jogo', e));
   });
   // abrirPainel(id, {fimDePartida}): o "ver análise completa" da tela compacta; já aberto na mesma partida = fica
-  const abrir = (id, opcoes = {}) => (painel?.r?.gameId === id && document.getElementById('lc-posjogo')
-    ? Promise.resolve(painel.r) : abrirPainel(id, cfg, coletor, opcoes));
-  return { aba, estado: estadoPainel, abrirPainel: abrir };
+  // A vigia da camada para antes: quem chama já expande (o 2º abrirPainel automático derrubaria este pela `abertura`)
+  const pararVigia = () => { vigiaCompacto?.parar(); vigiaCompacto = null; };
+  const abrir = (id, opcoes = {}) => {
+    pararVigia();
+    return painel?.r?.gameId === id && document.getElementById('lc-posjogo') ? Promise.resolve(painel.r) : abrirPainel(id, cfg, coletor, opcoes);
+  };
+  // Ctrl+K "analisar última partida" (passo 11 b2, achado 2 da revisão): no fim de partida do Rift, a partida que acabou
+  // (o mesmo abrir do "ver análise completa", com o cache do b1 e o "jogar de novo"); fora dele, a última do histórico.
+  // Para a vigia antes: o expandirAntes tira a camada e a vigia abriria um 2º painel, talvez de outra partida
+  const analisarAgora = () => {
+    pararVigia();
+    return faseAtual === 'EndOfGame' && gameId && (!mapa || mapa === 11) ? abrir(gameId, { fimDePartida: true }) : analisarUltima();
+  };
+  // licoesLocais(id): as lições do motor daqui para a tela 4 do compacto sem o coletor (passo 11 b5); painel desligado
+  // nas configurações = sem motor local, como no client normal
+  const locais = id => (cfg.posjogo?.ligado === false ? Promise.resolve(null) : licoesLocais(id));
+  return { aba, estado: estadoPainel, abrirPainel: abrir, licoesLocais: locais, analisarAgora };
 }

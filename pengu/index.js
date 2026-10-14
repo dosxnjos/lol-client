@@ -14,7 +14,7 @@ import { blocoChampSelect, blocoRunas, blocoConexao, blocoPainel, blocoVoz, bloc
 import { coletor, sincronizarConfig, estadoConexao } from './coach.js';
 import { iniciarSemPopups, blocoSemPopups } from './sem-popups.js';
 import { iniciarChatPosjogo, blocoChatPosjogo } from './chat-posjogo.js';
-import { iniciarCompacto } from './compacto/index.js';
+import { iniciarCompacto, expandirAntes } from './compacto/index.js';
 
 // um módulo quebrado não derruba os outros
 const seguro = (nome, fn) => { try { return fn(); } catch (e) { console.error(`[lol-client] ${nome}`, e); return null; } };
@@ -66,8 +66,9 @@ export function init(context) {
     seguro('chat do pós-jogo', () => chat?.atualizar()); // nomes, cores e avisos repintam na hora (desligado devolve o original)
     seguro('compacto', () => compacto?.sincronizar()); // ligado/inicioCompacto/tamanho valem na hora
   });
+  // com a camada compacta à vista, expande antes de abrir o painel (compacto/index.js expandirAntes, passo 11 b2)
   seguro('ações', () => registrarAcoes([
-    { name: 'lol-client: analisar última partida', tags: ['lol-client', 'pós-jogo'], perform: () => analisarUltima() },
+    { name: 'lol-client: analisar última partida', tags: ['lol-client', 'pós-jogo'], perform: () => expandirAntes({ compacto, abrir: () => (posjogo?.analisarAgora ?? analisarUltima)() }) },
   ]));
 
   // ponto de acesso para depuração e testes (cdp.mjs eval); prepararLobby não busca partida

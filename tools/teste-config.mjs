@@ -151,6 +151,35 @@ casos.push(
       .every(k => k in PADRAO.coach && bs.some(b => b.ids.includes('coach.' + k)))],
 );
 
+// paridade com o expandido (plano do compacto, passo 11 b3): a confirmação das ações do Ctrl+K sai dentro da camada
+// compacta quando ela está à vista (compacto/comum.js avisar), senão no Toast como antes
+{
+  const { registrarAcoes } = await import('../pengu/config.js');
+  const acoes = [];
+  globalThis.CommandBar = { addAction: a => acoes.push(a) };
+  registrarAcoes([]);
+  const acao = acoes.find(a => a.tags?.includes('esconderTft'));
+  const novoEl = () => { const e = { filhos: [], dataset: {}, style: {}, className: '', id: '', _t: '', pai: null,
+    append(...ns) { for (const n of ns) { if (n && typeof n === 'object') n.pai = e; e.filhos.push(n); } }, appendChild(n) { e.append(n); return n; },
+    remove() { if (e.pai) e.pai.filhos.splice(e.pai.filhos.indexOf(e), 1); e.pai = null; }, addEventListener() {}, setAttribute() {},
+    querySelector: sel => e.filhos.find(f => typeof f === 'object' && String(f.className).split(' ').includes(sel.slice(1))) || null,
+    get textContent() { return e._t + e.filhos.map(f => (typeof f === 'object' ? f.textContent : String(f))).join(''); }, set textContent(v) { e._t = String(v); e.filhos = []; } };
+    return e; };
+  const toasts = [];
+  globalThis.Toast = { success: t => toasts.push(t), error: t => toasts.push('[erro] ' + t) };
+  const camada = novoEl(); camada.id = 'lc-compacto';
+  const docAntes = globalThis.document;
+  globalThis.document = { ...docAntes, createElement: () => novoEl(), getElementById: id => (id === 'lc-compacto' ? camada : null) };
+  acao?.perform();
+  const naCamada = camada.filhos.map(f => f.textContent), toastsCamada = toasts.length;
+  globalThis.document = { ...docAntes, createElement: () => novoEl(), getElementById: () => null };
+  acao?.perform();
+  globalThis.document = docAntes;
+  casos.push(['b3: Ctrl+K liga/desliga com a camada à vista: confirmação dentro do #lc-compacto; sem ela, no Toast',
+    { naCamada, toastsCamada, toasts }, v => v.naCamada.length === 1 && /esconder TFT: (ligado|desligado)/.test(v.naCamada[0]) && v.toastsCamada === 0
+      && v.toasts.length === 1 && /esconder TFT/.test(v.toasts[0])]);
+}
+
 let ok = 0;
 for (const [nome, valor, conferir] of casos) {
   const passou = !!conferir(valor);

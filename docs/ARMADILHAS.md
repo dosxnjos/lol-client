@@ -79,6 +79,27 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   para a janela não encolher embaixo do cursor indo ao popup.
 - **Aviso da camada em cima do botão da vez** → `.lc-cp-aviso` fica logo abaixo do topo e com `pointer-events:none`; embaixo
   moram TRAVAR/BANIR/JOGAR.
+- **Toast e Ctrl+K invisíveis com a camada compacta à vista** (lido no `core.dll` do Pengu 1.1.6, 14/10/2026, sem abrir nada) →
+  o contêiner do `Toast` é `fixed` com z-index 9999 e a raiz da CommandBar é `fixed … z-[99]` (só existe aberta; abre no
+  `keydown` Ctrl+KeyK da `window`); a camada é z 100000. Aviso do plugin com a camada à vista vai por `compacto/comum.js`
+  `avisar` (runas, recompensas, Ctrl+K); ação do Ctrl+K que abre tela do plugin expande antes (`expandirAntes`). A paleta
+  em si segue embaixo da camada: subir o z dela é CSS sobre classe Tailwind do Pengu (proposta, não aplicada nem medida).
+  Inferido do fonte, não visto na tela.
+- **Celebração da coleta de recompensas não expande o compacto** (medido 14/10/2026 19:39:55, `__lolClient.compacto.modais()`,
+  1 s depois de "recompensa coletada") → o `.dialog-toast-celebration` chega dentro de `div.lol-uikit-toast-celebration-layer`,
+  filho direto do wrapper; a regra 7 (`classificarCamada`) só casa o gatilho no filho direto, então `expande: null` e o lobby
+  ficou compacto. `.vignette-celebration` (nível/maestria) não apareceu nesta medição.
+- **Escolha de runa pendente ao expandir** (passo 11 b4) → travar com 2+ páginas no compacto devolve `acao:'compacto'` e
+  marca `tratado`; sem cuidado, expandir antes de escolher deixava a runa atual sem aviso. `runas.js` guarda a pendência e,
+  quando `lc-modo-compacto` sai (`comum.vigiarClasse`), abre o popup se a página atual não é uma das candidatas (sem
+  `ux-show`/`ux-flash`); "manter a atual"/Esc é escolha, `fecharPopup()` de fora (tela 3) não. O clique numa página da
+  tela 3 avisa no ato (`runas.escolheu`): esperar o PUT deixava um "⤢" logo depois ler a página antiga e reabrir o popup.
+- **Dois painéis do pós-jogo no Ctrl+K do fim de partida compacto** (revisão do passo 11, 14/10/2026) → tirar a camada
+  dispara a vigia `vigiarSaidaDoCompacto` (um `abrirPainel` automático) e o `analisarUltima` abria outro, talvez da
+  partida anterior (o match-history demora a listar a que acabou). Quem expande para abrir o painel para a vigia antes, na
+  mesma volta (`posjogo.analisarAgora`/`abrir`); o observador desconectado não entrega o registro já na fila.
+- **Análise pré-carregada abria o painel na hora ao expandir** (idem) → com a análise já pronta, a abertura automática
+  pulava a janela do "mexeu" (D4) e cobria a tela da Riot que ele foi ver; agora fica o botão "análise pronta".
 - **Plugin carrega mas `init` morre calado** (`dataset.lolClient` vazio, sem `__lolClient`) →
   o Pengu chama `init()` **antes do `<body>` existir** (`await i.init(...)` no preInit);
   `document.body` é `null` ali. DOM só depois do `DOMContentLoaded` (ver `fila-rapida.js`);

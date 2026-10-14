@@ -545,8 +545,8 @@ const todasEscritas = [];
 
 // ---------- 5. finalização: skin, feitiços, runa ----------
 {
-  const fechou = [];
-  const t = await montarTela({ inicial: S(58), servicos: { runas: { fecharPopup: () => fechou.push(1) } } });
+  const fechou = [], escolheu = [];
+  const t = await montarTela({ inicial: S(58), servicos: { runas: { fecharPopup: () => fechou.push(1), escolheu: () => escolheu.push(t.escritas().length) } } });
   const sks = t.todos('button.lc-cp-sel-sk');
   caso('skin: só as 3 que ele tem, a escolhida (154002) marcada', igual(sks.map(b => String(b.dataset.id)), ['154000', '154002', '154006']) && sks[1].classList.contains('lc-cp-sel-on'));
   caso('skin: miniatura da splash (sem canvas no teste: cai na url do client)', /url\("\/t\/154000\.jpg"\)|url\("\/lol-game-data/.test(sks[0].style.backgroundImage || ''), sks[0].style.backgroundImage);
@@ -563,6 +563,8 @@ const todasEscritas = [];
   caso('runa: Renekton com 2 páginas mostra as 2 e fecha o popup escondido do runas.js', pags.length === 2 && fechou.length >= 1 && /escolhe uma/.test(t.achar('div[data-a="runa"]').textContent));
   pags[0].click(); await tick();
   caso('runa: clique = PUT currentpage com o id puro', t.escritas().at(-1) === 'PUT /lol-perks/v1/currentpage 1409260191' && /✓ aplicada/.test(t.achar('div[data-a="runa"]').textContent), t.escritas().join('; '));
+  // achado 5: o runas.js sabe da escolha no clique, ANTES do PUT (um ⤢ logo depois não reabre o popup)
+  caso('runa: o clique avisa o runas.js (escolheu) antes do PUT sair', escolheu.length === 1 && !t.escritas().slice(0, escolheu[0]).some(e => /currentpage/.test(e)), JSON.stringify(escolheu));
   caso('skin: troca de campeão relê o carrossel (Renekton: 1 skin dele + nenhuma do Zac)', t.todos('button.lc-cp-sel-sk').every(b => String(b.dataset.id).startsWith('58')));
   todasEscritas.push(...t.escritas());
 }
@@ -875,6 +877,60 @@ const todasEscritas = [];
     caso('ranqueada inteira (30 eventos): nenhuma escrita sem clique e nenhum erro', t.escritas().length === 0 && t.falhas.length === 0,
       t.escritas().join('; ') + t.falhas.map(e => e.message).join('; '));
   }
+}
+
+// ---------- 7b. selo do campeão em hover ou travado (plano, passo 11 b6) ----------
+// os números do champselect.js (servicos.champ.estatisticas: geral e a posição atribuída) na 2ª linha da linha "tu";
+// altura zero (a linha já tem 42 px); o texto inteiro no title. Matchup, trauma e draft ficam para o protótipo (d2)
+{
+  const pedidos = [];
+  const champ = {
+    partidas: () => [],
+    estatisticas: (id, pos) => {
+      pedidos.push([id, pos]);
+      return id === 154 ? { geral: { n: 12, vitorias: 7, winrate: 58, k: 6, d: 4, a: 6.4, kda: 3.1 }, posicao: { pos: 'JUNGLE', n: 5, vitorias: 3, winrate: 60, k: 5, d: 4, a: 6.2, kda: 2.8 } }
+        : { geral: { n: 0 }, posicao: pos ? { pos, n: 0 } : null };
+    },
+  };
+  const selo = t => linhaDo(t, 4)?.querySelector('[data-a="selo"]');
+  const linhas = s => (s ? s.children.map(c => c.textContent).join(' / ') : null); // as linhas do selo, uma por <span>
+  let t = await montarTela({ inicial: S(53), servicos: { champ } });
+  let s = selo(t);
+  caso('b6: hover (Zac, tua vez) → selo na linha "tu": partidas, winrate, KDA e o recorte da posição atribuída (2 linhas)',
+    linhas(s) === '12 partidas · 58% · KDA 3,1 / selva: 5 partidas · 60%' && pedidos.some(([id, pos]) => id === 154 && pos === 'JUNGLE'), linhas(s));
+  caso('b6: title com o selo inteiro (as linhas do selo do client normal: textoSelo)',
+    /Zac/.test(s?.getAttribute('title') || '') && /12 partidas · 58% · KDA 3,1/.test(s?.getAttribute('title') || '') && /selva: 5 partidas · 60% · KDA 2,8/.test(s?.getAttribute('title') || ''), s?.getAttribute('title'));
+  caso('b6: o selo mora na coluna da direita da linha "tu" (a das trocas dos aliados; nenhuma seção nova na tela)',
+    !!s && linhaDo(t, 4)?.classList.contains('lc-cp-sel-eu') && linhaDo(t, 4).children.at(-1) === s && t.todos('[data-a="selo"]').length === 1);
+  await t.emitir(S(58));
+  s = selo(t);
+  caso('b6: travado (finalização) → selo do campeão travado', linhas(s) === '12 partidas · 58% · KDA 3,1 / selva: 5 partidas · 60%', linhas(s));
+  t = await montarTela({ inicial: S(28), servicos: { champ } });
+  caso('b6: sem campeão em hover nem travado → sem selo', !selo(t));
+  // sem histórico ainda, sem partidas com ele, histórico quebrado
+  t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => null, estatisticas: champ.estatisticas } } });
+  caso('b6: histórico ainda lendo → "histórico carregando"', selo(t)?.textContent === 'histórico carregando', selo(t)?.textContent);
+  // leitura que falhou (sem outra em voo): o texto do selo do client normal, não "carregando" para sempre (achado 7)
+  t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => null, estatisticas: champ.estatisticas,
+    estado: () => ({ carregando: false, falhou: Date.now() }) } } });
+  caso('b6: leitura do histórico falhou → "histórico indisponível agora"', selo(t)?.textContent === 'histórico indisponível agora', selo(t)?.textContent);
+  t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => null, estatisticas: champ.estatisticas,
+    estado: () => ({ carregando: true, falhou: Date.now() }) } } });
+  caso('b6: falhou mas já relendo → "histórico carregando"', selo(t)?.textContent === 'histórico carregando', selo(t)?.textContent);
+  t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => [], estatisticas: (id, pos) => ({ geral: { n: 0 }, posicao: { pos, n: 0 } }) } } });
+  caso('b6: nenhuma partida com ele → "sem partidas com ele"', linhas(selo(t)) === 'sem partidas com ele', linhas(selo(t)));
+  t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => [], estatisticas: () => { throw new Error('x'); } } } });
+  caso('b6: estatística que lança → "histórico indisponível", sem erro de tela', selo(t)?.textContent === 'histórico indisponível' && t.falhas.length === 0, selo(t)?.textContent);
+  // KDA sem morte (null) = perfeito; posição sem partidas
+  t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => [], estatisticas: (id, pos) => ({ geral: { n: 2, winrate: 100, kda: null }, posicao: { pos, n: 0 } }) } } });
+  caso('b6: KDA sem morte = "perfeito"; posição sem partidas = "selva: sem partidas"', linhas(selo(t)) === '2 partidas · 100% · KDA perfeito / selva: sem partidas', linhas(selo(t)));
+  // "winrate no champ select" desligado: nem selo nem os números dos favoritos (a chave vale nos dois modos)
+  t = await montarTela({ inicial: S(53), cfg: { ...CFG, champSelect: { ligado: false } }, servicos: { champ } });
+  caso('b6: winrate no champ select desligado → sem selo e favoritos sem número', !selo(t)
+    && t.todos('button.lc-cp-sel-fav').every(b => !/partida|histórico/.test(b.textContent)), t.todos('button.lc-cp-sel-fav').map(b => b.textContent).join(' | '));
+  // sem o serviço (champselect.js quebrou no init): sem selo, tela segue
+  t = await montarTela({ inicial: S(53) });
+  caso('b6: sem servicos.champ → sem selo e sem erro', !selo(t) && t.falhas.length === 0);
 }
 
 // ---------- 8. linha que não se cruza, somada ----------

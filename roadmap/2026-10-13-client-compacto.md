@@ -444,14 +444,18 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     — **prova:** `teste-compacto.mjs` 122/122, `teste-compacto-lobby.mjs` 136/136, `teste-compacto-selecao.mjs` 143/143,
     `teste-compacto-posjogo.mjs` 85/85, `teste-aceite.mjs` 43/43, `teste-config.mjs` 49/49 (`rodar-testes.py` não roda
     com o jogo aberto).
-11. [ ] **Paridade com o expandido (pedido de 14/10/2026 ~15:35).** Palavras dele: "garanta que todos os outros recursos
+11. [ ] **Paridade com o expandido (pedido de 14/10/2026 ~15:35).** Grupo 1 (b1-b6) **feito em 14/10/2026** (bloco "Grupo 1
+    feito" abaixo); o que falta é o grupo 2 (d1-d3, protótipo no passo 13). Palavras dele: "garanta que todos os outros recursos
     que implementamos no modo expandido também tenham no modo compacto." Inventário e conferência no código em 14/10/2026
     (só leitura, `pengu/index.js`, `compacto/*`, `posjogo/index.js`, `champselect.js`, `runas.js`, `recompensas.js`,
     `config.js`, `aceite.js`, `sem-popups.js`, `estilo.css`, README). **Regra de dono:** `compacto/tela-champselect.js` e
     `tela-fila.js` são da frente seleção (passo 10: fotos da intenção, altura, roda de skins, anel);
     `compacto/tela-posjogo.js`, chat do pós-jogo, honra/placar, mentor e o painel de 6 abas no compacto são da frente fim
     de partida (protótipo `temp/2026-10-14-prototipo-compacto-fim-de-partida.html`). Correção num arquivo de outra frente
-    = **especificar para ela** (o quê, linha, prova), nunca editar direto. Legenda: [S] = não medido no client real.
+    = **especificar para ela** (o quê, linha, prova), nunca editar direto. **Revisto na construção do grupo 1 (14/10/2026):**
+    a tarefa mandou construir b1-b6, a única frente concorrente no ar era `coletor/*.py` e os dois arquivos estavam limpos
+    no `git status`; b5 e b6 foram editados direto em `tela-posjogo.js` e `tela-champselect.js`, com mudança mínima.
+    Legenda: [S] = não medido no client real.
 
     **a) Já existe nos dois modos (18, nada a fazer):** aceitar sozinho com contagem e "não aceitar" (`#lc-aceite` por
     cima da tela da fila; "não aceitar" expande) · atraso do aceite · client pisca e volta para trás (com o [S] da janela
@@ -471,8 +475,8 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     | 2 | Ctrl+K "analisar última partida" no compacto abre o painel em `display:none`; o `aoClicarFora` dele fecha no 1º clique na camada e o `keydown` de captura come o Esc enquanto ele existe | no `perform`, `compacto.expandir()` quando `compacto.estado().efetivo === 'compacto'` e só depois `analisarUltima()` | `pengu/index.js` (`registrarAcoes`, ~70) · livre |
     | 3 | avisos por `Toast` direto podem ficar embaixo da camada [S] | trocar pelo `avisar` de `compacto/comum.js:98` (já põe o aviso dentro do `#lc-compacto` quando ele existe e cai no Toast quando não): `runas.js:43` ("página da regra sumiu", "tua runa atual é a de X"), `recompensas.js:221` ("recompensa para escolher", falhas), `config.js:186` (confirmações do Ctrl+K). `fila-rapida.js` e `posjogo/index.js:297` só agem no expandido: ficam | `runas.js`, `recompensas.js`, `config.js` · livre |
     | 4 | travar no compacto com 2+ páginas e expandir antes de escolher: o `aoTravar` devolveu `acao:'compacto'` e marcou `tratado`; expandido, o popup não abre e fica a runa atual sem aviso (raro) | rodar `aoTravar` de novo ao sair do compacto na fase `ChampSelect` com a escolha pendente | `pengu/runas.js` · livre |
-    | 5 | lições da tela 4 mostram "fora" sem o coletor (o motor local do painel não roda) | export novo em `servicos.posjogo` com as lições da análise local (depende do item 1; custo: partida + linha do tempo, até ~75 s com as novas tentativas). Consumo na tela 4 | export: `posjogo/index.js` · livre; consumo: `tela-posjogo.js` · **especificar para a frente fim de partida** |
-    | 6 | selo do champ select: os dados já existem e a tela 3 não usa | reaproveitar `servicos.champ.coach()`, `estatisticas(id,pos)` e os formatadores `textoSelo`, `linhaMatchup`, `linhaTrauma`, `linhasDraft` de `champselect.js` (nenhuma leitura nova; o `champselect.js` já busca `/draft/<id>` a cada 3 s nos dois modos); o `estatFav` ignora `champSelect.ligado` (1 linha) | `compacto/tela-champselect.js:903-912` · **especificar para a frente seleção** |
+    | 5 | lições da tela 4 mostram "fora" sem o coletor (o motor local do painel não roda) | export novo em `servicos.posjogo` com as lições da análise local (depende do item 1; custo: partida + linha do tempo, até ~75 s com as novas tentativas). Consumo na tela 4 | export: `posjogo/index.js` · livre; consumo: `tela-posjogo.js` · feito aqui (ver "Regra de dono") |
+    | 6 | selo do champ select: os dados já existem e a tela 3 não usa | reaproveitar `servicos.champ.coach()`, `estatisticas(id,pos)` e os formatadores `textoSelo`, `linhaMatchup`, `linhaTrauma`, `linhasDraft` de `champselect.js` (nenhuma leitura nova; o `champselect.js` já busca `/draft/<id>` a cada 3 s nos dois modos); o `estatFav` ignora `champSelect.ligado` (1 linha) | `compacto/tela-champselect.js:903-912` · feito aqui, só winrate/KDA/posição (ver "Regra de dono"); matchup, trauma e draft no passo 13 |
 
     Decisões técnicas (orquestrador, 14/10/2026): (i) Toast → `avisar` do compacto, confiança alta (ele já escolhe pelo
     DOM e o Toast segue como reserva); reverte se a medição do item c2 mostrar o Toast por cima da camada e ele preferir o
@@ -489,6 +493,57 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
        compacto quando o modal da Riot fecha (`compacto/index.js` `aoModal`/`alvo`, livre; registrar como decisão
        técnica) ou aceitar como está.
     4. PDL da tela 4 (frente fim de partida; segue [S] até a medição).
+
+    **Medido (14/10/2026, fase Lobby, só leitura):** c1: a CommandBar **não** fica por cima: raiz `fixed … z-[99]` (só
+    existe aberta) contra 100000 da camada; lido no `core.dll` do Pengu 1.1.6, não visto na tela (abrir exigiria tecla).
+    No compacto o Ctrl+K abre invisível; o b2 cobre só o "analisar". Proposta não aplicada nem medida:
+    `html.lc-modo-compacto .fixed.top-0.left-0.z-\[99\] { z-index: 100001 !important }` (CSS sobre classe Tailwind do
+    Pengu, quebra calada numa atualização; não sei se a paleta monta em shadow root); aplicada, o d1 encolhe. c2: o Toast
+    é `fixed` z 9999, embaixo da camada (mesma fonte) → o b3 era necessário. c3: **não** expandiu na única observação (carga
+    das 19:39:55, 2 recompensas): o `.dialog-toast-celebration` chega dentro de `div.lol-uikit-toast-celebration-layer`, a
+    regra 7 só casa o filho direto do wrapper, `expande: null`, lobby seguiu compacto. Sem prova: a coleta 30 s depois de
+    uma partida, a `.vignette-celebration` e um `div.modal` das 19:40:08 depois de um "expandido por ti". ARMADILHAS § Client
+    e Pengu.
+
+    **Grupo 1 feito (14/10/2026; construtor + revisão + fechamento por subagentes do orquestrador):**
+    b1: no EndOfGame com a camada à vista, `obterAnalise(gid)` roda antes do `return`; nada desenha embaixo dela.
+    b2: Ctrl+K "analisar última partida" passa por `expandirAntes` (`compacto/index.js`): expande e só então abre; se a
+    camada não sai, não abre e avisa. No fim de partida do Rift abre a partida que acabou pelo mesmo `abrir` do "ver análise
+    completa" (`posjogo.analisarAgora`, que para a vigia da camada: sem isso saíam 2 `abrirPainel`, talvez de partidas
+    diferentes); fora dele, `analisarUltima` mostra "procurando a última partida…" antes da leitura do histórico (até ~40 s)
+    e não abre se ele fechou a caixa ou se a camada voltou. b3: Toasts de `runas.js`, `recompensas.js`, `config.js` passam
+    por `comum.avisar` (dentro da camada à vista, Toast sem ela); "runa X aplicada" não sai com a camada (decisão ii).
+    b4: travar com 2+ páginas no compacto deixa a escolha pendente; quando `lc-modo-compacto` sai (`comum.vigiarClasse`)
+    o popup abre, sem `ux-show`/`ux-flash`, salvo se a página atual já é candidata; "manter a atual"/Esc e o clique numa
+    página da tela 3 (`runas.escolheu`, antes do PUT) contam como escolha; 1 página, sem regra e runas desligadas limpam a
+    pendência. b5: `posjogo.licoesLocais(id)` (o motor e a análise em cache do painel) alimenta a tela 4 enquanto as
+    lições do coletor não chegam (fora, status 0, "esperando"), rótulo "3 lições · sem o coletor"; fora do Rift nem pede.
+    b6: selo do campeão em hover ou travado na coluna da direita da linha "tu" (2 linhas: "12 partidas · 58% · KDA 3,1" e
+    "selva: 5 partidas · 60%"; texto inteiro no title), dos números do `champselect.js` (nenhuma leitura nova); leitura
+    que falhou = "histórico indisponível agora".
+    Decisões técnicas (opus, 14/10/2026): (iii) abertura automática com a análise **já pronta** (camada que cai no
+    EndOfGame depois do b1: "⤢ expandir" dele, regra 7) não abre o painel por cima: fica o botão "análise pronta" (D4);
+    revê a decisão de 13/10 "o expandir no EndOfGame abre o painel" só para esse caso; com a análise em voo segue abrindo
+    quando fica pronta se ele não mexeu. Resíduo: expandir antes da análise ficar pronta ainda abre sozinho depois;
+    expandir depois dá o botão. Confiança média; reverte se ele quiser o painel abrindo sozinho ao expandir. (iv) lições
+    locais enquanto as do coletor não chegam (não só com ele fora), como o painel; com o histórico disponível na hora da
+    análise (sem refazer depois das 200 partidas: vale a armadilha da 3ª lição diferente). Média; reverte se ele estranhar
+    lição local trocada pela do coletor. (v) selo na coluna da direita, 2 linhas de 10,5 px (harness 420×680: linha em 42 px,
+    rolagem 0 em 6 fases; uma 3ª linha embaixo do nome ia a 50 px). Média; reverte se ele não gostar do lugar (aí entra
+    no passo 13). (vi) página atual já candidata = escolha feita; `fecharPopup()` de fora não conta. Alta. (vii) com
+    "winrate no champ select" desligado somem o selo **e** os números dos favoritos (mudança além do b6). Média; reverte
+    (dono: gabriel) se ele quiser os números dos favoritos mesmo com o selo desligado. (viii) a celebração da Riot segue por
+    baixo da camada (c3). Média; reverte se ele quiser ver a celebração.
+    Nota sem correção: 2 avisos seguidos da mesma coleta de recompensas deixam só o último visível na camada (o Toast
+    empilhava).
+    — **prova:** `teste-compacto.mjs` 122 → 127, `teste-compacto-selecao.mjs` 143 → 157, `teste-compacto-posjogo.mjs`
+    85 → 103, `teste-runas.mjs` 4/4 com extras 5 → 21, `teste-recompensas.mjs` 39 → 41, `teste-config.mjs` 49 → 50, todos
+    verdes; casos novos vermelhos antes da correção (os de b2 e da análise pronta conferidos revertendo a correção).
+    Sem mudança e verdes: `teste-compacto-lobby` 136, `teste-aceite` 43, `teste-posjogo` 11, `teste-jogar-de-novo` 96,
+    `teste-sem-popups` 22, `teste-chat-posjogo` 45, `teste-winrate`, `teste-licoes`, `teste-abas`, `teste-matchup`.
+    `rodar-testes.py` não roda com o jogo aberto. **Falta (só a próxima partida prova):** nada visto no client real (vale
+    depois da recarga no lobby); selo com as fontes da Riot; lições locais com o coletor fora de verdade; Ctrl+K num
+    EndOfGame real; celebração 30 s depois da partida e `.vignette-celebration`.
 
     **d) Precisa de tela nova: protótipo único + aprovação do Gabriel antes de código (regra do passo 0).** Protótipo,
     viabilidade e parecer de d1-d3 vivem no **passo 13** (telas B1-B3); o texto abaixo é o levantamento de origem.

@@ -1,7 +1,8 @@
 // Tela 4 do client compacto: pós-jogo (roadmap/2026-10-13-client-compacto.md, passo 7; protótipo aprovado em
 // 13/10/2026, temp/2026-10-13-prototipo-client-compacto.html, aba 4). Contrato das telas: pengu/compacto/index.js.
 // - WaitingForStats: "carregando" (a honra do PreEndOfGame é da Riot: o roteador expande e remonta no EndOfGame).
-// - EndOfGame: V/D, KDA, farm/min e PDL; as 3 lições do coletor (GET /licoes/<gameId>); jogar de novo (fila-rapida.js
+// - EndOfGame: V/D, KDA, farm/min e PDL; as 3 lições do coletor (GET /licoes/<gameId>; sem ele, as do motor local do
+//   painel, posjogo/index.js licoesLocais, passo 11 b5); jogar de novo (fila-rapida.js
 //   jogarDeNovo: mesma fila da partida, freios de freios.js, em grupo só volta ao lobby); ver análise completa (expande e
 //   abre o #lc-posjogo pelo posjogo/index.js, que com a camada à vista não abre sozinho); fechar (dismiss-stats).
 // Fontes: eog-stats-block (só o jogador local: nome de terceiro nunca entra), sessão do gameflow (gameId, fila, mapa).
@@ -257,7 +258,7 @@ async function lerLicoes(ctx, est) {
   const mem = lembrar(est.gameId);
   if (mem.licoes) { est.licoes = { estado: 'ok', lista: mem.licoes }; pintar(ctx, est); return; }
   const col = ctx.servicos?.coletor;
-  if (typeof col !== 'function') { est.licoes = { estado: 'fora', lista: [] }; pintar(ctx, est); return; }
+  if (typeof col !== 'function') { est.licoes = { estado: 'fora', lista: [] }; lerLicoesLocais(ctx, est); pintar(ctx, est); return; }
   est.licoesInicio ||= _relogio.agora();
   est.licoesEmVoo = true;
   let r;
@@ -272,6 +273,7 @@ async function lerLicoes(ctx, est) {
   } else if (!r || r.status === 0) {
     est.licoes = { estado: 'fora', lista: [] };
     espera = PRAZOS.coletorForaMs;
+    lerLicoesLocais(ctx, est);
   } else if (num(r.dados?.tentarDeNovoS) > 0) {
     est.licoes = { estado: 'esperando', lista: [] };
     espera = num(r.dados.tentarDeNovoS) * 1000;
@@ -280,13 +282,40 @@ async function lerLicoes(ctx, est) {
   }
   if (espera) {
     if (_relogio.agora() - est.licoesInicio + espera > PRAZOS.licoesMs) {
-      est.licoes = { estado: 'sem', lista: [], motivo: est.licoes.estado === 'fora' ? 'coletor fora do ar' : 'o coach não leu a partida a tempo' };
+      const fora = est.licoes.estado === 'fora';
+      est.licoes = { estado: 'sem', lista: [], motivo: fora ? 'coletor fora do ar' : 'o coach não leu a partida a tempo', fora };
     } else if (!est.licoesAgendada) {
       est.licoesAgendada = true;
       ctx.tempo(() => { est.licoesAgendada = false; return lerLicoes(ctx, est); }, espera);
     }
   }
   pintar(ctx, est);
+}
+
+// Sem o coletor (serviço ausente ou fora do ar): as lições do motor local do painel (posjogo/index.js licoesLocais, a mesma
+// análise em cache que o "ver análise completa" abre), como no client normal (plano, passo 11 b5). Pedidas uma vez por
+// montagem; o coletor segue sendo tentado e a resposta dele vence (licoesParaMostrar). Falha = segue "coletor fora".
+function lerLicoesLocais(ctx, est) {
+  const f = ctx.servicos?.posjogo?.licoesLocais;
+  if (typeof f !== 'function' || est.locais || !est.gameId) return;
+  // fora do Rift (ARAM, Arena) o motor não tem lição (analise.js: "só Summoner's Rift"): nem lê a partida (como a linha
+  // do "ver análise completa" lá embaixo)
+  if (est.mapa !== null && est.mapa !== 11) return;
+  est.locais = { estado: 'lendo', lista: [] };
+  const gid = est.gameId;
+  Promise.resolve().then(() => f(gid)).then(r => r, () => null).then(r => {
+    if (!ctx.vivo() || est.gameId !== gid) return;
+    const lista = (Array.isArray(r?.licoes) ? r.licoes : []).filter(l => l && typeof l.texto === 'string' && l.texto).slice(0, 3)
+      .map(l => ({ texto: l.texto, positiva: l.tipo === 'positiva' }));
+    est.locais = lista.length ? { estado: 'ok', lista } : { estado: 'sem', lista: [] };
+    pintar(ctx, est);
+  });
+}
+
+// o que a lista mostra: as do coletor quando chegaram; até lá (fora, esperando o banco, sem lição), as do motor local que
+// já chegaram, como o painel (`p.licoesColetor || calcularLicoes(...)`): o coletor que volta "esperando" não apaga a lista
+export function licoesParaMostrar(licoes, locais) {
+  return licoes?.estado !== 'ok' && locais?.estado === 'ok' ? { estado: 'ok', lista: locais.lista, local: true } : licoes;
 }
 
 // a cada 0,5 s: contagem do freio, eog que não chegou, PDL que não chegou
@@ -422,10 +451,13 @@ function pintar(ctx, est) {
     h('div', {}, h('b', {}, !vazio ? textoFarm(r.farmMin) : '–'), 'farm/min'),
     h('div', { title: pdlTitulo || undefined }, h('b', { class: pdlClasse || undefined }, pdlTxt), 'PDL')));
   // lições
-  const lic = est.licoes;
-  filhos.push(h('div', { class: 'lc-cp-rot' }, lic.estado === 'ok' && lic.lista.length !== 3 ? 'lições' : '3 lições'));
+  const lic = licoesParaMostrar(est.licoes, est.locais);
+  const rot = lic.estado === 'ok' && lic.lista.length !== 3 ? 'lições' : '3 lições';
+  filhos.push(h('div', { class: 'lc-cp-rot', title: lic.local ? 'as lições do coletor não chegaram: estas são do motor do painel, com o histórico do client' : undefined },
+    lic.local ? `${rot} · sem o coletor` : rot));
   if (lic.estado === 'ok') {
-    filhos.push(h('ul', { class: 'lc-cp-lic' }, lic.lista.map(l => h('li', { class: l.positiva ? 'lc-cp-pos' : undefined, title: l.texto }, `${l.positiva ? '✓' : '⚠'} ${l.texto}`))));
+    const titulo = l => (lic.local ? `${l.texto} (motor local: as do coletor não chegaram)` : l.texto);
+    filhos.push(h('ul', { class: 'lc-cp-lic' }, lic.lista.map(l => h('li', { class: l.positiva ? 'lc-cp-pos' : undefined, title: titulo(l) }, `${l.positiva ? '✓' : '⚠'} ${l.texto}`))));
   } else if (lic.estado === 'fora' || lic.estado === 'sem') {
     const texto = lic.estado === 'fora' ? 'coletor fora do ar: as lições ficam na análise completa' : `sem lições: ${lic.motivo || 'nada a mostrar'}`;
     filhos.push(h('ul', { class: 'lc-cp-lic' }, h('li', { class: 'lc-cp-mudo', title: texto }, texto)));
