@@ -508,6 +508,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **Análise de imagem em Python** → `python -I` não enxerga o `cv2` (instalado no site de
   usuário); o PIL não aceita caminho `/c/...` do Git Bash; saída com "≈" quebra no cp1252
   (`PYTHONIOENCODING=utf-8`); o hook `guarda-comando` bloqueia `sed -i` (13/10/2026).
+- **Tarefa com `pythonw` abre janela de console para cada filho** (`doppler`, `ffmpeg`, `py`, `tasklist`): processo sem
+  console que lança programa de console dá a ele um console novo, visível. O `tools\voz-agendada.py` lança o gerador
+  com `CREATE_NO_WINDOW` (console oculto) e os netos herdam esse console: medido em 13/10/2026, `GetConsoleWindow()` = 0
+  no filho e nos netos (venv e `py -3.14`). Toda chamada direta do `pythonw` também leva `CREATE_NO_WINDOW`.
+- **Saída do `schtasks` sai quebrada** ("ÒXITO") → vem na página OEM (cp850 no pt-BR): ler com `encoding="oem"`.
+  Para o estado da tarefa, `Get-ScheduledTask`/`Get-ScheduledTaskInfo` (o texto do `schtasks /query` é traduzido).
 - **Parar o coletor com `schtasks /end`** não grava "encerrado" (morte seca) e deixa a trava;
   a próxima instância vê o pid morto e remove ("trava órfã").
 - **Coletor sai com "outra instância em execução" sem haver outra** → a trava órfã tinha um pid
@@ -591,6 +597,28 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   sozinho (gastaria cota toda rodada): `--refazer-suspeitas`. Conferência que morre para a rodada sem gravar.
 - **Teste seco tocando som de verdade** → `Voz(saida=...)` não abre o pacote padrão; com pacote explícito e sem
   `tocar`, o .wav também vai para a `saida`. Nunca rodar teste que toque `winsound` com o Gabriel jogando.
+- **"A cota de todos acabou" não vale para a noite toda** (13/10/2026) → o `gemini-3.8-flash-tts` deu 429 diário por
+  volta das 20:50 e às 22:37 do mesmo dia aceitou um lote de 8 (a 1ª rodada agendada, que devia só bater no 429).
+  Não planejar prova "sem gastar cota" contando com a cota morta; o gerador trata qualquer rodada como produção.
+- **Rodada morre com `Server disconnected without sending a response`** (13/10/2026, 2º pedido da 1ª rodada
+  agendada) → o erro não era 429 e subia como traceback (rc 1), com o `progresso_alvo` do índice para trás. Hoje
+  falha passageira (rede, 5xx) tenta de novo em 10/30/90 s e depois para limpo (`RedeFalhou`, rc 2); o progresso é
+  regravado num `finally`.
+- **Regravar uma fala por cima do `.wav` antigo** pode pegar o arquivo tocando (o `winsound` abre o arquivo) e o
+  tocador com o índice velho → a fala refeita ganha `<hash>-<n>.wav`, o índice troca primeiro e o antigo sai depois
+  (se estiver aberto, a próxima rodada apaga o órfão). Nunca o nome atual da fala nem um que já exista (`nome_novo`;
+  `<hash>.wav` volta a servir se já foi apagado).
+- **`os.replace` no `indice.json` dá `PermissionError`** quando outro processo está lendo (o `open()` do Python não
+  compartilha a exclusão: coletor relendo, `estado`, antivírus) → a rodada morria com os `.wav` novos fora do índice
+  e o pedido gasto. `substituir()` tenta de novo 6 vezes (revisão 13/10/2026).
+- **Uma rodada a cada 2 h repete a mesma recusa** → fala com duração absurda (`falhas`) ou recusada no alvo gastava
+  1 pedido por rodada e 3 recusas num dia ruim a prendiam no modelo antigo. Hoje cada uma volta **1 vez por dia**
+  (`hoje` em `pendentes`/`para_convergir`); a falha continua em "faltam" (a tarefa não desliga com fala faltando) e
+  trocar o `--modelo-alvo` zera as recusas do antigo (`alvo_tentado`).
+- **`--modelo-alvo` errado gravava o nome no índice para sempre** (o `finally` usava o nome antes de validar) → o
+  índice só recebe o alvo do próprio índice ou um conferido contra a lista da API.
+- **Tarefa desativada e o catálogo cresceu** (fala nova no `LICOES.md`) → as novas tocam na Maria e ninguém grava;
+  o `estado` avisa "desativada mas faltam N": `python tools\voz-agendada.py instalar` reativa.
 
 ## Riot API (servidores da Riot, não a LCU)
 

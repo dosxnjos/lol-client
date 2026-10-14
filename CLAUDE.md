@@ -18,6 +18,8 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   portas de teste); nunca rodar o `coletor.py` de teste contra `dados/` com o coletor real de pé.
 - Print do overlay/moldura só pelo modo vitrine (`tools/vitrine.py`); nunca desligar `WDA_EXCLUDEFROMCAPTURE` nem
   trazer o jogo para a frente. Provas que abrem janela só com o jogo fechado (`rodar-testes.py` e `ensaio-coach.py` recusam).
+- Pacote de voz: a tarefa `lol-client-voz` completa e converge sozinha (`python tools/voz-agendada.py estado`); gerador
+  só com o jogo fechado e nada do `pythonw` sem `CREATE_NO_WINDOW` ([COLETOR](docs/COLETOR.md) § Avisos ao vivo).
 - Credencial do lockfile nunca em arquivo, log ou doc. Heurísticas do pós-jogo: dona é
   [docs/INSIGHTS.md](docs/INSIGHTS.md) (JS e Python seguem ela). Coletor, banco e MCP:
   [docs/COLETOR.md](docs/COLETOR.md).

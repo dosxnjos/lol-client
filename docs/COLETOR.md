@@ -342,6 +342,23 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   transcrição: o silêncio separa pedaços, o Whisper do Reco em `tools/conferir-trechos.py` diz de qual frase é
   cada um, e o trecho tem de soar mais como a própria frase do que como as vizinhas do lote; `loudnorm`; prova
   offline `tools/teste-pacote-voz.py`). `voz.prioridade_do_processo(True)` põe o coletor abaixo do normal na partida.
+- **Pacote que cresce sozinho** (plano voz, passo 6b): a tarefa `lol-client-voz` (`tools\voz-agendada.py rodar`,
+  `pythonw`, oculta, só logado) roda às 05:15 e a cada 2 h até 23:15. Pula com `League of Legends.exe` aberto ou o
+  client fora de `None`/`Lobby`/`EndOfGame` (fase pela LCU, como o coletor); senão chama o gerador no venv do TTS
+  (`--tom ambos`, console oculto, abaixo do normal) e, se o client entra em fila no meio, cria
+  `dados\voz-agendada.parar` (o gerador para antes do próximo pedido ou no meio de uma espera da API); com
+  `League of Legends.exe` aberto, mata o gerador na hora. O Whisper só sobe no 1º áudio (cota morta = 1 pedido e
+  sai). O gerador faz (a) as falas que faltam, com a
+  fila de modelos inteira e o **modelo-alvo** na frente (`modelo_alvo` no `indice.json`: o 1º da fila na 1ª rodada,
+  fixo depois; `--modelo-alvo` troca); (b) só se (a) esvaziou, refaz no alvo as falas de outro modelo, **só com o
+  alvo**. Fala refeita ganha `<hash>-<n>.wav` e entra no índice só depois de passar na conferência; o `.wav` antigo
+  sai depois do índice; recusada, a antiga fica (`tentativas_alvo`, no máximo 1 por dia; 3 recusas = presa; trocar o
+  alvo zera). Fala com duração absurda (`falhas`) também volta só 1 vez por dia. `progresso_alvo` no índice;
+  completo e no alvo → a tarefa se desativa (`schtasks /change /disable`) e registra; presas e suspeitas ficam fora
+  desse critério e o log diz quantas ("100% do que o alvo aceitou"). O tocador pega fala nova
+  sem reiniciar o coletor: um `Voz` novo por partida abre o pacote de novo e o `Pacote.relido()` relê o índice que
+  mudou antes de cada fala (nunca no meio). Log: `dados\voz-agendada.log` (rotação 256 KB × 3); última rodada em
+  `dados\voz-agendada.json`.
 - **Moldura** (`coletor\moldura.py`): janela própria de tela inteira, click-through
   (`WS_EX_LAYERED|TRANSPARENT|TOPMOST|TOOLWINDOW|NOACTIVATE`), borda pulsando + rótulo no canto por
   2 s, só com "League of Legends (TM) Client" em primeiro plano, e **fora do print**
@@ -352,6 +369,8 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
 | falar uma frase | `python -c "from coletor.voz import falar; falar('teste do coach')"` |
 | mostrar um alerta | `python coletor\moldura.py vermelho "jungler rio top" --forcar` |
 | provas | `python tools\teste-coach.py` (anti-spam + replay da partida gravada), `python tools\teste-alertas.py` |
+| pacote de voz: estado, tarefa | `python tools\voz-agendada.py estado` · `... instalar` (refaz/reativa) · `... remover` |
+| pacote de voz à mão (jogo fechado) | `%LOCALAPPDATA%\lol-client\voz\venv\Scripts\python.exe tools\gerar-pacote-voz.py --voz aoede` |
 
 ## Feitiços inimigos e sugestões (plano v2, passos 15e e 15f)
 

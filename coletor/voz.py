@@ -43,11 +43,15 @@ def duracao_wav(caminho):
 
 class Pacote:
     """índice de um pacote de voz: indice.json = {"voz", "modelo", "versao_catalogo", "frases": {fala:
-    {"arquivo": "<hash>.wav", ...}}}. arquivo(texto) -> Path do .wav ou None (fora do pacote / arquivo sumiu)."""
+    {"arquivo": "<hash>.wav", ...}}}. arquivo(texto) -> Path do .wav ou None (fora do pacote / arquivo sumiu).
+    O gerador agendado (tools/voz-agendada.py) acrescenta e troca falas entre as partidas: um Voz novo por partida
+    já abre o pacote de novo, e relido() pega a troca no meio de uma (antes de uma fala, nunca durante)."""
 
     def __init__(self, pasta):
         self.pasta = Path(pasta)
-        ind = json.loads((self.pasta / "indice.json").read_text(encoding="utf-8"))
+        self._indice = self.pasta / "indice.json"
+        self.mtime = self._indice.stat().st_mtime_ns     # antes de ler: troca no meio = relê na próxima fala
+        ind = json.loads(self._indice.read_text(encoding="utf-8"))
         self.nome = ind.get("voz") or self.pasta.name
         self.versao = ind.get("versao_catalogo")
         self.modelo = ind.get("modelo")
@@ -86,6 +90,19 @@ class Pacote:
     def arquivo(self, texto):
         arq = self.frases.get(normalizar(texto))
         return arq if arq is not None and arq.exists() else None
+
+    def relido(self, log=None):
+        """o pacote relido se o indice.json mudou desde a leitura (o gerador acrescentou ou trocou falas, com
+        arquivo novo por versão); senão self. Índice ilegível ou sumido no meio da troca: fica o que estava."""
+        try:
+            if self._indice.stat().st_mtime_ns == self.mtime:
+                return self
+            novo = type(self)(self.pasta)
+        except (OSError, ValueError):
+            return self
+        if log:
+            log.info("voz: pacote %s relido (%d -> %d frases)", self.nome, len(self.frases), len(novo.frases))
+        return novo
 CREATE_NO_WINDOW = 0x08000000
 BELOW_NORMAL_PRIORITY_CLASS = 0x00004000
 NORMAL_PRIORITY_CLASS = 0x00000020
@@ -298,6 +315,8 @@ class Voz:
                     self._cv.notify_all()
 
     def _dizer(self, texto):
+        if hasattr(self.pacote, "relido"):     # entre falas (fio da voz): nunca troca o .wav no meio de uma
+            self.pacote = self.pacote.relido(self.log)
         arq = self.pacote.arquivo(texto) if self.pacote is not None else None
         self.faladas.append((time.monotonic(), texto))
         self.fontes.append((texto, "pacote" if arq else "maria"))

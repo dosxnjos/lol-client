@@ -177,7 +177,8 @@
    (coincidentemente a mesma que eu também gostei pro jarvis na central rs)". Tom: o da config (`tomVoz`
    "serio" hoje); o pacote grava os dois, o tom em uso primeiro.
 6. [ ] **Parcial (13/10/2026, 21:00): 19 de 226 falas do tom sério no pacote, faltam 207** (+ 226 do descontraído);
-   a cota grátis de todos os modelos de TTS acabou. Retomar depois das ~04:00 de 14/10 (meia-noite do Pacífico),
+   a cota grátis de todos os modelos de TTS acabou. **Desde o passo 6b a tarefa `lol-client-voz` retoma sozinha**
+   (estado: `python tools/voz-agendada.py estado`). À mão: depois das ~04:00 de 14/10 (meia-noite do Pacífico),
    com o jogo fechado: `%LOCALAPPDATA%\lol-client\voz\venv\Scripts\python.exe tools\gerar-pacote-voz.py --voz aoede
    --tom serio` (~26 pedidos de 8; depois `--tom descontraido`). Prova até aqui: `teste-pacote-voz.py` 19/19; os 3
    lotes reais recusados pelo corte antigo alinharam 3/3 pelo corte guiado pela transcrição (detalhe no relatório).
@@ -185,6 +186,68 @@
    gera o catálogo inteiro, retomável (pula o que já existe), normaliza volume (`ffmpeg loudnorm`),
    grava `indice.json` com a versão do catálogo. Recusa rodar com o jogo aberto.
    **prova:** contagem de arquivos = tamanho do catálogo; tempo total e tamanho em disco no relatório.
+6b. [x] **Agendamento diário: completar o pacote e convergir para um modelo só** (pedido do Gabriel, 13/10/2026,
+   ~21h, depois de saber que a cota grátis, ~10 pedidos/dia por modelo, fez o pacote misturar 4 modelos do Gemini
+   TTS na mesma voz Aoede: "vamos misturando mas baixando o modelo completo ao longo dos dias. deixa o agendamento
+   aí").
+   **Entendimento:** hoje o gerador (passo 6) só roda à mão e, quando a cota do melhor modelo acaba, segue com o
+   próximo; o pacote fica misturado (19 falas: 3.8-flash-lite 8, 3.1-flash-preview 4, 2.5-flash-preview 4,
+   3.8-flash 3). O Gabriel aceita a mistura agora, desde que o pacote **vá sendo refeito no modelo melhor**, dia
+   após dia, sem ninguém lembrar de rodar. A cota renova à meia-noite do Pacífico (04:00 BRT; 05:00 depois de
+   01/11, fim do horário de verão americano).
+   **Decisões (agente, técnicas; confiança alta salvo onde dito):**
+   - **Modelo-alvo fixo no índice:** o primeiro da fila do `Gemini` (melhor: não-pro, não-lite, mais novo; hoje
+     `gemini-3.8-flash-tts`) vira `modelo_alvo` no `indice.json` na 1ª rodada e não muda sozinho se a lista da API
+     mudar; `--modelo-alvo <nome>` troca. Alvo fora da lista da API: completa o que falta com a fila e não converge.
+   - **Rodada em duas fases:** (a) as falas que faltam, com a fila inteira (alvo primeiro, depois os outros); (b)
+     só se (a) esvaziou a fila: refazer no alvo as falas com `modelo != alvo`, **só com o alvo** (cota do alvo
+     acabou = para; nunca gasta outro modelo na convergência). Fase (b) não começa se a cota do alvo já morreu na (a).
+   - **Substituição atômica:** a fala refeita ganha arquivo novo (`<hash>-<n>.wav`, nunca sobrescreve o que pode
+     estar tocando); o índice troca só depois que a nova passou na mesma conferência (duração + Whisper +
+     alinhamento) e o arquivo antigo é apagado depois do índice. Recusada (duração absurda, lote deslocado, ou
+     ouvida errado mesmo refeita sozinha), a antiga fica intacta e a fala ganha `tentativas_alvo` (no máximo 1 por
+     dia); com 3 recusas ela sai da convergência ("presa" no modelo antigo, listada no estado). Nunca troca uma fala
+     boa por uma `suspeita`.
+   - **Suspeitas seguem a regra atual:** o tocador pula, o gerador não refaz sozinho (`--refazer-suspeitas`); ficam
+     fora da convergência e do denominador do "100% no alvo" (senão uma suspeita antiga impediria a tarefa de
+     desligar). Confiança média: se o Gabriel quiser as suspeitas refeitas no alvo, é incluir na lista da fase (b).
+   - **Meta no índice:** `progresso_alvo` = falas no alvo / total (catálogo dos dois tons), faltam, fora do alvo,
+     presas, suspeitas; regravado a cada rodada, lido pelo estado e pelo agendador.
+   - **Tocador:** o `coach_vivo._Partida` cria um `voz.Voz` novo por partida, que abre o `Pacote` de novo: falas
+     novas entram na partida seguinte sem reiniciar o coletor. Além disso, o `Pacote` se relê quando o mtime do
+     `indice.json` muda, sempre antes de uma fala (nunca no meio). O gerador recusa e para com o jogo aberto.
+   - **Agendador** (`tools/voz-agendada.py`, Python do coletor via `pythonw`): tarefa `lol-client-voz` (XML pelo
+     `schtasks /create /xml`, usuário atual, só logado, `InteractiveToken`, oculta), diária às 05:15 com repetição a
+     cada 2 h até 23:15, uma instância por vez. Sai na hora com `League of Legends.exe` aberto ou o client fora de
+     `None`/`Lobby`/`EndOfGame` (fase pela LCU como o coletor: credencial do lockfile só em memória); roda o gerador
+     no venv do TTS com `--tom ambos`, prioridade abaixo do normal, **console oculto** (`CREATE_NO_WINDOW`: os filhos
+     `doppler`/`ffmpeg`/`py` herdam e não abrem janela); para o gerador se o client entrar em fila no meio. Log com
+     rotação em `dados/voz-agendada.log`. Pacote completo e 100% no alvo → `schtasks /change /disable` e registra.
+   **Subpassos:** 1. gerador: alvo, duas fases, substituição atômica, progresso, trava de instância única;
+   2. tocador: releitura por mtime; 3. `tools/voz-agendada.py` (`rodar`, `estado`, `instalar`, `remover`);
+   4. testes em `tools/teste-pacote-voz.py` (sem rede, cota nem som); 5. registrar a tarefa e rodá-la uma vez com
+   `schtasks /run` (só com o jogo fechado e o client em `None`/`Lobby`/`EndOfGame`; a cota do dia acabou, então ela
+   para limpo no 429: prova Doppler, venv, log e saída sem janela); 6. COLETOR.md, ARMADILHAS.md.
+   **prova:** `python tools/teste-pacote-voz.py` verde; log da execução agendada; `python tools/voz-agendada.py estado`.
+   **Revisão adversarial (13/10/2026, 23:00–23:30), 12 achados, todos corrigidos com caso de teste** (`teste-pacote-voz.py`
+   48/48, `teste-coach.py` 26/26; os casos 1 e 2 falharam antes da correção): (1) `--modelo-alvo` errado ou Gemini que
+   não sobe não grava mais o nome no índice; (2) jogo abre no meio → o vigia mata o gerador na hora (antes 120 s) e as
+   esperas da API (429 por minuto, rede) olham o arquivo de parada; (3) `os.replace` do índice tenta de novo no
+   `PermissionError`; (4) recusa no alvo volta 1 vez por dia (3 recusas = 3 dias, não um dia ruim) e o log de desligar
+   diz "100% do que o alvo aceitou" com presas/suspeitas; (5) falha de duração volta 1 vez por dia e segue contando em
+   "faltam"; (6) trocar o alvo zera as recusas do antigo; (7) `estado` avisa tarefa desativada com fala faltando;
+   (8) órfãos limpos e "nada a fazer" só com a trava; (9) Gemini antes do Whisper, Whisper sob demanda; (10) doc do
+   nome de arquivo; (11) uma leitura "?" da LCU não para a rodada; (12) `sys.path` uma vez. **Decisão (agente, confiança
+   média):** suspeitas seguem fora da convergência e do critério de desligar, como pedido ("seguem a regra atual"); o
+   que muda é o log honesto. Reverter: incluir as suspeitas na lista da fase (b).
+   **Feito em 13/10/2026 (22:00–22:45), commitado depois da revisão:** `teste-pacote-voz.py` 36/36 (17 casos novos), `teste-coach.py`
+   26/26; tarefa registrada (próxima 14/10 05:15, `PT2H`/`PT18H1M`, oculta, `IgnoreNew`, `Interactive`/`Limited`);
+   `/disable` e `/enable` reais sem senha. **Prova agendada (`schtasks /run`, 22:35, jogo fechado, fase `None`):**
+   Doppler achado no contexto da tarefa, venv e log ok, alvo fixado (`gemini-3.8-flash-tts`, 1º da fila da API).
+   `correção:` a cota do alvo **não** tinha acabado: 1 lote de 8 aceito (notas 0,88–1,0; pacote 27 de 452, 11 no
+   alvo); o 2º pedido caiu com "Server disconnected without sending a response" (traceback, rc 1). Corrigido depois:
+   falha passageira tenta de novo e para limpo (rc 2), progresso regravado num `finally`; provado só no teste (a
+   rodada real seguinte é a das 05:15). Console oculto medido à parte: `GetConsoleWindow()` = 0 no filho e nos netos.
 7. [x] **Feito e provado em 13/10/2026** (`teste-coach.py` 26/26 com pacote falso: toca do pacote, cai na Maria,
    registra a falta, urgente corta e fura, validade, `suspeita` fica na Maria, `.wav` que falha cai na Maria;
    `ensaio-coach.py` a 20x: 0 falhas, 26 de 26 falas no catálogo). Pendente fora do passo: reiniciar o coletor fora
