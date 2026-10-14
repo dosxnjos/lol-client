@@ -11,6 +11,9 @@ Pedido: — | client compacto (lobby, fila, champ select com trocas, pós-jogo, 
 - **Protótipo do fim de partida (passo 12, aguardando aprovação):**
   [temp/2026-10-14-prototipo-compacto-fim-de-partida.html](../temp/2026-10-14-prototipo-compacto-fim-de-partida.html)
   · prints em `temp/prototipo-fim-de-partida/tela-{A,B,B-detalhes,C,D}.png`.
+- **Protótipo do chat ao lado e do grupo 2 da paridade (passo 13, aguardando aprovação):**
+  [temp/2026-10-14-prototipo-compacto-chat-e-paridade.html](../temp/2026-10-14-prototipo-compacto-chat-e-paridade.html)
+  · prints em `temp/prototipo-chat-e-paridade/`.
 - **Ler antes:** hub [cerebro/projetos/lol-client.md](../../cerebro/projetos/lol-client.md) ·
   [CLAUDE.md](../CLAUDE.md) · [docs/ARMADILHAS.md](../docs/ARMADILHAS.md) (§ Client e Pengu, § LCU API) ·
   [README](../README.md) · irmãos: [jogar de novo](2026-10-13-jogar-de-novo.md) (freios, penalidade),
@@ -487,7 +490,8 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
        técnica) ou aceitar como está.
     4. PDL da tela 4 (frente fim de partida; segue [S] até a medição).
 
-    **d) Precisa de tela nova: protótipo único + aprovação do Gabriel antes de código (regra do passo 0):**
+    **d) Precisa de tela nova: protótipo único + aprovação do Gabriel antes de código (regra do passo 0).** Protótipo,
+    viabilidade e parecer de d1-d3 vivem no **passo 13** (telas B1-B3); o texto abaixo é o levantamento de origem.
     1. Configurações de dentro do compacto: hoje não há engrenagem e abrir as Configurações da Riot expande (regra 7).
        Mesmo "⚙ expandir e abrir as Configurações" é elemento novo (`compacto/modo.js` `criarCamada`). Tamanho depende do c1.
     2. Selo completo na tela 3: KDA, recorte por posição, campeão em hover ou travado (hoje só "n partidas · wr%" geral
@@ -578,6 +582,94 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     de construção (rotas [S] medidas antes de depender: 2º `POST ballot`, envio na sala, som da cerimônia).
     **reprova se:** qualquer `ajuste:`/`sem parecer` (ajusta o protótipo e pede de novo) ou código em `pengu/` desta frente
     antes da aprovação.
+13. [ ] **Chat lateral e grupo 2 da paridade (proposta, aguardando aprovação do Gabriel).** ⛔ Nenhum código de produto
+    antes das 5 telas aprovadas (regra do passo 0). Pedido dele (14/10/2026 ~17:00): "O chat que hoje abre uma janela
+    nova, eu queria que na verdade fosse o próprio modo compacto ganhando espaço para a direita, mostrando a lista. E se
+    eu abrir esse chat com alguém, esse chat também expande mais para a direita. Aí se eu fechar a parte do chat, fica só
+    o modo compacto e a lista de amigos. E eu também posso fechar a lista de amigos." Junto, o grupo 2 do passo 11 (d1-d3).
+    **Protótipo:** [temp/2026-10-14-prototipo-compacto-chat-e-paridade.html](../temp/2026-10-14-prototipo-compacto-chat-e-paridade.html)
+    (abre com duplo clique, zero requisição externa; `#A1-lista`, `#A1-conversa`, `#A1-direita`, `#A1-pequeno`, `#A2-rc`,
+    `#A2-pj`, `#B1`, `#B2-travado`, `#B2-fora`, `#B3-nunca`, `#parecer` etc. abrem direto). Prints de 14/10 em
+    `temp/prototipo-chat-e-paridade/` (23); o HTML é a referência (a revisão abaixo mudou textos depois dos prints).
+    Só o Gabriel com nome; amigos "amigo N", aliados "aliado N", mensagens inventadas.
+    Telas: **A1 chat ao lado** (💬 alarga 420 → 720 com a lista de amigos; clicar num amigo → 1080 com a conversa; ✕ da
+    conversa → 720; ✕ da lista → 420, ou 780 se a conversa segue aberta; painel da direita único com abas, então nunca
+    passa de 1080; monitor estreito: a conversa entra no lugar da lista com ←) · **A2 nas outras fases** (aceite preso à
+    coluna de 420; seleção nunca abre nada sozinha; em partida a lateral fecha e fica guardada; no pós-jogo entra à direita
+    da tela B do passo 12) · **B1 configurações** (⚙ abre os blocos do lol-client no painel da direita; as da Riot pelo
+    rodapé, expandindo) · **B2 selo completo** (📊 na seleção abre KDA, posição, hover/travado, matchup, trauma, draft e
+    "coletor fora" no painel da direita) · **B3 reabrir análise** (linha "📊 última partida" no lobby: pronta, analisando,
+    nunca aberta → analisar, falhou → tentar de novo; some no próximo ready check).
+    **Parecer** (botão "copiar meu parecer", chave `lc-prototipo-chat-e-paridade-v1`): 1ª linha `parecer do protótipo do
+    chat lateral e da paridade (14/10/2026)`, depois `tela A1 …` a `tela B3 …` (`aprovada`, `ajuste: <texto>` ou `sem
+    parecer`) e `decisão 1 …` a `decisão 3 …`. As decisões são dele (as linhas `decisão N` respondem, sem card):
+    - [[DECISAO]] mensagem nova abre a conversa sozinha? | opções: cabe/nunca/sempre | recomendo: cabe (só se couber sem mover a janela e nunca na seleção: mover a janela põe o JOGAR/TRAVAR embaixo do mouse) | dono: gabriel
+    - [[DECISAO]] lateral volta depois da partida? | opções: volta/fechada | recomendo: volta | dono: gabriel
+    - [[DECISAO]] onde abrem as configurações no compacto? | opções: painel/expandir | recomendo: painel | dono: gabriel
+
+    **Viabilidade (14/10/2026, só leitura com o client em `Lobby`; `riotInvoke` só `Window.ScreenData` e
+    `Window.GetValidWindowSizes`).** Monitor 2560×1080 físicos, área útil 2560×1020, escala 1,25 (= 2048×816 CSS);
+    `ResizeTo` em px CSS, `MoveTo` em px físicos (o `centerWithinMainWindow` do lol-uikit multiplica por `zoomScale`);
+    borda direita = `screenX + larguraCSS × zoomScale`, presa a `screenAvailLeft + screenAvailWidth` por `MoveTo`;
+    `screenX` = −32000 com a janela minimizada (ignorar); `window.getScreenDetails()` trava o eval (não usar). Larguras:
+    420/720/780/1080 CSS = 525/900/975/1350 físicos; altura 680 = 850. `/lol-chat` medido: `friends` (195; `icon` →
+    `profile-icons/<icon>.jpg`; em partida `lol.championId` → `champion-icons/<id>.png`, fila, `timeStamp`, `gameStatus`),
+    `conversations` + `messages` (`isHistorical`, `fromPuuid`), `friend-counts`, `v2/friend-requests` (3).
+    B1: `rcp.whenReady('rcp-fe-lol-settings')` → `show()` existe (não chamado); os `lol-uikit-*` dos blocos funcionam fora
+    do modal. B2: tudo em `pengu/champselect.js` (`estatisticasCampeao`, `textoSelo`, `linhaMatchup`, `linhaTrauma`,
+    `linhasDraft`, `adversarioDoDraft`); **pegadinha:** `desenhar()` volta cedo com `cfg.champSelect.ligado` falso e o
+    `lerCoach` nunca roda, então o compacto precisa de `lerCoach` exportado e independente do selo. B3: `ultimaAberta` e
+    `analises` são privados de `pengu/posjogo/index.js` (zeram no ready check).
+    **[S] a medir antes de depender:** `ResizeTo` manter o canto de cima à esquerda; evento de mensagem nova pelo `observe`
+    de `/lol-chat/v1/conversations` (reserva: reler a cada 5 s, a conversa aberta a cada 1,5 s); envio `{body,
+    type:"chat"}` com fallback 404 → `POST conversations {id, type:"chat"}` (1ª prova = mensagem real dele); `PUT`/`DELETE
+    conversations/active` e se "ativa" marca como lida sem ele ver (fechar o painel chama o `DELETE`); convite `POST
+    /lol-lobby/v2/lobby/invitations [{toSummonerId}]`; `ux-show`/restore da Riot no ready check com a lateral aberta; atalhos
+    da Riot pegando teclas do campo de texto; `aceite.js` minimizando se o foco mudar enquanto ele digita no ready check;
+    adversário de rota na ranqueada (rota provável do `draft.py`); Ctrl+K por cima da camada (11.c1).
+
+    **Decisões técnicas (orquestrador, 14/10/2026; opção mais reversível):**
+    (i) as 3 travas que hoje desfazem a lateral em < 2 s mudam juntas: `modo.js:14` `LIMITES.larg = [360, 900]` (o
+    `tamanho()` troca 1080 por 420 em silêncio); `modo.js:17`/`:50` `LARGURA_COMPACTA_MAX = 1000` (com 1080 o
+    `ehCompacta()` vira falso e o roteador, `index.js:286`, reencolhe; 3 vezes em 10 s desiste); `index.js:300` (toda troca
+    de tela encolhe se `!noTamanho(cfg.larg, cfg.alt)`). Novo: "compacta" = a medida bate com o último tamanho **pedido**
+    (±8 px); a largura desejada = coluna da config + lateral, guardada em `est.lateral` do roteador e nunca em
+    `cfg.compacto.larg`; "a Riot devolveu a janela" = o par exato 1280×720 (a altura 680 distingue). Confiança alta;
+    reverte se a medição mostrar a Riot devolvendo outro tamanho. Muda a regra de ARMADILHAS § Client e Pengu ("A Riot
+    devolve a janela a 1280×720 sozinha", `ehCompacta` ≥ 1000 px): atualizar lá **na construção**, não agora.
+    (ii) painel da direita único com abas (conversas, coach, configurações): teto de 1080, B1 e B2 no mesmo mecanismo do
+    chat. Confiança alta; reverte se ele pedir duas conversas lado a lado.
+    (iii) janelas do coletor (`coletor/chat_janelas.py`, `JanelasEdge`, rotas `/chat/*`, `painel/chat/`) **dormentes 1
+    ciclo**, não apagadas; obrigatório já na construção: campo novo no `/chat/plugin` para desligar a abertura automática
+    quando a lateral estiver ligada (não reaproveitar `compacto:false`), senão a conversa abre em dobro. Confiança média;
+    reverte (apaga) depois de 1 ciclo sem uso, ou volta se ele quiser o chat na 2ª tela.
+    (iv) o compacto lê o selo sem depender da chave "Winrate com o campeão", só quando ele abre o 📊. Confiança média;
+    reverte se ele quiser que a chave desligue tudo.
+    (v) depois de um `MoveTo` para caber, a janela volta à posição anterior ao encolher se ele não arrastou; voltar ao
+    compacto depois de fechar as Configurações da Riot é comportamento novo (hoje `est.forcado` só limpa na troca de
+    destino), o mesmo conserto do 11.c3.
+
+    **Reaproveitar na construção:** de `coletor/chat_janelas.py` para JS no plugin (1:1): `eh_conversa_direta`,
+    `status_amigo`, `nome_fila`/`FILAS`/`TIPOS_FILA`, `grupo_do_amigo`, ordenação, regras de convidar (só líder ou
+    `allowedInviteOthers`, nunca ocupado ou já no grupo), `enviar` com fallback 404, `TEXTO_MAX`, `MSGS_MAX`; de
+    `painel/chat/chat.js`/`chat.css`: render da lista e da conversa, `isTrusted` no enviar/convidar, "lida" só depois de
+    interação. `chat-ponte.naoLidasDaLcu` e o contador de `chat-botao.js` ficam. Camada: `#lc-compacto` vira linha (coluna
+    420 + painéis); `#lc-aceite`, `.lc-cp-aviso` (`comum.js:131`) e `.lc-cp-alerta` presos à coluna; o painel libera
+    `user-select`; foco só com `focus({preventScroll:true})`; corrigir junto o `criarArrasto.limites` (`index.js:519-523`
+    mistura `screen.*` físico com `innerWidth` CSS: usar `outerWidth`). Casos de `tools/teste-chat-janelas.py` viram teste
+    node com `tools/lcu-falsa.mjs`.
+    **Fronteiras (especificar, nunca editar arquivo de outra frente):** frente seleção: só o botão 📊 em
+    `compacto/tela-champselect.js`; frente fim de partida: 1 export só de leitura do estado da análise em
+    `posjogo/index.js` (`{gameId, pronta, erro, vista}` ou null) + `analisarUltima()` (última de Summoner's Rift ≥ 300 s)
+    e a lateral à direita da tela B; coletor: o campo novo do (iii). "Análise pronta" no B3 depende do 11.b1.
+    **Fica de fora, e por quê:** chat de dentro da partida (`conversations` fica `[]` o jogo inteiro); chat na 2ª tela (a
+    lateral é a mesma janela; para isso só as janelas do coletor); a UI da Riot ocupar a largura nova (viewport em 1280,
+    cortada); aceitar/recusar pedido de amizade, adicionar, silenciar, denunciar (client normal, expande); configurações da
+    Riot e "restaurar padrão" dentro do compacto; nome de jogador na seleção (só campeão).
+    — **prova:** parecer colado no chat com as 5 linhas `aprovada` e as 3 decisões → registrar data e frase dele aqui; só
+    então vira plano de construção, com os [S] acima medidos antes de depender deles.
+    **reprova se:** qualquer `ajuste:`/`sem parecer` (ajusta o protótipo e pede de novo); código em `pengu/` ou `coletor/`
+    desta frente antes da aprovação; algo que abre sozinho na seleção ou move a janela embaixo do mouse sem a decisão 1.
 
 ## Revisão da construção (13/10/2026)
 
@@ -655,6 +747,7 @@ expande (decisão acima).
 | paridade, 14/10: esconder o popup do ready check no compacto | o popup já fica embaixo da camada | orquestrador (conferência de 14/10) |
 | paridade, 14/10: aceitar/recusar dentro da camada com o aceite automático desligado | a decisão é do popup da Riot (o compacto expande) e a janelinha do coletor já serve nos dois modos; tela própria de recusar iria contra "nada decide pelo jogador" | orquestrador (conferência de 14/10) |
 | paridade, 14/10: ARAM e seleção com banco, reconectar, honra, falha ao abrir o jogo | telas da Riot; já descartadas neste plano (regra 7). **Honra reaberta** pelo passo 12 (só a sequência `honor-vote`; celebrações seguem expandindo): vale o parecer dele na tela A | orquestrador |
+| chat ao lado do compacto na 2ª tela (passo 13) | a lateral é a própria janela do client; a página só enxerga o monitor onde ela está e prender à borda evita cair na 2ª tela (outra escala). Chat na 2ª tela = só as janelas do coletor | medição de 14/10 |
 | paridade, 14/10: `ux-show`/`ux-flash` do popup de runas no compacto | quem escolhe é a tela 3, e ele já está nela porque acabou de travar | orquestrador (conferência de 14/10) |
 
 ## Relatório
