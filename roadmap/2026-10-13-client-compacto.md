@@ -190,7 +190,7 @@ monta `#lc-compacto` (tela cheia da janela, z-index 100000, abaixo do aceite) qu
 | --- | --- | --- |
 | 1 lobby | `None`/`Lobby` | grupo (membros, líder, + convidar), convite recebido (aceitar/recusar), JOGAR (fila e posições do cfg, freios; "o líder busca" no grupo de outro; apagado com o motivo e o prazo do `restrictions[]`), escolher fila (solo/duo 420, flex 440, normal 400, ARAM 450), resumo do dia, dica do coach, 💬 com contador, expandir, – ✕ |
 | 2 na fila | `Matchmaking` | tempo na fila, estimativa, cancelar (só o líder); variante baixa prioridade (contagem do `lowPriorityData`) |
-| — | `ReadyCheck` | cede ao `#lc-aceite` e à janelinha do coletor (sem tela nova) |
+| 2 na fila | `ReadyCheck` | "partida encontrada" por baixo do `#lc-aceite` (desde 14/10/2026, passo 10; antes a camada saía e a tela da Riot aparecia cortada); quem aceita segue sendo o `aceite.js` e a janelinha do coletor |
 | 3 champ select | `ChampSelect` (SR: 420/440/400) | timer e fase, aliados (posição + campeão), inimigos só por campeão (recolhível), 10 bans, busca + favoritos (Renekton, Zac), banir/escolher/travar, skin, feitiços, runa (escolha **dentro** da tela quando há 2+), trocas com aceito/recusa/desistência/virada de fase, – e ✕ com aviso de dodge |
 | 7 regra | `ChampSelect` do ARAM (450) | expande: banco e reroll ficam com a tela da Riot |
 | — | `GameStart`/`InProgress` | camada sai de cena (client normal embaixo do jogo, como hoje); volta no pós-jogo |
@@ -361,7 +361,83 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
      declarar com 1 clique no PLANNING, banir pela grade, travar pelo TRAVAR, e a linha
      `[lol-client] compacto: bannable-champion-ids … n=` no `LeagueClientUx.log` (n = 0 confirma a causa da grade
      vazia; n grande com `noCatalogo` > 0 derruba a dedução e a causa volta a ser procurada).
+10. [ ] **Relato da 3ª ranqueada de 14/10/2026 (~14:43), 5 ajustes.** Construído e provado offline em 14/10/2026; falta a
+    prova na próxima partida dele (fim deste passo). Palavras dele e o que mudou:
+    1. "O tema compacto quebrou e mostrou o lobby expandido porém dentro do modo compacto. E aí voltou para o modo compacto
+       assim que entrou na seleção." Sequência (`dados/coletor.log` e o `LeagueClientUx.log` da carga das 14:08): ready
+       check 1 (14:42:58; ele mesmo clicou no ACEITAR do popup da Riot, linha `readyCheck ACCEPT`, enquanto o POST do plugin
+       levava 2,2 s), um jogador não aceitou, `Matchmaking` por 2 s (14:43:11), ready check 2 (14:43:13), seleção
+       (14:43:24). **Causa:** não era o roteador deixar de remontar a fila: montagem não logava nada, e as 2 linhas "ceder"
+       iguais só saem se o estado mudou entre elas (o teste com a mesma sequência mostra a fila montada no meio). Era o
+       destino do `ReadyCheck`: "ceder" tirava a camada e deixava a janela de 420 com a tela da Riot de 1280 cortada e só a
+       faixa do `#lc-aceite` por cima, nos dois ready checks. **Correção:** `ReadyCheck` com o aceite automático vivo = a
+       tela da fila ("partida encontrada", anel parado, sem cancelar) por baixo do `#lc-aceite`, que no compacto fica logo
+       abaixo do topo, na largura da janela; aceite desligado, `aceite.js` quebrado ou "não aceitar" (popup da Riot de volta)
+       seguem expandindo. Como a camada agora cobre o popup da Riot, ready check sem o `#lc-aceite` visto em 1,5 s
+       (`CONTAGEM_MS`; caso do aceite que não agiu às 10:10 de 14/10) expande para o popup da Riot ficar à mão; a contagem que
+       some depois de vista (aceitou, esperando os outros) não expande. Na seleção, enquanto a sessão não chega, a fila
+       segue em "partida encontrada" (nunca "buscando" com cancelar). Toda montagem de tela loga
+       (`[lol-client] compacto: tela <nome> (<fase>)`). Decisão técnica (confiança alta; reverte se o popup da Riot
+       precisar ficar à vista no compacto: aí o ready check expande).
+    2. "As fotos dos campeões mostrando intenção não aparecem. Só depois que pica. Tem como mostrar as fotos já na
+       intenção?" A tela 3 mostrava a intenção dos aliados só em texto. Agora a foto da intenção (`championPickIntent` ou a
+       ação aberta; a dele também) aparece apagada e com borda tracejada; travado = foto normal. Inimigo segue só com o pick
+       completo (guardrail).
+    3. "A altura da janela pode ficar um pouco maior, porque acabou mostrando uma barra de rolagem desnecessária durante a
+       seleção, foi durante a tela de intenção." Medido no harness (`temp/compacto-harness/telas.html` + `servir.mjs`,
+       Playwright, sessão da ranqueada de 14/10): em 640 o corpo passava 15 px no PLANNING e 26 px na vez de outro com os
+       bans revelados; em 680, 0 nas 8 fases medidas, e lobby, fila e pós-jogo só ganham folga embaixo. `compacto.alt`
+       padrão 680; a config dele tem 640 salvo e não há campo nas Configurações, então o `carregar()` troca 640 (o padrão
+       antigo, nunca escolha) por 680, como faz com o `limiteS`. E a janela que já está pequena noutro tamanho (o plugin
+       recarregado com a janela de 640 ainda aberta) encolhe para 420×680 na próxima montagem (`criarJanela.noTamanho`,
+       folga de 8 px); antes, "já pequena" bastava e o 680 só valeria depois de expandir e compactar de novo.
+    4. "Quero poder usar o scroll para rolar entre as skins." Roda do mouse na faixa de skins rola para o lado; no
+       começo/fim da faixa (ou com tudo à vista) a roda segue para a tela; a faixa repintada pelo clique volta ao ponto rolado.
+    5. "Quando estou na fila, o círculo spinner não preenche, não completa o giro do círculo. Ele sempre reinicia sempre que
+       conta um segundo a mais no contador." O evento da busca chega a cada ~1 s e cada um recriava o anel (animação do
+       zero). Agora o anel é o mesmo elemento a montagem inteira (Matchmaking e ReadyCheck na mesma tela, sem remontar) e
+       nasce com a fase do giro presa ao relógio.
+    — **prova offline:** `node tools/teste-compacto.mjs` 115/115, `teste-compacto-lobby.mjs` 135/135,
+    `teste-compacto-selecao.mjs` 141/141, `teste-compacto-posjogo.mjs` 85/85, `teste-aceite.mjs` 43/43 (casos novos
+    vermelhos antes da correção); harness: a mesma `Animation` do anel depois da releitura de 5 s (código antigo: animação
+    nova), 1 só `tela fila (Matchmaking)` no log com o ready check no meio; prints antes/depois em
+    `temp/compacto-harness/2026-10-14-*.png`. **Falta na partida dele:** a contagem do aceite por cima da fila num ready
+    check real (as fontes da Riot podem mudar a altura da faixa; o anel desce 100 px para ela), a foto da intenção de um
+    aliado numa ranqueada, a roda numa faixa de skins real e a janela de 680 na tela dele (se o `innerHeight` depois do
+    `ResizeTo` não der 680 ± 8, o compacto pede o `ResizeTo` a cada tela nova: inofensivo, mas é sinal para ajustar). No `LeagueClientUx.log`: nenhum
+    "ceder"; `tela fila (Matchmaking)` uma vez por fila (o ready check não remonta), `tela fila (ReadyCheck): atualizada`
+    a cada ready check e `tela champselect (ChampSelect)`.
 
+    **Revisão adversarial do passo 10 (14/10/2026, só leitura) e o que entrou por ela.** Com o ready check na tela da
+    fila, `Matchmaking` e `ReadyCheck` passaram a ter a mesma chave no roteador (`tela:fila`); antes o "ceder" trocava a
+    chave e isso zerava sozinho o "⤢ expandir" e a regra 7 a cada virada. Achados corrigidos, cada um com caso de teste:
+    - um `div.modal` no ready check cujo `.ready-check-root-element` chega depois da folga de 250 ms da vigia (que só vê
+      filhos diretos do wrapper) era lido como modal desconhecido: expandia e, pela chave igual, seguia expandido na
+      busca seguinte. Agora `aoModal` no ready check confere de novo em 1 s (`MODAL_RC_MS`) e só expande se o modal segue
+      desconhecido; sair do ready check zera "⤢ expandir" e regra 7 daquele ready check (entrar nele não zera: expandido
+      na busca segue expandido no aceite, como antes);
+    - sem a contagem em 1,5 s o client expandia e, se ela chegasse depois, encolhia de novo embaixo do cursor dele: agora
+      fica expandido até o fim daquele ready check;
+    - a troca de fase sem remontar também loga (`tela fila (ReadyCheck): atualizada`), senão o log não separa "a fila
+      ficou no ready check" de "nada aconteceu";
+    - a nota da fila no ready check segue a contagem: "esperando a contagem do aceite…" → "responde na contagem do
+      aceite, aqui em cima" → depois que ela some (o `aceite.js` tira a contagem antes do GET/POST do aceite) "aceitando
+      a partida: esperando os outros jogadores";
+    - a posição da faixa de skins agora é guardada no evento `scroll` (deslize do touchpad e arrasto da barra), não só
+      na roda;
+    - teste novo: hover inimigo em andamento (`champselect-real.json` ev 18, 23, 51, 57) nunca vira foto nem entra na
+      lista de inimigos.
+    Fica para a partida (não dá para medir sem as fontes da Riot): a contagem do `#lc-aceite` pode quebrar em 3 linhas e
+    passar dos 100 px que o anel desce; se cobrir o "partida encontrada", encurtar o texto dela ou medir a margem pela
+    altura real. **Mudança de comportamento que ele precisa saber:** no compacto o popup da Riot do ready check fica
+    embaixo da camada; o aceite manual é o "aceitar agora" da contagem (ou "não aceitar", que devolve o client normal).
+    Decisões técnicas (closer do workflow, opus, 14/10/2026): conferir de novo o modal em vez de ignorar todo modal no
+    ready check (um modal desconhecido de verdade ainda expande), confiança alta; zerar a escolha ao sair do ready check
+    em vez de pôr a fase na chave (pôr a fase encolheria no aceite quem expandiu na busca), confiança média, reverte se
+    ele quiser o "⤢ expandir" do ready check valendo também na busca seguinte.
+    — **prova:** `teste-compacto.mjs` 122/122, `teste-compacto-lobby.mjs` 136/136, `teste-compacto-selecao.mjs` 143/143,
+    `teste-compacto-posjogo.mjs` 85/85, `teste-aceite.mjs` 43/43, `teste-config.mjs` 49/49 (`rodar-testes.py` não roda
+    com o jogo aberto).
 11. [ ] **Paridade com o expandido (pedido de 14/10/2026 ~15:35).** Palavras dele: "garanta que todos os outros recursos
     que implementamos no modo expandido também tenham no modo compacto." Inventário e conferência no código em 14/10/2026
     (só leitura, `pengu/index.js`, `compacto/*`, `posjogo/index.js`, `champselect.js`, `runas.js`, `recompensas.js`,

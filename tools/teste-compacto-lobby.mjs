@@ -10,7 +10,9 @@ import { criarRoteador, CLASSE } from '../pengu/compacto/index.js';
 import { _zerarCatalogo } from '../pengu/compacto/comum.js';
 import { criarTelaLobby, estadoGrupo, planoJogar, convitesPendentes, proximaPosicao, partidasDeHoje, resumoHoje, sequenciaHoje,
   dicaLocal, naoLidas, amigosParaConvidar, ranqueSolo, haQuanto, mmss, _zerarCache, variacaoDoDia, _zerarPdlDia } from '../pengu/compacto/tela-lobby.js';
-import { criarTelaFila, estadoBusca, textoEspera } from '../pengu/compacto/tela-fila.js';
+import { criarTelaFila, estadoBusca, textoEspera, CSS_FILA } from '../pengu/compacto/tela-fila.js';
+import * as modFila from '../pengu/compacto/tela-fila.js';
+import * as modLobby from '../pengu/compacto/tela-lobby.js';
 import { MEDICAO, ATUALIZANDO } from '../pengu/freios.js';
 
 // ---------- DOM mínimo (mesmo do teste-compacto.mjs) ----------
@@ -575,6 +577,59 @@ const buscando = (over = {}) => ({ searchState: 'Searching', timeInQueue: 41, es
   caso('fila: erro do client à vista', s.texto().includes('QUEUE_DODGER'));
   await s.evento('/lol-matchmaking/v1/search', 'lixo');
   caso('fila: evento torto não derruba', s.efetivo() === 'compacto' && s.rot.estado().tela === 'fila');
+}
+{
+  // 14/10/2026: "o círculo spinner não completa o giro, reinicia sempre que conta um segundo". O client manda o evento da
+  // busca a cada ~1 s (timeInQueue sobe) e cada evento redesenhava a tela: anel novo = animação do ::after do zero
+  let noClient = 41; // a releitura de 5 s devolve o mesmo que o evento
+  const s = cenario({ fase: 'Matchmaking', rotas: { 'GET /lol-matchmaking/v1/search': () => ({ status: 200, json: buscando({ timeInQueue: noClient }) }) } });
+  await s.iniciar();
+  const anel = s.q('.lc-cp-anel');
+  let soltou = 0, pai = anel?.parentNode;
+  if (anel) Object.defineProperty(anel, 'parentNode', { get: () => pai, set: v => { if (v !== pai) soltou++; pai = v; }, configurable: true });
+  for (let t = 42; t <= 46; t++) { noClient = t; s.rel.avancar(1000); await s.evento('/lol-matchmaking/v1/search', buscando({ timeInQueue: t })); }
+  caso('fila: 5 eventos da busca (1 por segundo) não recriam nem soltam o anel (o giro não reinicia)',
+    !!anel && s.q('.lc-cp-anel') === anel && soltou === 0, `mesmo=${s.q('.lc-cp-anel') === anel} soltou=${soltou}`);
+  caso('fila: com o anel parado no lugar, o tempo segue o client', s.q('[data-tick="fila"]')?.textContent === '00:46', s.q('[data-tick="fila"]')?.textContent);
+  caso('fila: anel nasce com a fase do giro presa ao relógio (anel recriado continua o giro, não volta ao topo)',
+    /^-\d+ms$/.test(String(anel?.style?.['--lc-cp-gira-fase'] || '')) && /animation-delay:var\(--lc-cp-gira-fase/.test(CSS_FILA), String(anel?.style?.['--lc-cp-gira-fase']));
+  await s.evento('/lol-matchmaking/v1/search', buscando({ searchState: 'Found' }));
+  caso('fila: partida encontrada para o anel no mesmo elemento', s.q('.lc-cp-anel') === anel && anel.classList.contains('lc-cp-parado') && soltou === 0);
+}
+{
+  // ready check (14/10/2026 14:43): a tela da fila fica de pé por baixo do #lc-aceite, sem cancelar (o ready check é do
+  // aceite); outro jogador não aceitou = volta a Matchmaking na mesma tela, buscando de novo
+  const s = cenario({ fase: 'Matchmaking', rotas: { 'GET /lol-matchmaking/v1/search': buscando() } });
+  await s.iniciar();
+  const montada = s.tFila.estado();
+  await s.ir('ReadyCheck');
+  caso('ready check: mesma tela da fila (atualizar), "partida encontrada", sem cancelar, nada escrito',
+    s.rot.estado().tela === 'fila' && s.tFila.estado() === montada && s.texto().includes('partidaencontrada') && !s.q('[data-a="cancelar-fila"]')
+      && s.escritas().length === 0, s.texto());
+  // o client carrega a tela por import(): sem atualizar no módulo, Matchmaking <-> ReadyCheck remontava (anel novo)
+  caso('módulos tela-fila e tela-lobby exportam atualizar (o roteador lê o módulo, não o criarTela)',
+    typeof modFila.atualizar === 'function' && typeof modLobby.atualizar === 'function');
+  caso('ready check: a nota aponta a contagem do aceite (o aceite é do aceite.js)', /aceite/.test(s.q('.lc-cp-nota-rc')?.textContent || ''), s.texto());
+  // revisão de 14/10/2026: a nota segue a contagem (#lc-aceite no <body>), que some quando o aceite.js aceita
+  const nota = () => s.q('.lc-cp-nota-rc')?.textContent || '';
+  const semContagemAinda = nota();
+  const cont = s.doc.createElement('div'); cont.id = 'lc-aceite'; s.doc.body.append(cont);
+  s.rel.avancar(1000); await tick();
+  const comContagem = nota();
+  cont.remove();
+  s.rel.avancar(1000); await tick();
+  caso('ready check: nota "esperando a contagem" → "responde na contagem" → depois do aceite (contagem sumiu) "esperando os outros"',
+    /esperando a contagem/.test(semContagemAinda) && /responde na contagem/.test(comContagem) && /esperando os outros/.test(nota()),
+    JSON.stringify([semContagemAinda, comContagem, nota()]));
+  await s.ir('Matchmaking');
+  await s.evento('/lol-matchmaking/v1/search', buscando({ timeInQueue: 3 }));
+  caso('ready check recusado por outro: de volta à fila na mesma tela, cancelar de volta', s.tFila.estado() === montada && !!s.q('[data-a="cancelar-fila"]')
+    && !s.q('.lc-cp-nota-rc') && s.q('[data-tick="fila"]')?.textContent === '00:03', s.texto());
+  // seleção: a fila espera a sessão (≤ 2 s) e um evento do lobby nesse meio não pode pintar "buscando" com cancelar
+  await s.ir('ReadyCheck'); await s.ir('ChampSelect');
+  await s.evento('/lol-lobby/v2/lobby', null, 'Delete');
+  caso('seleção chegando (tela da fila esperando a sessão): "partida encontrada", sem cancelar, mesmo com evento do lobby',
+    s.rot.estado().tela === 'fila' && s.texto().includes('abrindo a seleção') && !s.q('[data-a="cancelar-fila"]'), s.texto());
 }
 {
   // 404 na busca (entrando na fila) e sem histórico: "—" sem quebrar

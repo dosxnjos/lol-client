@@ -322,6 +322,7 @@ export const CSS = `
   border-bottom:1px solid rgba(60,60,65,.45); min-height:42px; }
 #lc-compacto .lc-cp-sel-lin.lc-cp-sel-eu { background:linear-gradient(90deg,rgba(200,170,110,.13),rgba(200,170,110,0)); }
 #lc-compacto .lc-cp-sel-lin.lc-cp-sel-agindo { box-shadow:inset 3px 0 0 var(--lc-azul); }
+#lc-compacto .lc-cp-foto.lc-cp-sel-intencao { opacity:.6; filter:saturate(.35); border-style:dashed; border-color:var(--lc-mudo); }
 #lc-compacto .lc-cp-sel-o { font-size:11px; color:var(--lc-mudo); text-align:center; }
 #lc-compacto .lc-cp-sel-n { font-size:12.5px; line-height:1.2; color:var(--lc-ouro2); min-width:0; }
 #lc-compacto .lc-cp-sel-n small { display:block; color:var(--lc-mudo); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -824,6 +825,7 @@ function pintarRecebida(st) {
 function foto(st, id, tam, extra = '') {
   if (!(id > 0)) return st.el('span', { class: 'lc-cp-foto lc-cp-sel-vazio' + extra, style: { width: tam + 'px', height: tam + 'px' } }, '?');
   const f = fotoCampeao(id, { tam, nome: nomeDe(st, id), doc: st.doc });
+  f.dataset.campeao = String(id);
   if (extra) f.className += extra;
   return f;
 }
@@ -832,7 +834,11 @@ function pintarTime(st) {
   const { el, l, ctx, partes: p, sessao: s, mem } = st;
   const linhas = l.time.map(t => {
     const agindo = l.modo.tipo === 'escolher' && t.eu;
-    const c = t.travado || (t.eu ? t.hover : 0);
+    // foto: travado = normal; intenção/hover (meu ou de aliado: championPickIntent ou a ação aberta, lerSessao) = foto
+    // com a marca de intenção, como no client da Riot (Gabriel, 14/10/2026: "só aparece depois que pica")
+    const c = t.travado || t.hover;
+    const fotoLinha = c ? foto(st, c, 30, t.travado ? '' : ' lc-cp-sel-intencao') : foto(st, 0, 30);
+    if (!t.travado && c) fotoLinha.setAttribute('title', `intenção: ${nomeDe(st, c)}`);
     let det;
     if (t.travado) det = nomeDe(st, t.travado);
     else if (t.hover) det = el('i', {}, t.eu ? `${nomeDe(st, t.hover)} (escolhendo)` : `intenção: ${nomeDe(st, t.hover)}`);
@@ -861,7 +867,7 @@ function pintarTime(st) {
       }
     }
     return el('div', { class: `lc-cp-sel-lin${t.eu ? ' lc-cp-sel-eu' : ''}${agindo ? ' lc-cp-sel-agindo' : ''}`, dataset: { cell: t.cellId } },
-      el('span', { class: 'lc-cp-sel-o' }, String(t.n)), (t.travado || t.eu) && c ? foto(st, c, 30) : foto(st, 0, 30), nome, dir);
+      el('span', { class: 'lc-cp-sel-o' }, String(t.n)), fotoLinha, nome, dir);
   });
   p.time.replaceChildren(...linhas);
 }
@@ -1031,8 +1037,13 @@ function pintarFinal(st) {
   filhos.push(el('div', { class: 'lc-cp-rot' }, `skin de ${nomeDe(st, champ)} `,
     el('span', { class: 'lc-cp-nota', style: { textTransform: 'none', letterSpacing: '0' } },
       s.allowSkinSelection === false ? '(esta fila não deixa escolher)' : !sk ? '(lendo as tuas skins…)' : sk.length === 1 ? '(só a padrão: tu não tem outra)' : `(as ${sk.length} que tu tem)`)));
+  let faixa = null;
   if (sk && s.allowSkinSelection !== false) {
-    filhos.push(el('div', { class: 'lc-cp-sel-skins', dataset: { a: 'skins' } }, ...sk.map(k => {
+    // roda do mouse na faixa rola as skins para o lado (Gabriel, 14/10/2026); no começo/fim da faixa ou com tudo à vista
+    // a roda segue para a tela (não prende a rolagem). Ouvinte só aqui: a grade de campeões não existe nesta fase
+    // scroll: guarda a posição venha de onde vier (roda, deslize lateral do touchpad, arrasto da barra), para a repintura
+    // voltar ao mesmo ponto
+    filhos.push(faixa = el('div', { class: 'lc-cp-sel-skins', dataset: { a: 'skins' }, on: { wheel: e => rodaNaFaixa(st, faixa, e), scroll: () => lembrarFaixa(st, faixa) } }, ...sk.map(k => {
       const b = el('button', {
         class: 'lc-cp-sel-sk' + (k.id === marcada ? ' lc-cp-sel-on' : ''), title: k.nome, disabled: oc('skin'), dataset: { a: 'skin', id: k.id },
         on: { click: ctx.seguro(() => { if (k.id !== marcada) escrever(st, 'skin', [['PATCH', `${CS}/session/my-selection`, { selectedSkinId: k.id }, 'não consegui trocar a skin']]); }) },
@@ -1066,6 +1077,26 @@ function pintarFinal(st) {
   filhos.push(el('div', { class: 'lc-cp-rot' }, 'runa'));
   filhos.push(pintarRuna(st, runa, champ));
   p.sel.replaceChildren(...filhos);
+  // faixa nova (clique numa skin repinta): volta para onde ele tinha rolado
+  if (faixa && st.skinsRolagem?.campeao === champ) try { faixa.scrollLeft = st.skinsRolagem.x; } catch { /* segue */ }
+}
+
+// px de uma volta da roda (deltaMode 1 = linhas, 2 = páginas); horizontal de touchpad passa direto
+export function rodaNaFaixa(st, faixa, e) {
+  if (!faixa || !e) return false;
+  const passo = e.deltaMode === 1 ? 40 : e.deltaMode === 2 ? Number(faixa.clientWidth) || 300 : 1;
+  const d = (Math.abs(Number(e.deltaY) || 0) >= Math.abs(Number(e.deltaX) || 0) ? Number(e.deltaY) || 0 : 0) * passo;
+  const max = Math.max(0, (Number(faixa.scrollWidth) || 0) - (Number(faixa.clientWidth) || 0));
+  const x = Number(faixa.scrollLeft) || 0;
+  if (!d || max <= 0 || (d > 0 && x >= max) || (d < 0 && x <= 0)) return false;
+  faixa.scrollLeft = Math.min(max, Math.max(0, x + d));
+  lembrarFaixa(st, faixa);
+  e.preventDefault?.();
+  return true;
+}
+
+export function lembrarFaixa(st, faixa) {
+  if (st && faixa) st.skinsRolagem = { campeao: st.l?.eu?.travado || 0, x: Number(faixa.scrollLeft) || 0 };
 }
 
 function pintarRuna(st, runa, champ) {

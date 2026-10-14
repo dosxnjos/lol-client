@@ -10,7 +10,7 @@
 import { h, CSS_BASE } from './comum.js';
 
 export const EXPANDIDA = [1280, 720];
-export const PADRAO_COMPACTA = [420, 640];
+export const PADRAO_COMPACTA = [420, 680]; // mesmo padrão do config.js (compacto.larg/alt)
 const LIMITES = { larg: [360, 900], alt: [480, 1000] };
 // janela mais estreita que isto conta como compacta (leitura de innerWidth no boot: recarga do plugin com a janela
 // pequena precisa voltar ao normal se a fase não tiver tela compacta)
@@ -52,9 +52,19 @@ export function criarJanela({ invocar, medir = () => [globalThis.innerWidth, glo
     }
     return medida && w < LARGURA_COMPACTA_MAX;
   };
+  // janela pequena mas fora do tamanho da config (ex.: 640 de antes de 14/10/2026 depois de recarregar o plugin): sem
+  // medida = não sei, conta como certa (não fica pedindo ResizeTo)
+  const noTamanho = (larg, alt) => {
+    const [w, hh] = tamanho(larg, alt);
+    const m = medir?.() || [];
+    const mw = Number(m[0]), mh = Number(m[1]);
+    if (!(mw > 0) || !(mh > 0)) return true;
+    return Math.abs(mw - w) <= 8 && Math.abs(mh - hh) <= 8;
+  };
   return {
     disponivel: () => (typeof invocar?.existe === 'function' ? invocar.existe() : typeof invocar === 'function'),
     ehCompacta,
+    noTamanho,
     compactar(larg, alt) {
       const [w, hh] = tamanho(larg, alt);
       const ok = invocar('Window.ResizeTo', [w, hh]);
@@ -245,6 +255,9 @@ export const CSS_MODO = `
 #lc-compacto .lc-cp-alerta .lc-cp-bts { display:flex; gap:8px; margin-top:7px; }
 #lc-compacto .lc-cp-alerta .lc-cp-bts .lc-cp-btn { flex:1; padding:6px; }
 html.lc-modo-compacto #lc-runas, html.lc-modo-compacto #lc-winrate, html.lc-modo-compacto #lc-posjogo { display:none !important; }
+/* ready check no compacto: a contagem do aceite.js (z 100002) logo abaixo do topo, na largura da janela; a tela da fila
+   desce o anel (lc-cp-anel-rc) para ela não cobrir o "partida encontrada" */
+html.lc-modo-compacto #lc-aceite { top:54px; left:12px; right:12px; transform:none; justify-content:center; flex-wrap:wrap; }
 #lc-botao-compacto { position:absolute; left:368px; top:24px; height:34px; padding:0 12px; box-sizing:border-box; z-index:2;
   display:flex; align-items:center; white-space:nowrap; cursor:pointer; user-select:none; pointer-events:auto;
   font:700 12px/1 var(--font-display); letter-spacing:.08em; text-transform:uppercase; color:#cdbe91;

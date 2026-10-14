@@ -7,7 +7,7 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada, criarBotaoModo, criarArrasto, ehAtalho, tamanho, CSS_MODO, GRACA_MEDIDA_MS } from '../pengu/compacto/modo.js';
-import { criarRoteador, destinoDaFase, infoDaSessao, classificarCamada, criarVigiaModais, FASES, CLASSE, ESPERA_SESSAO_MS, TELAS } from '../pengu/compacto/index.js';
+import { criarRoteador, destinoDaFase, infoDaSessao, classificarCamada, criarVigiaModais, FASES, CLASSE, ESPERA_SESSAO_MS, TELAS, CONTAGEM_MS, MODAL_RC_MS } from '../pengu/compacto/index.js';
 import { esc, h, avisar, lcu, campeoes, iconeCampeao, _zerarCatalogo, CSS_BASE } from '../pengu/compacto/comum.js';
 
 // ---------- DOM mínimo ----------
@@ -117,17 +117,17 @@ function telaFalsa(nome, { lancar = false, rejeitar = false, comAtualizar = fals
   return t;
 }
 
-function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, modal = null } = {}) {
+function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, alturaInicial = 720, modal = null, contagemNaTela } = {}) {
   const cfg = { compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 }, aceite: { ligado: true }, ...cfgOver };
   const pedidos = [];
   // como o client: o ResizeTo muda a largura que a página mede
-  const win = { innerWidth: larguraInicial, riotInvoke: arg => { const p = JSON.parse(arg.request); pedidos.push(p); if (p.name === 'Window.ResizeTo') win.innerWidth = p.params[0]; } };
+  const win = { innerWidth: larguraInicial, innerHeight: alturaInicial, riotInvoke: arg => { const p = JSON.parse(arg.request); pedidos.push(p); if (p.name === 'Window.ResizeTo') [win.innerWidth, win.innerHeight] = p.params; } };
   const invocar = invocadorRiot(win, () => {});
   const rel = relogio();
-  const janela = criarJanela({ invocar, medir: () => [win.innerWidth, 720], agora: rel.agoraMs });
+  const janela = criarJanela({ invocar, medir: () => [win.innerWidth, win.innerHeight], agora: rel.agoraMs });
   const doc = novoDoc();
   const avisos = [], logs = [], subs = new Map(), aplicados = [];
-  const ts = telas ?? { lobby: telaFalsa('lobby', { comAtualizar: true }), fila: telaFalsa('fila'), champselect: telaFalsa('champselect'), posjogo: telaFalsa('posjogo') };
+  const ts = telas ?? { lobby: telaFalsa('lobby', { comAtualizar: true }), fila: telaFalsa('fila', { comAtualizar: true }), champselect: telaFalsa('champselect'), posjogo: telaFalsa('posjogo') };
   const s = { cfg, pedidos, doc, rel, avisos, logs, subs, telas: ts, modal, aplicados, win };
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => janela.minimizar(), aoFechar: () => janela.sair(),
     avisoFechar: () => (s.rot.estado().fase === 'ChampSelect' ? 'fechar agora é dodge' : 'fechar o client?') });
@@ -139,7 +139,7 @@ function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, modal = null
     classe: on => doc.documentElement.classList.toggle(CLASSE, on),
     modalAberto: () => s.modal,
     aceiteManual: () => doc.documentElement.classList.contains('lc-aceite-manual'),
-    aoAplicar: e => aplicados.push(e.efetivo),
+    aoAplicar: e => aplicados.push(e.efetivo), contagemNaTela,
     agendar: rel.agendar, limpar: rel.limpar, repetir: rel.repetir, pararRepetir: rel.limpar, agora: rel.agoraMs,
   });
   s.janela = janela;
@@ -162,8 +162,15 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   globalThis.DataStore = { get: k => (k === 'lol-client.config' ? salvo : null), set: (k, v) => { if (k === 'lol-client.config') salvo = JSON.parse(JSON.stringify(v)); } };
   const { carregar, classes, PADRAO } = await import('../pengu/config.js');
   const c1 = JSON.parse(JSON.stringify(carregar()));
-  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×640}',
-    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 }), JSON.stringify(c1.compacto));
+  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680}',
+    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680 }), JSON.stringify(c1.compacto));
+  // 14/10/2026: barra de rolagem na tela 3 com 640. A config salva do Gabriel tem 640 (o padrão antigo; não há campo nas
+  // Configurações): sem migração, o padrão novo nunca chegava nele
+  salvo = { versao: 3, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 } };
+  const cAlt = JSON.parse(JSON.stringify(carregar()));
+  salvo = { versao: 3, compacto: { larg: 420, alt: 720 } };
+  const cAlt2 = JSON.parse(JSON.stringify(carregar()));
+  caso('config: alt 640 salvo (padrão antigo) vira 680; outro valor salvo fica', cAlt.compacto.alt === 680 && cAlt2.compacto.alt === 720, `${cAlt.compacto.alt} ${cAlt2.compacto.alt}`);
   salvo = { versao: 3, filaRapida: { fila: 440 } };
   const c2 = JSON.parse(JSON.stringify(carregar()));
   caso('config: salva antes da chave ganha o padrão do compacto e segue na versao 3', c2.compacto.ligado && c2.compacto.inicioCompacto && c2.versao === 3 && c2.filaRapida.fila === 440);
@@ -181,7 +188,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
 {
   const info = { lida: true, fila: 420, mapa: 11, custom: false, aceiteLigado: true, aceiteManual: false };
   const esperado = {
-    None: 'tela:lobby', Lobby: 'tela:lobby', Matchmaking: 'tela:fila', ReadyCheck: 'ceder:', ChampSelect: 'tela:champselect',
+    None: 'tela:lobby', Lobby: 'tela:lobby', Matchmaking: 'tela:fila', ReadyCheck: 'tela:fila', ChampSelect: 'tela:champselect',
     GameStart: 'jogo:', InProgress: 'jogo:', Reconnect: 'expandir:', FailedToLaunch: 'expandir:', TerminatedInError: 'expandir:',
     WaitingForStats: 'tela:posjogo', PreEndOfGame: 'expandir:', EndOfGame: 'tela:posjogo',
   };
@@ -195,8 +202,8 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('destino: flex e normal (440, 400) vão para a tela 3', ['440', '400'].every(f => destinoDaFase('ChampSelect', { ...info, fila: Number(f) }).tela === 'champselect'));
   caso('destino: ReadyCheck com aceite desligado expande', destinoDaFase('ReadyCheck', { ...info, aceiteLigado: false }).tipo === 'expandir');
   caso('destino: ReadyCheck com o popup devolvido (aceite manual) expande', destinoDaFase('ReadyCheck', { ...info, aceiteManual: true }).tipo === 'expandir');
-  caso('destino: ReadyCheck com o aceite.js quebrado no init (aceiteVivo false) expande; não sei (undefined) cede',
-    destinoDaFase('ReadyCheck', { ...info, aceiteVivo: false }).tipo === 'expandir' && destinoDaFase('ReadyCheck', { ...info, aceiteVivo: undefined }).tipo === 'ceder');
+  caso('destino: ReadyCheck com o aceite.js quebrado no init (aceiteVivo false) expande; não sei (undefined) fica na tela da fila',
+    destinoDaFase('ReadyCheck', { ...info, aceiteVivo: false }).tipo === 'expandir' && destinoDaFase('ReadyCheck', { ...info, aceiteVivo: undefined }).tela === 'fila');
   caso('infoDaSessao: fila, mapa e personalizada; sem sessão = nulos', igual(infoDaSessao(sessao(420)), { lida: true, fila: 420, mapa: 11, custom: false })
     && igual(infoDaSessao(null), { lida: true, fila: null, mapa: null, custom: false }));
 }
@@ -209,7 +216,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('janela: ResizeTo 420×640; expandir = ResizeTo 1280×720 + CenterToScreen; – e ✕ da Riot',
     igual(pedidos, [{ name: 'Window.ResizeTo', params: [420, 640] }, { name: 'Window.ResizeTo', params: [1280, 720] },
       { name: 'Window.CenterToScreen', params: [] }, { name: 'Window.Minimize', params: [] }, { name: 'RiotClient.Exit', params: [] }]), JSON.stringify(pedidos));
-  caso('janela: tamanho torto vira 420×640, fora do limite também', igual(tamanho('x', null), [420, 640]) && igual(tamanho(100, 5000), [420, 640]) && igual(tamanho(480, 700), [480, 700]));
+  caso('janela: tamanho torto vira 420×680 (o padrão), fora do limite também', igual(tamanho('x', null), [420, 680]) && igual(tamanho(100, 5000), [420, 680]) && igual(tamanho(480, 700), [480, 700]));
   const sem = criarJanela({ invocar: invocadorRiot({}), medir: () => [1280, 720] });
   caso('janela: sem riotInvoke não está disponível e não finge que encolheu', !sem.disponivel() && sem.compactar(420, 640) === false && !sem.ehCompacta());
   caso('janela: boot com a janela pequena (recarga do plugin) conta como compacta', criarJanela({ invocar: invocadorRiot({}), medir: () => [420, 640] }).ehCompacta());
@@ -248,7 +255,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   s.rot.marcarPronto();
   const passos = [
     ['None', null, 'compacto', 'lobby'], ['Lobby', null, 'compacto', 'lobby'], ['Matchmaking', null, 'compacto', 'fila'],
-    ['ReadyCheck', null, 'ceder', null], ['ChampSelect', sessao(420), 'compacto', 'champselect'], ['GameStart', null, 'expandido', null],
+    ['ReadyCheck', null, 'compacto', 'fila'], ['ChampSelect', sessao(420), 'compacto', 'champselect'], ['GameStart', null, 'expandido', null],
     ['InProgress', null, 'expandido', null], ['Reconnect', null, 'expandido', null], ['FailedToLaunch', null, 'expandido', null],
     ['TerminatedInError', null, 'expandido', null], ['WaitingForStats', null, 'compacto', 'posjogo'], ['PreEndOfGame', null, 'expandido', null],
     ['EndOfGame', null, 'compacto', 'posjogo'],
@@ -277,7 +284,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   s.rot.marcarPronto();
   await s.ir('Matchmaking');
   await s.ir('ReadyCheck');
-  caso('ReadyCheck com aceite ligado: camada sai, janela fica pequena (o #lc-aceite centra nela)', igual(s.foto(), { efetivo: 'ceder', tela: null, janelaCompacta: true, camada: false, classe: false }));
+  caso('ReadyCheck com aceite ligado: camada fica (tela da fila), janela pequena (o #lc-aceite fica por cima)', igual(s.foto(), { efetivo: 'compacto', tela: 'fila', janelaCompacta: true, camada: true, classe: true }));
   s.doc.documentElement.classList.add('lc-aceite-manual');
   s.rot.reavaliar();
   caso('ReadyCheck com o popup da Riot de volta (lc-aceite-manual): expande', s.foto().efetivo === 'expandido' && !s.foto().janelaCompacta && s.nomes().includes('Window.CenterToScreen'));
@@ -289,6 +296,109 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   await s2.ir('Matchmaking');
   await s2.ir('ReadyCheck');
   caso('ReadyCheck com aceite automático desligado: expande (o botão da Riot fica à mão)', s2.foto().efetivo === 'expandido' && !s2.foto().janelaCompacta && !s2.foto().camada);
+}
+
+{ // ranqueada de 14/10/2026 14:43: ready check aceito, outro jogador não aceitou (volta a Matchmaking ~2 s), 2º ready
+  // check, seleção. O Gabriel viu a tela da Riot (1280, cortada) dentro da janela pequena do 1º ready check até a seleção.
+  // LeagueClientUx.log daquela carga: só 2 linhas "ceder: ready check" e nada entre elas.
+  const s = cenario();
+  s.rot.marcarPronto();
+  const passos = [];
+  for (const [fase, ses] of [['Matchmaking'], ['ReadyCheck'], ['Matchmaking'], ['ReadyCheck'], ['ChampSelect', sessao(420)]]) {
+    const antes = s.pedidos.length;
+    await s.ir(fase, ses);
+    passos.push({ fase, ...s.foto(), mexeuJanela: s.pedidos.length !== antes });
+  }
+  const rcs = passos.filter(p => p.fase === 'ReadyCheck');
+  caso('14/10 14:43: no ready check a camada fica de pé na janela pequena (tela da fila por baixo do #lc-aceite), sem mexer na janela',
+    rcs.length === 2 && rcs.every(p => p.efetivo === 'compacto' && p.tela === 'fila' && p.camada && p.classe && p.janelaCompacta && !p.mexeuJanela),
+    JSON.stringify(passos) + ' logs=' + JSON.stringify(s.logs));
+  caso('14/10 14:43: a volta a Matchmaking mostra a tela da fila; a seleção monta a tela 3',
+    passos[2].efetivo === 'compacto' && passos[2].tela === 'fila' && passos[2].camada && passos[4].tela === 'champselect' && passos[4].camada,
+    JSON.stringify(passos));
+  caso('14/10 14:43: a fila não remonta entre Matchmaking e ReadyCheck (mesma tela, atualizar)', s.telas.fila.montadas === 1, `montadas=${s.telas.fila.montadas}`);
+  {
+    // com a camada no ready check o popup da Riot fica embaixo dela: se a contagem do aceite.js (#lc-aceite) não aparecer
+    // (o JS do aceite não agiu, como em 14/10 10:10), ele ficaria sem botão. Sem contagem em 1,5 s = expande (popup da Riot)
+    let contagem = false;
+    const c = cenario({ contagemNaTela: () => contagem });
+    c.rot.marcarPronto(); await c.ir('Matchmaking'); await c.ir('ReadyCheck');
+    const cedo = c.foto();
+    c.rel.avancar(CONTAGEM_MS + 100); await tick();
+    caso('ready check sem a contagem do aceite: fila por 1,5 s, depois expande (popup da Riot à mão)',
+      cedo.efetivo === 'compacto' && cedo.tela === 'fila' && c.foto().efetivo === 'expandido' && !c.foto().janelaCompacta, JSON.stringify([cedo, c.foto()]));
+    await c.ir('ChampSelect', sessao(420));
+    caso('ready check sem contagem: a seleção volta ao compacto', c.foto().efetivo === 'compacto' && c.foto().tela === 'champselect');
+    contagem = true;
+    const d = cenario({ contagemNaTela: () => contagem });
+    d.rot.marcarPronto(); await d.ir('Matchmaking'); await d.ir('ReadyCheck');
+    d.rel.avancar(500); await tick();
+    contagem = false; // o aceite.js tira a contagem depois de aceitar (esperando os outros)
+    d.rel.avancar(CONTAGEM_MS + 100); await tick();
+    caso('ready check com a contagem vista: ela sumir depois (aceitou, esperando os outros) não expande',
+      d.foto().efetivo === 'compacto' && d.foto().tela === 'fila', JSON.stringify(d.foto()));
+  }
+  {
+    // altura nova (680) com o plugin recarregado e a janela ainda nos 420×640 de antes: encolher "já pequena" não bastava
+    const a = cenario({ larguraInicial: 420, alturaInicial: 640, cfg: { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680 }, aceite: { ligado: true } } });
+    a.rot.marcarPronto(); await a.ir('Lobby');
+    const b = cenario({ larguraInicial: 420, alturaInicial: 680, cfg: { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680 }, aceite: { ligado: true } } });
+    b.rot.marcarPronto(); await b.ir('Lobby'); await b.ir('Matchmaking'); await b.ir('ReadyCheck');
+    caso('janela já pequena noutro tamanho (420×640) vira 420×680 na montagem; no tamanho certo nenhum ResizeTo',
+      igual(a.nomes(), ['Window.ResizeTo 420x680']) && a.foto().efetivo === 'compacto' && b.nomes().length === 0 && b.foto().tela === 'fila', JSON.stringify([a.nomes(), b.nomes()]));
+  }
+  caso('14/10 14:43: cada montagem de tela compacta vai para o log (sem isso o LeagueClientUx.log não prova nada)',
+    s.logs.filter(l => /^tela fila \(Matchmaking\)$/.test(l)).length === 1 && s.logs.some(l => /^tela champselect/.test(l)), JSON.stringify(s.logs));
+  caso('14/10 14:43: a troca de fase sem remontar também vai ao log (ready check na fila, volta à busca)',
+    s.logs.filter(l => l === 'tela fila (ReadyCheck): atualizada').length === 2 && s.logs.includes('tela fila (Matchmaking): atualizada'), JSON.stringify(s.logs));
+}
+
+{ // revisão de 14/10/2026: com o ready check na tela da fila, Matchmaking e ReadyCheck têm a mesma chave (tela:fila)
+  // 1) "modal" no ready check (o .ready-check-root-element chega depois da folga da vigia): não expande no ato
+  const a = cenario();
+  a.rot.marcarPronto(); await a.ir('Matchmaking'); await a.ir('ReadyCheck');
+  a.modal = null; // quando a conferência roda, o modal já tem o conteúdo do ready check (vigia.aberto() = null)
+  a.rot.aoModal('modal');
+  const noAto = a.foto().efetivo;
+  a.rel.avancar(MODAL_RC_MS + 50); await tick();
+  caso('ready check: "modal" que era o do próprio ready check não expande (confere de novo e some)',
+    noAto === 'compacto' && a.foto().efetivo === 'compacto' && a.foto().tela === 'fila' && !a.avisos.length, JSON.stringify([noAto, a.foto(), a.avisos]));
+  const b = cenario();
+  b.rot.marcarPronto(); await b.ir('Matchmaking'); await b.ir('ReadyCheck');
+  b.modal = 'modal'; // segue aberto e desconhecido
+  b.rot.aoModal('modal');
+  b.rel.avancar(MODAL_RC_MS + 50); await tick();
+  caso('ready check: modal desconhecido que segue aberto expande depois da conferência',
+    b.foto().efetivo === 'expandido' && b.avisos.some(([m]) => /janela própria/.test(m)), JSON.stringify(b.foto()));
+  b.modal = null;
+  await b.ir('Matchmaking');
+  caso('o ready check expandido pela regra 7 não segue para a busca (outro não aceitou: a fila volta compacta)',
+    b.foto().efetivo === 'compacto' && b.foto().tela === 'fila', JSON.stringify(b.rot.estado()));
+  // 2) "⤢ expandir" no ready check vale só nele; o expandido na busca segue no ready check (não encolhe no aceite)
+  const c = cenario();
+  c.rot.marcarPronto(); await c.ir('Matchmaking'); await c.ir('ReadyCheck');
+  c.rot.expandir();
+  const rcExp = c.foto().efetivo;
+  await c.ir('Matchmaking');
+  const mmDepois = c.foto().efetivo;
+  c.rot.expandir();
+  await c.ir('ReadyCheck');
+  caso('"⤢ expandir" no ready check não segue para a busca; expandido na busca segue expandido no ready check',
+    rcExp === 'expandido' && mmDepois === 'compacto' && c.foto().efetivo === 'expandido', JSON.stringify([rcExp, mmDepois, c.foto()]));
+  // 3) sem contagem em 1,5 s expande; ela chegar tarde não encolhe de novo no mesmo ready check
+  let contagem = false;
+  const d = cenario({ contagemNaTela: () => contagem });
+  d.rot.marcarPronto(); await d.ir('Matchmaking'); await d.ir('ReadyCheck');
+  d.rel.avancar(CONTAGEM_MS + 100); await tick();
+  const exp = d.foto().efetivo;
+  const pedidosAntes = d.pedidos.length;
+  contagem = true; // o #lc-aceite entrou depois de 1,5 s
+  d.rot.reavaliar();
+  caso('ready check: contagem que chega depois de expandir não encolhe a janela embaixo do cursor',
+    exp === 'expandido' && d.foto().efetivo === 'expandido' && d.pedidos.length === pedidosAntes, JSON.stringify([exp, d.foto(), d.nomes()]));
+  contagem = false;
+  await d.ir('Matchmaking');
+  caso('ready check expandido por falta de contagem: a volta à busca é compacta', d.foto().efetivo === 'compacto' && d.foto().tela === 'fila');
 }
 
 { // Reconnect
@@ -510,9 +620,9 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   await s.ir('ReadyCheck');
   const antes = s.pedidos.length;
   await s.ir('ChampSelect');
-  const esperando = s.foto().efetivo === 'ceder' && s.pedidos.length === antes;
+  const esperando = s.foto().efetivo === 'compacto' && s.foto().tela === 'fila' && s.pedidos.length === antes;
   s.rel.avancar(ESPERA_SESSAO_MS + 10);
-  caso('seleção sem a sessão do gameflow: espera sem mexer na janela e expande depois de 2 s', esperando && s.foto().efetivo === 'expandido' && !s.foto().janelaCompacta);
+  caso('seleção sem a sessão do gameflow: espera na tela da fila sem mexer na janela e expande depois de 2 s', esperando && s.foto().efetivo === 'expandido' && !s.foto().janelaCompacta);
   const s2 = cenario();
   s2.rot.marcarPronto();
   await s2.ir('Lobby');

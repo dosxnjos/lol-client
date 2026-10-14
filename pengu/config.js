@@ -65,9 +65,9 @@ export const PADRAO = {
   // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): ligado = botão "modo compacto", atalho
   // Ctrl+Shift+M e roteador por fase; inicioCompacto = o padrão de cada fase é a tela compacta (pedido do Gabriel,
   // 13/10/2026); favoritos = championId fixos no topo da busca (58 Renekton, 154 Zac); larg/alt = janela em px CSS.
-  // Chave nova sem valor antigo para corrigir: entra pela mescla, sem migração nem VERSAO nova (a v3 cobre).
+  // alt 680 desde 14/10/2026 (a tela 3 passava 26 px de 640 e mostrava barra de rolagem; carregar() leva o 640 salvo).
   // Classes: lc-compacto (ligado) e lc-inicio-compacto; a camada à vista é html.lc-modo-compacto (compacto/index.js)
-  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 },
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680 },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -121,6 +121,8 @@ export function carregar() {
   Object.assign(cfg, mesclar(PADRAO, migrar(salvo, marca)));
   // limiteS não é editável: dono é o PADRAO (ajuste depois de medir a janela chega a quem já salvou)
   cfg.aceite.limiteS = PADRAO.aceite.limiteS;
+  // compacto.alt não tem campo nas Configurações: 640 salvo é o padrão antigo, nunca escolha (barra de rolagem na tela 3)
+  if (cfg.compacto.alt === 640) cfg.compacto.alt = PADRAO.compacto.alt;
   // a mescla só confere o tipo: texto fora da lista (salvo à mão ou por versão futura) volta ao padrão
   for (const [caminho, opcoes] of Object.entries(ESCOLHAS)) {
     const [mod, chave] = caminho.split('.');

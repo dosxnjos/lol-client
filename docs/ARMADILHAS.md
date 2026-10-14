@@ -56,6 +56,27 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **CSS das telas compactas vaza entre telas** → o `<style>` de cada tela nunca sai do documento; nome igual (`.lc-cp-jogar`)
   com a mesma especificidade = ganha o último injetado (o JOGAR do lobby encolhia depois do 1º pós-jogo). Regra de tela
   que reusa nome comum vai sob a classe da tela (`.lc-cp-pj` no pós-jogo).
+- **Tela da Riot (1280, cortada) dentro da janela pequena no ready check** (ranqueada de 14/10/2026 14:43, 2 ready checks
+  porque um jogador não aceitou) → o destino do `ReadyCheck` era "ceder": a camada saía e a janela seguia em 420 com só a
+  faixa do `#lc-aceite` por cima, do 1º ready check até a seleção. O roteador remontou a fila nos 2 s de `Matchmaking`
+  entre eles (diagnóstico: a mesma sequência no roteador antigo deu as 2 linhas "ceder" do log, que só se repetem se o
+  estado mudou no meio). Hoje o ready check é a tela da fila ("partida encontrada") por baixo do `#lc-aceite` (z 100002;
+  a camada é 100000 e o popup da Riot fica embaixo dela, como já ficava embaixo do `#lc-posjogo`). Sem o `#lc-aceite`
+  visto em 1,5 s (`CONTAGEM_MS`), o ready check expande: senão ele ficaria sem botão. Toda montagem de tela vai ao
+  `LeagueClientUx.log` (`[lol-client] compacto: tela <nome> (<fase>)`): antes só as saídas logavam.
+- **Tela compacta que não muda entre fases remonta no client e não no teste** → o roteador carrega a tela por `import()` e
+  procura `atualizar` no MÓDULO; teste que monta `criarTelaX()` direto passa sem o `export const atualizar`. Conferir o
+  export no módulo (`teste-compacto-lobby.mjs`, 14/10/2026).
+- **Animação CSS reinicia a cada repintura** (anel da fila, 14/10/2026: "reinicia sempre que conta um segundo") → o client
+  manda o evento da busca a cada ~1 s e `replaceChildren` recriava o anel: elemento novo (ou solto e reposto) = o
+  `::after` gira do zero. Elemento animado vive a montagem inteira e só muda classe e miolo (`tela-fila.anelDe`).
+- **Escolha de um ready check vazando para a busca** (revisão de 14/10/2026) → `Matchmaking` e `ReadyCheck` têm a mesma
+  chave no roteador (`tela:fila`), então "⤢ expandir" e a regra 7 não zeram sozinhos entre eles: `aoFase` zera ao sair do
+  ready check. Um `div.modal` no ready check é conferido de novo em 1 s (`MODAL_RC_MS`) antes de expandir: o conteúdo
+  `.ready-check-root-element` pode chegar depois da folga da vigia, que só vê filhos diretos do wrapper.
+- **No compacto o popup da Riot do ready check fica embaixo da camada** → quem responde é o `#lc-aceite` ("aceitar agora" /
+  "não aceitar"). Sem ele em 1,5 s o client expande e fica expandido até o fim daquele ready check (`semContagem` trava),
+  para a janela não encolher embaixo do cursor indo ao popup.
 - **Aviso da camada em cima do botão da vez** → `.lc-cp-aviso` fica logo abaixo do topo e com `pointer-events:none`; embaixo
   moram TRAVAR/BANIR/JOGAR.
 - **Plugin carrega mas `init` morre calado** (`dataset.lolClient` vazio, sem `__lolClient`) →

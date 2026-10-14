@@ -567,6 +567,36 @@ const todasEscritas = [];
   todasEscritas.push(...t.escritas());
 }
 {
+  // "quero poder usar o scroll para rolar entre as skins" (Gabriel, 14/10/2026): roda do mouse na faixa = rolagem lateral
+  const t = await montarTela({ inicial: S(58) });
+  const faixa = t.achar('div.lc-cp-sel-skins');
+  const roda = (el, deltaY, deltaX = 0) => { let parou = false; for (const fn of el?.ouvintes?.wheel || []) fn({ deltaY, deltaX, deltaMode: 0, preventDefault() { parou = true; } }); return parou; };
+  if (faixa) { faixa.scrollWidth = 600; faixa.clientWidth = 300; faixa.scrollLeft = 0; }
+  const parou = roda(faixa, 100);
+  caso('skins: roda para baixo na faixa rola para o lado (e não rola a tela)', !!faixa && faixa.scrollLeft === 100 && parou, `left=${faixa?.scrollLeft} parou=${parou}`);
+  roda(faixa, -40);
+  caso('skins: roda para cima volta', faixa?.scrollLeft === 60, String(faixa?.scrollLeft));
+  t.todos('button.lc-cp-sel-sk')[2].click(); await tick(); // repinta a faixa (skin ocupada)
+  const nova = t.achar('div.lc-cp-sel-skins');
+  caso('skins: clicar numa skin repinta a faixa no mesmo ponto da rolagem', nova !== faixa && nova.scrollLeft === 60, `nova=${nova !== faixa} left=${nova?.scrollLeft}`);
+  faixa.scrollLeft = 300; // fim da faixa (600 - 300)
+  const parouFim = roda(faixa, 100);
+  caso('skins: no fim da faixa a roda segue para a tela (não prende a rolagem)', !parouFim && faixa.scrollLeft === 300, `left=${faixa.scrollLeft} parou=${parouFim}`);
+  const curta = t.achar('div.lc-cp-sel-skins');
+  curta.scrollWidth = 200; curta.clientWidth = 300; curta.scrollLeft = 0;
+  caso('skins: faixa que cabe inteira não engole a roda', !roda(curta, 100) && curta.scrollLeft === 0);
+  caso('skins: a grade de campeões não ganhou ouvinte de roda', !(t.achar('div.lc-cp-sel-grade')?.ouvintes?.wheel?.length));
+  // revisão de 14/10/2026: deslize lateral do touchpad ou arrasto da barra (só o evento scroll, sem wheel) também ficam
+  curta.scrollWidth = 600; curta.clientWidth = 300; curta.scrollLeft = 210;
+  for (const fn of curta.ouvintes?.scroll || []) fn({});
+  const outraSkin = S(58); outraSkin.myTeam.find(c => c.cellId === 4).selectedSkinId = 154006;
+  await t.emitir(outraSkin); // o client confirmou a skin: repinta a faixa
+  const depoisScroll = t.achar('div.lc-cp-sel-skins');
+  caso('skins: rolagem sem roda (touchpad, barra) também volta ao mesmo ponto depois da repintura',
+    depoisScroll !== curta && depoisScroll.scrollLeft === 210, `nova=${depoisScroll !== curta} left=${depoisScroll?.scrollLeft}`);
+  caso('skins: rolar não escreve nada (só o PATCH do clique na skin)', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/my-selection {"selectedSkinId":154006}']), t.escritas().join('; '));
+}
+{
   const t = await montarTela({ inicial: S(58), cfg: { ...CFG, runas: { ...CFG.runas, ligado: false } } });
   caso('runa: runa por campeão desligada = nada lido nem escrito', /desligada/.test(t.achar('div[data-a="runa"]').textContent) && !t.lcu.chamadas.some(c => /perks/.test(c.url)));
 }
@@ -797,6 +827,45 @@ const todasEscritas = [];
     Date.now = () => agora() + tela.REENVIO_MS + 50;
     try { t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick(); } finally { Date.now = agora; }
     caso('reenvio: evento velho não faz reenviar o mesmo campeão; depois de REENVIO_MS o 2º clique reenvia', n1 === 1 && t.escritas().length === 2, `${n1} ${t.escritas().length}`);
+  }
+
+  // 3ª ranqueada de 14/10/2026: "as fotos dos campeões mostrando intenção não aparecem. Só depois que pica" (o aliado
+  // com intenção só tinha o texto "intenção: X"; foto só depois de travar). Intenção = foto com marca própria, travado
+  // = foto normal; inimigo segue só com o pick completo (lerSessao, guardrail)
+  {
+    const fotoDa = (t, cell) => linhaDo(t, cell)?.querySelector('span.lc-cp-foto');
+    const t = await montarTela({ inicial: SR(11) });
+    const a0 = fotoDa(t, 0), eu = fotoDa(t, 1);
+    caso('ranqueada ev 11: aliado com intenção (cell 0, 25) mostra a foto da intenção, marcada como intenção',
+      String(a0?.dataset?.campeao) === '25' && a0.classList.contains('lc-cp-sel-intencao') && /intenção/.test(linhaDo(t, 0)?.textContent || ''),
+      `${a0?.dataset?.campeao} ${a0?.className}`);
+    caso('ranqueada ev 11: a minha intenção (58) também com a marca de intenção', String(eu?.dataset?.campeao) === '58' && eu.classList.contains('lc-cp-sel-intencao'), `${eu?.dataset?.campeao} ${eu?.className}`);
+    await t.emitir(SR(12));
+    const a0t = fotoDa(t, 0);
+    caso('ranqueada ev 12: aliado travou (25): foto normal, sem a marca de intenção', String(a0t?.dataset?.campeao) === '25' && !a0t.classList.contains('lc-cp-sel-intencao'), a0t?.className);
+    await t.emitir(SR(15));
+    caso('ranqueada ev 15: intenção nova de outro aliado (cell 2, 51) aparece na hora', String(fotoDa(t, 2)?.dataset?.campeao) === '51' && fotoDa(t, 2).classList.contains('lc-cp-sel-intencao'));
+    caso('intenção: o CSS dá à foto de intenção um visual próprio (tracejada e apagada)',
+      /\.lc-cp-foto\.lc-cp-sel-intencao \{[^}]*dashed[^}]*\}/.test(tela.CSS) && /\.lc-cp-foto\.lc-cp-sel-intencao \{[^}]*opacity/.test(tela.CSS));
+    caso('intenção: nenhuma escrita só por mostrar', t.escritas().length === 0, t.escritas().join('; '));
+  }
+  // revisão de 14/10/2026: a intenção é só do meu time. Hover inimigo em andamento (champselect-real.json: ev 18 cell 0
+  // 950, ev 23 cell 1 145, ev 51 cell 7 245, ev 57 cell 9 92, isAllyAction false) nunca vira foto nas linhas do time
+  // nem entra na lista de inimigos antes do pick completo
+  {
+    const vazou = [];
+    for (const [i, cell, id] of [[18, 0, 950], [23, 1, 145], [51, 7, 245], [57, 9, 92]]) {
+      const s = S(i);
+      const hover = s.actions.flat().find(a => a.actorCellId === cell && a.type === 'pick' && a.isAllyAction === false);
+      if (!hover || hover.championId !== id || hover.completed) { vazou.push(`fixture ${i} mudou`); continue; }
+      const t = await montarTela({ inicial: s });
+      const linhas = t.todos('div.lc-cp-sel-lin');
+      if (!linhas.length) vazou.push(`ev ${i}: sem linhas do time`);
+      const fotos = linhas.flatMap(l => l.querySelectorAll('span.lc-cp-foto')).filter(f => String(f.dataset?.campeao) === String(id));
+      if (fotos.length) vazou.push(`ev ${i}: foto de ${id} na linha do time`);
+      if (lerSessao(s).inimigos.includes(id)) vazou.push(`ev ${i}: ${id} na lista de inimigos`);
+    }
+    caso('intenção inimiga (hover em andamento) não aparece em foto nem na lista de inimigos (ev 18, 23, 51, 57)', !vazou.length, vazou.join('; '));
   }
 
   // a seleção inteira, sem clique: nada escrito, nenhum erro

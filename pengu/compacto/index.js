@@ -35,6 +35,8 @@ export const MAPA_SR = 11;
 export const TELAS = { lobby: './tela-lobby.js', fila: './tela-fila.js', champselect: './tela-champselect.js', posjogo: './tela-posjogo.js' };
 export const CLASSE = 'lc-modo-compacto'; // no <html> enquanto a camada está à vista (lc-compacto é a chave ligada)
 export const ESPERA_SESSAO_MS = 2000; // champ select sem a sessão do gameflow lida: espera isso e expande
+export const CONTAGEM_MS = 1500; // ready check sem o #lc-aceite visto até aqui: expande (o popup da Riot fica embaixo da camada)
+export const MODAL_RC_MS = 1000; // "modal" no ready check: confere de novo depois disso antes de expandir (aoModal)
 
 // Regra 7 (telas da Riot que surgem sozinhas): camadas filhas de #lol-uikit-layer-manager-wrapper. Medido no
 // rcp-fe-lol-uikit 16.20 (13/10/2026): modal = div.modal; drawer/popout = lol-uikit-full-page-backdrop;
@@ -48,18 +50,24 @@ export const MODAIS = {
   conhecidos: ['.ready-check-root-element'],
 };
 
-// info: {lida, fila, mapa, custom, aceiteLigado, aceiteVivo, aceiteManual} -> {tipo: 'tela'|'ceder'|'jogo'|'expandir'|'esperar', tela?, motivo?}
+// info: {lida, fila, mapa, custom, aceiteLigado, aceiteVivo, aceiteManual} -> {tipo: 'tela'|'jogo'|'expandir'|'esperar', tela?, motivo?}
 // aceiteVivo === false: o aceite.js falhou no init (index.js: seguro() devolveu null); undefined = não sei, vale o ligado
 export function destinoDaFase(fase, info = {}) {
   switch (fase) {
     case 'None': case 'Lobby': return { tipo: 'tela', tela: 'lobby' };
     case 'Matchmaking': return { tipo: 'tela', tela: 'fila' };
     case 'ReadyCheck':
-      // a janela pequena corta o popup da Riot (modal de 1280): só cede ao #lc-aceite quando ele vai mesmo aceitar
+      // a janela pequena corta o popup da Riot (modal de 1280): só fica no compacto quando o #lc-aceite vai mesmo aceitar
       if (!info.aceiteLigado) return { tipo: 'expandir', motivo: 'aceite automático desligado: o popup da Riot decide' };
       if (info.aceiteVivo === false) return { tipo: 'expandir', motivo: 'o aceite automático não subiu nesta carga: o popup da Riot decide' };
       if (info.aceiteManual) return { tipo: 'expandir', motivo: 'o popup da Riot voltou (aceite manual)' };
-      return { tipo: 'ceder' };
+      // a camada cobre o popup da Riot: sem a contagem do aceite.js à vista, ele ficaria sem botão (14/10 10:10 o JS
+      // do aceite não agiu). O roteador só marca isso depois de CONTAGEM_MS sem ver o #lc-aceite neste ready check
+      if (info.semContagem) return { tipo: 'expandir', motivo: 'a contagem do aceite não apareceu: o popup da Riot decide' };
+      // a tela da fila fica de pé ("partida encontrada") por baixo do #lc-aceite (z 100002 > camada 100000). Até
+      // 14/10/2026 o ready check tirava a camada ("ceder") e a janela de 420 mostrava a tela da Riot de 1280 cortada
+      // pelo ready check inteiro (ranqueada das 14:43, com 2 ready checks: ARMADILHAS § Client)
+      return { tipo: 'tela', tela: 'fila' };
     case 'ChampSelect': {
       if (!info.lida) return { tipo: 'esperar', motivo: 'lendo a fila da seleção' };
       const fila = Number(info.fila) || 0, mapa = Number(info.mapa) || 0;
@@ -173,6 +181,7 @@ export function criarRoteador({
   cfg, janela, camada, carregarTela, servicos = {}, lcu = lcuPadrao, avisar = avisarPadrao,
   log = (...a) => console.log('[lol-client] compacto:', ...a), assinar = () => {}, classe = () => {},
   modalAberto = () => null, aceiteManual = () => false, aceiteVivo = () => undefined, aoAplicar = () => {},
+  contagemNaTela = () => undefined, // #lc-aceite no DOM? (undefined = não sei: não expande por isso)
   agendar = setTimeout, limpar = clearTimeout, repetir = setInterval, pararRepetir = clearInterval, agora = () => Date.now(),
 }) {
   const reencolhidas = []; // quando a Riot devolveu a janela a 1280 com a tela compacta montada (ms)
@@ -180,7 +189,7 @@ export function criarRoteador({
     efetivo: 'expandido', motivo: 'início', tela: null, pronto: false };
   const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
   const assinadas = new Set();
-  let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null;
+  let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null, timerContagem = null, timerModalRc = null;
 
   const carregar = nome => {
     let m = modulos.get(nome);
@@ -193,13 +202,13 @@ export function criarRoteador({
     return m;
   };
 
-  // o que a fase pede agora -> {modo: 'compacto'|'expandido'|'ceder'|'esperar'|'nada', tela?, mod?, motivo?}
+  // o que a fase pede agora -> {modo: 'compacto'|'expandido'|'esperar'|'nada', tela?, mod?, motivo?}
   function alvo() {
     const c = cfg.compacto || {};
     if (!c.ligado) return { modo: 'expandido', motivo: 'client compacto desligado' };
     // sem DOM ou sem a 1ª leitura da fase: não mexe em nada (recarga com a janela pequena não pisca)
     if (!est.pronto || !est.faseLida) return { modo: 'nada' };
-    const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual() });
+    const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual(), semContagem: semContagem() });
     const chave = d.tipo === 'esperar' ? est.chave : `${d.tipo}:${d.tela || ''}`;
     // virou de destino: a escolha manual e a regra 7 valem só até aqui ("lembrar o modo por fase", plano)
     if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; }
@@ -208,7 +217,6 @@ export function criarRoteador({
     if (d.tipo === 'esperar') return { modo: 'esperar', motivo: d.motivo };
     if (d.tipo === 'expandir') return { modo: 'expandido', motivo: d.motivo, daFase: true };
     if (d.tipo === 'jogo') return { modo: 'expandido', motivo: 'partida: client normal embaixo do jogo', daFase: true };
-    if (d.tipo === 'ceder') return quer === 'compacto' ? { modo: 'ceder', motivo: 'ready check: o aceite é dono' } : { modo: 'expandido', motivo: 'expandido por ti' };
     if (est.forcado) return { modo: 'expandido', motivo: est.forcado };
     if (quer !== 'compacto') return { modo: 'expandido', motivo: est.override ? 'expandido por ti' : 'padrão: client normal' };
     if (!janela.disponivel()) return { modo: 'expandido', motivo: 'sem controle da janela (riotInvoke)' };
@@ -221,6 +229,18 @@ export function criarRoteador({
       if (modal) { est.forcado = `o client abriu uma janela própria (${modal})`; return { modo: 'expandido', motivo: est.forcado }; }
     }
     return { modo: 'compacto', tela: d.tela, mod: m.mod };
+  }
+
+  // ready check: a contagem foi vista alguma vez? (some sozinha depois do aceite, esperando os outros: não conta)
+  function semContagem() {
+    if (est.fase !== 'ReadyCheck' || !est.rc) return false;
+    let v;
+    try { v = contagemNaTela(); } catch { v = undefined; }
+    if (v === true) est.rc.vista = true;
+    // expandiu uma vez neste ready check: fica expandido até a fase mudar (a contagem chegando tarde encolheria a
+    // janela embaixo do cursor dele, indo clicar no popup da Riot: revisão de 14/10/2026)
+    if (!est.rc.vista && v === false && agora() - est.rc.desde >= CONTAGEM_MS) est.rc.expandiu = true;
+    return !!est.rc.expandiu;
   }
 
   function resolver() {
@@ -276,7 +296,9 @@ export function criarRoteador({
       }
       desmontarTela();
       const partes = camada.montar();
-      if (!janela.ehCompacta() && !janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt)) {
+      // já pequena mas noutro tamanho (recarga do plugin com a janela de 640 de antes): encolhe para o tamanho da config
+      const precisa = !janela.ehCompacta() || (typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt));
+      if (precisa && !janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt) && !janela.ehCompacta()) {
         camada.remover();
         est.forcado = 'a janela não encolheu (riotInvoke)';
         est.efetivo = 'expandido'; est.motivo = est.forcado; est.tela = null;
@@ -284,10 +306,13 @@ export function criarRoteador({
       }
       classe(true);
       est.efetivo = 'compacto'; est.motivo = null; est.tela = a.tela;
+      // toda montagem vai para o LeagueClientUx.log: sem ela, o log de uma partida só mostrava as saídas do compacto
+      // e não provava o que estava na tela (14/10/2026 14:43)
+      log(`tela ${a.tela} (${est.fase})`);
       montarTela(a.tela, a.mod, partes);
       return;
     }
-    // expandido ou ceder: sem camada; ceder não mexe na janela (o #lc-aceite fica centrado nela)
+    // expandido: sem camada e a janela no tamanho normal
     desmontarTela();
     camada.remover();
     classe(false);
@@ -299,6 +324,9 @@ export function criarRoteador({
   function mudarFase(a) {
     const m = montagem;
     m.fase = est.fase;
+    // a troca de fase sem remontar também vai ao log (Matchmaking <-> ReadyCheck): sem ela, "tela fila (Matchmaking)"
+    // seguido de "tela champselect" não separa "a fila ficou no ready check" de "nada aconteceu"
+    log(`tela ${m.nome} (${est.fase}): atualizada`);
     if (typeof m.mod.atualizar === 'function') {
       try { const r = m.mod.atualizar(m.ctx); if (r && typeof r.then === 'function') r.catch(e => falhou(e, m.token)); } catch (e) { falhou(e, m.token); }
       return;
@@ -399,6 +427,14 @@ export function criarRoteador({
     resolver();
   }
 
+  // regra 7: tela própria da Riot por cima do compacto = client normal até a próxima virada de destino
+  function forcarPorModal(desc) {
+    if (est.efetivo !== 'compacto' || !desc) return;
+    est.forcado = `o client abriu uma janela própria (${desc})`;
+    avisarDepois(`${est.forcado}: client normal`);
+    resolver();
+  }
+
   function compactarPorTi() {
     est.override = 'compacto';
     est.forcado = null;
@@ -418,7 +454,15 @@ export function criarRoteador({
       if (est.faseLida && fase === est.fase) return;
       est.faseLida = true; // null (leitura falhou de vez) também conta: destino "fase desconhecida" = client normal
       if (fase === 'ChampSelect') est.info = { lida: false }; // a sessão de antes pode ser de outra fila
+      // saiu do ready check (outro não aceitou: Matchmaking de novo): "⤢ expandir" e regra 7 daquele ready check não
+      // seguem para a busca. Matchmaking e ReadyCheck têm a mesma chave (tela:fila) desde 14/10/2026; antes o "ceder"
+      // trocava a chave e zerava isso. Entrar no ready check não zera: expandido por ti segue expandido no aceite
+      if (est.fase === 'ReadyCheck' && fase !== 'ReadyCheck') { est.override = null; est.forcado = null; }
       est.fase = fase;
+      // ready check novo: confere a contagem do aceite de novo depois de CONTAGEM_MS (semContagem)
+      if (timerContagem) { limpar(timerContagem); timerContagem = null; }
+      est.rc = fase === 'ReadyCheck' ? { desde: agora(), vista: false } : null;
+      if (est.rc) timerContagem = agendar(() => { timerContagem = null; resolver(); }, CONTAGEM_MS + 50);
       resolver();
     },
     aoSessao(s) {
@@ -431,9 +475,20 @@ export function criarRoteador({
     },
     aoModal(desc) {
       if (est.efetivo !== 'compacto' || !desc) return;
-      est.forcado = `o client abriu uma janela própria (${desc})`;
-      avisarDepois(`${est.forcado}: client normal`);
-      resolver();
+      // ready check: o div.modal do ready check pode ganhar o .ready-check-root-element depois da folga da vigia (ela só
+      // vê filhos diretos do wrapper) e ser lido como desconhecido. Confere de novo em MODAL_RC_MS: o do ready check já
+      // tem o conteúdo (vigia.aberto() devolve null); modal desconhecido de verdade segue aberto e expande
+      if (est.fase === 'ReadyCheck' && desc === 'modal') {
+        if (timerModalRc) return;
+        timerModalRc = agendar(() => {
+          timerModalRc = null;
+          let d = null;
+          try { d = modalAberto(); } catch { d = null; }
+          if (d) forcarPorModal(d);
+        }, MODAL_RC_MS);
+        return;
+      }
+      forcarPorModal(desc);
     },
     alternar() {
       if (!cfg.compacto?.ligado) { avisar('client compacto desligado nas configurações', true); return; }
@@ -491,8 +546,9 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     // pengu/index.js passa o retorno do iniciarAceite (null = o módulo quebrou no init: o popup da Riot segue
     // escondido pelo estilo.css e ninguém aceita; ceder com a janela pequena perderia a partida)
     aceiteVivo: () => ('aceite' in servicos ? !!servicos.aceite : undefined),
-    // botão "▣ modo compacto" só no client normal (no "ceder" do ready check a janela é a pequena); na seleção a
-    // barra da Riot não aparece: botão flutuante
+    // contagem do aceite.js (mostrarOverlay põe #lc-aceite no <body>)
+    contagemNaTela: () => !!doc.getElementById('lc-aceite'),
+    // botão "▣ modo compacto" só no client normal; na seleção a barra da Riot não aparece: botão flutuante
     aoAplicar: e => botao.sincronizar(!!cfg.compacto?.ligado && e.efetivo === 'expandido', { flutuante: e.fase === 'ChampSelect' }),
   });
 
@@ -519,13 +575,14 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     estilo('lc-compacto-estilo', CSS, doc);
     botao.ligar();
     vigia.ligar();
-    // popup do ready check que volta (aceite manual): sai do "ceder" e expande
+    // popup do ready check que volta (aceite manual): sai da tela compacta e expande
     if (typeof MutationObserver !== 'undefined')
       new MutationObserver(() => { if (rot.estado().fase === 'ReadyCheck') rot.reavaliar(); })
         .observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });
     // camada trocada por cópia (boot da Riot): o roteador remonta. Observa só os filhos do <body>; o intervalo cobre
     // um <body> novo (o observador ficaria preso no antigo)
-    const conferirCamada = () => { if (camada.existe() && !camada.conectada()) rot.reavaliar(); };
+    // no ready check também: a contagem do aceite (#lc-aceite) entrando no <body> conta como vista (semContagem)
+    const conferirCamada = () => { if ((camada.existe() && !camada.conectada()) || rot.estado().fase === 'ReadyCheck') rot.reavaliar(); };
     if (typeof MutationObserver !== 'undefined') new MutationObserver(conferirCamada).observe(doc.body, { childList: true });
     setInterval(conferirCamada, 2000);
     // atalho só com a chave ligada: desligado, o Ctrl+Shift+M segue para o client como se o plugin não existisse
