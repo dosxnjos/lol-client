@@ -77,6 +77,11 @@ Quem decidiu: o agente executor (opus, técnico). Reverter = `git revert` do com
 | D17 | (passo 7) jungler longe = **uma lista de 3** (`junglerLonge`: só painel / falar e piscar a borda / não mostrar) em vez de duas caixas: cobre "escolher ou não" nos dois sentidos num controle só. "Tudo" publica igual ao perto (voz, borda, vermelho), mas com o intervalo de 20 s contado à parte (`Aviso.grupo="longe"`; revisão de 14/10/2026: sem isso o longe calava o perto que vinha depois) | média | o Gabriel achar a lista confusa |
 | D18 | (passo 7) filtro do "mid sumiu" desligado = a regra de antes de 14/10 (só não conta o mid visto por último na base dele, motivo `base_dele`) **com** teto 4 e 120 s (D3), que são "limites de repetição"; corte da frase repetida desligado tira as duas janelas (60 s e os 10 s do urgente: antes de D4 não havia nenhuma) | alta | — |
 | D19 | (passo 7) overlay: cores vermelho claro (padrão, `COR`), laranja `(240,140,50)` e **roxo** `(170,90,230)`; azul fica fora porque é a cor dos aliados no minimapa (mancha azul = "aliado ali"). Força sutil (0,30/0,08), normal (`ALPHA`/`ALPHA_MIN`), forte (0,60/0,18). Transição desligada = `tau` 0 (alvo na tela no 1º quadro). Troca em voo por `OverlayMinimapa.aplicar_estilo`; o estilo entra no estado do quadro, então o "parado" não segura a imagem velha | média (gosto) | o Gabriel pedir azul ou outra cor: 1 linha em `overlay_minimapa.CORES` + `servidor_local.ESCOLHAS` + `pengu/config.js OVERLAY_CORES` |
+| D20 | (passo 8) **base presumida**: sem ícone fresco, a última pista "fui para a base" há ≤ 45 s (`AlertasPosicao.BASE_PRESUMIDA_S`: eu morto, meu ícone sumiu com o anel grosso de voltando à base, ou visto por último na minha base) = `onde_estou` fonte `base` (antes `reserva`). Com isso a regra do Gabriel ("na base ou morto, gank na minha rota só conta com aliado lá, como o de outra rota") sai do `decidir_gank` que já tratava base/morto assim. Sumir **na rota** (sem anel grosso) segue a reserva (D5). O `minimapa.Captura` passa `grande` nas detecções | média | gank faltando na rota dele logo depois de voltar da base numa partida medida (ícone não achado por mais de 4 s no caminho): baixar `BASE_PRESUMIDA_S`. A Yuumi aliada presa nele também dá anel grosso: com ela deduzida na minha posição (≤ 300) o anel não conta como voltar à base |
+| D21 | (passo 8) a faixa do meio (\|y − x\| ≤ `M_MEIO`) é só do mid em `avisos.perto_da_rota` (fora `com_base`, que mantém o nexo sem rota, D14): com a margem de 1500 as rotas laterais pegavam a frente das bases no meio (torre do inibidor do mid a ~5300 do canto, fora do `R_BASE`) | alta | — |
+| D22 | (passo 8) "visto" do painel = o mais recente entre a assinatura da Live Client (nível, itens, farm) e a última detecção do minimapa (`ao_vivo.mesclar_vistos`, no passo do coach; grava no banco também, então o `visto_gt` do `ao_vivo` passa a incluir o minimapa) | alta | detecção falsa do adversário no minimapa marcando "atual" o que está parado (o painel mostraria números velhos sem o cinza) |
+| D23 | (passo 8, corrigida na revisão) overlay: a janela fica como está (a hipótese do print foi derrubada com prova). A causa do "não funcionou mais" é **defeito do desenho**, não gosto: o desfoque σ=2 do `alfa_alvo` diluía a mancha pequena (jungler recém-visto = calor de 1–2 px) a 2–8% de alfa; 4 dos 7 quadros de calor da partida ficaram abaixo de 16% (145059-03 0,09; 145529-13 0,11; 145659-15 0,04; 150000-21 0,15). Correção: pedaço pequeno (área < π·(2·`MANCHA_MIN_PX`)²) alarga 3 px antes do desfoque e o pico volta ao de antes do desfoque (nunca acima); zona grande fica com a borda de antes. Força e cor não mudam. Fica também o diagnóstico no log (`janela pronta`, `na tela {...}`, aviso se o jogo estava por cima na ordem Z) e a 2ª fase do `--demo` | alta | mancha de ponto grande demais ou "pulando" na tela (ele dizer): baixar `MANCHA_MIN_PX` para 2 (ponto ainda com área ≥ π·4² px acima de 10%). O log "na tela, sem o jogo por cima" **não** prova que ele viu: a janela TOPMOST sobre o jogo sem borda (`WindowMode=2`) não perde na ordem Z |
+| D24 | (passo 8, revisão) eu na base (inclui a base presumida da D20) ou morto: **intruso** na minha rota só conta com aliado lá, a mesma regra do gank ("nem tinha aliado nenhum meu no top, então não fazia sentido se preocupar"). Quem chega enquanto estou fora já está na rota quando eu volto e não vira intruso (regra de 13/10). O "o top voltou" (morador) não muda | média | ele dizer que quer saber, da base, quem está esperando na rota dele: tirar o filtro `longe` do laço de intrusos em `AlertasPosicao.observar` |
 
 Espelho do mapa: a geometria das rotas é absoluta (rota top = canto de cima à esquerda para os dois times);
 base e selva são relativas ao meu time (`analise.regiao`, `jungler.nome_zona`), e `zonas_de_gank` usa os
@@ -126,6 +131,78 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
      Sem prova: `gankOutraRota=false` lido em `coach_vivo._jungler` (o `decidir_gank(outras=False)` está provado).
    - Falta (orquestrador, no lobby): reiniciar o coletor e recarregar o client para a tela nova aparecer; olhar a
      seção LOL-CLIENT com os textos novos.
+8. **Relato da partida 3293137136** (14/10/2026, ~14:46–15:15, top de Renekton contra K'Sante, coletor rodando
+   d913c28; gameTime 0 ≈ 14:47:02). O Gabriel, em palavras dele (decisões D20–D23):
+   1. "O overlay do mapa não funcionou mais." O coach desenhou (`dados\coletor.log`: a vitrine gravou
+      `overlay-calor`/`overlay-texto` 14:50–15:01; `temp\vitrine\2026-10-14\14*-minimapa-*.png`).
+   2. "O coach ao vivo não está encontrando o oponente na lane [...] mesmo que ele estivesse aparecendo no
+      minimapa. Ele só encontrou depois que apareceu na minha tela."
+   3. "Tava só eu e o Gragas (o mid deles), ambos na top lane, e eu recebi o aviso sonoro de que tinham quatro no
+      top, sendo que eu tava vendo dois no mid e um no bot. Dois na base do mid deles e um no bot lá no meio da
+      lane." (log 15:07:57 `intruso_grupo/vermelho: 4 inimigos top`)
+   4. "Acho que apareceu gank provável no top sendo que eu já tava na base [...] nem tinha aliado nenhum meu no
+      top, então não fazia sentido se preocupar com isso." Regra pedida: na base ou morto, gank na rota dele só
+      conta se houver aliado lá (como gank de outra rota).
+   - **Causas, com evidência:**
+     - (1) Hipótese "a janela nova (UpdateLayeredWindow) entra no print do minimapa e o coach lê a própria mancha"
+       **derrubada**: com o jogo fechado, na ordem da produção (exclusão pedida ao nascer), afinidade lida de volta
+       `0x11`, R − G médio da área quente no print ~0 com a exclusão e +65 sem ela; a janela vai ao lugar pedido.
+       O detector rodado sobre os prints da vitrine (camada descontada) acha o K'Sante em 7 de 12 recortes
+       (`minimapa.py` sem mudança desde 13/10). O que está medido: a mancha nova muda a tela ~8× menos que a do Tk (diferença média
+       25–38 na área pintada contra ~200) e metade dos quadros de calor é um ponto (alfa máx 4–15%). Se a janela
+       apareceu in-game **não tem prova** (o print nunca mostra a janela, por regra): entra diagnóstico no log.
+       **Causa achada na revisão (D23):** o desfoque σ=2 do `alfa_alvo` diluía a mancha pequena; alfa máximo medido
+       no código de antes: ponto de 1 px 0,018, raio 1 px 0,08, 3 px 0,31, só de 5 px para cima 0,43–0,45. Nos
+       prints da partida (`*-camada.png`), 4 de 7 quadros de calor ficaram entre 4% e 15%. O Tk de manhã também
+       tinha manchas minúsculas, mas pintava o ponto em cor cheia a 55% com contorno branco: era visível.
+     - (2) O "visto" do painel (adversário de rota: "visto há X s: dados dele parados") era só a assinatura da
+       Live Client (nível, itens, farm), e o farm anda de 10 em 10: em gt 843,8 o minimapa achou o K'Sante e o
+       painel dizia "visto há 34 s"; 34 de 142 amostras dele vivo estavam "paradas". Leitura do agente: ele falava
+       do bloco de rota do painel (é o único lugar que diz "não visto" do adversário); se era a voz "o top voltou",
+       é outra coisa e fica para a próxima calibração.
+     - (3) `avisos.perto_da_rota` alargava top/bot em 1500 (x < 3800, y > 11180) e a frente da base no meio
+       (torre do inibidor do mid, ~5300 do canto, fora do `R_BASE`) contava como top, mid e bot: o Gragas chegando
+       no top + 3 inimigos na frente da base do mid deles = "4 inimigos top" (quais 3 não está no log; o que casa
+       com "dois na base do mid deles" é a dupla do bot com a Yuumi presa, que conta 2, e o Graves; o K'Sante mora
+       no top e não entra na conta). Reproduzido no teste com as posições das torres: o código de antes fala
+       "3 inimigos no mid" e, 20 s depois, com o mid deles chegando no top, "4 inimigos no top", a mesma dupla do
+       log (15:07:42 "2 inimigos mid", 15:07:57 "4 inimigos top").
+     - (4) O `decidir_gank` já tratava "na base/morto" como pedido, mas só com o meu ícone **visto** na base; o
+       ícone na fonte fica no canto do minimapa e mal é achado (anel 0,301 contra o limiar 0,30): sem ícone por
+       4 s, "onde estou" virava a rota do champ select e o gank do top saía urgente.
+   - **Correções:** `avisos.perto_da_rota` (faixa do meio só do mid, D21); `AlertasPosicao` com base presumida e
+     `minimapa.Captura` passando `grande` (D20); `ao_vivo.mesclar_vistos` chamado no passo do coach (D22);
+     `overlay_minimapa`: `diagnostico()`, `por_cima()`, log `janela pronta`/`na tela`/ordem Z e a 2ª fase do
+     `--demo` na ordem da produção (D23). Da revisão: `overlay_minimapa.alfa_alvo` com mancha mínima e pico
+     preservado (D23); `ao_vivo.mesclar_vistos` refaz também o bloco da **ameaça** (o painel desenha `a.atual` e
+     `a.vistoHaS` dessa cópia, que seguia "visto há 34 s" com o adversário à vista); intruso na minha rota calado
+     comigo na base ou morto sem aliado lá (D24); Yuumi aliada com nome de campeão repetido ("Yuumi ORDER").
+   - **Efeito colateral da D20 (sabido):** com a base presumida (≤ 45 s depois de morrer ou voltar à base) o
+     "mid sumiu" também se cala (motivo `eu_na_base`), como já acontecia com o ícone visto na base.
+   - **Provas** (falham no código de antes: rodadas sobre uma cópia do `HEAD` em pasta temporária):
+     `python tools\teste-alertas.py --sem-janela` (`revisao_3293137136`: geometria, "4 inimigos" → "intruso top"
+     amarelo, base presumida em 3 caminhos e o lado oposto: sumir na rota ou com a Yuumi presa = reserva), `python tools\teste-coach.py`
+     (`caso_visto_minimapa`: unidade e o caminho real `Coach._ao_ler`), `python tools\teste-overlay.py` (ordem Z
+     falsa; e, da revisão, mancha de ponto/raio 1, 3 e 10 px no `ALPHA` com área ≥ π·4² px acima de 10%, que dava
+     0,018 antes), `python tools\teste-minimapa.py` (interface com `grande`). Da revisão também: `teste-coach`
+     (a ameaça vira "atual") e `teste-alertas` (intruso no top vazio comigo na base calado; com aliado ou eu na
+     rota, avisa), os dois falhando no código anterior à revisão.
+   - **Provado depois, com o jogo fechado (revisão):** `python coletor\overlay_minimapa.py --demo --left 1800 --top 300`
+     ok nas duas fases (fora do print, R − G +0 com a exclusão e +57 sem; em (1000, 300) dá FALHOU porque há tela
+     animando atrás, a armadilha já registrada); `rodar-testes.py` 42/42. Janela real com um ponto de 1 px de
+     calor, print com a exclusão desligada: código de antes = nada na tela (R − G máx +4); agora 64 px avermelhados
+     (R − G até +76). O `--demo` quebrava na 2ª fase com a saída redirecionada (cp1252 no "R−G"): corrigido.
+   - **Sem prova:** o overlay in-game (próxima partida: perguntar se viu a bolinha logo depois de o jungler ser
+     visto; no log, `overlay: na tela` e `POR CIMA`).
+   - **Na próxima partida:** perguntar se viu a mancha **pequena** (logo depois de o jungler ser visto). Se não
+     viu nem a grande e o log diz `overlay: na tela`, aí é janela/contraste; "Força Forte" sozinha não resolvia
+     o ponto (0,60 no mesmo desfoque dava ~2% em r=0) e por isso não é a resposta para a mancha pequena.
+   - **Notas da revisão, não corrigidas (sem caso medido, risco de piorar):** `minimapa.Detector._yuumi` pode
+     pôr uma Yuumi inimiga fantasma num inimigo voltando à base (conta no "N inimigos" e vira "visto" no painel);
+     a junção de dois candidatos no mesmo centro (`minimapa.py`, raio 0,6·r_anel) não olha o time, então num
+     corpo a corpo a menos de ~370 unidades um dos dois ícones some. Nos 12 prints da partida nenhum dos dois
+     aconteceu. Risco conhecido da D20: ícone dele perdido em < 4 s logo ao sair da base deixa o gank real no
+     top "só com aliado" por até 45 s.
 
 ## O que o overlay mostra (para o Gabriel)
 
@@ -134,7 +211,9 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
   As cores eram relativas (o ponto mais provável do momento era sempre o vermelho mais forte).
 - **Agora:** uma mancha vermelha clara só, da mesma família do anel vermelho dos inimigos no minimapa. Quanto
   **mais forte** o vermelho, mais provável ele estar ali; toda a área onde ele pode estar fica pelo menos
-  levemente pintada (12%, o papel do antigo contorno branco) e a borda vai sumindo suave. A mancha cresce aos
+  levemente pintada (12%, o papel do antigo contorno branco) e a borda vai sumindo suave. Logo depois de ele
+  ser visto, a mancha é uma bolinha pequena no vermelho mais forte (desde a revisão de 14/10: antes ela
+  sumia no desfoque e o overlay parecia desligado). A mancha cresce aos
   poucos enquanto ele está sumido (ele anda), some devagar 30 s depois da última pista e não pinta onde o teu
   time está vendo (lá ele não está).
 
@@ -152,6 +231,20 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
   partida, porque o `ler_config` não conferia a lista (só o POST); agora volta ao padrão também na leitura, e no
   plugin a mescla, que só olhava o tipo, confere as listas novas.
 - completei (passo 7): "Como ler" a mancha no bloco Minimapa (ele perguntou o que eram as cores, ~12:10).
+- completei (passo 8): "voltando à base" (anel grosso no meu ícone que some) também presume a base, não só a
+  morte: ele disse "eu já tava na base", e o recall é o outro jeito de chegar lá sem morrer.
+- completei (passo 8): o "visto" do minimapa vale para todo inimigo do painel e entra no `visto_gt` gravado no
+  banco (o mentor lê quem está "parado"), não só no adversário de rota.
+- completei (passo 8): log `overlay: janela pronta (fora do print: …)`; antes o resultado da exclusão nem era
+  registrado, e não havia como saber depois da partida se a janela foi à tela.
+- completei (revisão do passo 8): a regra do gank na base (D20) também para o intruso (D24); senão, por até
+  45 s com ele na base, "intruso top" seguia vigiando o top vazio, o mesmo "não fazia sentido se preocupar".
+- completei (revisão do passo 8): o bloco da ameaça do painel também recebe o "visto" do minimapa; sem isto o
+  "não encontrou o oponente" continuava no bloco ao lado do de rota.
+- fica de fora (passo 8, não pedido): a Yuumi inimiga presa conta 2 no "N inimigos" (ela está lá); o jogo por
+  cima do overlay só é avisado, não corrigido além do "sempre no topo" de 1 s que já existia.
+- correção (passo 8): o "baixar o accept para 8 segundos" do mesmo relato já está feito (`aceiteAtrasoS: 8` na
+  linha `config do coach` de 15:19:04); não é desta frente.
 - fica de fora (passo 7, não pedido): atalho Ctrl+K para as chaves novas e o `alfa` que a vitrine grava no jsonl
   (segue o `ALPHA` do módulo, não a força escolhida; a imagem gravada já sai com a força certa).
 - fica de fora (não pedido): "o top voltou pra rota" (5 falas, 8 molduras); as 5 falas estão a mais de 1 min

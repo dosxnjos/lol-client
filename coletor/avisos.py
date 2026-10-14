@@ -604,6 +604,12 @@ def perto_da_rota(rota, x, y, margem=MARGEM_ROTA, com_base=False):
     a = analise
     if not com_base and (x * x + y * y < a.R_BASE ** 2 or (a.XMAX - x) ** 2 + (a.YMAX - y) ** 2 < a.R_BASE ** 2):
         return False
+    # a faixa do meio é só do mid: com a margem, as rotas laterais (x < 3800, y > 11180) engoliam a frente das
+    # bases no meio (torre do inibidor do mid, a ~5300 do canto, fora do R_BASE): 3 inimigos defendendo o mid
+    # deles viravam "4 inimigos no top" (partida 3293137136, 14/10/2026). Fora com_base: o nexo (as 3 faixas)
+    # segue sem rota em onde_estou (D14)
+    if not com_base and rota != "rota_meio" and abs(y - x) <= a.M_MEIO:
+        return False
     if rota == "rota_top":
         return x < a.F_ROTA + margem or y > a.YMAX - a.F_ROTA - margem or y - x > a.D_QUINA - margem
     if rota == "rota_bot":
@@ -834,6 +840,12 @@ class AlertasPosicao:
     RESYNC_S = 2.0     # depois de uma pausa (quadros inválidos) só observa, sem alertar
     FRESCO_S = 0.6     # detecção com visto_em mais velho que isto = posição antiga, não visível agora
     MINHA_POS_S = 4.0  # meu ícone visto há mais que isto = não sei onde estou (vale a rota do champ select)
+    # sem ícone fresco, mas a última pista diz "fui para a base" (morri e renasci, o ícone sumiu com o anel grosso
+    # de "voltando à base", ou foi visto por último na minha base): estou na base por até isto (a fonte fica no
+    # canto do minimapa e o ícone lá mal passa no LIMIAR_ANEL: 0,301 contra 0,30). Antes valia a rota do champ
+    # select e o gank dela saía urgente comigo na base (Gabriel, partida 3293137136, 14/10/2026). Da fonte à
+    # torre externa do top são ~25 s a pé: passado isto sem ícone, volta a valer a reserva
+    BASE_PRESUMIDA_S = 45.0
     RAIO_PERTO = 4000  # jungler a até isto de mim importa onde quer que eu esteja (~11 s a 345 de velocidade)
     # "mid sumiu" só na fase de rotas: os minions chegam ao mid ~1:00; aos 14:00 caem as placas e os times
     # agrupam. Medido 14/10/2026: o aviso saía aos 0:37 e 7 vezes com a base do Gabriel caindo (22–24 min)
@@ -868,6 +880,7 @@ class AlertasPosicao:
         self.aliados_pos = {}             # nome -> (gameTime, x, y) do último quadro em que o aliado foi visto
         self.minha_pos = None
         self.minha_pos_t = None           # gameTime em que o meu ícone foi visto por último
+        self.base_t = None                # gameTime da última pista de que fui para a minha base (BASE_PRESUMIDA_S)
         self.eu_morto = False
         self.agora = 0.0                  # gameTime do último observar (para quem lê de fora: coach_vivo)
         self.calados = Counter()          # motivo -> "mid sumiu" calado pela relevância (prova e diagnóstico)
@@ -894,12 +907,16 @@ class AlertasPosicao:
     def onde_estou(self, agora=None):
         """{'fonte': 'icone'|'base'|'morto'|'reserva', 'pos': (x, y)|None, 'reg': região|None, 'rota': rota_*|None}.
         Ícone fresco numa rota → ela; no rio/selva → a única rota cuja faixa (MARGEM_ROTA) me contém, senão
-        nenhuma; na minha base, morto ou sem ícone → a rota do champ select (vou voltar para ela)."""
+        nenhuma; na minha base, morto ou sem ícone → a rota do champ select (vou voltar para ela). Sem ícone
+        fresco depois de morrer, de sumir voltando à base ou de ser visto nela (há ≤ BASE_PRESUMIDA_S) = 'base'
+        com pos None (revisão 14/10/2026: antes era 'reserva', e o gank da rota do champ select saía urgente)."""
         agora = self.agora if agora is None else agora
         reserva = ROTA_DA_POSICAO.get(self.minha_posicao)
         if self.eu_morto:
             return {"fonte": "morto", "pos": None, "reg": None, "rota": reserva}
         if self.minha_pos is None or self.minha_pos_t is None or agora - self.minha_pos_t > self.MINHA_POS_S:
+            if self.base_t is not None and agora - self.base_t <= self.BASE_PRESUMIDA_S:
+                return {"fonte": "base", "pos": None, "reg": "base_aliada", "rota": reserva}
             return {"fonte": "reserva", "pos": None, "reg": None, "rota": reserva}
         x, y = self.minha_pos
         reg = analise.regiao(x, y, self.meu_time)
@@ -996,6 +1013,8 @@ class AlertasPosicao:
             if len(eventos) != self._n_eventos:   # a lista é acumulativa: só recalcula quando cresce
                 self._n_eventos, self._estr = len(eventos), estruturas(eventos, self.meu_time)
         self.eu_morto = self.eu in mortos
+        if self.eu_morto:
+            self.base_t = agora               # renasço na fonte: base presumida até o ícone aparecer (onde_estou)
         if not quadro_valido:
             self._invalido = True
             return []
@@ -1003,15 +1022,24 @@ class AlertasPosicao:
             self._invalido = False
             self._resync_ate = agora + self.RESYNC_S
         quieto = agora < self._resync_ate
-        vistos = {}
+        vistos, voltando = {}, False
         for d in deteccoes or []:
             if d.get("visto_em") is not None and agora - float(d["visto_em"]) > self.FRESCO_S:
                 continue                      # última posição antiga (Captura.deteccoes()): não está visível agora
             n = self._nome(d)
             if n and n not in vistos:
                 vistos[n] = (float(d["x"]), float(d["y"]))
+                voltando = voltando or (n == self.eu and bool(d.get("grande")))
         if self.eu in vistos:
             self.minha_pos, self.minha_pos_t = vistos[self.eu], agora
+            # o nome pode vir com sufixo (campeão repetido: "Yuumi ORDER"), por isso a 1ª palavra
+            yu = next((n for n in self.aliados if n.split()[0].lower() == "yuumi" and n in vistos), None)
+            if voltando and yu and math.hypot(vistos[yu][0] - vistos[self.eu][0], vistos[yu][1] - vistos[self.eu][1]) < 300:
+                voltando = False              # o anel grosso é a Yuumi aliada presa em mim (minimapa.Detector._yuumi)
+            # anel grosso no meu ícone = voltando à base: se ele sumir agora, fui para a fonte; visto na minha base,
+            # idem; visto fora dela sem o anel grosso, não estou na base
+            na_base = analise.regiao(*vistos[self.eu], self.meu_time) == "base_aliada"
+            self.base_t = agora if (voltando or na_base) else None
         for n in self.aliados & set(vistos):
             self.aliados_pos[n] = (agora, *vistos[n])
         n_visiveis = self._agrupados(vistos, mortos)
@@ -1081,8 +1109,14 @@ class AlertasPosicao:
                                         prio=PRIO_JUNGLER_LONGE, grupo="longe"))
             elif n == self.mid and mid_tinha_sumido and reg not in ("rota_meio", "base_inimiga"):
                 avisos.append(Aviso("mid_indo", dados, zt))
+        # eu na base ou morto (onde_estou: inclui a base presumida da D20): intruso na MINHA rota só com aliado lá, a
+        # mesma regra do gank (revisão do passo 8: "nem tinha aliado nenhum meu no top, então não fazia sentido se
+        # preocupar"). Quem chegou enquanto eu estava fora já está na rota quando eu voltar: não vira intruso (13/10)
+        longe = self.onde_estou(agora)["fonte"] in ("base", "morto") if intrusos else False
         for n, dados, rota in intrusos:
-            perto_agora = [m for m in self.inimigos if m not in self.ocupantes.get(rota, ())
+            if longe and not self.aliados_na_rota(rota, agora):
+                continue
+            perto_agora =[m for m in self.inimigos if m not in self.ocupantes.get(rota, ())
                            and self.st[m].visivel and rota in self.st[m].perto]
             if len(perto_agora) >= 2:
                 avisos.append(Aviso("intruso_grupo", {**dados, "n": len(perto_agora)}, rota))

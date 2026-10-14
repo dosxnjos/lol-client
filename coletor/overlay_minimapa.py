@@ -30,6 +30,8 @@ ALPHA = 0.45               # opacidade no ponto mais provável (calor 1); a vitr
 ALPHA_MIN = 0.12           # opacidade na borda da área (pouca chance)
 LIMIAR = 0.05              # calor abaixo disto não pinta (a borda é uma rampa em volta dele, não um corte)
 SUAVE_PX = 2.0             # desfoque gaussiano (σ em px) da opacidade: borda sem serrilhado (corte da fog incluso)
+MANCHA_MIN_PX = 3          # raio (px) que a opacidade alarga antes do desfoque: ponto de 1 px vira mancha visível
+#                            (partida 3293137136, 14/10/2026: o desfoque sozinho levava o ponto a 2% de alfa)
 TAU_S = 0.35               # transição: a imagem mostrada anda para a nova com esta constante de tempo
 QUADRO_MS = 100            # 10 quadros/s só enquanto anima; parado (convergiu) não redesenha. Medido 14/10/2026:
 #                            ~2,6 ms por quadro com o UpdateLayeredWindow; a 15/s o processo ia a ~3,5% de um núcleo
@@ -56,6 +58,8 @@ HTTRANSPARENT = -1
 SW_HIDE = 0
 SWP_NOSIZE, SWP_NOMOVE, SWP_NOACTIVATE, SWP_SHOWWINDOW = 0x0001, 0x0002, 0x0010, 0x0040
 HWND_TOPMOST = -1
+GW_HWNDPREV = 3
+TITULO_JOGO = "League of Legends (TM) Client"
 ULW_ALPHA, AC_SRC_OVER, AC_SRC_ALPHA = 0x2, 0x0, 0x1
 DPI_PER_MONITOR_V2 = -4
 
@@ -97,7 +101,33 @@ def alfa_alvo(calor, lado, estilo=None):
     # contorno branco mostrava). A rampa fica só no último quarto abaixo do LIMIAR; quem suaviza é o desfoque
     borda = np.clip((c - LIMIAR * 0.75) / (LIMIAR * 0.25), 0, 1)
     a = borda * (e.alpha_min + (e.alpha - e.alpha_min) * c)
-    return cv2.GaussianBlur(a, (0, 0), SUAVE_PX) if SUAVE_PX > 0 else a
+    if SUAVE_PX <= 0:
+        return a
+    # o desfoque dilui mancha pequena até sumir (partida 3293137136, 14/10/2026: jungler recém-visto = calor de 1–2 px
+    # saía a 2–8% de alfa, 4 de 7 quadros invisíveis, o "overlay não funcionou mais"). Pedaço pequeno (área abaixo
+    # de π·(2·MANCHA_MIN_PX)²) alarga MANCHA_MIN_PX antes do desfoque; zona grande fica com a borda de antes. Depois o
+    # pico volta ao de antes do desfoque (nunca acima dele): o ponto sai no ALPHA, a borda segue suave
+    pico = float(a.max())
+    if pico <= 0:
+        return a
+    if MANCHA_MIN_PX > 0:
+        a = _alargar_pequenas(a)
+    b = cv2.GaussianBlur(a, (0, 0), SUAVE_PX)
+    m = float(b.max())
+    if m > 0 and m < pico:
+        b = np.minimum(b * np.float32(pico / m), np.float32(pico))
+    return b
+
+
+def _alargar_pequenas(a):
+    """a com cada pedaço pintado de área < π·(2·MANCHA_MIN_PX)² dilatado MANCHA_MIN_PX px (o resto intacto)"""
+    n, rot, stats, _ = cv2.connectedComponentsWithStats((a > 0).astype(np.uint8), connectivity=8)
+    pequenos = [i for i in range(1, n) if stats[i, cv2.CC_STAT_AREA] < np.pi * (2 * MANCHA_MIN_PX) ** 2]
+    if not pequenos:
+        return a
+    k = 2 * MANCHA_MIN_PX + 1
+    so = np.where(np.isin(rot, pequenos), a, np.float32(0))
+    return np.maximum(a, cv2.dilate(so, cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (k, k))))
 
 
 def camada(alfa, texto=None, cor=None):
@@ -274,6 +304,12 @@ _u.GetWindowLongW.argtypes = [wt.HWND, ctypes.c_int]
 _u.GetWindowRect.argtypes = [wt.HWND, ctypes.POINTER(wt.RECT)]
 _u.WindowFromPoint.argtypes = [wt.POINT]
 _u.WindowFromPoint.restype = wt.HWND
+_u.GetWindow.argtypes = [wt.HWND, wt.UINT]
+_u.GetWindow.restype = wt.HWND
+_u.GetForegroundWindow.restype = wt.HWND
+_u.GetWindowTextW.argtypes = [wt.HWND, wt.LPWSTR, ctypes.c_int]
+_u.IsWindowVisible.argtypes = [wt.HWND]
+_u.GetWindowDisplayAffinity.argtypes = [wt.HWND, ctypes.POINTER(wt.DWORD)]
 _u.GetDC.argtypes = [wt.HWND]
 _u.GetDC.restype = wt.HDC
 _u.ReleaseDC.argtypes = [wt.HWND, wt.HDC]
@@ -292,6 +328,29 @@ try:
     _u.SetThreadDpiAwarenessContext.restype = wt.HANDLE
 except AttributeError:  # Windows antigo
     pass
+
+
+def por_cima(alvo, de, anterior, limite=2000):
+    """`alvo` está acima de `de` na ordem Z? anterior(h) = a janela logo acima de h (GetWindow GW_HWNDPREV), 0/None
+    no topo. Puro (o teste passa uma ordem falsa); None se a busca passar do limite"""
+    h = anterior(de)
+    for _ in range(limite):
+        if not h:
+            return False
+        if h == alvo:
+            return True
+        h = anterior(h)
+    return None
+
+
+def _janela_do_jogo():
+    """hwnd do jogo se ele está em primeiro plano, senão None (o título, como em moldura.janela_do_jogo)"""
+    h = _u.GetForegroundWindow()
+    if not h:
+        return None
+    buf = ctypes.create_unicode_buffer(128)
+    _u.GetWindowTextW(h, buf, 128)
+    return h if buf.value == TITULO_JOGO else None
 
 
 def _dpi_fisico():
@@ -393,6 +452,8 @@ class OverlayMinimapa:
         self._ult_quadro = None
         self._ult_topo = 0.0
         self._falha_ulw = False
+        self._diag_logado = False         # 1ª vez na tela: uma linha no log com o estado real da janela
+        self._z_avisado = False           # o jogo por cima do overlay: avisa 1 vez por janela
 
     def iniciar(self):
         if self._thread and self._thread.is_alive():
@@ -434,6 +495,7 @@ class OverlayMinimapa:
                 raise OSError(f"CreateWindowExW falhou (erro {ctypes.get_last_error()})")
             self._filhos = (self.hwnd,)
             self.fora_do_print(self.excluir)
+            log.info("overlay: janela pronta (fora do print: %s)", self.excluida)
             _u.SetTimer(self.hwnd, 1, int(self.quadro_ms), None)
             self._pronto.set()
             msg = wt.MSG()
@@ -504,6 +566,7 @@ class OverlayMinimapa:
         if parado and self._desenhado == estado:
             if self._visivel and agora - self._ult_topo >= TOPO_S:
                 self._ult_topo = agora
+                self._conferir_z()
                 _u.SetWindowPos(self.hwnd, wt.HWND(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE)
             # parado não redesenha, mas a vitrine continua recebendo o quadro que está na tela no ritmo da
             # busca (antes da janela Win32 era a cada 400 ms; sem isto, overlay parado = vitrine sem print)
@@ -528,8 +591,15 @@ class OverlayMinimapa:
             return
         if not self._visivel or agora - self._ult_topo >= TOPO_S:
             self._ult_topo = agora
+            if self._visivel:
+                self._conferir_z()
             _u.SetWindowPos(self.hwnd, wt.HWND(HWND_TOPMOST), left, top, lado, lado, SWP_NOACTIVATE | SWP_SHOWWINDOW)
             self._visivel = True
+            if not self._diag_logado:
+                # prova da próxima partida (14/10/2026: o Gabriel não viu o overlay; o print não mostra a janela,
+                # que é fora do print por regra): o que o Windows diz da janela na 1ª vez que ela vai à tela
+                self._diag_logado = True
+                log.info("overlay: na tela %s", self.diagnostico())
         self._desenhado = estado if parado else None
         self.medidas.append((time.perf_counter() - t0) * 1000)
         if len(self.medidas) > 5000:
@@ -570,6 +640,37 @@ class OverlayMinimapa:
         if self.hwnd:
             self.excluida = bool(_u.SetWindowDisplayAffinity(self.hwnd, WDA_EXCLUIR if sim else 0)) and sim
         return self.excluida
+
+    def diagnostico(self):
+        """o que o Windows diz da janela: retângulo (px físicos), visível, fora do print (afinidade lida de volta,
+        não o retorno do Set), estilos e se o jogo em primeiro plano está ACIMA dela na ordem Z (None sem o jogo
+        na frente). Barato: para o log da 1ª vez na tela e para a prova com o jogo fechado"""
+        h = self.hwnd
+        if not h:
+            return {"janela": None}
+        r = wt.RECT()
+        _u.GetWindowRect(h, ctypes.byref(r))
+        af = wt.DWORD(0)
+        _u.GetWindowDisplayAffinity(h, ctypes.byref(af))
+        jogo = _janela_do_jogo()
+        return {"ret": (r.left, r.top, r.right - r.left, r.bottom - r.top), "visivel": bool(_u.IsWindowVisible(h)),
+                "fora_do_print": af.value == WDA_EXCLUIR,
+                "estilos": (_u.GetWindowLongW(h, GWL_EXSTYLE) & ESTILO) == ESTILO,
+                "jogo_por_cima": None if jogo is None else por_cima(jogo, h, lambda x: _u.GetWindow(x, GW_HWNDPREV))}
+
+    def _conferir_z(self):
+        """antes de reafirmar o "sempre no topo": se o jogo estava por cima do overlay, avisa 1 vez no log (a
+        mancha não aparecia para o Gabriel; sem isto não há como saber depois da partida)"""
+        if self._z_avisado:
+            return
+        try:
+            jogo = _janela_do_jogo()
+            if jogo is not None and por_cima(jogo, self.hwnd, lambda x: _u.GetWindow(x, GW_HWNDPREV)):
+                self._z_avisado = True
+                log.warning("overlay: o jogo estava POR CIMA do overlay na ordem Z (reafirmando o topo) %s",
+                            self.diagnostico())
+        except Exception as e:
+            log.warning("overlay: conferência da ordem Z falhou: %s", e)
 
     def conferir(self):
         """(estilos ok, retângulo da janela em px físicos, clique atravessa) para a prova; o clique
@@ -648,8 +749,35 @@ def _demo(left, top, lado, segundos):
         print(f"custo: {len(med)} quadros desenhados, {np.median(med):.2f} ms mediana, {np.percentile(med, 95):.2f} ms p95")
     ok = (estilos and atravessa and rect == (left, top, lado, lado) and mudou_quente > 0.8 and mudou_frio < 0.05
           and excluida and no_print < 0.05)
-    print("ok" if ok else "FALHOU")
-    return 0 if ok else 1
+
+    # 2ª fase, a ordem da PRODUÇÃO (o coach_vivo cria com a exclusão pedida ao nascer, antes do 1º
+    # UpdateLayeredWindow; a 1ª fase liga depois de desenhar). 14/10/2026: hipótese "a janela nova entra no print
+    # do minimapa e o coach lê a mancha como inimigo" derrubada aqui. Medida = R − G médio na área quente (a mancha
+    # sobe o R e baixa o G; tela animada atrás muda os px, mas não nessa direção)
+    fixo = np.clip(1 - np.hypot(xx - lado * 0.5, yy - lado * 0.5) / (lado * 0.35), 0, 1)
+    ov2 = OverlayMinimapa(lambda: {"ret": (left, top, lado), "calor": fixo, "texto": None, "mostrar": True},
+                          atalho=False, quadro_ms=50)
+    antes2 = grab()
+    ov2.iniciar()
+    time.sleep(2.0)
+    diag = ov2.diagnostico()
+    p_excl = grab()
+    ov2.fora_do_print(False)
+    time.sleep(0.6)
+    p_vis = grab()
+    ov2.parar()
+    time.sleep(0.8)
+    quente2 = fixo >= 0.5
+
+    def avermelhou(b):
+        d = (b - antes2)[quente2]
+        return float((d[:, 2] - d[:, 1]).mean())
+    print(f"ordem da produção: {diag} | R−G na área quente: com a exclusão {avermelhou(p_excl):+.0f}, "
+          f"sem {avermelhou(p_vis):+.0f}")
+    ok2 = (diag.get("fora_do_print") and diag.get("visivel") and diag.get("ret") == (left, top, lado, lado)
+           and avermelhou(p_excl) < 5 and avermelhou(p_vis) > 30)
+    print("ok" if ok and ok2 else "FALHOU")
+    return 0 if ok and ok2 else 1
 
 
 if __name__ == "__main__":
@@ -663,4 +791,5 @@ if __name__ == "__main__":
     ap.add_argument("--segundos", type=float, default=2.0)
     a = ap.parse_args()
     if a.demo:
+        sys.stdout.reconfigure(encoding="utf-8")   # saída redirecionada (cp1252) quebrava no "R−G" da 2ª fase
         sys.exit(_demo(a.left, a.top, a.lado, a.segundos))

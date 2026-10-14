@@ -174,6 +174,41 @@ def principal():
          nucleo < 5.0, f"quadro {pq:.2f} ms mediana (p95 {np.percentile(q, 95):.2f}), alvo {pb:.2f} ms; "
          f"~{nucleo:.1f}% de um núcleo a {1000 / ov.QUADRO_MS:.0f} quadros/s; parado: 0 (não redesenha); bgra {bgra.shape}")
 
+    # 14/10/2026, partida 3293137136 (revisão do passo 8): o desfoque σ=2 sozinho diluía a mancha pequena até sumir
+    # (jungler recém-visto = calor de 1–2 px: alfa máximo 0,018 no ponto, 0,08 em r=1; 4 de 7 quadros de calor da
+    # partida abaixo de 16%). O pico tem de sobreviver ao desfoque e o ponto tem de virar mancha de raio ≥ 4 px
+    medidas = []
+    for r in (0, 1, 3, 10):
+        cr = calor_disco(r, 120 / LADO, 140 / LADO)          # centro num px inteiro: calor 1 no centro
+        if r == 0:
+            cr = np.zeros((LADO, LADO), np.float32)
+            cr[140, 120] = 1.0
+        ar = ov.alfa_alvo(cr, LADO)
+        medidas.append((r, float(ar.max()), int((ar > 0.1).sum())))
+    caso("mancha pequena (ponto de 1 px, raio 1, 3 e 10 px) sai no ALPHA e com área ≥ π·4² px acima de 10%",
+         all(mx >= 0.9 * ov.ALPHA and mx <= ov.ALPHA + 1e-6 and area >= np.pi * 16 for _, mx, area in medidas),
+         "; ".join(f"r{r}: máx {mx:.3f}, {area} px > 0,1" for r, mx, area in medidas))
+    duas = np.zeros((LADO, LADO), np.float32)
+    duas[60:200, 60:200] = 1.0
+    duas[300, 300] = 1.0
+    ad = ov.alfa_alvo(duas, LADO)
+    caso("ponto isolado ao lado de uma zona grande também aparece (não só o maior pedaço)",
+         float(ad[295:306, 295:306].max()) >= 0.6 * ov.ALPHA and float(ad.max()) <= ov.ALPHA + 1e-6,
+         f"ponto {float(ad[295:306, 295:306].max()):.3f}, máx {float(ad.max()):.3f}")
+
+    # 14/10/2026, partida 3293137136: o Gabriel não viu o overlay, e o print não mostra a janela (fora do print por
+    # regra). O overlay confere a ordem Z antes de reafirmar o topo e loga 1 vez se o jogo estava POR CIMA dele.
+    # Ordem falsa (de cima para baixo): 10 (sistema), 20 (jogo), 30 (overlay), 40
+    ordem = [10, 20, 30, 40]
+
+    def anterior(h):
+        i = ordem.index(h)
+        return ordem[i - 1] if i > 0 else None
+    caso("ordem Z: o jogo acima do overlay é visto; abaixo não; sem fim = False",
+         ov.por_cima(20, 30, anterior) is True and ov.por_cima(40, 30, anterior) is False
+         and ov.por_cima(20, 10, anterior) is False and ov.por_cima(20, 30, lambda h: 99, limite=5) is None,
+         f"{ov.por_cima(20, 30, anterior)}, {ov.por_cima(40, 30, anterior)}")
+
     n = sum(resultados)
     print(f"\n{'ok' if n == len(resultados) else 'FALHOU'} ({n}/{len(resultados)})")
     return 0 if n == len(resultados) else 1

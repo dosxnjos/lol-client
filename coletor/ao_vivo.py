@@ -49,6 +49,46 @@ def mmss(s):
     return f"{s // 60:02d}:{s % 60:02d}"
 
 
+def _adversario(eu, inimigos):
+    """o único inimigo da minha rota (a do champ select na Live Client), ou None"""
+    if not eu or not eu["rota"]:
+        return None
+    mesmos = [j for j in inimigos if j["rota"] == eu["rota"]]
+    return mesmos[0] if len(mesmos) == 1 else None
+
+
+def mesclar_vistos(est, vistos):
+    """o minimapa como pista de "visto" (coach_vivo, a cada passo). Sem ele, "visto" era só a assinatura da Live
+    Client (nível, itens ou farm mudou), e o farm dela anda de 10 em 10: o adversário à vista no minimapa, andando
+    ou sem fechar 10 de farm, ficava "visto há 34 s: dados dele parados" no painel até chegar na minha tela
+    (Gabriel, partida 3293137136, 14/10/2026: 34 de 142 amostras dele vivo). vistos = {championName: gameTime da
+    última detecção}. Muda no lugar vistoGt/vistoHaS/atual dos inimigos e refaz est["rota"] e est["ameaca"]; devolve est."""
+    if not vistos or not isinstance(est, dict) or not est.get("jogadores"):
+        return est
+    gt = float(est.get("gt") or 0)
+    mudou = False
+    for j in est["jogadores"]:
+        v = vistos.get(j.get("nome"))
+        if j.get("aliado") or v is None:
+            continue
+        v = min(float(v), gt)              # o relógio do minimapa é estimado: pode passar um pouco do gt da leitura
+        if j.get("vistoGt") is not None and v <= j["vistoGt"]:
+            continue
+        ha = max(0.0, gt - v)
+        j["vistoGt"], j["vistoHaS"], j["atual"] = round(v, 1), round(ha), ha <= VELHO_S
+        mudou = True
+    if mudou:
+        # rota E ameaça: as duas são cópias feitas no atualizar (vistoHaS/atual de antes); refazer só a rota deixava
+        # o bloco da ameaça (painel.js) em "visto há 34 s" com o bloco da rota dizendo "atual" (revisão do passo 8)
+        inimigos = [j for j in est["jogadores"] if not j.get("aliado")]
+        adv = _adversario(est.get("euJogador"), inimigos)
+        if est.get("euJogador"):
+            est["rota"] = EstadoPartida._rota(est["euJogador"], adv, est.get("ouroBolso", 0))
+        if "ameaca" in est:
+            est["ameaca"] = EstadoPartida._ameaca(inimigos, adv)
+    return est
+
+
 # ---------- catálogo (preço total e categoria dos itens, campeões) ----------
 
 def baixar_catalogo(lcu, caminho=CATALOGO):
@@ -307,10 +347,7 @@ class EstadoPartida:
         eu = lista[eu_slot] if eu_slot is not None else None
         aliados = [j for j in lista if j["aliado"]]
         inimigos = [j for j in lista if not j["aliado"]]
-        adv = None
-        if eu and eu["rota"]:
-            mesmos = [j for j in inimigos if j["rota"] == eu["rota"]]
-            adv = mesmos[0] if len(mesmos) == 1 else None
+        adv = _adversario(eu, inimigos)
 
         est = {"partida": True, "fase": fase, "gt": round(gt, 1), "relogio": mmss(gt),
                "atualizadoMs": agora_ms or banco.agora_ms(), "meuTime": 100 if meu_time == "ORDER" else 200,

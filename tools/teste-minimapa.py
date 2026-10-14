@@ -140,14 +140,14 @@ def principal():
                for i in range(0, len(folhas), 4)]
         cv2.imwrite(a.folha, np.vstack(lin))
         print("folha:", a.folha)
-    # 4) interface para o motor de avisos: Captura.processar -> deteccoes() [{campeao, time, x, y, visto_em}]
+    # 4) interface para o motor de avisos: Captura.processar -> deteccoes() [{campeao, time, x, y, visto_em, grande}]
     info = {"meu_time": eu["time"], "campeoes": partida["campeoes"], "mortos": []}
     cap = mm.Captura(lambda: info, relogio=lambda: 503.0, pasta_icones=FIX / "icones")
     p = str(FIX / "00502.0.png")
     cap.ret = rets[p]
     cap.processar(np.ascontiguousarray(rets[p].recorte(cv2.imread(p))), info, 502.0)
     ds = cap.deteccoes()
-    chaves_ok = ds and all(set(d) == {"campeao", "time", "x", "y", "visto_em"} for d in ds)
+    chaves_ok = ds and all(set(d) == {"campeao", "time", "x", "y", "visto_em", "grande"} for d in ds)
     velhos = cap.deteccoes(max_idade=0.5)
     print(f"interface: {len(ds)} detecções, ex. {ds[0] if ds else None}; max_idade 0,5 s -> {len(velhos)}")
     if not chaves_ok or velhos:

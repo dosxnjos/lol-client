@@ -424,6 +424,100 @@ def calib_gank():
          {"gank provável no top", "gank provável no mid", "gank provável no bot"} <= fala_cat)
 
 
+def revisao_3293137136():
+    """relato do Gabriel depois da partida 3293137136 (14/10/2026, ~15:08): "4 inimigos no top" com só o mid deles
+    no top (dois na base do mid deles, um no bot) e "gank provável no top" com ele na base e nenhum aliado no top
+    (roadmap/2026-10-14-calibrar-avisos.md, passo 8)"""
+    from avisos import decidir_gank, perto_da_rota
+    # torres do inibidor do meio (a ~5300 do canto: fora do R_BASE 5000) e o meio das rotas
+    inib_meio_deles, inib_meio_meu = (11134, 11207), (3651, 3696)
+    geo = {p: tuple(r for r in ("rota_top", "rota_meio", "rota_bot") if perto_da_rota(r, *p))
+           for p in (inib_meio_deles, inib_meio_meu, TOP_ROTA, TOP_FUNDO, BOT_ROTA, MID, (8500, 13800))}
+    caso("3293137136: a frente das bases no meio é só do mid (antes: top, mid e bot ao mesmo tempo)",
+         geo[inib_meio_deles] == ("rota_meio",) and geo[inib_meio_meu] == ("rota_meio",)
+         and geo[TOP_ROTA] == ("rota_top",) and geo[TOP_FUNDO] == ("rota_top",) and geo[BOT_ROTA] == ("rota_bot",)
+         and geo[MID] == ("rota_meio",) and geo[(8500, 13800)] == ("rota_top",), f"{geo}")
+
+    # eu (Illaoi, top) e o mid deles (Yasuo) no top; jungler, atirador e suporte deles na frente da base do mid
+    # deles. Antes: "4 inimigos no top" (vermelho, urgente). Agora: só o mid chegando no top (amarelo)
+    def r(t):
+        v = [("Illaoi", TOP_ROTA_2), ("Ekko", inib_meio_deles), ("Tristana", (10900, 11400)),
+             ("Seraphine", (11300, 11250))]
+        return v + ([("Yasuo", TOP_ROTA)] if t >= 1270 else [])
+    # o mid chega 20 s depois (passado o intervalo do tipo): no código de antes sai o "4 inimigos top" do log
+    m, mol, s = rodar("Illaoi", r, 25, inicio=1250)
+    # o jungler deles longe de mim (na frente da base do mid) vai só ao painel (D6): azul, sem voz nem borda
+    rotas = [x for x in resumo(s) if x[1] != "jungler_apareceu" or x[3] != "azul"]
+    caso("3293137136: 3 inimigos na base do mid deles + o mid no top → 'intruso top' amarelo, nada de '4 inimigos'",
+         rotas == [(1270, "intruso", "intruso top", "amarelo")] and mol.mostradas == [("amarelo", "intruso top")],
+         f"{resumo(s)}; falas {[a.fala for _, a in s]}; moldura {mol.mostradas}")
+
+    # base presumida (decisão D20): sem ícone fresco depois de morrer, de sumir com o anel grosso (voltando à
+    # base) ou de ser visto na base, eu estou na base: o gank da minha rota só conta com aliado lá
+    def montar(roteiro, ate, mortos=None):
+        motor = MotorAvisos(textos=TEXTOS, moldura=MolduraFalsa())
+        al = AlertasPosicao(motor, "Illaoi", "ORDER", JOGADORES)
+        for t in range(0, ate + 1):
+            dets = []
+            for c, p, *g in roteiro(t):
+                d = det(c, p, float(t))
+                d["grande"] = bool(g and g[0])
+                dets.append(d)
+            al.observar(dets, float(t), mortos=(mortos(t) if mortos else ()))
+        return al
+
+    def gank_top(rota, alvo):
+        return {"prob": 0.6} if rota == "top" else None
+
+    def quem(al, t):
+        a = decidir_gank(gank_top, al, agora=float(t))   # chave "top" = a minha rota (urgente); "outra:top" = com aliado
+        return (al.onde_estou(float(t))["fonte"], a and (a.dados["zc"], a.chave))
+
+    # morri no top aos 10 s, renasci aos 30 s; a fonte fica no canto e o meu ícone não aparece
+    morte = montar(lambda t: [("Illaoi", TOP_ROTA_2)] if t < 10 else [], 50,
+                   mortos=lambda t: {"Illaoi"} if 10 <= t < 30 else set())
+    renasci = quem(morte, 50)
+    expirou = quem(morte, 30 + 46)
+    caso("3293137136 D20: renasci e o ícone não aparece → base; gank no top sem aliado lá = nada (antes: urgente)",
+         renasci == ("base", None) and expirou == ("reserva", ("top", "top")),
+         f"aos 20 s do renascer {renasci}; 46 s sem ícone {expirou}")
+    # voltando à base: o ícone com o anel grosso some (teleportou para a fonte)
+    volta = montar(lambda t: [("Illaoi", TOP_ROTA_2, t >= 5)] if t < 13 else [], 20)
+    com_aliado = montar(lambda t: ([("Illaoi", TOP_ROTA_2, t >= 5)] if t < 13 else []) + [("Zac", TOP_ROTA)], 20)
+    caso("3293137136 D20: sumi voltando à base → base; gank no top só com aliado no top, como o de outra rota",
+         quem(volta, 20) == ("base", None) and quem(com_aliado, 20) == ("base", ("top", "outra:top")),
+         f"sem aliado {quem(volta, 20)}; com o Zac no top {quem(com_aliado, 20)}")
+    # o lado oposto: sumir NA ROTA (sem anel grosso, sem morrer) segue a reserva (D5): o gank da minha rota é urgente
+    sumi = montar(lambda t: [("Illaoi", TOP_ROTA_2)] if t < 13 else [], 20)
+    na_base = montar(lambda t: [("Illaoi", BASE_MINHA)] if t < 13 else [], 20)
+    # a Yuumi aliada presa em mim também dá anel grosso (o detector põe ela na minha posição): não é voltar à base
+    yuumi = montar(lambda t: [("Illaoi", TOP_ROTA_2, True), ("Yuumi", TOP_ROTA_2)] if t < 13 else [], 20)
+    caso("3293137136 D20: sumir na rota (ou com a Yuumi presa) segue a reserva; visto por último na base = base",
+         quem(sumi, 20) == ("reserva", ("top", "top")) and quem(na_base, 20) == ("base", None)
+         and quem(yuumi, 20) == ("reserva", ("top", "top")),
+         f"sumi na rota {quem(sumi, 20)}; visto na base {quem(na_base, 20)}; com a Yuumi {quem(yuumi, 20)}")
+
+    # revisão do passo 8: a mesma regra vale para o intruso. Eu na base (visto nela, depois sem ícone) e o mid deles
+    # entrando no top vazio: antes "intruso top" (o top seguia vigiado pela rota do champ select); agora nada. Com o
+    # Zac no top, o intruso segue (é ele quem leva o gank). Visto na rota (sem base), segue como sempre
+    def intrusos(eu, aliado=False, ate=25):
+        motor = MotorAvisos(textos=TEXTOS, moldura=MolduraFalsa())
+        al = AlertasPosicao(motor, "Illaoi", "ORDER", JOGADORES)
+        out = []
+        for t in range(0, ate + 1):
+            dets = [det(c, p, float(t)) for c, p in eu(t)]
+            dets += [det("Zac", TOP_ROTA, float(t))] if aliado else []
+            dets += [det("Yasuo", TOP_ROTA_2, float(t))] if t >= 18 else []
+            out += [(t, a.tipo) for a in al.observar(dets, float(t))]
+        return out
+    base_vazia = intrusos(lambda t: [("Illaoi", BASE_MINHA)] if t < 13 else [])
+    base_aliado = intrusos(lambda t: [("Illaoi", BASE_MINHA)] if t < 13 else [], aliado=True)
+    na_rota = intrusos(lambda t: [("Illaoi", TOP_ROTA)])
+    caso("3293137136: eu na base e o top vazio → intruso no top calado; com aliado lá ou eu na rota, avisa",
+         base_vazia == [] and (18, "intruso") in base_aliado and (18, "intruso") in na_rota,
+         f"base, top vazio {base_vazia}; base, Zac no top {base_aliado}; eu no top {na_rota}")
+
+
 def escolhas_config():
     """as regras de 14/10/2026 viram escolha nas Configurações (roadmap/2026-10-14-calibrar-avisos.md, passo 7):
     cada chave desligada muda o comportamento; ligada (o padrão) = o de hoje, já provado pelos casos 14/10 acima"""
@@ -780,6 +874,7 @@ def principal():
     calib_mid_sumiu()
     calib_gank()
     escolhas_config()
+    revisao_3293137136()
     if not a.sem_janela:
         janela_real()
     n = sum(resultados)

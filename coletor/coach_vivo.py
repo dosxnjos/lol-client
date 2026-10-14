@@ -495,6 +495,11 @@ class _Partida:
             # "sumido há X s" (o corte de 1 s do `dets` jogava fora o tempo desde que ele sumiu)
             vistos = {d["campeao"]: d["visto_em"] for d in cap.deteccoes() if _time_str(d.get("time")) == inimigo} \
                 if cap is not None else None
+            try:   # o minimapa também conta como "visto" no painel (adversário de rota, "dados dele parados");
+                #      antes só a assinatura da Live Client, que anda de 10 em 10 de farm (14/10/2026)
+                ao_vivo.mesclar_vistos(est, vistos)
+            except Exception as e:
+                av("visto pelo minimapa", e)
             area = None
             if extra.get("jungler"):
                 area = {"texto": extra["jungler"].get("texto"), "zonas": extra["jungler"].get("zonas", [])[:3]}

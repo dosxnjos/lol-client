@@ -239,6 +239,101 @@ def caso_ouro_rota():
          r["diff"]["ouro"] is None and r["cor"]["ouro"] == "velho" and r2["diff"]["ouro"] == 50
          and r2["cor"]["ouro"] == "neutro", f"{r['diff']} {r['cor']} | {r2['diff']} {r2['cor']}")
 
+def caso_visto_minimapa():
+    # partida 3293137136 (14/10/2026): o painel dizia "K'Sante visto há 34 s: dados dele parados" com ele à vista no
+    # minimapa (gt 843,8). "Visto" era só a assinatura da Live Client (nível/itens/farm, farm de 10 em 10). Agora a
+    # última detecção do minimapa também conta (ao_vivo.mesclar_vistos, chamado pelo passo do coach)
+    import ao_vivo
+
+    def amostra(gt, cs_adv):
+        return {"activePlayer": {"riotId": "Eu#BR1", "currentGold": 300}, "gameData": {"gameTime": gt},
+                "events": {"Events": [{"EventID": 0, "EventName": "GameStart", "EventTime": 0.0}]},
+                "allPlayers": [
+                    {"championName": "Renekton", "team": "ORDER", "position": "TOP", "riotId": "Eu#BR1", "level": 11,
+                     "items": [{"itemID": 3071}], "scores": {"creepScore": 110}},
+                    {"championName": "KSante", "team": "CHAOS", "position": "TOP", "riotId": "Ele#BR1", "level": 11,
+                     "items": [{"itemID": 3068}], "scores": {"creepScore": cs_adv}},
+                    {"championName": "Gragas", "team": "CHAOS", "position": "MIDDLE", "riotId": "Mid#BR1", "level": 10,
+                     "items": [], "scores": {"creepScore": cs_adv - 10}}]}
+    ep = ao_vivo.EstadoPartida()
+    ep.atualizar(amostra(790.0, 90))
+    ep.atualizar(amostra(800.0, 100))          # o farm muda aqui (assinatura nova: "visto" aos 800)
+    est = ep.atualizar(amostra(843.8, 100))     # 43,8 s sem mudar: "dados dele parados"
+    antes = (est["rota"]["adv"]["atual"], est["rota"]["adv"]["vistoHaS"])
+    ao_vivo.mesclar_vistos(est, {"KSante": 843.0, "Gragas": 700.0, "Renekton": 843.0})
+    adv = est["rota"]["adv"]
+    j = {x["nome"]: x for x in est["jogadores"]}
+    caso("3293137136: adversário à vista no minimapa = visto no painel (antes: 'dados dele parados')",
+         antes == (False, 44) and adv["atual"] is True and adv["vistoHaS"] == 1 and est["rota"]["cor"]["cs"] != "velho"
+         and j["Gragas"]["vistoGt"] == 800.0 and j["Renekton"]["vistoGt"] == 843.8,
+         f"antes {antes}; depois adv {adv}, cor {est['rota']['cor']}; Gragas (detecção mais velha que a assinatura) "
+         f"{j['Gragas']['vistoGt']}; eu {j['Renekton']['vistoGt']}")
+    # revisão do passo 8: o bloco da ameaça (painel.js desenha a.atual/a.vistoHaS) é outra cópia; quando a ameaça é o
+    # adversário, ela também tem de sair "atual", não "visto há 44 s" ao lado do bloco da rota
+    am = est.get("ameaca") or {}
+    caso("3293137136: a ameaça (o adversário de rota) também vira vista no painel, não só o bloco da rota",
+         am.get("nome") == "KSante" and am.get("minhaRota") is True and am.get("atual") is True
+         and am.get("vistoHaS") == 1, f"ameaça {am}")
+
+    # o caminho real: Coach._ao_ler -> _Partida.passo com a captura do minimapa (falsa) vendo o K'Sante
+    import logging
+
+    import coach_vivo
+    log_coach = logging.getLogger("coletor.coach")
+    log_coach.propagate = False
+    nulo = logging.NullHandler()
+    log_coach.addHandler(nulo)
+
+    class Peca:
+        ligado = True
+        ao_mostrar = ao_desenhar = ao_alternar = _thread = None
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __getattr__(self, nome):
+            return lambda *a, **k: None
+
+    class CapFalsa(Peca):
+        no_ar, ret = True, None
+
+        def deteccoes(self, max_idade=None):
+            d = [{"campeao": "KSante", "time": "CHAOS", "x": 2000, "y": 12500, "visto_em": 843.0, "grande": False}]
+            return [x for x in d if max_idade is None or 843.8 - x["visto_em"] <= max_idade]
+
+    class Janela:
+        def fase(self, f):
+            pass
+
+        def fechar(self):
+            pass
+
+    def sem(*a):
+        raise RuntimeError("fora do teste")
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        arq.write_text(json.dumps({"voz": False, "minimapa": False, "feiticos": False, "carregamento": False,
+                                   "mentor": False, "amostrasAoVivo": False, "painelAoVivo": False}), encoding="utf-8")
+        fab = {"voz": Peca, "moldura": Peca, "overlay": Peca, "estatico": sem, "mentor": sem, "captura": sem,
+               "janela": lambda url, ligado: Janela()}
+        c = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=arq, liveclient="http://127.0.0.1:9", fabricas=fab)
+        p = c.iniciar_partida(9002, 420)
+        p.cap = CapFalsa()
+        ep2 = ao_vivo.EstadoPartida()
+        ep2.atualizar(amostra(790.0, 90))
+        ep2.atualizar(amostra(800.0, 100))
+        bruto = amostra(843.8, 100)
+        est2 = ep2.atualizar(bruto)
+        extra = c._ao_ler(bruto, bruto, est2) or {}
+        est2.update(extra)
+        c.encerrar_partida()
+    log_coach.propagate = True
+    log_coach.removeHandler(nulo)
+    adv2 = est2["rota"]["adv"]
+    caso("3293137136: o passo do coach passa o minimapa ao painel (Coach._ao_ler com a captura vendo o adversário)",
+         adv2["atual"] is True and adv2["vistoHaS"] == 1, f"adv {adv2}")
+
+
 def caso_catalogo():
     # plano voz pré-gravada, passos 3 e 3b: fala genérica e finita; o catálogo cobre todo molde falado
     import ao_vivo
@@ -627,6 +722,7 @@ def principal():
     caso_tom()
     caso_textos_md()
     caso_ouro_rota()
+    caso_visto_minimapa()
     caso_catalogo()
     caso_fila_voz()
     caso_pacote_voz()

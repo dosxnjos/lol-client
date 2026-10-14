@@ -6,7 +6,7 @@
 #   jogo_na_tela(img, ret)     a faixa está lá? (11% dos prints da partida medida eram outra janela)
 #   Detector(...).detectar()   anéis vermelho/azul -> candidatos -> classificação entre os 5 do time
 #   terreno(mapa) / caminhavel(quadros)   fog e paredes por brilho (HSV V)
-#   Captura                    laço ~6 fps -> deteccoes() = [{campeao, time, x, y, visto_em}]
+#   Captura                    laço ~6 fps -> deteccoes() = [{campeao, time, x, y, visto_em, grande}]
 import ctypes
 import json
 import logging
@@ -425,8 +425,8 @@ class Captura:
         self._parar.set()
 
     def deteccoes(self, max_idade=None):
-        """[{campeao, time, x, y, visto_em}] última posição vista de cada campeão (mundo 0–14870,
-        visto_em = gameTime). max_idade em s filtra posições velhas."""
+        """[{campeao, time, x, y, visto_em, grande}] última posição vista de cada campeão (mundo 0–14870,
+        visto_em = gameTime; grande = anel grosso). max_idade em s filtra posições velhas."""
         agora = self.relogio()
         with self._lock:
             v = list(self.ultimas.values())
@@ -454,8 +454,10 @@ class Captura:
                                       math.hypot(d.x - ant["x"], d.y - ant["y"]) > 1000 + 450 * (gt - ant["visto_em"]))]
         with self._lock:
             for d in det:
+                # grande: anel grosso (voltando à base ou Yuumi presa); o AlertasPosicao usa no meu ícone para
+                # saber que fui para a fonte quando ele some (base presumida, 14/10/2026)
                 self.ultimas[d.campeao] = {"campeao": d.campeao, "time": d.time, "x": round(d.x), "y": round(d.y),
-                                           "visto_em": round(gt, 1)}
+                                           "visto_em": round(gt, 1), "grande": bool(d.grande)}
             self.ultimo_quadro = mapa
             if gt - self._t_amostra >= 5:
                 self._t_amostra = gt

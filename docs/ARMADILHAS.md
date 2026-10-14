@@ -361,6 +361,11 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 1.
 - **Painel dizia "+500 de ouro" na largada (14/10/2026)** → os itens do inimigo só chegam quando ele é visto; antes
   disso o inventário dele vem vazio e a conta "ouro em itens" dava o item inicial do Gabriel inteiro. Adversário nunca
   visto ou sem item = ouro desconhecido ("—", cor `velho`) em `ao_vivo.EstadoPartida._rota` (`teste-coach.py`).
+- **"Não encontrou o meu oponente, mesmo aparecendo no minimapa; só depois que apareceu na minha tela"** (partida
+  3293137136, 14/10/2026) → o "visto" do painel era só a assinatura da Live Client (nível, itens, farm), e o farm
+  dela anda de **10 em 10**: andando ou farmando devagar, o K'Sante à vista no minimapa ficava "visto há 34 s: dados
+  dele parados" (34 de 142 amostras dele vivo; a vitrine o achou no minimapa em 7 de 12 recortes). A última detecção
+  do minimapa também conta (`ao_vivo.mesclar_vistos`, `teste-coach.py`).
 - **Recusa a conexão fora da partida, mas responde 200 na tela de carregamento** → ~7 s depois de
   `InProgress` já vem `allPlayers` completo (campeão, time, rota, feitiços, keystone), com
   `gameData.gameTime` parado em ~0,025 e `events` vazio por ~99 s. Quem usa "resposta ok" ou
@@ -500,6 +505,30 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **`--demo` do overlay dá `FALHOU` num ponto e `ok` no outro** → "px fora da área que mudaram" mede a tela
   **atrás** da janela; um terminal ou vídeo animando ali passa dos 5% (11% em (300, 300), 13/10/2026). Rodar
   de novo com a área livre antes de mexer no overlay.
+- **"O overlay não funcionou mais" (partida 3293137136, 14/10/2026) não é a janela entrando no print** → prova com o
+  jogo fechado na ordem da produção (exclusão pedida ao nascer, antes do 1º `UpdateLayeredWindow`): afinidade lida
+  de volta `0x11`, R − G da área quente no print ~0 com a exclusão e +65 sem ela. O que os prints da vitrine medem:
+  a mancha nova muda a tela ~8× menos que a do Tk (25–38 de diferença média na área pintada contra ~200) e metade
+  dos quadros de calor era um ponto (alfa máx 4–15%, ≤ 0,2% do mapa: o jungler acabou de ser visto e a área fora
+  da visão é mínima). Se a janela foi à tela in-game não tem como saber pelo print: o log `overlay: na tela {...}`
+  e o aviso de ordem Z dizem na próxima partida ([COLETOR](COLETOR.md) § Minimapa ao vivo).
+- **Desfoque que dilui a mancha pequena até sumir** (causa do "overlay não funcionou mais", revisão de 14/10/2026) →
+  o `GaussianBlur` σ=2 do `alfa_alvo` espalha um ponto de 1 px em ~30 px: alfa máximo 0,018 no ponto, 0,08 em raio
+  1 px, 0,31 em 3 px. Na partida 4 de 7 quadros de calor ficaram entre 4% e 15%; o Tk pintava o ponto a 55% com
+  contorno branco. Pedaço pequeno alarga `MANCHA_MIN_PX` antes do desfoque e o pico volta ao de antes
+  (`teste-overlay.py`). "Força Forte" não resolvia (0,60 no mesmo desfoque dá ~2% no ponto). E o log `overlay: na
+  tela` não prova que o Gabriel viu: janela TOPMOST sobre o jogo sem borda não perde na ordem Z.
+- **Bloco da ameaça do painel é cópia à parte** → `est["ameaca"]` copia `vistoHaS`/`atual` no `atualizar`; mudar o
+  "visto" depois (`ao_vivo.mesclar_vistos`) sem refazer a cópia deixa "visto há 34 s" ao lado do bloco da rota
+  dizendo "atual" (revisão de 14/10/2026, `teste-coach.py`). Quem muda `jogadores` depois do `atualizar` refaz
+  `rota` **e** `ameaca`.
+- **Faixa das rotas laterais com margem engole a frente das bases no meio** (partida 3293137136, 14/10/2026: "4
+  inimigos no top" com o Gragas no top e três na frente da base do mid deles) → `perto_da_rota` alarga top/bot
+  em 1500 (x < 3800, y > 11180) e a torre do inibidor do meio fica a ~5300 do canto, fora do `R_BASE`: era top,
+  mid e bot ao mesmo tempo. A faixa do meio (|y − x| ≤ 1200) é só do mid (`teste-alertas.py`, `revisao_3293137136`).
+- **Meu ícone na fonte mal é achado** → o canto do minimapa corta o anel: o ícone colado na fonte dá anel 0,301
+  contra `LIMIAR_ANEL` 0,30 (recorte real da vitrine, 14/10/2026). Sem ícone, "onde estou" caía na rota do champ
+  select e o gank dela saía urgente com o Gabriel na base; hoje vale a base presumida (COLETOR § Avisos ao vivo).
 - **LCU não tem atributo de campeão** → `/lol-game-data/assets/v1/champions/{id}.json` não traz
   velocidade (só `tacticalInfo`, magias, skins). Velocidade base sai do Data Dragon (`champion.json`
   da versão do client, 16.20.1 em 13/10/2026; Zac 340 = `moveSpeed` da Live Client), em cache em `dados/`.

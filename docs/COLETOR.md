@@ -192,6 +192,16 @@ ele conseguiria ter ido). Desde 14/10/2026 o Gabriel escolhe em Configurações 
 normal, forte) e "mancha muda aos poucos" (desligado = muda na hora). Valores: `CORES` e `FORCAS` no topo do
 `overlay_minimapa.py` (normal = `ALPHA`/`ALPHA_MIN`); a janela troca em voo por `OverlayMinimapa.aplicar_estilo`.
 
+**A janela foi à tela?** O print nunca mostra o overlay (fora do print por regra), então quem prova é o log de cada
+partida: `overlay: janela pronta (fora do print: True)` ao nascer, `overlay: na tela {ret, visivel, fora_do_print,
+estilos, jogo_por_cima}` na 1ª vez que desenha (`OverlayMinimapa.diagnostico`, o que o Windows diz da janela) e
+`overlay: o jogo estava POR CIMA do overlay na ordem Z` se, ao reafirmar o topo (1 s), o jogo estava acima dela.
+Sem o jogo: `python coletor\overlay_minimapa.py --demo --left 1000 --top 300` (2ª fase = a ordem da produção).
+O log "na tela" não prova que a mancha era visível (a janela TOPMOST sobre o jogo sem borda não perde na ordem Z):
+o contraste é do desenho. **Mancha mínima** (revisão de 14/10/2026): pedaço de calor pequeno (área < π·(2·
+`MANCHA_MIN_PX`)² px) alarga `MANCHA_MIN_PX` antes do desfoque e o pico volta ao de antes dele, então o jungler
+recém-visto sai como bolinha no `ALPHA`, não a 2% ([ARMADILHAS](ARMADILHAS.md) § desfoque).
+
 ## MCP (`mcp\servidor.py`)
 
 Ferramentas: `resumo(dias)`, `partidas(limite, campeao, fila)`, `analise_partida(game_id)`,
@@ -257,7 +267,10 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   `carregando` (resposta com `gameTime` ~0 e sem `GameStart`), `jogo`, `fim` (`GameEnd`); 10 s sem
   resposta → `{"partida": false}`. Inimigo: nível, itens e farm congelam na fog → `vistoHaS` = tempo
   desde a última mudança (ou desde um abate dele com aliado envolvido); > 30 s = `atual: false` e o
-  painel mostra cinza "visto há Xs". Ouro estimado = `priceTotal` do `items.json` da LCU (cache em
+  painel mostra cinza "visto há Xs". Com o minimapa ligado, a última detecção dele também conta
+  (`ao_vivo.mesclar_vistos`, no passo do coach; 14/10/2026: o farm da Live Client anda de 10 em 10 e o adversário
+  à vista no minimapa ficava "dados dele parados" até chegar na tela do Gabriel); ela refaz os blocos da rota e
+  da ameaça (cópias feitas no `atualizar`). Ouro estimado = `priceTotal` do `items.json` da LCU (cache em
   `dados\cache\catalogo.json`; o `price` da Live Client é o da receita). Objetivos pelos horários
   medidos no banco (constantes no topo do módulo; alma = 4º `DragonKill` do time, fenda = tipo do 3º).
   "Teu padrão": vitórias por mortes antes dos 10 no histórico (campeão com n ≥ 8, senão geral).
@@ -340,14 +353,18 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   ou na selva, a rota cuja faixa me contém (senão nenhuma: andando pela selva longe das rotas nenhuma rota é
   vigiada, só vale o raio de 4000 do jungler e o gank das rotas com aliado); na base **deles** (split push), a
   faixa da rota sem margem (perto do nexo, onde as 3 se cruzam, nenhuma); morto, na minha base ou sem ícone = a
-  rota do champ select. Vale para a rota vigiada (intruso), o jungler e o gank. Geometria das rotas absoluta,
-  base e selva relativas ao meu time (`analise.regiao`): nada fixa "top".
+  rota do champ select. **Base presumida** (revisão de 14/10/2026, D20): sem ícone fresco, mas com a última pista
+  "fui para a base" há ≤ 45 s (`BASE_PRESUMIDA_S`: morri, o ícone sumiu com o anel grosso de voltando à base, ou
+  foi visto por último na minha base), a fonte é `base` (pos `None`), não `reserva`: o ícone na fonte fica no
+  canto do minimapa e mal passa no `LIMIAR_ANEL`. Vale para a rota vigiada (intruso), o jungler e o gank.
+  Geometria das rotas absoluta, base e selva relativas ao meu time (`analise.regiao`): nada fixa "top".
 - **Gank** (`avisos.decidir_gank`, chamado pelo `coach_vivo`): o da rota onde estou sai urgente, vermelho, prio
   100; o de outra rota (o Gabriel avisa os colegas) só com aliado visto nela há ≤ 5 s e adiantado, amarelo,
   prio 75, sem urgência, no máximo 1 a cada 30 s (`coach_vivo.GANK_OUTRA_S`), sempre no tom sério e com validade
   de 22 s na fila (`VALIDADE_GANK_OUTRA`: espera a fala anterior em vez de cair mudo); cada aliado da rota é
   testado, o mais adiantado primeiro (`aliados_na_rota`); 1 gank por vez (a minha rota vence; entre as outras,
-  a de maior massa). Morto ou na base, a minha rota não é alvo.
+  a de maior massa). Morto ou na base (inclusive a presumida), a minha rota só conta com aliado visto nela, como
+  a de outra rota (amarelo, sem urgência): pedido do Gabriel depois da partida 3293137136.
 - **Posição**: jungler apareceu (≥ 8 s fora de vista ou 1º avistamento) com voz e borda só se importa para
   onde estou (a ≤ 4000 de mim ou na zona de gank da minha rota, `avisos.ZONAS_DA_ROTA`); longe = só a faixa do
   painel, azul, prio 15 (abaixo das informativas); eu de selva, o jungler deles importa no mapa todo. Mid sumiu (6 s sem detecção, visto por último na rota do meio ou no rio) só entre 1:30 e 14:00,
@@ -358,9 +375,11 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   relevância ou foi calado só por luta, eu morto ou eu na base (`LIBERA_MID_INDO`), aceito ou não o "mid sumiu"
   pelo motor (intervalo, teto); nunca fora da fase de rotas, em cerco ou depois de morrer e renascer; intruso = inimigo que não
   mora na rota vigiada (moradores: top no top, mid no mid, atirador e suporte no bot; o jungler deles
-  não mora em nenhuma) chegando a ≤ 1500 da faixa dela (regiões de [INSIGHTS](INSIGHTS.md)), vermelho
+  não mora em nenhuma) chegando a ≤ 1500 da faixa dela (regiões de [INSIGHTS](INSIGHTS.md); a faixa do meio,
+  |y − x| ≤ 1200, é só do mid: com a margem, top e bot engoliam a frente das bases no meio, `avisos.perto_da_rota`), vermelho
   se jungler ou 2+, amarelo se 1; "chegando" = **ele** entrou na faixa ou reapareceu nela, nunca eu
-  entrando numa rota onde ele já estava. Adversário da rota do champ select que volta depois de ≥ 20 s
+  entrando numa rota onde ele já estava. Eu morto ou na base (inclusive a presumida), o intruso da minha rota só
+  conta com aliado visto nela, a regra do gank (D24 do [plano de calibração](../roadmap/2026-10-14-calibrar-avisos.md)). Adversário da rota do champ select que volta depois de ≥ 20 s
   sumido = azul. Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
   nada (com o ícone numa rota, o jungler deles chegando = vermelho urgente, o contra-gank).
   Na minha rota, intruso vence "mid indo".
