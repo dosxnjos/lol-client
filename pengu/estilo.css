@@ -59,6 +59,14 @@ html:not(.lc-fila-rapida) #lc-fila-rapida { display: none; }
 html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual) #lol-uikit-layer-manager-wrapper .modal:has(.ready-check-root-element) { display: none !important; }
 
 /* painel pós-jogo */
+/* reabrir depois de fechar: no topo do pós-jogo da Riot, entre "VITÓRIA" e o "exibir detalhes avançados"; abaixo da
+   camada compacta (100000), que tem o próprio "ver análise completa" */
+#lc-posjogo-reabrir {
+  position: fixed; top: 26px; left: 470px; z-index: 99990; padding: 7px 14px; cursor: pointer;
+  font: 700 12px/1 var(--font-display); letter-spacing: .06em; text-transform: uppercase;
+  color: #0ac8b9; background: #010a13; border: 1px solid #0ac8b9; border-radius: 2px;
+}
+#lc-posjogo-reabrir:hover { background: #0a323c; color: #f0e6d2; }
 #lc-posjogo {
   position: fixed; inset: 0; z-index: 100001; display: flex; align-items: center; justify-content: center;
   background: rgba(1, 10, 19, .78); font: 12px/1.4 var(--font-body); color: #a09b8c;

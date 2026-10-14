@@ -84,14 +84,36 @@ function remover() {
   painel = null;
 }
 function fechar() { abertura++; remover(); }
-function aoTecla(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); fechar(); } }
+
+// "reabrir análise" (Gabriel, 14/10/2026): fechar pelo ✕, Esc ou fundo deixa um botão no topo do pós-jogo da Riot;
+// some quando o painel abre de novo e nas fases em que o painel também fecha (aceite, seleção, partida)
+let ultimaAberta = null; // {gameId, fimDePartida} da última abertura com análise
+export function esconderReabrir() { document.getElementById('lc-posjogo-reabrir')?.remove(); }
+export function mostrarReabrir() {
+  esconderReabrir();
+  if (!ultimaAberta || !document.body) return null;
+  const { gameId, fimDePartida } = ultimaAberta;
+  const bt = document.createElement('button');
+  bt.id = 'lc-posjogo-reabrir';
+  bt.textContent = '📊 reabrir análise';
+  bt.title = 'abre de novo o painel do pós-jogo (mentor, lições, rota)';
+  bt.addEventListener('click', () => {
+    esconderReabrir();
+    abrirPainel(gameId, padrao.cfg, padrao.coletor, { fimDePartida }).catch(e => console.error('[lol-client] pós-jogo', e));
+  });
+  document.body.appendChild(bt);
+  return bt;
+}
+function fecharPeloUsuario() { fechar(); mostrarReabrir(); }
+function aoTecla(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); fecharPeloUsuario(); } }
 
 function moldura(conteudo) {
+  esconderReabrir();
   remover();
   const el = document.createElement('div');
   el.id = 'lc-posjogo';
   el.innerHTML = conteudo;
-  el.addEventListener('click', e => { if (e.target === el || e.target.closest('.lc-fechar')) fechar(); });
+  el.addEventListener('click', e => { if (e.target === el || e.target.closest('.lc-fechar')) fecharPeloUsuario(); });
   document.body.appendChild(el);
   window.addEventListener('keydown', aoTecla, true);
   return el;
@@ -277,6 +299,7 @@ let padrao = { cfg: { traumas: { ligado: true } }, coletor: null };
 export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor, { fimDePartida = false } = {}) {
   moldura('<div class="lc-carregando">analisando a partida…</div>');
   const minha = ++abertura;
+  ultimaAberta = { gameId, fimDePartida }; // painel com erro também reabre (a análise pode sair na 2ª)
   const vivo = () => minha === abertura && !!document.getElementById('lc-posjogo');
   try {
     const r = await analisarPartida(gameId, {
@@ -362,7 +385,7 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
     faseAtual = fase;
     if (vigiaCompacto && fase !== 'EndOfGame') { vigiaCompacto.parar(); vigiaCompacto = null; }
     // o painel (tela cheia) não pode cobrir o aceite nem a seleção: fecha e cancela análise em voo
-    if (['ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress'].includes(fase)) fechar();
+    if (['ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress'].includes(fase)) { fechar(); esconderReabrir(); ultimaAberta = null; }
     // novo ciclo: o id da partida anterior não vale mais (Lobby traz gameId 0)
     if (['None', 'Lobby', 'Matchmaking'].includes(fase)) gameId = null;
     if (fase !== 'EndOfGame' || !cfg.posjogo.ligado) return;

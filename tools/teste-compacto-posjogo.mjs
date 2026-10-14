@@ -451,6 +451,15 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   caso('posjogo/index.js: compacto ligado mas client normal à vista (expandido por ti, modal da Riot) → abre como antes', b.aberto);
   const c = await rodada({ compacto: false, avista: false });
   caso('posjogo/index.js: compacto desligado → abre como antes', c.aberto);
+  // reabrir (Gabriel, 14/10/2026): fechar pelo fundo deixa o botão; clicar reabre; fase do aceite tira o botão
+  c.doc.getElementById('lc-posjogo').disparar('click');
+  const bt = c.doc.getElementById('lc-posjogo-reabrir');
+  caso('pós-jogo fechado por ele: painel sai e aparece o "reabrir análise"', !c.doc.getElementById('lc-posjogo') && !!bt);
+  bt?.click(); await tick(10);
+  caso('reabrir análise: o painel volta e o botão some', !!c.doc.getElementById('lc-posjogo') && !c.doc.getElementById('lc-posjogo-reabrir'));
+  c.doc.getElementById('lc-posjogo').disparar('click');
+  c.emitir('/lol-gameflow/v1/gameflow-phase', 'ReadyCheck');
+  caso('ReadyCheck tira o "reabrir análise" (painel e botão fora do aceite)', !c.doc.getElementById('lc-posjogo') && !c.doc.getElementById('lc-posjogo-reabrir'));
   const d = await rodada({ compacto: true, avista: false, mudarFase: 'Lobby' });
   caso('posjogo/index.js: fase saiu do EndOfGame durante a espera → não abre', !d.aberto);
   const e = await rodada({ compacto: true, avista: true });
