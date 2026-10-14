@@ -414,7 +414,9 @@ class AvisoPartida:
                         # nunca anda para frente, então a reserva aceitaria cedo demais. Falha fechada: para. Só o timer
                         # que volta conta: 404 passageiro no MESMO ready check acontece (14/10 11:27, logo depois do
                         # aceite do plugin) e, com o plugin morto, faria a reserva desistir sem aceitar
-                        if self.reserva_fim is None and self._ultimo_timer is not None and t < self._ultimo_timer:
+                        # o timer também recua 1 s logo depois do aceite (14/10 14:43, 10 -> 9): respondido não é outro
+                        if (self.reserva_fim is None and self._ultimo_timer is not None and t < self._ultimo_timer
+                                and rc.get("playerResponse") in (None, "None")):
                             self._reserva_fim("outro ready check", self.relogio() - self.inicio)
                         self._ultimo_timer = t
                         # timer em segundos inteiros: o início real fica no máximo 1 s antes deste

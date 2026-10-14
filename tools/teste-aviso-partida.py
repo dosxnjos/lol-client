@@ -275,6 +275,9 @@ class LCURegistro(LCUFalsa):
             if getattr(self, "soluco_em", None) is not None and dt >= self.soluco_em:
                 self.soluco_em = None
                 raise OSError("404 soluço")
+            if getattr(self, "recuo_em", None) is not None and dt >= self.recuo_em:
+                self.recuo_em = None
+                self.t0 += 1.5   # o timer deste payload sai menor que o do anterior
             if self.reinicio_em is not None and dt >= self.reinicio_em:
                 self.reinicio_em = None
                 self.t0 = time.monotonic()
@@ -410,6 +413,12 @@ def reserva():
     av = rodar_reserva(lcu, atraso=1.0, s=2.6)
     caso("F24b 404 passageiro com o timer seguindo: não é outro ready check, a reserva aceita",
          lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and av.reserva_fim == "aceitou", (lcu.ops, av.reserva_fim))
+    # aceito pelo plugin e o timer recua (14/10 14:43, 10 -> 9): o log diz "já aceita", não "outro ready check"
+    lcu = LCURegistro(resp_em={1.3: "Accepted"})
+    lcu.recuo_em = 1.3
+    av = rodar_reserva(lcu, atraso=1.5, s=3.0)
+    caso("F24c aceito e timer recuando: 'já aceita', nenhum POST", lcu.posts == [] and str(av.reserva_fim).startswith("já aceita"),
+         (lcu.ops, av.reserva_fim))
     lcu = LCURegistro(reinicio_em=1.2, reinicio_404=False)
     av = rodar_reserva(lcu, atraso=2, s=3.2)
     caso("F25 timer que volta sem 404 também é outro ready check: nenhum POST",
