@@ -531,8 +531,15 @@ def principal():
     ap.add_argument("--porta", type=int, default=8766)
     ap.add_argument("--porta-sim", type=int, default=2996)
     ap.add_argument("--sem-prints", action="store_true", help="não tira os prints headless do painel")
+    ap.add_argument("--com-jogo", action="store_true", help="roda mesmo com o jogo aberto (a janela Tk pode roubar foco)")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
+    # chamado direto, o ensaio escapava da trava do rodar-testes e rodou na partida do Gabriel (13/10/2026)
+    if not a.com_jogo and "League of Legends.exe" in subprocess.run(
+            ["tasklist", "/FI", "IMAGENAME eq League of Legends.exe"],
+            capture_output=True, text=True, errors="replace").stdout:
+        print("League of Legends.exe aberto: o ensaio fica para depois da partida (--com-jogo força)")
+        return 2
     if (SAIDA / "ensaio.log").exists():
         (SAIDA / "ensaio.log").unlink()
     SAIDA.mkdir(parents=True, exist_ok=True)
