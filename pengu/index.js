@@ -10,10 +10,11 @@ import { iniciarChampSelect } from './champselect.js';
 import { iniciarRunas } from './runas.js';
 import { iniciarRecompensas, levantar, criarLcu } from './recompensas.js';
 import { blocoChampSelect, blocoRunas, blocoConexao, blocoPainel, blocoVoz, blocoAlertas, blocoMinimapa, blocoMentor,
-  blocoCarregamento, blocoTraumas } from './blocos.js';
+  blocoCarregamento, blocoTraumas, blocoCompacto } from './blocos.js';
 import { coletor, sincronizarConfig, estadoConexao } from './coach.js';
 import { iniciarSemPopups, blocoSemPopups } from './sem-popups.js';
 import { iniciarChatPosjogo, blocoChatPosjogo } from './chat-posjogo.js';
+import { iniciarCompacto } from './compacto/index.js';
 
 // um módulo quebrado não derruba os outros
 const seguro = (nome, fn) => { try { return fn(); } catch (e) { console.error(`[lol-client] ${nome}`, e); return null; } };
@@ -31,6 +32,10 @@ export function init(context) {
   const chat = seguro('chat do pós-jogo', () => iniciarChatPosjogo(context, cfg));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
   const recompensas = seguro('recompensas', () => iniciarRecompensas(context, cfg));
+  // client compacto (roadmap/2026-10-13-client-compacto.md): roteador por fase; telas em compacto/tela-*.js
+  // (definir: a tela 1 grava fila e posições em filaRapida.*; coletor: POST /chat/plugin e o 💬; aceite: null = o
+  // aceite.js quebrou no init e o ReadyCheck expande em vez de ceder)
+  const compacto = seguro('compacto', () => iniciarCompacto(context, cfg, { fila, champ, runas, posjogo, coletor, historico, definir, aceite }));
   seguro('configurações', () => iniciarConfiguracoes({ cfg, definir, aoMudar, restaurar }));
   seguro('blocos', () => {
     registrarBloco('champSelect', blocoChampSelect(champ));
@@ -45,6 +50,7 @@ export function init(context) {
     registrarBloco('traumas', blocoTraumas, 'Traumas');
     registrarBloco('chatPosjogo', blocoChatPosjogo, 'Chat do pós-jogo');
     registrarBloco('semPopups', blocoSemPopups, 'Avisos do client');
+    registrarBloco('compacto', blocoCompacto, 'Client compacto');
   });
   // config do coach para o coletor: agora e a cada mudança (o coletor sobe depois: coach.js tenta de novo)
   seguro('coach', () => sincronizarConfig(cfg));
@@ -57,6 +63,7 @@ export function init(context) {
     if (!c.runas.ligado) seguro('runas', () => runas?.fecharPopup());
     seguro('coach', () => sincronizarConfig(c));
     seguro('chat do pós-jogo', () => chat?.atualizar()); // nomes, cores e avisos repintam na hora (desligado devolve o original)
+    seguro('compacto', () => compacto?.sincronizar()); // ligado/inicioCompacto/tamanho valem na hora
   });
   seguro('ações', () => registrarAcoes([
     { name: 'lol-client: analisar última partida', tags: ['lol-client', 'pós-jogo'], perform: () => analisarUltima() },
@@ -78,6 +85,7 @@ export function init(context) {
     foco: () => aceite?.foco?.estado(),
     chatPosjogo: chat, // estado() e atualizar()
     semPopups, // rotaFalsa(metodo, url): o que seria respondido por nós agora (só consulta)
+    compacto, // estado(), alternar(), compactar(), expandir(), reavaliar()
   };
   document.documentElement.dataset.lolClient = 'ok';
   console.log('[lol-client] ok');

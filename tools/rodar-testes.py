@@ -28,6 +28,12 @@ TESTES = [
     ["node", "tools/teste-recompensas.mjs"],
     ["node", "tools/teste-jogar-de-novo.mjs"],
     ["node", "tools/teste-runas.mjs"],
+    ["node", "tools/teste-compacto.mjs"],
+    ["node", "tools/teste-compacto-lobby.mjs"],
+    ["node", "tools/teste-compacto-selecao.mjs"],
+    ["node", "tools/teste-compacto-posjogo.mjs"],
+    [PY, "tools/teste-medir-compacto.py"],
+    [PY, "tools/teste-chat-janelas.py"],   # sem janela de verdade (o --real abre o Edge: só à mão, jogo fechado)
     [PY, "tools/teste-coach.py"],
     [PY, "tools/teste-pacote-voz.py"],
     [PY, "tools/teste-alertas.py"],

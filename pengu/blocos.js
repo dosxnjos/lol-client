@@ -207,3 +207,10 @@ export const blocoCarregamento = (corpo, ctx) => corpo.append(
 export const blocoTraumas = (corpo, { cfg, definir, ui }) => corpo.append(
   ui.caixa('traumas.ligado', 'Mostrar traumas', 'Campeão inimigo que mais aparece nas tuas derrotas (lift ≥ 1,2 com n ≥ 3, sempre com V/D ao lado): linha no selo do champ select e bloco na aba Tendência do pós-jogo.',
     cfg.traumas.ligado, v => definir('traumas.ligado', v)));
+
+// client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): vale na hora (index.js aoMudar -> sincronizar)
+export const blocoCompacto = (corpo, { cfg, definir, ui }) => corpo.append(
+  ui.caixa('compacto.ligado', 'Client compacto', 'Janela pequena só com a rotina (lobby, fila, seleção com as trocas, pós-jogo), o botão "▣ modo compacto" no topo e o atalho Ctrl+Shift+M. Desligado: client normal, sem botão; o coletor deixa de abrir conversa nova sozinho.',
+    !!cfg.compacto?.ligado, v => definir('compacto.ligado', v)),
+  ui.caixa('compacto.inicioCompacto', 'Abrir cada fase no compacto', 'Desligado: cada fase começa no client normal e o botão "▣ modo compacto" leva ao compacto. ARAM, reconectar, honra e janelas próprias da Riot abrem o client normal de qualquer jeito.',
+    !!cfg.compacto?.inicioCompacto, v => definir('compacto.inicioCompacto', v)));

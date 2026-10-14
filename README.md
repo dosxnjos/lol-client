@@ -22,6 +22,7 @@ painel, overlay), coisa que a Riot não aprova para produtos: risco da conta ass
 | tela de carregamento | os 10 (elo, winrate, tags com número: OTP, morre cedo, sequência…), previsão de vitória em faixa, composição inimiga e lembrete de build ([ITENS](docs/ITENS.md)) | painel da 2ª tela |
 | partida | 4 blocos fixos (tua rota, ameaça, teu padrão, time e objetivos) + 1 aviso por vez; voz (1 fala a cada 20 s, gank fura); moldura colorida na borda da tela; área provável do jungler por cima do minimapa; Flash dos inimigos pelo chat ou F9; preparo 60 s antes de cada objetivo; picos de força | 2ª tela, voz, tela do jogo |
 | pós-jogo | 6 abas (Resumo com 3 lições, Rota, Mortes, Objetivos, Tendência, Sessão), análise do mentor e caixa de pergunta; botão "jogar de novo e buscar"; 30 s depois, coleta o prêmio da partida; chat da tela de estatísticas com campeão, ícone e cor do time | client (plugin) |
+| client compacto (padrão) | janela pequena (420×640) só com a rotina: lobby com JOGAR (freios) e grupo, fila, seleção de campeões com as 3 trocas (posição, ordem, campeão), pós-jogo curto; "⤢ expandir" e Ctrl+Shift+M voltam ao client normal, o "▣ modo compacto" no topo volta ao compacto (na seleção da Riot ele flutua no alto à direita); o topo da janela compacta arrasta a janela. ARAM, reconectar, honra, falha ao abrir o jogo e qualquer janela própria da Riot abrem o client normal sozinho; erro numa tela compacta também. 💬 abre os amigos e cada conversa numa janela fora do client (precisa do coletor) | client (plugin `pengu/compacto/`) e janelas do chat (coletor) |
 | a qualquer hora | `resumo`, `partidas`, `matchups`, `traumas`, `licoes`, `sessao_hoje`, `carregamento_atual`… | Claude Code (MCP) |
 
 ## Como liga sozinho
@@ -61,6 +62,7 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 | freio de tilt: pedir 2º clique depois de N derrotas seguidas na sessão (padrão: 2; 0 = nunca), na fila rápida e no jogar de novo | Fila rápida | (plugin: `filaRapida.freioTilt`) |
 | freio de madrugada: pedir 2º clique ao buscar entre 01:00 e 05:59, hora do PC (padrão: ligado), nos mesmos dois botões | Fila rápida | (plugin: `filaRapida.freioMadrugada`) |
 | coletar recompensas sozinho / incluir o passe do TFT | Recompensas | (plugin: `recompensas.ligado`, `recompensas.tft`) |
+| client compacto (desligado = client normal, sem botão nem atalho; o coletor deixa de abrir conversa nova sozinha) / abrir cada fase no compacto (desligado = começa no normal e o botão "▣ modo compacto" leva ao compacto) | Client compacto (e Ctrl+K) | (plugin: `compacto.ligado`, `compacto.inicioCompacto`; `favoritos`, `larg`, `alt` só no DataStore) |
 | chat da tela de estatísticas: campeão junto do nome (ou no lugar), ícone do campeão (do próprio client), cor certa de aliado/inimigo, abre sozinho e fica aberto (o botão do chat recolhe; o Esc também, se o cursor estiver no chat), sem "entrou/deixou o saguão", quem saiu cinza no placar; com o painel do pós-jogo aberto o chat fica por baixo; desligar no meio da tela devolve o chat como o client deixou | Chat do pós-jogo | (plugin: `chatPosjogo.ligado`, `.nomes` = ambos/campeao/jogador, `.iconeCampeao`, `.corTime`, `.abrirSozinho`, `.manterAberto`, `.esconderEntrouSaiu`, `.escurecerSaiu`) |
 | calar o aviso de runas mudadas pelo jogo e o de golpear colocado sozinho (resposta falsa só nessas 2 rotas; o "você foi preenchido" fica: sai da sessão do champ select). O de runas logo depois de um patch ainda não foi provado | Avisos do client | (plugin: `semPopups.ligado`, `.runasAutomaticas`, `.smiteAutomatico`) |
 | painel na 2ª tela / amostras de 10 s no banco | Painel ao vivo (2ª tela) | `painelAoVivo` / `amostrasAoVivo` |
@@ -118,6 +120,13 @@ escondido, som calado, jogar de novo, a coleta de recompensas, o chat do pós-jo
 [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md),
 [voz e foco](roadmap/2026-10-13-voz-pregravada-e-foco.md), [jogar de novo](roadmap/2026-10-13-jogar-de-novo.md) e
 [coleta](roadmap/2026-10-13-coleta-automatica-de-recompensas.md).
+**Client compacto** (13/10/2026): testado só com LCU e janela falsas (`teste-compacto*.mjs`, 474 checagens) e os 10 módulos
+importados sem erro no CEF do client depois da revisão de 13/10 (`node tools\cdp.mjs eval tools\compacto-importar.js`, só
+`import()`); as rotas marcadas [S] (trocas, fila, PDL, convite, líder) e a ranqueada inteira no compacto seguem nos
+passos 1 e 9 do [plano](roadmap/2026-10-13-client-compacto.md). Vale depois da próxima recarga da interface. Também
+só a partida real prova: arrastar a janela compacta pelo topo (unidade do `Window.MoveTo`), a posição do "▣ modo
+compacto" flutuante na seleção da Riot e se a Riot devolve a janela a 1280×720 sozinha (o compacto encolhe de novo).
+A variação de PDL do bloco "hoje" conta desde a 1ª leitura do ranque no dia (DataStore do Pengu).
 **Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
 antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 
@@ -128,6 +137,8 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | todas as provas offline (inclui o ensaio a 20x; ~4 min) | `python tools\rodar-testes.py` |
 | ensaio ponta a ponta sem o client (banco copiado, portas 8766/2996) | `python tools\ensaio-coach.py` |
 | simulador da Live Client (porta 2998) | `python tools\simular-liveclient.py` |
+| medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
+| chat em janelas fora do client (tela 5 do compacto: lista de amigos e uma janela por conversa, LCU e janelas falsas; `--prints` tira o print das 2 páginas sem abrir janela; `--real` abre 2 janelas do Edge e mede foco e posição, só com o jogo fechado) | `python tools\teste-chat-janelas.py` |
 
 Pegadinhas medidas: [ARMADILHAS](docs/ARMADILHAS.md). Regras do pós-jogo: [INSIGHTS](docs/INSIGHTS.md).
 

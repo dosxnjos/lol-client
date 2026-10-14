@@ -51,6 +51,12 @@ export const PADRAO = {
     avisosDesligados: { voz: [], tela: [] }, // tipos calados por destino ("tela" = painel + moldura)
     aceiteFlutuante: true, // janelinha aceitar/recusar fora do client (coletor); aceiteAtrasoS vai junto, derivado (coach.js)
   },
+  // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): ligado = botão "modo compacto", atalho
+  // Ctrl+Shift+M e roteador por fase; inicioCompacto = o padrão de cada fase é a tela compacta (pedido do Gabriel,
+  // 13/10/2026); favoritos = championId fixos no topo da busca (58 Renekton, 154 Zac); larg/alt = janela em px CSS.
+  // Chave nova sem valor antigo para corrigir: entra pela mescla, sem migração nem VERSAO nova (a v3 cobre).
+  // Classes: lc-compacto (ligado) e lc-inicio-compacto; a camada à vista é html.lc-modo-compacto (compacto/index.js)
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -193,6 +199,8 @@ const ALTERNAVEIS = [
   ['coach.alertasTela', 'moldura de alertas na tela'],
   ['coach.overlayMinimapa', 'overlay do jungler no minimapa'],
   ['coach.mentor', 'mentor no pós-jogo'],
+  ['compacto.ligado', 'client compacto (botão e Ctrl+Shift+M)'],
+  ['compacto.inicioCompacto', 'abrir cada fase no modo compacto'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],

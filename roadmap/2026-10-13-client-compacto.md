@@ -226,7 +226,10 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
   a tela 3 mostra a mesma escolha do `runas.js` e o winrate nos favoritos. Evita empate de z-index (100000) com a
   camada. Confiança média: depende de o `runas.js` expor as páginas candidatas sem abrir o popup.
 - **Pós-jogo:** no compacto o `posjogo/index.js` não abre o `#lc-posjogo` no `EndOfGame`; só o "ver análise completa"
-  (que expande antes). No expandido, segue como hoje.
+  (que expande antes). No expandido, segue como hoje. Revisão de 13/10/2026: se a camada cair DEPOIS da decisão
+  (celebração tardia que a regra 7 expande, erro da tela 4 ou o ⤢ expandir dele) ainda no `EndOfGame`, o painel abre
+  (`vigiarSaidaDoCompacto`): "expandido segue como hoje". Confiança média; reverte se ele achar que o ⤢ manual não
+  devia abrir o painel (aí só modal/erro abrem).
 - **Filas novas na fila rápida:** hoje `FILAS = [420, 440]` em `config.js`; o compacto adiciona 400 e 450.
   Posições só em 420/440/400 (regra do jogar de novo). ARAM sem posição.
 - **Conceitos do acervo:** `via-negativa` (o compacto é subtração: o valor está no que sai da tela, não no que entra
@@ -270,7 +273,11 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
    - atalho de endereço `#3`, `#3b`, `#5` abre direto na tela (prints por Edge headless em `temp/prototipo-compacto/`).
    - chave das marcações **mantida** (`lc-prototipo-compacto-v2`): as 5 aprovações dele continuam marcadas e ele só
      re-marca a 3 e a 5 (o contrário da rodada anterior, que trocou a chave porque o protótipo inteiro mudou).
-1. [ ] **Medir as [S] numa ranqueada real, só leitura** (gravador do coletor ou `tools/cdp.mjs eval` com GET):
+1. [ ] **Ferramenta pronta, medir na próxima ranqueada:** `python tools/medir-compacto.py` (passivo, só GET, só sinais
+   em `dados/medicao-compacto-<data>.jsonl`; prova offline `tools/teste-medir-compacto.py` 32/32). Falta rodar numa
+   ranqueada real e escrever o `docs/MEDICAO-<data>.md` § Trocas. Enquanto isso, a construção é defensiva: campo
+   ausente ou estado desconhecido = botão cinza com motivo ou expandir.
+   **Medir as [S] numa ranqueada real, só leitura** (gravador do coletor ou `tools/cdp.mjs eval` com GET):
    estados de `positionSwaps`/`pickOrderSwaps`/`trades` e `summoners/{slotId}` a cada `Update`; `skin-carousel-skins`
    dentro da seleção; `lol.gameStatus` de um amigo na fila e `lol.timeStamp`; `GET /lol-matchmaking/v1/search` na fila
    (`timeInQueue`, `estimatedQueueTime`, `lowPriorityData`); origem do PDL do pós-jogo; `received-invitations` com um
@@ -278,12 +285,16 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
    `#lol-uikit-layer-manager-wrapper`); Ctrl+Shift+M livre no client. Gravar sinais (enum, bool), nunca identidade.
    — **prova:** `docs/MEDICAO-<data>.md` § Trocas com a tabela estado×momento e ARMADILHAS atualizado.
    **reprova se:** a tabela tem estado sem momento observado ou a seção não existe.
-2. [ ] **Config e troca de modo** (`pengu/config.js`: `compacto: {ligado, inicioCompacto, favoritos: [58, 154],
+2. [x] **Feito 13/10/2026:** `node tools/teste-compacto.mjs` 104/104 (alterna nos dois sentidos, 420×640 ↔ 1280×720,
+   camada some, arrastar pelo topo, janela devolvida a 1280 pela Riot, atalho só com a chave ligada).
+   **Config e troca de modo** (`pengu/config.js`: `compacto: {ligado, inicioCompacto, favoritos: [58, 154],
    larg: 420, alt: 640}`; `pengu/compacto/modo.js`: `ResizeTo`, camada, botão "modo compacto" no expandido junto da
    fila rápida, botão "expandir" em toda tela compacta, + atalho). Teste node com `riotInvoke` falso.
    — **prova:** `node tools/teste-compacto.mjs` → modo alterna nos dois sentidos, `ResizeTo` chamado com 420×640 e
    1280×720, camada some no expandido. **reprova se:** alternar duas vezes não volta ao estado inicial.
-3. [ ] **Roteador por fase** (`pengu/compacto/index.js`): as 13 fases da tabela → destino; `ReadyCheck` cede ao
+3. [x] **Feito 13/10/2026:** no mesmo `teste-compacto.mjs` (13 fases → destino, ReadyCheck cede ao aceite e expande
+   se o `aceite.js` não subiu, Reconnect expande, `.modal` desconhecido expande, vigia ligada antes do layer manager).
+   **Roteador por fase** (`pengu/compacto/index.js`): as 13 fases da tabela → destino; `ReadyCheck` cede ao
    aceite; `GameStart`/`InProgress` tiram a camada; `Reconnect`/`FailedToLaunch`/`TerminatedInError` e a seleção do
    ARAM expandem; + lembrar o modo por fase; telas da Riot que surgem sozinhas → expandir (sinal de cada uma medido no
    passo 1, sem rota inventada) **mais** um `MutationObserver` na camada de modais da Riot
@@ -291,13 +302,18 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
    calados do `sem-popups.js`) → expandir. — **prova:** teste node com sequência das 13 fases → destino esperado a
    cada fase, z-index < 100002; DOM falso com um `.modal` desconhecido → expande. **reprova se:** o `ReadyCheck`
    mostra tela compacta por cima do aceite, ou `Reconnect` deixa a camada de pé.
-4. [ ] **Telas 1 e 2** (lobby, fila): reusar `fila-rapida.prepararLobby`, `freios.js`, `restricaoDura` (penalidade
+4. [x] **Feito 13/10/2026:** `node tools/teste-compacto-lobby.mjs` 126/126 (busca só no clique e pelos freios, penalidade
+   e não-líder não buscam, fila fora do compacto não busca, nenhum `matchmaking/search` real).
+   **Telas 1 e 2** (lobby, fila): reusar `fila-rapida.prepararLobby`, `freios.js`, `restricaoDura` (penalidade
    na tela 1); grupo pelo `GET /lol-lobby/v2/lobby` (membros, líder), convite recebido (`received-invitations`
    accept/decline, clique dele), convidar pela lista de amigos; não-líder não busca nem cancela; cancelar =
    `DELETE /lol-lobby/v2/lobby/matchmaking/search`; tempo e estimativa do `GET /lol-matchmaking/v1/search`.
    — **prova:** teste com LCU falsa: busca só no clique, freio pede 2º clique, penalidade não busca, não-líder não
    busca; **nunca** `matchmaking/search` real em teste. **reprova se:** algum caminho busca sem clique.
-5. [ ] **Tela 3** (champ select SR): busca, favoritos, hover/ban/travar, skin, feitiços, runa **dentro da tela**
+5. [x] **Feito 13/10/2026 (offline):** `node tools/teste-compacto-selecao.mjs` 79/79 sobre `champselect-real.json`
+   (inimigo só com pick completo, sem nome de terceiro, trocas julgadas pelo efeito, socket mudo relê por GET, runa
+   dentro da tela). Falta a parte na personalizada (skin e feitiço pelo Gabriel): vai junto do passo 9.
+   **Tela 3** (champ select SR): busca, favoritos, hover/ban/travar, skin, feitiços, runa **dentro da tela**
    (páginas candidatas do `runas.js`; `html.lc-compacto` esconde `#lc-runas` e `#lc-winrate`), inimigos só com ação
    completa, trocas pelos botões do `summoners/{slotId}` com `DECLINED`/`CANCELLED`/virada de fase visíveis e
    `INVALID` com motivo; ✕ com aviso de dodge; reler `localPlayerCellId` a cada evento; trade muda
@@ -305,22 +321,56 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
    — **prova:** fixture `champselect-real.json` + teste node; na personalizada o Gabriel troca skin e feitiço pela
    tela compacta. **reprova se:** inimigo aparece antes do pick completo, nome de terceiro aparece ou o popup/selo
    antigo aparece por cima da tela compacta.
-6. [ ] **Tela 5** (chat em janelas): coletor serve `/chat/*`, abre uma janela Edge app por conversa
+6. [x] **Feito 13/10/2026 (offline + 2 janelas reais):** `python tools/teste-chat-janelas.py` 71/71 (abre na mensagem
+   nova, não abre em `InProgress`, origem barrada com 403, sem credencial na url/log; `--real` mediu foco e posição).
+   Falta 1 mensagem real enviada pelo Gabriel: vai junto do passo 9.
+   **Tela 5** (chat em janelas): coletor serve `/chat/*`, abre uma janela Edge app por conversa
    (`janela_painel` como base, até 3, sem roubar o foco, nenhuma em `InProgress`), plugin alimenta amigos/conversas,
    envia mensagens e convites; contador 💬 de `unreadMessageCount`.
    — **prova:** `python tools/teste-chat-janelas.py` com LCU falsa (mensagem nova abre a janela da conversa; em
    `InProgress` não abre) + 1 mensagem real enviada pelo Gabriel.
    **reprova se:** a janela abre fora da área útil, rouba o foco, ou a credencial da LCU aparece na url/log do coletor.
-7. [ ] **Tela 4** (pós-jogo compacto): "carregando" em `WaitingForStats`/`PreEndOfGame`; lições do
+7. [x] **Feito 13/10/2026:** `node tools/teste-compacto-posjogo.mjs` 62/62 com a partida 3292746609 (painel fechado até
+   o clique, abre se a camada cair ainda no `EndOfGame`, jogar de novo pelos freios, CSS sem vazar para a tela 1).
+   **Tela 4** (pós-jogo compacto): "carregando" em `WaitingForStats`/`PreEndOfGame`; lições do
    `GET /licoes/<gameId>`, jogar de novo existente (mesma fila, regra de grupo), "ver análise completa" expande e abre
    o `#lc-posjogo`; no compacto o `posjogo/index.js` não abre o painel sozinho. — **prova:** teste node com partida
    gravada 3292746609 + `EndOfGame` com o compacto ligado → `#lc-posjogo` fechado até o clique.
    **reprova se:** o jogar de novo pula os freios ou o painel grande cobre o pós-jogo compacto.
-8. [ ] **Docs:** README (tabela "o que faz" + bloco nas Configurações), ARMADILHAS (o que a medição achar),
+8. [x] **Feito 13/10/2026:** README (tabela, Configurações, o que só a partida prova, medidor), ARMADILHAS (§ Client e
+   Pengu, § LCU, § Windows), hub do cérebro e o resumo visual com os prints do protótipo aprovado.
+   **Docs:** README (tabela "o que faz" + bloco nas Configurações), ARMADILHAS (o que a medição achar),
    hub do cérebro. — **prova:** `grep -n compacto README.md docs/ARMADILHAS.md` → linhas novas.
    **reprova se:** zero linhas.
 9. [ ] **Prova no client com ele:** uma ranqueada inteira no compacto (lobby → fila → champ select com 1 troca →
    pós-jogo → jogar de novo). Verificação manual (precisa de partida real e de outro jogador para a troca).
+
+## Revisão da construção (13/10/2026)
+
+Revisão adversarial achou 20 defeitos; nenhum falso, dois repetidos (12 = 2, 18 = 5): 18 distintos, todos corrigidos
+com caso de teste, sem rota nova da LCU. Depois disso: `rodar-testes.py` 41/41 e os 10 módulos importados sem erro no
+CEF do client (`node tools/cdp.mjs eval tools/compacto-importar.js`).
+
+| # | achado | correção |
+| --- | --- | --- |
+| 1 | vigia de modais cega com o layer manager criado depois | espera pelo `<body>` até ele existir |
+| 2 | painel do pós-jogo não abria se a camada caísse depois de 400 ms | `vigiarSaidaDoCompacto` |
+| 3 | tela 3 congelava com o socket mudo | relê `GET session` a cada 2 s depois de 3 s sem evento |
+| 4 | lobby solo em fila fora do compacto (Arena, TFT) | JOGAR apagado com a fila; busca só depois de escolher |
+| 5 | troca feita dada como "fechou sem resposta" | segue por tipo + cell, julga pelo efeito em mim |
+| 6 | janela devolvida a 1280×720 pela Riot ficava assim | desconfia de ≥ 1000 px; reencolhe; 3 vezes em 10 s desiste |
+| 7 | conversa marcada como lida sem clique | `?auto=1` só marca depois de clique/tecla |
+| 8 | qualquer página local mandava mensagem por ele | `origem_chat_ok` (403 fora da própria origem) |
+| 9 | sem volta ao compacto na seleção da Riot | "▣ modo compacto" flutuante; some no ready check |
+| 10 | telas 3 e 4 sem 💬 | `compacto/chat-botao.js` nas telas 1 a 4 |
+| 11 | aviso tapando o TRAVAR | aviso abaixo do topo, `pointer-events:none` |
+| 13 | CSS do pós-jogo encolhia o JOGAR | regras sob `.lc-cp-pj` |
+| 14 | "hoje" mostrava o PDL absoluto | variação do dia + elo embaixo |
+| 15 | janela compacta não se movia | topo arrasta por `Window.MoveTo` |
+| 16 | Configurações da Riot atrás da camada | expandem como modal |
+| 17 | ready check com `aceite.js` quebrado | expande em vez de ceder |
+| 19 | conversa abria sozinha com o compacto desligado | desligado vence a lista aberta |
+| 20 | Ctrl+Shift+M engolido com a chave desligada | atalho só age com a chave ligada |
 
 ## Riscos / o que pode dar errado
 

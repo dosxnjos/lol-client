@@ -29,6 +29,30 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `menu_item_navbar_store`, `.lol-settings-container`, `.lol-settings-navs`,
   `.lol-settings-nav-scroller`, `.lol-settings-options`, `.lol-settings-title`,
   `.app-controls-settings` (engrenagem, ≈1226,15 px CSS). Patch novo pode renomear; conferir aqui primeiro.
+- **Janela do client pelo `riotInvoke`** (lido nos scripts `rcp-fe-*` da própria página por GET, 13/10/2026):
+  `Window.ResizeTo [w,h]` (px CSS), `Window.CenterToScreen`, `Window.Minimize` (o "–" da Riot), `RiotClient.Exit` (fim do
+  "✕"), `Window.MoveTo`, `Window.Show`. A Riot volta ao normal com ResizeTo 1280×720 + CenterToScreen; o compacto expande
+  igual (`pengu/compacto/modo.js`). Nenhum script da Riot trata Ctrl+Shift+M (atalho do compacto).
+- **`html.lc-compacto` não quer dizer "camada compacta à vista"** → a regra do `config.js` transforma `compacto.ligado`
+  em `lc-compacto`; o estado da camada é `html.lc-modo-compacto` (roteador). CSS que esconde algo no compacto usa a 2ª.
+- **Telas da Riot que surgem sozinhas** (regra 7 do compacto): camadas filhas de `#lol-uikit-layer-manager-wrapper`, que
+  nasce preguiçoso e sempre tem o `lol-social-chat-window`. Modal = `div.modal` (o do ready check tem
+  `.ready-check-root-element`); drawer/popout = `lol-uikit-full-page-backdrop`; celebração = `.vignette-celebration`,
+  `.dialog-toast-celebration`; tooltip, flyout e toast simples também moram lá e não contam. O que apareceu de verdade numa
+  partida: `window.__lolClient.compacto.modais()` (só tag e classe).
+  - o `#lol-uikit-layer-manager` também nasce por JS (não está no `index.html` estático, GET de 13/10/2026): vigia ligada
+    no `DOMContentLoaded` sem ele ficava cega a sessão inteira; ela espera pelo `<body>` até ele existir
+    (`criarVigiaModais`). Conferir: `window.__lolClient.compacto.modais()` não pode ficar vazio depois de um modal.
+  - as Configurações da Riot (`.lol-settings-container`) expandem como qualquer modal: com a camada à vista ficavam
+    abertas e invisíveis atrás dela (inclusive o bloco que desliga o compacto).
+- **A Riot devolve a janela a 1280×720 sozinha** [S] (restore do plugin-runner; `ux-minimize`/`ux-show` do `aceite.js`)
+  → camada de 1280 que não é compacto. `criarJanela.ehCompacta` desconfia de medida ≥ 1000 px depois de 1,5 s do próprio
+  `ResizeTo`; o `resize` da janela reavalia e o roteador encolhe de novo (3 vezes em 10 s = desiste e fica no normal).
+- **CSS das telas compactas vaza entre telas** → o `<style>` de cada tela nunca sai do documento; nome igual (`.lc-cp-jogar`)
+  com a mesma especificidade = ganha o último injetado (o JOGAR do lobby encolhia depois do 1º pós-jogo). Regra de tela
+  que reusa nome comum vai sob a classe da tela (`.lc-cp-pj` no pós-jogo).
+- **Aviso da camada em cima do botão da vez** → `.lc-cp-aviso` fica logo abaixo do topo e com `pointer-events:none`; embaixo
+  moram TRAVAR/BANIR/JOGAR.
 - **Plugin carrega mas `init` morre calado** (`dataset.lolClient` vazio, sem `__lolClient`) →
   o Pengu chama `init()` **antes do `<body>` existir** (`await i.init(...)` no preInit);
   `document.body` é `null` ali. DOM só depois do `DOMContentLoaded` (ver `fila-rapida.js`);
@@ -213,9 +237,21 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   aparece no `Update` em que a ação de pick dele fica `completed`; o hover dele vaza em
   `championPickIntent`/ação `isInProgress` só no turno dele, 0,5–2,2 s antes (a conferir se a tela
   mostra; ler só a ação completa evita flicker) (13/10/2026).
+- **No PLANNING a "minha ação em andamento" é um ban** → todas as ações `ban` já vêm `isInProgress: true` na fase
+  de planejamento (fixture `champselect-real.json`); quem procura a ação em andamento para marcar a intenção pega o ban.
+  A intenção vai sempre na ação de `pick` (`compacto/tela-champselect.js`), e ela nunca vira o alvo padrão do ban.
+- **Popup de runas some atrás da camada compacta** → com `html.lc-modo-compacto` o `runas.js` não abre o `#lc-runas`
+  (devolve `acao: 'compacto'`): a escolha de 2+ páginas é da tela 3. Se a tela 3 cair para o client normal depois do
+  travamento, a runa daquela seleção fica na mão (página atual ou tela da Riot).
 - **`pickOrderSwap` entre aliados muda o dono do `cellId`** → `assignedPosition`,
   `championPickIntent` e a ação de pick passam de um cell para outro (3 → 1, 13/10/2026). Estado
   guardado por `cellId` entre `Update`s pode trocar de jogador; reler `localPlayerCellId` a cada sessão.
+- **Troca feita não passa por `ACCEPTED` e regenera os contratos** (fixture, ev 30 → 32): os ids 4 e 7 somem e voltam
+  como 24 e 25 em `AVAILABLE`; os ids dos `trades` também mudam a cada fase. Pedido seguido pelo `id` vira "fechou sem
+  resposta" quando deu certo. A tela 3 segue por tipo + cell e julga pelo efeito em mim (cell, posição ou campeão
+  mudou = aceita; `acompanharPedidos`).
+- **Socket do Pengu mudo no champ select** → a tela que só ouve eventos congela com o relógio andando (vez errada,
+  tempo acaba = dodge). A tela 3 relê `GET session` a cada 2 s depois de 3 s sem evento.
 - **Gravação não diz se o champ select da normal é anônimo** → o gravador passa a sessão por
   `limpar_sessao()`, que apaga `nameVisibilityType` junto com a identidade. Para responder, gravar
   só sinais (`bool(valor)` e o enum) antes de limpar.
@@ -228,6 +264,20 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   console cp1252 morre com `UnicodeEncodeError`: `PYTHONIOENCODING=utf-8` ou `errors='replace'`.
 - **Chat do jogo não passa pela LCU** → `/lol-chat/v1/conversations` (sem as privadas) ficou `[]`
   a partida inteira de 13/10/2026 com ~160 linhas de chat na tela: só dá para ler por tela (OCR).
+- **`/lol-chat/v1/conversations` mistura as salas de grupo com as conversas 1:1** (`/help`, 13/10/2026) → sala do
+  champ select, pós-jogo e lobby vêm na mesma lista com `password` e `mucJwtDto`, e a do champ select ranqueado tem nome
+  oculto. As janelas do chat só servem `type` `chat` com id fora de `@champ-select.`/`@post-game.`… e tiram esses campos
+  de toda resposta (`chat_janelas.eh_conversa_direta`, `limpo`). Corpos ainda [S], sem conversa real: envio
+  `{body, type: "chat"}`, convite `[{toSummonerId}]`, "lida" = `PUT conversations/active {id}`, e o evento de mensagem
+  nova com uri `/lol-chat/v1/conversations/<id>/messages/<mid>` `Create` (rede, se o evento vier em outro formato: a
+  subida do `unreadMessageCount` lida a cada 5 s com o compacto ligado também abre a conversa).
+  - "lida" (`PUT conversations/active`) só depois de clique ou tecla de verdade na janela aberta sozinha (`?auto=1`): ela
+    pode nascer com o foco (`JanelasEdge.abrir` admite), e `document.hasFocus()` sozinho marcava a conversa sem ele ver.
+  - `/chat/*` (menos `/chat/plugin`, `/chat/abrir/amigos`, `/chat/estado`) só aceita a origem das próprias páginas
+    (`http://127.0.0.1:<porta>`) ou pedido sem Origin: outra página local ou outro plugin lia as chaves e mandava
+    mensagem em nome dele (`servidor_local.origem_chat_ok`).
+  - `{compacto: false}` do plugin vence a lista de amigos aberta: conversa nova não abre sozinha (o bloco das
+    Configurações promete isso); sem aviso ainda (`None`, coletor reiniciou), a lista aberta vale.
 - **Timeout de leitura da LCU não vira `URLError`** → sai `TimeoutError` cru do `getresponse`
   (e `ConnectionResetError`, `JSONDecodeError` com corpo cortado). Quem só pega `HTTPError` morre
   no 1º engasgo; o `Gravador.get()` pega tudo e conta `erro_lcu`.
@@ -371,6 +421,9 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 
 ## Windows
 
+- **403 com o corpo do POST ainda no socket = `WinError 10053` no cliente** → o `servidor_local` recusava antes de ler o
+  corpo e o Windows abortava a conexão em vez de entregar o 403 (teste intermitente, 13/10/2026). Ler o corpo antes de
+  recusar (`do_POST`).
 - **Print com `mss`**: a versão 10 já devolve px físicos (monitor do jogo 2560×1080 com escala
   125%) e `mss.mss()` virou `mss.MSS()` (o antigo só avisa). Conferido 13/10/2026.
 - **`sct.monitors[1]` não é o monitor principal** → aqui é a 2ª tela (1920×1200 em (2560, 595)); o do
@@ -471,6 +524,15 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   dele. `janela_painel.pid_existe` recusa processo criado depois do `ts` do arquivo (13/10/2026).
 - **`taskkill /PID <edge> /T` sem `/F` não fecha o Edge** (esperou 3 s e precisou do `/F`) →
   `WM_CLOSE` na janela do pid fecha em 0,4 s (`janela_painel.py`, 13/10/2026).
+- **Janelas do chat (várias `--app` num perfil só): o pid do 2º `msedge` morre na hora** → ele entrega a URL ao Edge
+  do perfil e sai; a janela nova é do 1º processo. `chat_janelas.JanelasEdge` acha cada janela pelo hwnd novo desse
+  processo (e o Edge órfão pelo fim do título, ` · chat lol`) e fecha por `WM_CLOSE` no hwnd. Perfil `dados\edge-chat`,
+  nunca o do painel (o `--app` do chat cairia nele). Medido 13/10/2026 (`teste-chat-janelas.py --real`).
+- **Janela do Edge rouba o foco ao nascer** (13/10/2026, as duas do `--real`) → o Edge ignora o `SW_SHOWNOACTIVATE` do
+  `STARTUPINFO`, e a janela entregue a um Edge que está em primeiro plano também ativa. A aberta sozinha (mensagem nova)
+  é minimizada e restaurada com `SW_SHOWNOACTIVATE`: o Windows devolve a ativação à janela de antes, sem
+  `SetForegroundWindow` (medido: "não roubou o foco"). Com uma janela do chat em primeiro plano ela nem abre (espera).
+  Lançado pela tarefa agendada (sem direito de primeiro plano), o Edge talvez nem roube: não medido.
 - **Print headless do painel sai vazio** → `msedge --headless --screenshot` tira a foto no load,
   antes do 1º `fetch('/estado')`: o servidor embute o estado no HTML; `--virtual-time-budget=3000` ajuda.
 - **Nome grande some de um bloco do painel** (integração, 13/10/2026: "3 AD · 2 AP" sumiu no

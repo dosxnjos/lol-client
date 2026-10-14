@@ -65,6 +65,7 @@ export const paginasEditaveis = async () => {
   return r.ok ? r.json.filter(p => p.isEditable) : [];
 };
 
+const compactoAVista = () => !!globalThis.document?.documentElement?.classList?.contains?.('lc-modo-compacto');
 const aoTecla = e => { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); fecharPopup(); } };
 function fecharPopup() {
   document.getElementById('lc-runas')?.remove();
@@ -146,6 +147,9 @@ export function iniciarRunas(context, cfg) {
       return { acao: 'aplicou', id: candidatas[0] };
     }
     if (candidatas.length > 1) {
+      // client compacto à vista (html.lc-modo-compacto): a escolha é da tela 3 (compacto/tela-champselect.js); o popup
+      // nasceria escondido, roubaria o Esc da busca e piscaria a janela (ux-show/ux-flash) à toa
+      if (compactoAVista()) return { acao: 'compacto', ids: candidatas };
       if (!await popup(nomes[championId] || `campeão ${championId}`, candidatas.map(id => porId[id]), aplicar, vivo))
         return { acao: 'nada', motivo: 'seleção acabou' };
       lcu('POST', '/riotclient/ux-show');

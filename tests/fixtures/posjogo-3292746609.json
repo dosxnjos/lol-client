@@ -1,0 +1,87 @@
+{
+ "_origem": "partida real 3292746609 (normal 400, Zac, 13/10/2026): eog do dados/lol.db (maior id) recortado ao jogador local sem identidade (sem nome, puuid, summonerId, chat); lições = GET /licoes/<id> do coletor (temp/licoes/3292746609.json, só id/tipo/prioridade/texto). Usada por tools/teste-compacto-posjogo.mjs.",
+ "sessao": {
+  "gameData": {
+   "gameId": 3292746609,
+   "queue": {
+    "id": 400,
+    "mapId": 11
+   },
+   "isCustomGame": false
+  },
+  "map": {
+   "id": 11
+  }
+ },
+ "eog": {
+  "gameId": 3292746609,
+  "gameLength": 2002,
+  "endOfGameTimestamp": 1791888829931,
+  "gameMode": "CLASSIC",
+  "gameType": "MATCHED_GAME",
+  "queueType": "NORMAL",
+  "ranked": false,
+  "gameEndedInEarlySurrender": false,
+  "teamEarlySurrendered": false,
+  "invalid": false,
+  "teams": [
+   {
+    "teamId": 100,
+    "isPlayerTeam": true,
+    "isWinningTeam": false,
+    "isBottomTeam": true
+   },
+   {
+    "teamId": 200,
+    "isPlayerTeam": false,
+    "isWinningTeam": true,
+    "isBottomTeam": false
+   }
+  ],
+  "localPlayer": {
+   "championId": 154,
+   "championName": "Zac",
+   "teamId": 100,
+   "isLocalPlayer": true,
+   "detectedTeamPosition": "JUNGLE",
+   "championSquarePortraitPath": "/lol-game-data/assets/v1/champion-icons/154.png",
+   "stats": {
+    "CHAMPIONS_KILLED": 8,
+    "NUM_DEATHS": 9,
+    "ASSISTS": 6,
+    "MINIONS_KILLED": 65,
+    "NEUTRAL_MINIONS_KILLED": 141,
+    "WIN": 0,
+    "kills": 8,
+    "deaths": 9,
+    "assists": 6,
+    "totalMinionsKilled": 65,
+    "neutralMinionsKilled": 141,
+    "timePlayed": 2002
+   }
+  }
+ },
+ "licoes": {
+  "gameId": 3292746609,
+  "licoes": [
+   {
+    "id": "sozinho-lado-inimigo",
+    "tipo": "atencao",
+    "prioridade": 72,
+    "texto": "3 de 9 mortes sozinho no lado inimigo do mapa, sem aliado perto. Do outro lado sem visão, recua ou chama alguém."
+   },
+   {
+    "id": "morte-objetivo",
+    "tipo": "atencao",
+    "prioridade": 70,
+    "texto": "7 de 9 mortes seguidas de objetivo inimigo em até 90 s (13 objetivos). Perto de dragão, arauto ou torre, tua vida vale o objetivo."
+   },
+   {
+    "id": "farm-acima",
+    "tipo": "positiva",
+    "prioridade": 40,
+    "texto": "Farm de 6,2/min, +0,4 acima da tua média com Zac (n=20)."
+   }
+  ]
+ }
+}

@@ -1,0 +1,905 @@
+// Tela 3 do client compacto: seleção de campeões do SR (filas 420/440/400 e personalizada no SR; o roteador manda o
+// resto para a tela da Riot). Plano: roadmap/2026-10-13-client-compacto.md, passo 5; visual = protótipo aprovado em
+// 13/10/2026 (temp/2026-10-13-prototipo-client-compacto.html, aba 3). Contrato de tela: cabeçalho de ./index.js.
+// Importável no node (tools/teste-compacto-selecao.mjs): nada de window/document no topo do módulo.
+//
+// Linhas que não se cruzam (plano § guardrails):
+// - nada decide pelo jogador: hover, ban, travar, troca, aceite de troca, skin, feitiço e runa são clique dele.
+//   A única escrita automática que existe é a do runas.js (1 página), que segue dona dela; aqui não se repete.
+// - nome nenhum: aliado = "aliado N", inimigo só pelo campeão e só com a ação de pick COMPLETA (o hover inimigo vaza
+//   em actions[].championId com isInProgress e nos bans antes do ten_bans_reveal: ARMADILHAS § LCU, fixture real).
+// - estado sai da sessão a cada evento (localPlayerCellId relido sempre: troca de ordem muda o dono do cellId).
+// - erro aqui = client normal (o roteador expande): dodge custa PDL, tela quebrada não pode ficar na frente.
+//
+// Rotas (todas [H] no /help de 13/10/2026; o que é [S] está marcado):
+//   GET  /lol-champ-select/v1/session (+ evento), pickable-champion-ids, bannable-champion-ids, skin-carousel-skins,
+//        summoners/{slotId} (só os botões show*: enriquecimento opcional [S], falha calada)
+//   PATCH session/actions/{id} {championId} = hover/intenção [S]; POST session/actions/{id}/complete = banir/travar
+//   PATCH session/my-selection {selectedSkinId} | {spell1Id, spell2Id}
+//   POST session/position-swaps|pick-order-swaps|champion-swaps/{id}/request|cancel|accept|decline
+//        (a troca de campeão é o campo `trades` da sessão, mas a rota é champion-swaps)
+//   GET  /lol-perks/v1/pages, /lol-perks/v1/currentpage; PUT /lol-perks/v1/currentpage <id puro> (ARMADILHAS § LCU)
+import { h, fotoCampeao, campeoes, estilo } from './comum.js';
+import { consultarRunas } from '../runas.js';
+import { botaoChat } from './chat-botao.js';
+
+const CS = '/lol-champ-select/v1';
+export const POS = { TOP: 'Topo', JUNGLE: 'Selva', MIDDLE: 'Meio', BOTTOM: 'Atirador', UTILITY: 'Suporte' };
+// catálogo medido 13/10/2026 (summoner-spells.json, CLASSIC): reserva quando o client não responde
+export const FEITICOS = { 1: 'Purificar', 3: 'Exaustão', 4: 'Flash', 6: 'Fantasma', 7: 'Curar', 11: 'Golpear', 12: 'Teleporte', 14: 'Incendiar', 21: 'Barreira' };
+export const TROCAS = [
+  { tipo: 'POSICAO', campo: 'positionSwaps', rota: 'position-swaps', botao: '⇄ posição', nome: 'posição', mostrar: 'showPositionSwaps' },
+  { tipo: 'ORDEM', campo: 'pickOrderSwaps', rota: 'pick-order-swaps', botao: '⇅ ordem', nome: 'ordem', mostrar: 'showSwaps' },
+  { tipo: 'CAMPEAO', campo: 'trades', rota: 'champion-swaps', botao: '⟲ campeão', nome: 'campeão', mostrar: 'showTrades' },
+];
+const MOTIVO = {
+  BUSY: { todos: 'outra troca em andamento: espera ela fechar' },
+  INVALID: {
+    POSICAO: 'troca de posição não vale agora (fora de fase, ou um de vocês já escolheu)',
+    ORDEM: 'troca de ordem não vale agora (fora de fase, ou um de vocês já escolheu)',
+    CAMPEAO: 'troca de campeão só depois que os dois travarem, e cada um precisa ter o campeão do outro',
+  },
+  AUSENTE: { todos: 'o client não oferece esta troca nesta fase' },
+  ESCONDIDA: { todos: 'o client não oferece esta troca com este aliado agora' },
+};
+export const RESULTADO_MS = 6000; // quanto tempo "recusou/desistiu/aceitou" fica na linha do aliado
+export const SILENCIO_MS = 3000, RELER_MS = 2000; // sem evento da sessão há SILENCIO_MS: relê por GET (a cada RELER_MS)
+
+const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
+const posDe = p => String(p || '').toUpperCase();
+export const nomePos = p => POS[posDe(p)] || (posDe(p) ? posDe(p).toLowerCase() : 'sem posição');
+export const acoes = s => (Array.isArray(s?.actions) ? s.actions.flat(2) : []).filter(a => a && typeof a === 'object');
+export const semAcento = t => String(t ?? '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().replace(/[^a-z0-9]/g, '');
+
+// ---------- leitura da sessão (pura) ----------
+// -> null (sem myTeam) | {me, fase, time[], inimigos[], nInimigos, banidos[], revelado, meuBan, modo, eu, timer,
+//    travados (Set), banidosConhecidos (Set), vez}
+export function lerSessao(s) {
+  if (!s || typeof s !== 'object' || !Array.isArray(s.myTeam)) return null;
+  const me = num(s.localPlayerCellId);
+  const lista = acoes(s);
+  const doTime = new Set(s.myTeam.map(c => num(c?.cellId)));
+  // isAllyAction é o sinal; sem ele, pelo cellId (os cells do meu time mudam entre seleções: 0-4 ou 5-9)
+  const aliada = a => (typeof a.isAllyAction === 'boolean' ? a.isAllyAction : doTime.has(num(a.actorCellId)));
+  const picks = lista.filter(a => a.type === 'pick');
+  const pickDe = cell => picks.find(a => num(a.actorCellId) === cell) || null;
+  const time = s.myTeam.filter(c => c && typeof c === 'object').map(c => {
+    const cell = num(c.cellId), a = pickDe(cell), ia = picks.indexOf(a);
+    // travado: myTeam.championId (muda na troca de campeão; a ação fica com o id antigo) ou a ação completa
+    const travado = num(c.championId) > 0 ? num(c.championId) : (a?.completed && num(a.championId) > 0 ? num(a.championId) : 0);
+    const hover = travado ? 0 : (a && !a.completed && num(a.championId) > 0 ? num(a.championId) : Math.max(0, num(c.championPickIntent)));
+    return { cellId: cell, eu: cell === me, pos: posDe(c.assignedPosition), travado, hover, ordem: ia < 0 ? 100 + cell : ia,
+      skin: num(c.selectedSkinId), spells: [num(c.spell1Id), num(c.spell2Id)] };
+  }).sort((x, y) => x.ordem - y.ordem || x.cellId - y.cellId);
+  let n = 0;
+  time.forEach((t, i) => { t.n = i + 1; t.rotulo = t.eu ? 'tu' : `aliado ${++n}`; });
+  const eu = time.find(t => t.eu) || null;
+
+  // inimigo: só a ação de pick completa (nunca theirTeam.championPickIntent nem a ação em andamento)
+  const inimigos = picks.filter(a => !aliada(a) && a.completed && num(a.championId) > 0).map(a => num(a.championId));
+  const nInimigos = Array.isArray(s.theirTeam) && s.theirTeam.length ? s.theirTeam.length : 5;
+
+  // bans: o do inimigo vem na sessão antes da revelação; só mostra depois do ten_bans_reveal completo
+  const bans = lista.filter(a => a.type === 'ban');
+  const revela = lista.find(a => a.type === 'ten_bans_reveal');
+  const revelado = revela ? !!revela.completed : (!s.hasSimultaneousBans || (bans.length > 0 && bans.every(a => a.completed)));
+  const meuBanA = bans.find(a => num(a.actorCellId) === me && a.completed);
+  const meuBan = meuBanA ? num(meuBanA.championId) : null; // -1/0 = não baniu
+  const banidos = revelado
+    ? bans.filter(a => a.completed && num(a.championId) > 0).map(a => ({ id: num(a.championId), meu: num(a.actorCellId) === me, aliado: aliada(a) }))
+      .sort((x, y) => (y.meu - x.meu) || (y.aliado - x.aliado))
+    : [];
+  const banidosConhecidos = new Set(bans.filter(a => a.completed && num(a.championId) > 0 && (revelado || aliada(a))).map(a => num(a.championId)));
+  const travados = new Set([...time.map(t => t.travado).filter(Boolean), ...inimigos]);
+
+  // o que eu faço agora
+  const fase = String(s.timer?.phase || '');
+  const minhas = lista.filter(a => num(a.actorCellId) === me);
+  const meuPick = minhas.find(a => a.type === 'pick') || null;
+  const ativa = minhas.find(a => a.isInProgress && !a.completed && (a.type === 'pick' || a.type === 'ban')) || null;
+  const travei = !!eu?.travado || !!meuPick?.completed;
+  let tipo;
+  if (fase === 'PLANNING') tipo = meuPick && !meuPick.completed ? 'intencao' : 'esperar';
+  else if (fase === 'BAN_PICK') tipo = ativa ? (ativa.type === 'ban' ? 'banir' : 'escolher') : travei ? 'finalizar' : 'esperar';
+  else if (fase === 'FINALIZATION' || fase === 'GAME_STARTING') tipo = 'finalizar';
+  else tipo = travei ? 'finalizar' : 'desconhecido';
+  // no PLANNING os bans já vêm isInProgress (fixture real): a intenção é sempre a ação de pick, nunca a ativa
+  const acao = tipo === 'banir' || tipo === 'escolher' ? ativa : (tipo === 'intencao' || tipo === 'esperar') && meuPick && !meuPick.completed ? meuPick : null;
+
+  // de quem é a vez (rótulo da fase)
+  const andamento = lista.filter(a => a.isInProgress && !a.completed);
+  const banindo = andamento.some(a => a.type === 'ban');
+  const pickAgora = andamento.find(a => a.type === 'pick');
+  const vez = !pickAgora ? '' : aliada(pickAgora) ? (time.find(t => t.cellId === num(pickAgora.actorCellId))?.rotulo || 'teu time') : 'time inimigo';
+
+  const t = s.timer || {};
+  return {
+    me, fase, time, eu, inimigos, nInimigos, banidos, revelado, meuBan, banidosConhecidos, travados,
+    modo: { tipo, acao: acao ? { id: acao.id, type: acao.type, championId: num(acao.championId) } : null },
+    banindo, vez, fila: num(s.queueId),
+    timer: { restante: Math.max(0, num(t.adjustedTimeLeftInPhase)), total: Math.max(0, num(t.totalTimeInPhase)), infinito: !!t.isInfinite },
+  };
+}
+
+// rótulo da fase no topo (protótipo: FASE_ROT) -> [título, linha de baixo]
+export function rotuloFase(l) {
+  const f = l?.fase || '';
+  if (f === 'PLANNING') return ['PLANEJAMENTO', 'PLANNING · declara tua intenção'];
+  if (f === 'BAN_PICK') {
+    if (l.modo.tipo === 'banir' || l.banindo) return ['BANIMENTO', 'BAN_PICK · bans simultâneos'];
+    if (l.modo.tipo === 'escolher') return ['ESCOLHA · TUA VEZ', 'BAN_PICK · escolhendo'];
+    return ['ESCOLHA', l.vez ? `BAN_PICK · vez: ${l.vez}` : 'BAN_PICK · escolhendo'];
+  }
+  if (f === 'FINALIZATION') return ['FINALIZAÇÃO', 'FINALIZATION · skin, feitiços, trocas'];
+  if (f === 'GAME_STARTING') return ['COMEÇANDO', 'GAME_STARTING · a partida vai abrir'];
+  return ['SELEÇÃO', `fase ${f || 'sem leitura'}`];
+}
+
+// estado de uma troca com um aliado. slots: Map(cellId -> summoners/{slotId}) opcional (show* = false esconde)
+export function estadoTroca(s, troca, cellId, slot) {
+  const arr = s?.[troca.campo];
+  const c = Array.isArray(arr) ? arr.find(x => num(x?.cellId) === cellId) : null;
+  const id = c && c.id !== undefined && c.id !== null && Number.isInteger(Number(c.id)) ? Number(c.id) : null;
+  if (!c || id === null) return { estado: 'AUSENTE', id: null, motivo: MOTIVO.AUSENTE.todos };
+  const estado = String(c.state || '').toUpperCase();
+  if (estado === 'AVAILABLE' && slot && slot[troca.mostrar] === false) return { estado: 'ESCONDIDA', id, motivo: MOTIVO.ESCONDIDA.todos };
+  const m = MOTIVO[estado];
+  return { estado, id, motivo: m ? (m[troca.tipo] || m.todos) : estado === 'AVAILABLE' ? '' : `estado do client não esperado (${estado || 'vazio'})` };
+}
+
+// pedidos de troca em aberto (SENT/RECEIVED) e como fecharam. mem = novaMemoria(); devolve os resultados novos
+// [{tipo, cellId, dir, resultado: 'aceito'|'recusado'|'cancelado'|'morreu'|'sumiu'}]. "morreu" = fechou sem resposta
+// numa virada de fase (plano: pedido aberto morre na virada [S]).
+// Medido na fixture real (champselect-real.json, ev 30 -> 32, troca de ordem entre os cells 1 e 3): o estado ACCEPTED
+// nunca aparece; a troca feita REGENERA os contratos (ids 4 e 7 somem e voltam como 24 e 25 em AVAILABLE) e os
+// jogadores mudam de cell. Por isso o pedido é seguido por tipo + cell do aliado (nunca pelo id), e o fim sem estado
+// final é julgado pelo efeito em mim: ordem = meu localPlayerCellId mudou; posição = minha assignedPosition mudou;
+// campeão = meu championId mudou. Sem efeito: vale o clique dele (recusar/cancelar), senão morreu/sumiu.
+export const novaMemoria = () => ({ sessao: null, fase: null, abertos: new Map(), resultados: new Map(), cliques: new Map() });
+// clique dele num pedido aberto (accept/decline/cancel): se o contrato sumir sem estado final, conta o clique
+export function marcarClique(mem, tipo, cellId, verbo) { mem.cliques?.set(`${tipo}:${num(cellId)}`, verbo); }
+function meuEstado(s) {
+  const cell = num(s?.localPlayerCellId);
+  const c = Array.isArray(s?.myTeam) ? s.myTeam.find(x => num(x?.cellId) === cell) : null;
+  return { cell, pos: posDe(c?.assignedPosition), champ: num(c?.championId) };
+}
+function trocaFeita(ab, eu) {
+  if (ab.tipo === 'ORDEM') return eu.cell !== ab.eu.cell;
+  if (ab.tipo === 'POSICAO') return !!eu.pos && !!ab.eu.pos && eu.pos !== ab.eu.pos;
+  return ab.eu.champ > 0 && eu.champ > 0 && eu.champ !== ab.eu.champ; // CAMPEAO
+}
+export function acompanharPedidos(mem, s, agora = Date.now()) {
+  const fase = String(s?.timer?.phase || '');
+  mem.cliques ||= new Map();
+  if (mem.sessao !== s?.id) { mem.sessao = s?.id ?? null; mem.abertos.clear(); mem.resultados.clear(); mem.cliques.clear(); mem.fase = fase; }
+  const eu = meuEstado(s);
+  const novos = [];
+  const vistos = new Map(); // `${tipo}:${cellId}` -> {tr, c}
+  for (const tr of TROCAS) for (const c of (Array.isArray(s?.[tr.campo]) ? s[tr.campo] : [])) if (c) vistos.set(`${tr.tipo}:${num(c.cellId)}`, { tr, c });
+  for (const [k, ab] of [...mem.abertos]) {
+    const v = vistos.get(k), st = String(v?.c?.state || '').toUpperCase();
+    if (st === 'SENT' || st === 'RECEIVED') continue; // segue aberto (mesmo com id novo)
+    const clique = mem.cliques.get(k);
+    const resultado = st === 'ACCEPTED' ? 'aceito' : st === 'DECLINED' ? 'recusado' : st === 'CANCELLED' ? 'cancelado'
+      : trocaFeita(ab, eu) ? 'aceito' : clique === 'decline' ? 'recusado' : clique === 'cancel' ? 'cancelado'
+        : fase !== ab.fase ? 'morreu' : 'sumiu';
+    mem.abertos.delete(k);
+    mem.cliques.delete(k);
+    // troca feita em que eu mudei de cell (ordem; posição também, se ela mover jogadores [S]): o aliado agora senta no
+    // cell que era meu (a linha dele é a desse cell)
+    const cellAgora = resultado === 'aceito' && eu.cell !== ab.eu.cell && ab.cellId === eu.cell ? ab.eu.cell : ab.cellId;
+    const r = { tipo: ab.tipo, cellId: cellAgora, dir: ab.dir, resultado };
+    novos.push(r);
+    mem.resultados.set(cellAgora, { ...r, ate: agora + RESULTADO_MS });
+  }
+  for (const [k, { tr, c }] of vistos) {
+    const st = String(c?.state || '').toUpperCase();
+    if ((st === 'SENT' || st === 'RECEIVED') && !mem.abertos.has(k)) mem.abertos.set(k, { tipo: tr.tipo, cellId: num(c.cellId), dir: st, fase, eu });
+  }
+  // resultado guardado num cell que virou o meu (troca de ordem) não teria linha onde aparecer
+  for (const [cell, r] of [...mem.resultados]) if (r.ate <= agora || cell === eu.cell) mem.resultados.delete(cell);
+  mem.fase = fase;
+  return novos;
+}
+
+// texto da linha do aliado depois que o pedido fechou
+export function textoResultado(r, rotulo) {
+  const nome = TROCAS.find(t => t.tipo === r.tipo)?.nome || 'troca';
+  if (r.resultado === 'aceito') return `troca de ${nome} feita`;
+  if (r.resultado === 'recusado') return r.dir === 'SENT' ? `${rotulo} recusou a troca de ${nome}` : `tu recusou a troca de ${nome}`;
+  if (r.resultado === 'cancelado') return r.dir === 'SENT' ? `pedido de troca de ${nome} cancelado` : `${rotulo} desistiu da troca de ${nome}`;
+  if (r.resultado === 'morreu') return `o pedido de troca de ${nome} morreu na virada de fase`;
+  return `o pedido de troca de ${nome} fechou sem resposta`;
+}
+
+// campeões que não dá para escolher/banir agora (Set de ids)
+export function indisponiveis(l, s, { pickable = null, bannable = null } = {}) {
+  const fora = new Set([...l.travados, ...l.banidosConhecidos]);
+  if (l.modo.tipo === 'banir') {
+    if (s?.disallowBanningTeammateHoveredChampions) for (const t of l.time) if (!t.eu && t.hover) fora.add(t.hover);
+    return { fora, permitidos: bannable };
+  }
+  return { fora, permitidos: pickable };
+}
+
+// lista da grade: ids do catálogo (permitidos quando o client respondeu), favoritos na frente, busca sem acento
+export function listaGrade(cat, { busca = '', permitidos = null, favoritos = [] } = {}) {
+  const q = semAcento(busca);
+  const fav = favoritos.filter(id => cat.has(id));
+  const ids = [...cat.keys()].filter(id => !permitidos || permitidos.has(id) || fav.includes(id));
+  const nome = id => cat.get(id)?.nome || String(id);
+  return ids.filter(id => !q || semAcento(nome(id)).includes(q) || semAcento(cat.get(id)?.alias).includes(q))
+    .sort((a, b) => (fav.includes(b) - fav.includes(a)) || (fav.indexOf(a) - fav.indexOf(b)) || nome(a).localeCompare(nome(b), 'pt-BR'));
+}
+
+// skins que ele tem do campeão (carrossel do client): padrão sempre; chroma escolhida marca a skin-mãe
+export function skinsDoCampeao(carrossel, championId) {
+  const lista = (Array.isArray(carrossel) ? carrossel : []).filter(k => k && num(k.championId) === championId && !k.disabled
+    && (k.isBase || k.unlocked || k.ownership?.owned));
+  return lista.map(k => ({ id: num(k.id), nome: String(k.name || (k.isBase ? 'padrão' : k.id)), base: !!k.isBase,
+    splash: String(k.splashPath || ''), tile: String(k.tilePath || ''), filhos: (Array.isArray(k.childSkins) ? k.childSkins : []).map(c => num(c?.id)) }))
+    .sort((a, b) => (b.base - a.base) || a.id - b.id);
+}
+export const skinMarcada = (skins, selecionada) => skins.find(k => k.id === selecionada || k.filhos.includes(selecionada))?.id ?? null;
+
+// feitiço novo no slot (0 = D, 1 = F); igual ao do outro slot = trocam de lugar (como o client)
+export function trocarFeitico([a, b], slot, novo) {
+  const par = [a, b];
+  const outro = 1 - slot;
+  if (par[outro] === novo) par[outro] = par[slot];
+  par[slot] = novo;
+  return par;
+}
+
+// ---------- miniatura da splash (protótipo: splash reduzida no canvas, 240×142) ----------
+const miniaturas = new Map(); // splashPath -> dataURL | 'erro' | Promise
+export const MINIATURA = [240, 142];
+function miniatura(url, doc) {
+  if (!url) return Promise.resolve(null);
+  const m = miniaturas.get(url);
+  if (typeof m === 'string') return Promise.resolve(m === 'erro' ? null : m);
+  if (m) return m;
+  const p = new Promise(resolve => {
+    const Img = globalThis.Image;
+    const canvas = doc?.createElement?.('canvas');
+    const g = canvas?.getContext?.('2d');
+    if (typeof Img !== 'function' || !g) return resolve(null);
+    const img = new Img();
+    img.onload = () => {
+      try {
+        const [w, hh] = MINIATURA;
+        canvas.width = w; canvas.height = hh;
+        const esc = Math.max(w / img.naturalWidth, hh / img.naturalHeight);
+        const sw = w / esc, sh = hh / esc;
+        g.drawImage(img, (img.naturalWidth - sw) / 2, (img.naturalHeight - sh) / 2, sw, sh, 0, 0, w, hh);
+        let d = canvas.toDataURL('image/webp', 0.82);
+        if (!d.startsWith('data:image/webp')) d = canvas.toDataURL('image/jpeg', 0.82);
+        resolve(d);
+      } catch { resolve(null); }
+    };
+    img.onerror = () => resolve(null);
+    img.src = url;
+  }).then(d => { miniaturas.set(url, d || 'erro'); return d; });
+  miniaturas.set(url, p);
+  return p;
+}
+
+// ---------- CSS (visual do protótipo aprovado; prefixo lc-cp-sel-) ----------
+export const CSS = `
+#lc-compacto .lc-cp-corpo.lc-cp-sel { padding:0; gap:0; }
+#lc-compacto .lc-cp-sel-f { color:var(--lc-ouro2); font-weight:700; letter-spacing:.08em; font-size:13px; line-height:1.25; white-space:nowrap; }
+#lc-compacto .lc-cp-sel-f small { display:block; font-weight:400; letter-spacing:0; color:var(--lc-mudo); font-size:10.5px; }
+#lc-compacto .lc-cp-sel-t { font-size:22px; color:var(--lc-ouro2); font-weight:300; margin-right:6px; min-width:34px; text-align:right; }
+#lc-compacto .lc-cp-sel-barra { position:sticky; top:0; z-index:3; height:4px; flex:none; background:#1b2530; }
+#lc-compacto .lc-cp-sel-barra i { display:block; height:100%; width:100%; background:var(--lc-azul); transition:width .25s linear; }
+#lc-compacto .lc-cp-sel-barra i.lc-cp-sel-fim { background:var(--lc-verm); }
+#lc-compacto .lc-cp-sel-receb { margin:8px 10px 2px; border:1px solid var(--lc-amarelo); background:rgba(242,193,78,.1); padding:8px 10px;
+  font-size:12.5px; color:var(--lc-ouro2); }
+#lc-compacto .lc-cp-sel-receb .lc-cp-sel-tt { font-weight:700; color:var(--lc-amarelo); font-size:11px; letter-spacing:.08em; text-transform:uppercase; }
+#lc-compacto .lc-cp-sel-receb b { color:var(--lc-ouro2); }
+#lc-compacto .lc-cp-sel-bts { display:flex; gap:8px; margin-top:7px; }
+#lc-compacto .lc-cp-sel-bts .lc-cp-btn { flex:1; padding:6px; }
+#lc-compacto .lc-cp-sel-sec { display:flex; justify-content:space-between; align-items:center; padding:7px 12px 3px; font-size:10px;
+  letter-spacing:.12em; text-transform:uppercase; color:var(--lc-mudo); }
+#lc-compacto .lc-cp-sel-sec button { background:none; border:none; color:var(--lc-ouro); font-family:inherit; font-size:11px; letter-spacing:0;
+  text-transform:none; padding:0; cursor:pointer; }
+#lc-compacto .lc-cp-sel-time { padding:0 8px; }
+#lc-compacto .lc-cp-sel-lin { display:grid; grid-template-columns:16px 32px 1fr auto; gap:7px; align-items:center; padding:4px;
+  border-bottom:1px solid rgba(60,60,65,.45); min-height:42px; }
+#lc-compacto .lc-cp-sel-lin.lc-cp-sel-eu { background:linear-gradient(90deg,rgba(200,170,110,.13),rgba(200,170,110,0)); }
+#lc-compacto .lc-cp-sel-lin.lc-cp-sel-agindo { box-shadow:inset 3px 0 0 var(--lc-azul); }
+#lc-compacto .lc-cp-sel-o { font-size:11px; color:var(--lc-mudo); text-align:center; }
+#lc-compacto .lc-cp-sel-n { font-size:12.5px; line-height:1.2; color:var(--lc-ouro2); min-width:0; }
+#lc-compacto .lc-cp-sel-n small { display:block; color:var(--lc-mudo); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#lc-compacto .lc-cp-sel-n i { color:#7f8a93; }
+#lc-compacto .lc-cp-sel-trocas { display:flex; gap:3px; }
+#lc-compacto .lc-cp-sel-trocas button { background:var(--lc-pan2); border:1px solid var(--lc-linha); color:var(--lc-ouro2); font-family:inherit;
+  font-size:10.5px; padding:3px 5px; border-radius:3px; white-space:nowrap; cursor:pointer; }
+#lc-compacto .lc-cp-sel-trocas button:hover:not([disabled]) { border-color:var(--lc-ouro); }
+#lc-compacto .lc-cp-sel-trocas button[disabled] { color:#5b5f66; border-color:#2a2d33; cursor:not-allowed; }
+#lc-compacto .lc-cp-sel-trocas button.lc-cp-sel-busy[disabled] { color:#8a7a52; }
+#lc-compacto .lc-cp-sel-pend { font-size:10.5px; color:var(--lc-amarelo); text-align:right; line-height:1.3; }
+#lc-compacto .lc-cp-sel-pend.lc-cp-sel-ruim { color:#ff8a9a; }
+#lc-compacto .lc-cp-sel-pend.lc-cp-sel-bom { color:var(--lc-azul); }
+#lc-compacto .lc-cp-sel-pend button { background:none; border:1px solid #6b5a2e; color:var(--lc-ouro2); font-family:inherit; font-size:10px;
+  padding:1px 6px; margin-top:2px; cursor:pointer; }
+#lc-compacto .lc-cp-sel-vazio { border-style:dashed !important; border-color:#3a3f46 !important; color:#4a4f56; background:#151b22; }
+#lc-compacto .lc-cp-sel-inim { display:flex; gap:6px; padding:2px 12px 6px; align-items:center; }
+#lc-compacto .lc-cp-sel-bans { padding:0 12px 6px; font-size:11px; color:var(--lc-mudo); display:flex; align-items:center; gap:3px; white-space:nowrap; }
+#lc-compacto .lc-cp-sel-bans > span:first-child { margin-right:4px; }
+#lc-compacto .lc-cp-sel-bans .lc-cp-foto { filter:grayscale(.85) brightness(.75); }
+#lc-compacto .lc-cp-sel-bans .lc-cp-foto.lc-cp-sel-teu { filter:none; border-color:var(--lc-verm); }
+#lc-compacto .lc-cp-sel-sel { margin-top:auto; border-top:1px solid var(--lc-linha2); padding:8px 10px 10px; display:flex; flex-direction:column;
+  gap:7px; background:rgba(9,20,40,.6); }
+#lc-compacto .lc-cp-sel-busca { display:flex; gap:6px; }
+#lc-compacto .lc-cp-sel-busca input { flex:1; background:var(--lc-bg); border:1px solid var(--lc-linha); color:var(--lc-ouro2); padding:6px 8px;
+  font-family:inherit; font-size:12.5px; user-select:text; }
+#lc-compacto .lc-cp-sel-favs { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+#lc-compacto .lc-cp-sel-fav { display:flex; gap:7px; align-items:center; background:var(--lc-pan2); border:1px solid var(--lc-linha); padding:4px 7px;
+  color:var(--lc-ouro2); font-family:inherit; font-size:12px; text-align:left; cursor:pointer; }
+#lc-compacto .lc-cp-sel-fav small { display:block; color:var(--lc-mudo); font-size:10.5px; }
+#lc-compacto .lc-cp-sel-fav.lc-cp-sel-on, #lc-compacto .lc-cp-sel-gc.lc-cp-sel-on { border-color:var(--lc-azul); box-shadow:0 0 0 1px var(--lc-azul) inset; }
+#lc-compacto .lc-cp-sel-grade { display:grid; grid-template-columns:repeat(7,1fr); gap:4px; max-height:118px; overflow:auto; padding-right:2px; }
+#lc-compacto .lc-cp-sel-gc { background:none; border:1px solid transparent; padding:2px 0; display:flex; flex-direction:column; align-items:center;
+  gap:1px; color:var(--lc-mudo); font-family:inherit; font-size:9.5px; line-height:1.05; cursor:pointer; }
+#lc-compacto .lc-cp-sel-gc span.lc-cp-sel-nm { max-width:52px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+#lc-compacto .lc-cp-sel-gc[disabled], #lc-compacto .lc-cp-sel-fav[disabled] { opacity:.28; cursor:not-allowed; }
+#lc-compacto .lc-cp-sel-acao { display:flex; gap:6px; }
+#lc-compacto .lc-cp-sel-acao .lc-cp-btn { flex:1; font-size:14px; letter-spacing:.1em; padding:9px; }
+#lc-compacto .lc-cp-sel-skins { display:flex; gap:5px; overflow-x:auto; padding-bottom:3px; }
+#lc-compacto .lc-cp-sel-sk { position:relative; flex:none; width:104px; height:62px; border:1px solid var(--lc-linha); padding:0; overflow:hidden;
+  background:#151b22 center/cover no-repeat; font-family:inherit; font-size:9.5px; color:#fff; text-align:left; line-height:1.15;
+  text-shadow:0 1px 2px #000; cursor:pointer; }
+#lc-compacto .lc-cp-sel-sk span { position:absolute; left:0; right:0; bottom:0; padding:12px 4px 3px;
+  background:linear-gradient(rgba(0,0,0,0),rgba(0,0,0,.88) 55%); display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:2; overflow:hidden; }
+#lc-compacto .lc-cp-sel-sk.lc-cp-sel-on { border:2px solid var(--lc-ouro); }
+#lc-compacto .lc-cp-sel-spells { display:grid; grid-template-columns:1fr 1fr; gap:6px; }
+#lc-compacto .lc-cp-sel-spells button { background:var(--lc-pan2); border:1px solid var(--lc-linha); color:var(--lc-ouro2); padding:6px 8px;
+  font-family:inherit; font-size:12px; text-align:left; cursor:pointer; }
+#lc-compacto .lc-cp-sel-spells button.lc-cp-sel-on { border-color:var(--lc-ouro); }
+#lc-compacto .lc-cp-sel-spells button b { color:var(--lc-mudo); margin-right:5px; font-weight:600; }
+#lc-compacto .lc-cp-sel-splista { display:flex; flex-wrap:wrap; gap:4px; }
+#lc-compacto .lc-cp-sel-splista button { background:var(--lc-bg); border:1px solid var(--lc-linha); color:var(--lc-txt); font-family:inherit;
+  font-size:11px; padding:3px 6px; cursor:pointer; }
+#lc-compacto .lc-cp-sel-splista button.lc-cp-sel-on { border-color:var(--lc-ouro); color:var(--lc-ouro2); }
+#lc-compacto .lc-cp-sel-runa { font-size:12px; color:var(--lc-txt); display:flex; gap:6px; align-items:center; flex-wrap:wrap; }
+#lc-compacto .lc-cp-sel-runa .lc-cp-sel-ok { color:#3fbf77; }
+#lc-compacto .lc-cp-sel-runa button { background:var(--lc-pan2); border:1px solid var(--lc-linha); color:var(--lc-ouro2); font-family:inherit;
+  font-size:11.5px; padding:4px 8px; cursor:pointer; }
+#lc-compacto .lc-cp-sel-runa button.lc-cp-sel-on { border-color:var(--lc-azul); }
+`;
+
+// ---------- tela ----------
+let atual = null; // estado da montagem viva (o roteador monta uma tela por vez)
+
+export async function montar(raiz, ctx) {
+  const doc = raiz.ownerDocument || raiz.doc || globalThis.document;
+  estilo('lc-cp-selecao-estilo', CSS, doc);
+  raiz.classList.add('lc-cp-sel');
+  const st = {
+    ctx, raiz, doc, el: (tag, attrs = {}, ...f) => h(tag, { doc, ...attrs }, ...f),
+    sessao: null, l: null, mem: novaMemoria(), cat: new Map(), pickable: null, bannable: null, chaveListas: '',
+    escolhido: 0, busca: '', inimigosAbertos: true, spAberto: null, ocupado: new Set(), slots: new Map(), slotsEm: 0, slotsVoo: false,
+    skins: null, feiticos: null, runa: null, fim: 0, chaveSel: '', chaveGrade: '', modoSel: null, saiu: false,
+  };
+  atual = st;
+  st.ultimoEvento = Date.now();
+  montarEsqueleto(st);
+  ctx.observar(`${CS}/session`, msg => { if (msg?.eventType !== 'Delete' && msg?.data) aoSessao(st, msg.data); });
+  ctx.intervalo(() => relogio(st), 250);
+  // socket mudo (engasgo da LCU, reconexão que não reassina: ARMADILHAS § LCU) deixaria a tela congelada com o
+  // relógio andando e a vez errada: sem evento há SILENCIO_MS, relê a sessão por GET
+  ctx.intervalo(() => {
+    if (st.relendo || Date.now() - st.ultimoEvento < SILENCIO_MS) return;
+    st.relendo = true;
+    ctx.lcu('GET', `${CS}/session`).then(ctx.seguro(r => {
+      st.relendo = false;
+      st.ultimoEvento = Date.now();
+      if (r.ok && r.json && typeof r.json === 'object') aoSessao(st, r.json);
+    }));
+  }, RELER_MS);
+  campeoes().then(ctx.seguro(cat => { if (cat?.size) { st.cat = cat; st.chaveSel = ''; pintar(st); } }));
+  const r = await ctx.lcu('GET', `${CS}/session`);
+  if (!ctx.vivo()) return;
+  if (r.ok && r.json && typeof r.json === 'object') aoSessao(st, r.json);
+  else if (!st.sessao) {
+    st.partes.time.replaceChildren(st.el('div', { class: 'lc-cp-nota', style: { padding: '10px 4px' } }, 'lendo a seleção…'));
+    ctx.tempo(() => { if (!st.sessao) ctx.falhou(new Error(`a sessão da seleção não chegou (${r.status})`)); }, 3000);
+  }
+}
+
+export function desmontar(raiz) {
+  try { raiz?.classList?.remove('lc-cp-sel'); } catch { /* segue */ }
+  atual = null;
+}
+
+// só para o teste e para depuração (window.__lolClient.compacto.montada())
+export const _estado = () => atual;
+
+function montarEsqueleto(st) {
+  const { el, ctx, raiz } = st;
+  const p = st.partes = {
+    fase: el('div', { class: 'lc-cp-sel-f' }),
+    tempo: el('span', { class: 'lc-cp-sel-t', title: 'tempo da fase' }),
+    barra: el('i'),
+    receb: el('div'),
+    time: el('div', { class: 'lc-cp-sel-time' }),
+    toggle: el('button', { dataset: { a: 'inimigos' }, on: { click: ctx.seguro(() => { st.inimigosAbertos = !st.inimigosAbertos; pintar(st); }) } }, 'recolher'),
+    inim: el('div'),
+    sel: el('div', { class: 'lc-cp-sel-sel' }),
+    busca: el('input', { placeholder: 'buscar campeão', dataset: { a: 'busca' }, spellcheck: 'false' }),
+    favs: el('div', { class: 'lc-cp-sel-favs' }),
+    grade: el('div', { class: 'lc-cp-sel-grade' }),
+    acao: el('div', { class: 'lc-cp-sel-acao' }),
+  };
+  p.busca.addEventListener('input', ctx.seguro(() => { st.busca = String(p.busca.value || ''); pintarGrade(st); }));
+  ctx.titulo.append(p.fase);
+  ctx.extras.append(p.tempo);
+  botaoChat(ctx); // protótipo (tela 3): relógio, 💬 com o contador, expandir
+  raiz.append(
+    el('div', { class: 'lc-cp-sel-barra' }, p.barra),
+    p.receb,
+    el('div', { class: 'lc-cp-sel-sec' }, el('span', {}, 'teu time · ordem de escolha')),
+    p.time,
+    el('div', { class: 'lc-cp-sel-sec' }, el('span', {}, 'time inimigo · só campeão'), p.toggle),
+    p.inim,
+    p.sel,
+  );
+}
+
+function aoSessao(st, s) {
+  const { ctx } = st;
+  st.ultimoEvento = Date.now();
+  const l = lerSessao(s);
+  if (!l) throw new Error('sessão da seleção sem myTeam');
+  // seleção com banco (ARAM), espectador ou sem seleção: a tela é da Riot
+  if (s.benchEnabled || s.isSpectating || l.fila === 450) {
+    if (!st.saiu) { st.saiu = true; ctx.avisar('esta seleção (banco/ARAM ou espectador) é da tela da Riot: abri o client normal'); ctx.expandir(); }
+    return;
+  }
+  if (st.sessao?.id !== s.id || st.l?.me !== l.me) { st.escolhido = 0; st.spAberto = null; st.skins = null; st.runa = null; }
+  // escolha local vale só para a ação em que foi feita (intenção 18 -> ban 4 -> pick 18): nunca carrega para o ban
+  if ((l.modo.acao?.id ?? null) !== st.acaoId) { st.acaoId = l.modo.acao?.id ?? null; st.escolhido = 0; }
+  st.sessao = s; st.l = l;
+  st.fim = Date.now() + l.timer.restante;
+  for (const r of acompanharPedidos(st.mem, s)) {
+    if (r.resultado === 'morreu' || r.resultado === 'sumiu') ctx.avisar(textoResultado(r, rotuloDe(l, r.cellId)));
+    ctx.tempo(() => pintar(st), RESULTADO_MS + 100);
+  }
+  if (st.escolhido && l.modo.tipo === 'finalizar') st.escolhido = 0;
+  lerListas(st);
+  lerSlots(st);
+  if (l.modo.tipo === 'finalizar') { lerSkins(st); lerFeiticos(st); lerRuna(st); }
+  pintar(st);
+}
+
+const rotuloDe = (l, cell) => l?.time.find(t => t.cellId === cell)?.rotulo || 'aliado';
+const nomeDe = (st, id) => st.cat.get(id)?.nome || (id > 0 ? `campeão ${id}` : '');
+
+// ---------- leituras de apoio (falha = segue sem: botão cinza ou lista inteira) ----------
+function lerListas(st) {
+  const { l, ctx } = st;
+  if (!['intencao', 'esperar', 'banir', 'escolher'].includes(l.modo.tipo)) return;
+  const feitas = acoes(st.sessao).filter(a => a.completed).length;
+  const chave = `${st.sessao.id}|${l.fase}|${l.modo.tipo}|${feitas}`;
+  if (chave === st.chaveListas) return;
+  st.chaveListas = chave;
+  const ids = r => (r.ok && Array.isArray(r.json) ? new Set(r.json.map(Number).filter(n => n > 0)) : null);
+  const rota = l.modo.tipo === 'banir' ? 'bannable-champion-ids' : 'pickable-champion-ids';
+  ctx.lcu('GET', `${CS}/${rota}`).then(ctx.seguro(r => {
+    if (st.chaveListas !== chave) return;
+    if (rota === 'bannable-champion-ids') st.bannable = ids(r); else st.pickable = ids(r);
+    st.chaveSel = ''; pintar(st);
+  }));
+}
+
+// summoners/{slotId}: só os show* dos aliados (slot ↔ cell pelo cellId da resposta) [S]; falha = sem enriquecimento
+function lerSlots(st) {
+  const { l, ctx } = st;
+  if (st.slotsVoo || Date.now() - st.slotsEm < 2000 || !['PLANNING', 'BAN_PICK', 'FINALIZATION'].includes(l.fase)) return;
+  st.slotsVoo = true; st.slotsEm = Date.now();
+  const cells = new Set(l.time.filter(t => !t.eu).map(t => t.cellId));
+  Promise.all([0, 1, 2, 3, 4].map(i => ctx.lcu('GET', `${CS}/summoners/${i}`))).then(ctx.seguro(rs => {
+    st.slotsVoo = false;
+    const m = new Map();
+    for (const r of rs) {
+      const j = r.ok && r.json && typeof r.json === 'object' ? r.json : null;
+      if (!j || j.isOnPlayersTeam === false || !cells.has(num(j.cellId))) continue;
+      m.set(num(j.cellId), { showTrades: j.showTrades, showSwaps: j.showSwaps, showPositionSwaps: j.showPositionSwaps });
+    }
+    st.slots = m;
+    pintar(st);
+  }));
+}
+
+function lerSkins(st) {
+  const { l, ctx } = st;
+  const champ = l.eu?.travado || 0;
+  if (!champ) return;
+  const k = st.skins;
+  if (k && k.campeao === champ && (k.lista || k.voo || Date.now() - k.em < 3000)) return;
+  st.skins = { campeao: champ, lista: k?.campeao === champ ? k.lista : null, voo: true, em: Date.now() };
+  ctx.lcu('GET', `${CS}/skin-carousel-skins`).then(ctx.seguro(r => {
+    if (st.skins?.campeao !== champ) return;
+    const lista = r.ok ? skinsDoCampeao(r.json, champ) : [];
+    st.skins = { campeao: champ, lista: lista.length ? lista : null, voo: false, em: Date.now() };
+    st.chaveSel = ''; pintar(st);
+  }));
+}
+
+function lerFeiticos(st) {
+  if (st.feiticos) return;
+  st.feiticos = { ...FEITICOS };
+  st.ctx.lcu('GET', '/lol-game-data/assets/v1/summoner-spells.json').then(st.ctx.seguro(r => {
+    if (!r.ok || !Array.isArray(r.json)) return;
+    const m = {};
+    for (const f of r.json) if (num(f?.id) > 0 && Array.isArray(f.gameModes) && f.gameModes.includes('CLASSIC') && f.name) m[num(f.id)] = String(f.name);
+    if (Object.keys(m).length >= 5) { st.feiticos = m; st.chaveSel = ''; pintar(st); }
+  }));
+}
+
+function lerRuna(st) {
+  const { l, ctx } = st;
+  const cfg = ctx.cfg || {};
+  const champ = l.eu?.travado || 0;
+  if (!champ || (st.runa && st.runa.campeao === champ)) return;
+  if (!cfg.runas?.ligado) { st.runa = { campeao: champ, estado: 'desligada' }; return; }
+  st.runa = { campeao: champ, estado: 'lendo' };
+  Promise.all([ctx.lcu('GET', '/lol-perks/v1/pages'), ctx.lcu('GET', '/lol-perks/v1/currentpage')]).then(ctx.seguro(([p, a]) => {
+    if (st.runa?.campeao !== champ) return;
+    if (!p.ok || !Array.isArray(p.json)) { st.runa = { campeao: champ, estado: 'erro' }; st.chaveSel = ''; pintar(st); return; }
+    const paginas = p.json.filter(x => x && x.isEditable);
+    const { candidatas } = consultarRunas(cfg.runas.regras, champ, l.eu?.pos, paginas);
+    const porId = new Map(paginas.map(x => [x.id, x]));
+    st.runa = { campeao: champ, estado: 'ok', candidatas: candidatas.map(id => ({ id, nome: String(porId.get(id)?.name ?? id) })),
+      atual: a.ok && a.json ? { id: a.json.id, nome: String(a.json.name ?? '') } : null };
+    // 2+ páginas: a escolha é desta tela; o popup do runas.js (escondido no compacto) sai, com o Esc dele
+    // (o runas.js lê páginas e nomes antes de abrir: fecha de novo depois, para o popup que nasce atrasado)
+    if (candidatas.length > 1) {
+      const fechar = () => { try { ctx.servicos?.runas?.fecharPopup?.(); } catch { /* segue */ } };
+      fechar(); ctx.tempo(fechar, 1500); ctx.tempo(fechar, 5000);
+    }
+    // 1 página: o runas.js aplica sozinho ao travar; relê a atual para mostrar o ✓
+    if (candidatas.length === 1 && st.runa.atual?.id !== candidatas[0]) ctx.tempo(() => relerRunaAtual(st, champ), 1500);
+    st.chaveSel = ''; pintar(st);
+  }));
+}
+function relerRunaAtual(st, champ) {
+  st.ctx.lcu('GET', '/lol-perks/v1/currentpage').then(st.ctx.seguro(a => {
+    if (st.runa?.campeao !== champ || !a.ok || !a.json) return;
+    st.runa = { ...st.runa, atual: { id: a.json.id, nome: String(a.json.name ?? '') } };
+    st.chaveSel = ''; pintar(st);
+  }));
+}
+
+// ---------- escritas: só por clique dele ----------
+// uma por chave por vez; erro vira aviso (a tela continua: dá para tentar de novo ou expandir)
+function escrever(st, chave, passos, ok, depois) {
+  const { ctx } = st;
+  if (st.ocupado.has(chave)) return;
+  st.ocupado.add(chave);
+  pintar(st);
+  (async () => {
+    for (const [metodo, url, corpo, erro] of passos) {
+      const r = await ctx.lcu(metodo, url, corpo);
+      if (!ctx.vivo()) return;
+      if (!r.ok) { ctx.avisar(`${erro} (${r.status || 'sem resposta'})`, true); return; }
+    }
+    if (ok) ctx.avisar(ok);
+    depois?.();
+  })().catch(e => ctx.falhou(e)).finally(() => { st.ocupado.delete(chave); if (ctx.vivo()) { st.chaveSel = ''; pintar(st); } });
+}
+
+function clicarCampeao(st, id) {
+  const { l } = st;
+  st.escolhido = id;
+  // na vez dele o clique é hover (como o client: o time vê); a decisão é o botão de baixo
+  const a = l.modo.acao;
+  if (a && (l.modo.tipo === 'banir' || l.modo.tipo === 'escolher') && a.championId !== id)
+    escrever(st, 'hover', [['PATCH', `${CS}/session/actions/${a.id}`, { championId: id }, 'não consegui marcar o campeão']]);
+  st.chaveSel = ''; pintar(st);
+}
+
+function confirmarAcao(st) {
+  const { l } = st;
+  const a = l.modo.acao, id = alvoPadrao(st);
+  if (!a || !id) return;
+  const nome = nomeDe(st, id);
+  if (l.modo.tipo === 'intencao' || l.modo.tipo === 'esperar')
+    return escrever(st, 'acao', [['PATCH', `${CS}/session/actions/${a.id}`, { championId: id }, 'não consegui declarar a intenção']], `intenção: ${nome}`);
+  const verbo = l.modo.tipo === 'banir' ? 'banir' : 'travar';
+  escrever(st, 'acao', [
+    ['PATCH', `${CS}/session/actions/${a.id}`, { championId: id }, `não consegui ${verbo} ${nome}`],
+    ['POST', `${CS}/session/actions/${a.id}/complete`, undefined, `não consegui ${verbo} ${nome}`],
+  ]);
+}
+
+function troca(st, tr, id, verbo, cellId) {
+  if (!Number.isInteger(id)) return;
+  if (verbo !== 'request' && cellId !== undefined) marcarClique(st.mem, tr.tipo, cellId, verbo);
+  const txt = { request: 'pedir', cancel: 'cancelar', accept: 'aceitar', decline: 'recusar' }[verbo];
+  escrever(st, `troca:${tr.tipo}:${id}`, [['POST', `${CS}/session/${tr.rota}/${id}/${verbo}`, undefined, `não consegui ${txt} a troca de ${tr.nome}`]]);
+}
+
+// ---------- pintura ----------
+function relogio(st) {
+  const { partes: p, l } = st;
+  if (!l) return;
+  if (l.timer.infinito) { p.tempo.textContent = '∞'; p.barra.style.width = '100%'; return; }
+  const resta = Math.max(0, st.fim - Date.now());
+  p.tempo.textContent = String(Math.ceil(resta / 1000));
+  p.barra.style.width = (l.timer.total > 0 ? Math.min(100, resta / l.timer.total * 100) : 0) + '%';
+  p.barra.classList.toggle('lc-cp-sel-fim', resta < 8000);
+}
+
+function pintar(st) {
+  if (!st.l || !st.ctx.vivo()) return;
+  const [f, sub] = rotuloFase(st.l);
+  st.partes.fase.replaceChildren(f, st.el('small', {}, sub));
+  relogio(st);
+  pintarRecebida(st);
+  pintarTime(st);
+  pintarInimigos(st);
+  pintarSel(st);
+}
+
+// pedido que chegou: o 1º RECEIVED (um por vez no client: os outros ficam BUSY)
+function recebida(st) {
+  for (const t of st.l.time) {
+    if (t.eu) continue;
+    for (const tr of TROCAS) {
+      const e = estadoTroca(st.sessao, tr, t.cellId);
+      if (e.estado === 'RECEIVED') return { t, tr, e };
+    }
+  }
+  return null;
+}
+
+function pintarRecebida(st) {
+  const { el, l, partes: p, ctx } = st;
+  const r = recebida(st);
+  if (!r) return p.receb.replaceChildren();
+  const { t, tr, e } = r, eu = l.eu || {};
+  let txt;
+  if (tr.tipo === 'POSICAO') txt = [el('b', {}, t.rotulo), ` (${nomePos(t.pos)}) quer trocar de posição: tu vai para `, el('b', {}, nomePos(t.pos)), ', ele para ', el('b', {}, nomePos(eu.pos)), '.'];
+  else if (tr.tipo === 'ORDEM') txt = [el('b', {}, t.rotulo), ' quer trocar a ordem de escolha: tu escolhe em ', el('b', {}, `${t.n}º`), ', ele em ', el('b', {}, `${eu.n}º`), '.'];
+  else txt = [el('b', {}, t.rotulo), ' quer trocar de campeão: tu fica com ', el('b', {}, nomeDe(st, t.travado) || 'o campeão dele'), ', ele com ', el('b', {}, nomeDe(st, eu.travado) || 'o teu'), '.'];
+  const ocupado = st.ocupado.has(`troca:${tr.tipo}:${e.id}`);
+  p.receb.replaceChildren(el('div', { class: 'lc-cp-sel-receb', role: 'alert' },
+    el('div', { class: 'lc-cp-sel-tt' }, `pedido de troca de ${tr.nome}`), ...txt,
+    el('div', { class: 'lc-cp-sel-bts' },
+      el('button', { class: 'lc-cp-btn lc-cp-prim', disabled: ocupado, dataset: { a: 'aceitar', tipo: tr.tipo }, on: { click: ctx.seguro(() => troca(st, tr, e.id, 'accept', t.cellId)) } }, 'aceitar'),
+      el('button', { class: 'lc-cp-btn lc-cp-verm', disabled: ocupado, dataset: { a: 'recusar', tipo: tr.tipo }, on: { click: ctx.seguro(() => troca(st, tr, e.id, 'decline', t.cellId)) } }, 'recusar'))));
+}
+
+function foto(st, id, tam, extra = '') {
+  if (!(id > 0)) return st.el('span', { class: 'lc-cp-foto lc-cp-sel-vazio' + extra, style: { width: tam + 'px', height: tam + 'px' } }, '?');
+  const f = fotoCampeao(id, { tam, nome: nomeDe(st, id), doc: st.doc });
+  if (extra) f.className += extra;
+  return f;
+}
+
+function pintarTime(st) {
+  const { el, l, ctx, partes: p, sessao: s, mem } = st;
+  const linhas = l.time.map(t => {
+    const agindo = l.modo.tipo === 'escolher' && t.eu;
+    const c = t.travado || (t.eu ? t.hover : 0);
+    let det;
+    if (t.travado) det = nomeDe(st, t.travado);
+    else if (t.hover) det = el('i', {}, t.eu ? `${nomeDe(st, t.hover)} (escolhendo)` : `intenção: ${nomeDe(st, t.hover)}`);
+    else det = el('i', {}, agindo ? 'escolhendo…' : 'ainda não escolheu');
+    const nome = el('div', { class: 'lc-cp-sel-n' }, t.rotulo, el('small', {}, `${nomePos(t.pos)} · `, det));
+    let dir = '';
+    if (!t.eu) {
+      const res = mem.resultados.get(t.cellId);
+      const estados = TROCAS.map(tr => [tr, estadoTroca(s, tr, t.cellId, st.slots.get(t.cellId))]);
+      const enviada = estados.find(([, e]) => e.estado === 'SENT');
+      const chegou = estados.find(([, e]) => e.estado === 'RECEIVED');
+      if (enviada) {
+        const [tr, e] = enviada;
+        dir = el('div', { class: 'lc-cp-sel-pend' }, `pedido de ${tr.nome} enviado`, el('br'), 'aguardando… ',
+          el('button', { dataset: { a: 'cancelar', tipo: tr.tipo }, disabled: st.ocupado.has(`troca:${tr.tipo}:${e.id}`), on: { click: ctx.seguro(() => troca(st, tr, e.id, 'cancel', t.cellId)) } }, 'cancelar'));
+      } else if (chegou) {
+        dir = el('div', { class: 'lc-cp-sel-pend' }, `pediu troca de ${chegou[0].nome}`, el('br'), 'responde acima');
+      } else if (res && res.ate > Date.now()) {
+        const ruim = res.resultado !== 'aceito';
+        dir = el('div', { class: 'lc-cp-sel-pend ' + (ruim ? 'lc-cp-sel-ruim' : 'lc-cp-sel-bom') }, textoResultado(res, t.rotulo));
+      } else {
+        dir = el('div', { class: 'lc-cp-sel-trocas' }, ...estados.map(([tr, e]) => (e.estado === 'AVAILABLE'
+          ? el('button', { title: `pedir troca de ${tr.nome} com ${t.rotulo}`, dataset: { a: 'pedir', tipo: tr.tipo, cell: t.cellId },
+            disabled: st.ocupado.has(`troca:${tr.tipo}:${e.id}`), on: { click: ctx.seguro(() => troca(st, tr, e.id, 'request')) } }, tr.botao)
+          : el('button', { disabled: true, class: e.estado === 'BUSY' ? 'lc-cp-sel-busy' : undefined, title: e.motivo, dataset: { tipo: tr.tipo, estado: e.estado, cell: t.cellId } }, tr.botao))));
+      }
+    }
+    return el('div', { class: `lc-cp-sel-lin${t.eu ? ' lc-cp-sel-eu' : ''}${agindo ? ' lc-cp-sel-agindo' : ''}`, dataset: { cell: t.cellId } },
+      el('span', { class: 'lc-cp-sel-o' }, String(t.n)), (t.travado || t.eu) && c ? foto(st, c, 30) : foto(st, 0, 30), nome, dir);
+  });
+  p.time.replaceChildren(...linhas);
+}
+
+function pintarInimigos(st) {
+  const { el, l, partes: p } = st;
+  p.toggle.textContent = st.inimigosAbertos ? 'recolher' : 'mostrar';
+  if (!st.inimigosAbertos) return p.inim.replaceChildren();
+  const vis = l.inimigos.length;
+  const fotos = Array.from({ length: Math.max(l.nInimigos, vis) }, (_, i) => (i < vis ? foto(st, l.inimigos[i], 34) : foto(st, 0, 34)));
+  const filhos = [el('div', { class: 'lc-cp-sel-inim', dataset: { a: 'inimigos-fotos' } }, ...fotos,
+    el('span', { class: 'lc-cp-nota', style: { marginLeft: '4px' } }, vis ? `${vis} de ${l.nInimigos} travados` : 'aparece quando cada um trava'))];
+  if (l.banidos.length) {
+    const nomes = l.banidos.map(b => nomeDe(st, b.id) + (b.meu ? ' (teu)' : '')).join(', ');
+    filhos.push(el('div', { class: 'lc-cp-sel-bans', title: nomes, dataset: { a: 'bans' } }, el('span', {}, `${l.banidos.length} banidos`),
+      ...l.banidos.map(b => foto(st, b.id, 22, b.meu ? ' lc-cp-sel-teu' : ''))));
+  }
+  p.inim.replaceChildren(...filhos);
+}
+
+function pintarSel(st) {
+  const { l, ctx } = st;
+  const tipo = l.modo.tipo;
+  if (['intencao', 'esperar', 'banir', 'escolher'].includes(tipo)) return pintarEscolha(st);
+  if (st.modoSel !== tipo) { st.modoSel = tipo; st.chaveSel = ''; }
+  if (tipo === 'finalizar') return pintarFinal(st);
+  const chave = `desconhecido|${l.fase}`;
+  if (chave === st.chaveSel) return;
+  st.chaveSel = chave;
+  st.partes.sel.replaceChildren(st.el('div', { class: 'lc-cp-nota' }, `fase da seleção que eu não conheço (${l.fase || 'sem leitura'}): usa ⤢ expandir para a tela da Riot.`));
+}
+
+function estatFav(st, id) {
+  const champ = st.ctx.servicos?.champ;
+  try {
+    if (!champ?.estatisticas || (typeof champ.partidas === 'function' && champ.partidas() === null)) return 'histórico carregando';
+    const g = champ.estatisticas(id, st.l.eu?.pos)?.geral;
+    return g?.n ? `${g.n} ${g.n === 1 ? 'partida' : 'partidas'} · ${g.winrate}%` : 'sem partidas';
+  } catch { return 'histórico indisponível'; }
+}
+
+const favoritos = st => (Array.isArray(st.ctx.cfg?.compacto?.favoritos) ? st.ctx.cfg.compacto.favoritos : []).map(Number).filter(n => n > 0 && n < 10000);
+function dadosEscolha(st) {
+  const { fora, permitidos } = indisponiveis(st.l, st.sessao, { pickable: st.pickable, bannable: st.bannable });
+  return { fav: favoritos(st), fora, permitidos, id: alvoPadrao(st), pode: x => !fora.has(x) && (!permitidos || permitidos.has(x)) };
+}
+// campeão do botão: o clicado agora, senão o que o client já tem nesta ação. No ban, NUNCA a intenção de pick dele
+// (a intenção declarada no PLANNING viraria "BANIR <o campeão dele>" a um clique)
+export function alvoPadrao(st) {
+  const l = st.l;
+  if (st.escolhido) return st.escolhido;
+  if (l.modo.tipo === 'banir') return l.modo.acao?.championId > 0 ? l.modo.acao.championId : 0;
+  if (l.modo.tipo === 'escolher') return (l.modo.acao?.championId > 0 ? l.modo.acao.championId : 0) || l.eu?.hover || 0;
+  return l.eu?.hover || 0;
+}
+
+// estrutura fixa do modo escolha: o campo de busca nunca sai do DOM (evento da sessão chega a cada ~1 s e tiraria
+// o foco de quem está digitando); só o miolo de cada caixa se refaz
+function pintarEscolha(st) {
+  const { el, l, ctx, partes: p } = st;
+  if (st.modoSel !== 'escolha') {
+    st.modoSel = 'escolha'; st.chaveSel = ''; st.chaveGrade = '';
+    p.notas = el('div', { style: { display: 'contents' } });
+    p.fim = el('div', { style: { display: 'contents' } });
+    if (p.busca.value !== st.busca) p.busca.value = st.busca;
+    p.sel.replaceChildren(p.notas, el('div', { class: 'lc-cp-sel-busca' }, p.busca), p.favs, p.grade, p.acao, p.fim);
+  }
+  const d = dadosEscolha(st);
+  const { fav, fora, permitidos, id, pode } = d;
+  const tipo = l.modo.tipo;
+  const ocupado = st.ocupado.has('acao');
+  const stats = fav.map(x => estatFav(st, x));
+  const chave = JSON.stringify([tipo, l.modo.acao?.id, id, [...fora].sort(), permitidos ? permitidos.size : -1, st.cat.size, fav, stats, ocupado, l.meuBan, l.revelado, l.fase]);
+  pintarGrade(st, d);
+  if (chave === st.chaveSel) return;
+  st.chaveSel = chave;
+  p.favs.replaceChildren(...fav.map((x, i) => el('button', {
+    class: 'lc-cp-sel-fav' + (x === id ? ' lc-cp-sel-on' : ''), disabled: !pode(x), dataset: { a: 'campeao', id: x },
+    on: { click: ctx.seguro(() => clicarCampeao(st, x)) },
+  }, foto(st, x, 28), el('span', {}, `★ ${nomeDe(st, x)}`, el('small', {}, stats[i])))));
+  const rot = { intencao: 'DECLARAR INTENÇÃO', esperar: 'DECLARAR INTENÇÃO', banir: 'BANIR', escolher: 'TRAVAR' }[tipo];
+  const botao = el('button', {
+    class: 'lc-cp-btn ' + (tipo === 'banir' ? 'lc-cp-verm' : 'lc-cp-prim'), dataset: { a: 'acao' },
+    disabled: !l.modo.acao || !id || !pode(id) || ocupado, on: { click: ctx.seguro(() => confirmarAcao(st)) },
+  }, id ? `${rot} ${nomeDe(st, id)}` : rot);
+  p.acao.replaceChildren(botao);
+  const notas = [];
+  if (l.meuBan !== null && !l.revelado && l.fase === 'BAN_PICK' && tipo !== 'banir')
+    notas.push(el('div', { class: 'lc-cp-nota' }, l.meuBan > 0 ? `tu baniu ${nomeDe(st, l.meuBan)}. Os bans dos 10 aparecem juntos quando todos terminarem.` : 'tu não baniu ninguém.'));
+  if (tipo === 'esperar') notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'tua vez de escolher ainda não chegou: aqui só muda a intenção.' : 'tua vez ainda não chegou.'));
+  p.notas.replaceChildren(...notas);
+  p.fim.replaceChildren(...(tipo === 'intencao' ? [el('div', { class: 'lc-cp-nota' }, 'a intenção só mostra ao teu time; escolher de verdade é na tua vez.')] : []));
+}
+
+// a grade se repinta à parte (busca digitada não refaz o resto nem perde o foco do campo)
+function pintarGrade(st, dados) {
+  const { el, ctx, partes: p, l } = st;
+  if (!dados) {
+    if (!l || st.modoSel !== 'escolha') return;
+    dados = dadosEscolha(st);
+  }
+  const { fav, pode, id, permitidos } = dados;
+  const ids = listaGrade(st.cat, { busca: st.busca, permitidos, favoritos: fav });
+  const chave = JSON.stringify([ids, ids.map(pode), id, st.cat.size]);
+  if (chave === st.chaveGrade) return;
+  st.chaveGrade = chave;
+  const rolagem = p.grade.scrollTop;
+  p.grade.replaceChildren(...(ids.length ? ids.map(x => el('button', {
+    class: 'lc-cp-sel-gc' + (x === id ? ' lc-cp-sel-on' : ''), disabled: !pode(x), title: nomeDe(st, x), dataset: { a: 'campeao', id: x },
+    on: { click: ctx.seguro(() => clicarCampeao(st, x)) },
+  }, foto(st, x, 30), el('span', { class: 'lc-cp-sel-nm' }, nomeDe(st, x)))) : [el('span', { class: 'lc-cp-nota' }, st.cat.size ? 'nenhum campeão com esse nome' : 'carregando os campeões…')]));
+  p.grade.scrollTop = rolagem;
+}
+
+function pintarFinal(st) {
+  const { el, l, ctx, partes: p, sessao: s } = st;
+  const eu = l.eu || { spells: [0, 0], skin: 0 };
+  const champ = eu.travado;
+  const sk = st.skins?.campeao === champ ? st.skins.lista : null;
+  const fe = st.feiticos || FEITICOS;
+  const runa = st.runa?.campeao === champ ? st.runa : null;
+  const oc = k => st.ocupado.has(k);
+  const chave = JSON.stringify([champ, sk?.map(k => k.id), eu.skin, eu.spells, st.spAberto, fe, runa, s.allowSkinSelection, oc('skin'), oc('feitico'), oc('runa'), st.cat.size, l.fase]);
+  if (chave === st.chaveSel) return;
+  st.chaveSel = chave;
+  const filhos = [];
+  // skin
+  const marcada = sk ? skinMarcada(sk, eu.skin) : null;
+  filhos.push(el('div', { class: 'lc-cp-rot' }, `skin de ${nomeDe(st, champ)} `,
+    el('span', { class: 'lc-cp-nota', style: { textTransform: 'none', letterSpacing: '0' } },
+      s.allowSkinSelection === false ? '(esta fila não deixa escolher)' : !sk ? '(lendo as tuas skins…)' : sk.length === 1 ? '(só a padrão: tu não tem outra)' : `(as ${sk.length} que tu tem)`)));
+  if (sk && s.allowSkinSelection !== false) {
+    filhos.push(el('div', { class: 'lc-cp-sel-skins', dataset: { a: 'skins' } }, ...sk.map(k => {
+      const b = el('button', {
+        class: 'lc-cp-sel-sk' + (k.id === marcada ? ' lc-cp-sel-on' : ''), title: k.nome, disabled: oc('skin'), dataset: { a: 'skin', id: k.id },
+        on: { click: ctx.seguro(() => { if (k.id !== marcada) escrever(st, 'skin', [['PATCH', `${CS}/session/my-selection`, { selectedSkinId: k.id }, 'não consegui trocar a skin']]); }) },
+      }, el('span', {}, k.nome));
+      miniatura(k.splash, st.doc).then(d => {
+        const url = d || k.tile || k.splash;
+        if (url) b.style.backgroundImage = `url("${String(url).replace(/["\\\n]/g, '')}")`;
+      });
+      return b;
+    })));
+  }
+  // feitiços
+  filhos.push(el('div', { class: 'lc-cp-rot' }, 'feitiços'));
+  filhos.push(el('div', { class: 'lc-cp-sel-spells' }, ...[0, 1].map(slot => el('button', {
+    class: st.spAberto === slot ? 'lc-cp-sel-on' : undefined, dataset: { a: 'feitico-abrir', slot },
+    on: { click: ctx.seguro(() => { st.spAberto = st.spAberto === slot ? null : slot; st.chaveSel = ''; pintar(st); }) },
+  }, el('b', {}, slot ? 'F' : 'D'), fe[eu.spells[slot]] || (eu.spells[slot] ? `feitiço ${eu.spells[slot]}` : 'nenhum')))));
+  if (st.spAberto !== null) {
+    filhos.push(el('div', { class: 'lc-cp-sel-splista' }, ...Object.keys(fe).map(Number).map(fid => el('button', {
+      class: eu.spells[st.spAberto] === fid ? 'lc-cp-sel-on' : undefined, disabled: oc('feitico'), dataset: { a: 'feitico', id: fid },
+      on: { click: ctx.seguro(() => {
+        const slot = st.spAberto;
+        st.spAberto = null;
+        if (eu.spells[slot] === fid) { st.chaveSel = ''; return pintar(st); }
+        const [spell1Id, spell2Id] = trocarFeitico(eu.spells, slot, fid);
+        escrever(st, 'feitico', [['PATCH', `${CS}/session/my-selection`, { spell1Id, spell2Id }, 'não consegui trocar o feitiço']]);
+      }) },
+    }, fe[fid]))));
+  }
+  // runa
+  filhos.push(el('div', { class: 'lc-cp-rot' }, 'runa'));
+  filhos.push(pintarRuna(st, runa, champ));
+  p.sel.replaceChildren(...filhos);
+}
+
+function pintarRuna(st, runa, champ) {
+  const { el, ctx } = st;
+  const nome = nomeDe(st, champ);
+  const linha = (...f) => el('div', { class: 'lc-cp-sel-runa', dataset: { a: 'runa' } }, ...f);
+  if (!runa || runa.estado === 'lendo') return linha(el('span', { class: 'lc-cp-nota' }, 'lendo as páginas…'));
+  if (runa.estado === 'desligada') return linha(el('span', { class: 'lc-cp-nota' }, 'runa por campeão desligada nas configurações: fica a atual'));
+  if (runa.estado === 'erro') return linha(el('span', { class: 'lc-cp-nota' }, 'não consegui ler as páginas: fica a atual'));
+  const c = runa.candidatas, atual = runa.atual?.id;
+  const aplicar = pg => escrever(st, 'runa', [['PUT', '/lol-perks/v1/currentpage', pg.id, `não consegui aplicar a runa ${pg.nome}`]],
+    `runa ${pg.nome} aplicada`, () => { if (st.runa?.campeao === champ) st.runa = { ...st.runa, atual: { id: pg.id, nome: pg.nome } }; });
+  if (!c.length) return linha(el('span', { class: 'lc-cp-nota' }, `sem página para ${nome}: fica a atual${runa.atual?.nome ? ` (${runa.atual.nome})` : ''}`));
+  if (c.length === 1) {
+    return atual === c[0].id ? linha(el('span', { class: 'lc-cp-sel-ok' }, '✓'), `página "${c[0].nome}" aplicada sozinha`)
+      : linha(`página "${c[0].nome}": `, el('button', { dataset: { a: 'runa-aplicar', id: c[0].id }, disabled: st.ocupado.has('runa'),
+        on: { click: ctx.seguro(() => aplicar(c[0])) } }, 'aplicar'));
+  }
+  const marcada = c.find(x => x.id === atual);
+  return linha(`${c.length} páginas de ${nome}: `, ...c.map(pg => el('button', {
+    class: pg.id === atual ? 'lc-cp-sel-on' : undefined, disabled: st.ocupado.has('runa'), dataset: { a: 'runa-pagina', id: pg.id },
+    on: { click: ctx.seguro(() => { if (pg.id !== atual) aplicar(pg); }) },
+  }, pg.nome)), marcada ? el('span', { class: 'lc-cp-sel-ok' }, '✓ aplicada') : el('span', { class: 'lc-cp-nota' }, 'escolhe uma'));
+}

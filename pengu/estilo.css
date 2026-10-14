@@ -1,5 +1,8 @@
 /* lol-client: CSS do plugin. Cada regra depende da classe que o config.js põe no <html>.
-   Seletores do client medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md. */
+   Seletores do client medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md.
+   Client compacto: o CSS dele NÃO mora aqui. Vai injetado por JS (compacto/modo.js CSS_MODO, comum.js CSS_BASE e o
+   CSS_* de cada tela-*.js), todo sob #lc-compacto, #lc-botao-compacto, html.lc-modo-compacto ou html.lc-botao-compacto,
+   que só existem com compacto.ligado: desligado, nada daquele CSS pega no client normal (tools/teste-compacto.mjs). */
 
 /* esconder TFT: card na tela de modos e aba na barra de cima */
 html.lc-esconder-tft .game-type-card:has(.parties-game-type-icon.map-22),

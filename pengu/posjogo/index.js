@@ -324,10 +324,34 @@ export async function analisarUltima() {
 
 export { fechar as fecharPainel };
 
+// Client compacto (roadmap/2026-10-13-client-compacto.md, passo 7): com a camada compacta à vista no EndOfGame o painel
+// NÃO abre sozinho; abre pelo "ver análise completa" da tela 4 (compacto/tela-posjogo.js), que expande antes e chama o
+// abrirPainel devolvido abaixo. A classe é a da camada à vista (lc-modo-compacto), nunca lc-compacto (só "chave ligada").
+// O roteador observa a fase depois deste módulo (e depois da honra remonta a camada só no EndOfGame): espera um instante.
+export const ESPERA_COMPACTO_MS = 400;
+export const compactoAVista = () => !!globalThis.document?.documentElement?.classList?.contains('lc-modo-compacto');
+
+// Camada compacta que cai DEPOIS da decisão (celebração de nível/maestria que chega depois dos 400 ms e a regra 7
+// expande, erro da tela 4, ou o ⤢ expandir/Ctrl+Shift+M dele): o client normal segue "como hoje" (plano § Decisões),
+// com o painel. Vigia a classe do <html> até a camada sair ou a fase mudar. Decisão (13/10/2026): o expandir manual no
+// EndOfGame também abre o painel, igual ao client sem compacto; o "ver análise completa" já abre antes e não duplica.
+// -> {parar()}. doc/MO injetáveis (teste).
+export function vigiarSaidaDoCompacto({ aoSair, doc = globalThis.document, MO = globalThis.MutationObserver }) {
+  if (typeof MO !== 'function' || !doc?.documentElement) return { parar() {} };
+  let vivo = true;
+  const obs = new MO(() => {
+    if (!vivo || doc.documentElement.classList.contains('lc-modo-compacto')) return;
+    vivo = false; obs.disconnect();
+    try { aoSair(); } catch (e) { console.error('[lol-client] pós-jogo', e); }
+  });
+  obs.observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });
+  return { parar() { if (vivo) { vivo = false; obs.disconnect(); } } };
+}
+
 // abre sozinho no fim da partida (gameId guardado enquanto a partida rolava)
 export function iniciarPosjogo(context, cfg, coletor = null) {
   padrao = { cfg, coletor };
-  let gameId = null, mapa = null;
+  let gameId = null, mapa = null, faseAtual = null, vigiaCompacto = null;
   context.socket.observe('/lol-gameflow/v1/session', msg => {
     const s = msg?.data;
     if (s?.gameData?.gameId) gameId = s.gameData.gameId;
@@ -335,6 +359,8 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
   });
   context.socket.observe('/lol-gameflow/v1/gameflow-phase', async msg => {
     const fase = msg?.data;
+    faseAtual = fase;
+    if (vigiaCompacto && fase !== 'EndOfGame') { vigiaCompacto.parar(); vigiaCompacto = null; }
     // o painel (tela cheia) não pode cobrir o aceite nem a seleção: fecha e cancela análise em voo
     if (['ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress'].includes(fase)) fechar();
     // novo ciclo: o id da partida anterior não vale mais (Lobby traz gameId 0)
@@ -342,7 +368,26 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
     if (fase !== 'EndOfGame' || !cfg.posjogo.ligado) return;
     if (mapa && mapa !== 11) return; // ARAM, Arena etc.: sem painel automático
     if (!gameId) gameId = (await json('/lol-end-of-game/v1/eog-stats-block').catch(() => null))?.gameId;
-    if (gameId) abrirPainel(gameId, cfg, coletor, { fimDePartida: true }).catch(e => console.error('[lol-client] pós-jogo', e));
+    if (!gameId) return;
+    if (cfg.compacto?.ligado) {
+      await esperar(ESPERA_COMPACTO_MS);
+      if (faseAtual !== 'EndOfGame') return;
+      if (compactoAVista()) {
+        console.log('[lol-client] pós-jogo: tela compacta à vista; o painel abre no "ver análise completa"');
+        const gid = gameId;
+        vigiaCompacto?.parar();
+        vigiaCompacto = vigiarSaidaDoCompacto({ aoSair: () => {
+          vigiaCompacto = null;
+          if (faseAtual !== 'EndOfGame' || document.getElementById('lc-posjogo')) return;
+          abrirPainel(gid, cfg, coletor, { fimDePartida: true }).catch(e => console.error('[lol-client] pós-jogo', e));
+        } });
+        return;
+      }
+    }
+    abrirPainel(gameId, cfg, coletor, { fimDePartida: true }).catch(e => console.error('[lol-client] pós-jogo', e));
   });
-  return { aba, estado: estadoPainel };
+  // abrirPainel(id, {fimDePartida}): o "ver análise completa" da tela compacta; já aberto na mesma partida = fica
+  const abrir = (id, opcoes = {}) => (painel?.r?.gameId === id && document.getElementById('lc-posjogo')
+    ? Promise.resolve(painel.r) : abrirPainel(id, cfg, coletor, opcoes));
+  return { aba, estado: estadoPainel, abrirPainel: abrir };
 }

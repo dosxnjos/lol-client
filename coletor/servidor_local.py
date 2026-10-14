@@ -10,6 +10,7 @@
 #   GET  /contexto/<gameId> contexto do coletor para as lições do pós-jogo (coach.contexto_partida)
 #   GET  /licoes/<gameId>  as 3 lições da partida (coach.licoes_partida)
 #   GET  <rotas extras>    o coletor pendura outras (ex.: /draft, /revisao/<gameId>)
+#   GET/POST /chat/...     janelas do chat fora do client (coletor/chat_janelas.py pendura em rotas_get/rotas_post)
 # CORS: só origem local (o client roda em https://127.0.0.1:<porta da LCU>; o Pengu em
 # https://plugins); site qualquer no navegador não lê nem muda nada. Host fora de 127.0.0.1/localhost
 # é recusado (rebinding de DNS).
@@ -148,6 +149,22 @@ def origem_ok(origem):
         return False
 
 
+# /chat/*: as janelas do chat escrevem na LCU em nome dele (enviar, convidar, lida) e leem conversas. Só as próprias
+# páginas (mesma origem: http://127.0.0.1|localhost:<esta porta>) ou pedido sem Origin (navegação, GET de mesma
+# origem). Outra página local ou outro plugin do Pengu não lê as chaves nem manda mensagem. O plugin só usa estas:
+CHAT_ORIGEM_LIVRE = ("/chat/plugin", "/chat/abrir/amigos", "/chat/estado")
+
+
+def origem_chat_ok(rota, origem, porta):
+    if not rota.startswith("/chat/") or rota in CHAT_ORIGEM_LIVRE or not origem:
+        return True
+    try:
+        u = urlsplit(origem)
+        return u.scheme == "http" and u.hostname in ("127.0.0.1", "localhost") and u.port == porta
+    except ValueError:
+        return False
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = "lol-client"
     sys_version = ""
@@ -182,6 +199,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._enviar(403, {"erro": "host"})
             return True
         if not origem_ok(self.headers.get("Origin")):
+            self._enviar(403, {"erro": "origem"})
+            return True
+        if not origem_chat_ok(urlsplit(self.path).path, self.headers.get("Origin"), self.server.server_address[1]):
             self._enviar(403, {"erro": "origem"})
             return True
         return False
@@ -245,15 +265,25 @@ class _Handler(BaseHTTPRequestHandler):
     do_HEAD = do_GET
 
     def do_POST(self):
-        if self._barrar():
-            return
         rota = urlsplit(self.path).path
         try:
             n = int(self.headers.get("Content-Length") or 0)
         except ValueError:
             n = 0
+        # lê o corpo ANTES de recusar: responder 403 com o corpo ainda no socket faz o Windows abortar a conexão do
+        # cliente (WinError 10053) em vez de entregar o 403
         bruto = self.rfile.read(min(n, 65536)) if n > 0 else b""
+        if self._barrar():
+            return
         srv = self.server.dono
+        prefixo = next((p for p in srv.rotas_post if rota.startswith(p)), None)
+        if prefixo:  # ex.: /chat/ (coletor/chat_janelas.py): f(rota, corpo bruto) -> (status, corpo[, tipo])
+            try:
+                self._enviar(*srv.rotas_post[prefixo](rota, bruto))
+            except Exception as e:
+                log.warning("POST %s: %s", rota, e)
+                self._enviar(500, {"erro": "interno"})
+            return
         if rota.startswith("/mentor/") and srv.mentor_http:
             try:
                 codigo, corpo = srv.mentor_http("POST", self.path, bruto)
@@ -288,7 +318,7 @@ class ServidorLocal:
     (mentor: f(game_id) -> dict|None troca essa leitura). iniciar() sobe numa thread; False = porta ocupada."""
 
     def __init__(self, estado=None, mentor=None, db=banco.DB_PADRAO, porta=PORTA, config=CONFIG, mentor_http=None,
-                 ao_config=None, rotas_get=None, garantir_partida=None):
+                 ao_config=None, rotas_get=None, garantir_partida=None, rotas_post=None):
         self.estado = estado or (lambda: {"partida": False})
         self.db = db
         self.mentor = mentor or mentor_do_banco(db)
@@ -297,6 +327,7 @@ class ServidorLocal:
         self.config = config
         self.ao_config = ao_config            # f(cfg) depois de cada POST /config
         self.rotas_get = dict(rotas_get or {})  # {prefixo: f(caminho) -> (status, dict)}
+        self.rotas_post = dict(rotas_post or {})  # {prefixo: f(caminho, corpo bruto) -> (status, dict)} (/chat/)
         # f(gameId) -> bool: o pós-jogo pede o contexto no EndOfGame, antes do backfill (5–160 s depois)
         # gravar a partida; o coletor busca na LCU na hora (só GET)
         self.garantir_partida = garantir_partida

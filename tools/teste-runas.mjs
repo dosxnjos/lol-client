@@ -28,6 +28,29 @@ const extras = [
   ['página do próprio campeão -> null', donoDaPagina(regras, 1540029809, 154), r => r === null],
 ];
 
+// client compacto à vista (html.lc-modo-compacto): 2+ páginas não abrem o popup nem piscam a janela (a tela 3 escolhe)
+{
+  const { iniciarRunas } = await import('../pengu/runas.js');
+  const chamadas = [], criados = [];
+  const antes = { document: globalThis.document, fetch: globalThis.fetch };
+  globalThis.document = {
+    documentElement: { classList: { contains: c => c === 'lc-modo-compacto' } },
+    getElementById: () => null, removeEventListener() {}, addEventListener() {},
+    createElement: t => { criados.push(t); return { append() {}, addEventListener() {}, dataset: {} }; }, body: { appendChild() {} },
+  };
+  globalThis.fetch = async (url, op = {}) => {
+    chamadas.push(`${op.method || 'GET'} ${url}`);
+    const corpo = url === '/lol-perks/v1/pages' ? paginas.map(p => ({ ...p, isEditable: true, name: 'p' + p.id }))
+      : url.endsWith('champion-summary.json') ? [{ id: 58, name: 'Renekton' }] : [];
+    return { ok: true, status: 200, text: async () => JSON.stringify(corpo) };
+  };
+  const r = await iniciarRunas({ socket: { observe() {} } }, { runas: { ligado: true, regras } }).aoTravar(58, 'TOP');
+  Object.assign(globalThis, antes);
+  extras.push(['compacto à vista: 2 páginas sem popup, sem ux-show/ux-flash, sem escrita',
+    { r, escritas: chamadas.filter(c => !c.startsWith('GET')), criados: criados.length },
+    x => x.r.acao === 'compacto' && igual(x.r.ids, [1409260191, 2147419287]) && x.escritas.length === 0 && x.criados === 0]);
+}
+
 let ok = 0;
 for (const [nome, r, conf] of casos) { const passou = conf(r); ok += passou; console.log(passou ? 'ok' : 'FALHOU', nome, JSON.stringify(r)); }
 let okx = 0;

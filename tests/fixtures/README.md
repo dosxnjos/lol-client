@@ -14,6 +14,12 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
 - `ref-3292712362.json`: números esperados, saída do cálculo independente `temp/insights_calc.py`
   (fora do repo); a tabela de [INSIGHTS.md](../../docs/INSIGHTS.md) § Caso de teste é a mesma.
 
+## Pós-jogo compacto (`tools/teste-compacto-posjogo.mjs`)
+
+- `posjogo-3292746609.json`: **real** (normal 400, Zac, derrota 8/9/6, 13/10/2026): o eog do `dados/lol.db`
+  (maior id) recortado ao jogador local **sem identidade** (só campeão, stats de KDA/farm, times com vitória), a
+  sessão do gameflow só com gameId/fila/mapa e as 3 lições do `GET /licoes/<id>` do coletor (só id/tipo/texto).
+
 ## Champ select (`tools/teste-champselect.py`, acha `champselect-*.json` por glob)
 
 - `champselect-preferida`, `-autofill`, `-blind`, `-tardio`: montadas à mão no formato do `/help`.

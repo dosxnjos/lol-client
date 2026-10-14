@@ -1,0 +1,565 @@
+// Client compacto: roteador por fase (roadmap/2026-10-13-client-compacto.md, passo 3).
+// Cada fase do gameflow tem destino (destinoDaFase); o roteador decide se a camada compacta aparece, qual tela
+// monta e quando o client volta ao normal. Telas: pengu/compacto/tela-<nome>.js (contrato abaixo), carregadas sob
+// demanda; tela que não existe ou falha = client normal, nunca tela quebrada (dodge no champ select custa PDL).
+// Importável no node (tools/teste-compacto.mjs): o DOM só entra em iniciarCompacto.
+//
+// ---- contrato das telas ----
+// export function montar(raiz, ctx)   // obrigatório; pode ser async. Erro (throw ou Promise rejeitada) = expande.
+// export function desmontar(raiz, ctx) // opcional; o roteador já limpa raiz, título, extras, timers e assinaturas.
+// export function atualizar(ctx)       // opcional; fase mudou sem mudar de tela (None->Lobby, WaitingForStats->
+//                                      // EndOfGame). Sem ele o roteador desmonta e monta de novo.
+// ctx = {
+//   cfg, servicos ({context, fila, champ, runas, posjogo, coletor, ...} do pengu/index.js), tela (nome),
+//   fase (getter, fase atual), info (getter: {lida, fila, mapa, custom} da sessão do gameflow),
+//   raiz (corpo), titulo (slot à esquerda do topo), extras (slot antes do "expandir": 💬, etc.),
+//   lcu(metodo, url, corpo) -> {ok, status, json} (nunca lança; comum.lcu),
+//   observar(uri, cb)    // evento da LCU (WAMP {data, eventType, uri}); some sozinho ao desmontar; erro no cb = expande
+//   tempo(fn, ms), intervalo(fn, ms) // limpos ao desmontar; erro = expande
+//   seguro(fn)           // embrulha handler de clique/promise: erro = expande; no-op depois de desmontada
+//   vivo()               // false depois de desmontada (trabalho async confere antes de pintar)
+//   falhou(erro)         // erro tratado pela tela que deve devolver o client normal
+//   expandir()           // clique do Gabriel que leva ao client normal (ex.: "ver análise completa")
+//   avisar(msg, erro)    // aviso curto dentro da camada
+// }
+// Linhas que não se cruzam (plano § guardrails): busca só por clique e pelos freios (freios.js); nome oculto nunca;
+// nada decide pelo jogador; nunca tecla ou clique no jogo.
+import { criarJanela, criarCamada, criarBotaoModo, criarArrasto, invocadorRiot, ehAtalho, CSS, GRACA_MEDIDA_MS } from './modo.js';
+import { lcu as lcuPadrao, avisar as avisarPadrao, estilo } from './comum.js';
+import { avisarModo } from './chat-ponte.js';
+
+export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'Reconnect',
+  'FailedToLaunch', 'TerminatedInError', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
+export const FILAS_CHAMPSELECT = [420, 440, 400]; // seleção do SR com ban e posição (ARAM 450 expande: decisão do plano)
+export const MAPA_SR = 11;
+export const TELAS = { lobby: './tela-lobby.js', fila: './tela-fila.js', champselect: './tela-champselect.js', posjogo: './tela-posjogo.js' };
+export const CLASSE = 'lc-modo-compacto'; // no <html> enquanto a camada está à vista (lc-compacto é a chave ligada)
+export const ESPERA_SESSAO_MS = 2000; // champ select sem a sessão do gameflow lida: espera isso e expande
+
+// Regra 7 (telas da Riot que surgem sozinhas): camadas filhas de #lol-uikit-layer-manager-wrapper. Medido no
+// rcp-fe-lol-uikit 16.20 (13/10/2026): modal = div.modal; drawer/popout = lol-uikit-full-page-backdrop;
+// celebração = .vignette-celebration / .dialog-toast-celebration. Fora: .tooltip, .flyout*, lol-social-chat-window
+// (mora lá o tempo todo), notificações contextuais, toast simples.
+export const MODAIS = {
+  gatilho: ['.modal', 'lol-uikit-full-page-backdrop', '.vignette-celebration', '.dialog-toast-celebration', '.first-touch-modal', '.identity-modal'],
+  // conhecidos: só o popup do ready check (aceite.js é dono). As Configurações (.lol-settings-container) NÃO: com a
+  // camada à vista elas ficariam abertas e invisíveis atrás dela (inclusive o bloco que desliga o compacto); a Riot
+  // reanexa o mesmo DOM ao reabrir (ARMADILHAS § Client), então reabrir também dispara a vigia e expande
+  conhecidos: ['.ready-check-root-element'],
+};
+
+// info: {lida, fila, mapa, custom, aceiteLigado, aceiteVivo, aceiteManual} -> {tipo: 'tela'|'ceder'|'jogo'|'expandir'|'esperar', tela?, motivo?}
+// aceiteVivo === false: o aceite.js falhou no init (index.js: seguro() devolveu null); undefined = não sei, vale o ligado
+export function destinoDaFase(fase, info = {}) {
+  switch (fase) {
+    case 'None': case 'Lobby': return { tipo: 'tela', tela: 'lobby' };
+    case 'Matchmaking': return { tipo: 'tela', tela: 'fila' };
+    case 'ReadyCheck':
+      // a janela pequena corta o popup da Riot (modal de 1280): só cede ao #lc-aceite quando ele vai mesmo aceitar
+      if (!info.aceiteLigado) return { tipo: 'expandir', motivo: 'aceite automático desligado: o popup da Riot decide' };
+      if (info.aceiteVivo === false) return { tipo: 'expandir', motivo: 'o aceite automático não subiu nesta carga: o popup da Riot decide' };
+      if (info.aceiteManual) return { tipo: 'expandir', motivo: 'o popup da Riot voltou (aceite manual)' };
+      return { tipo: 'ceder' };
+    case 'ChampSelect': {
+      if (!info.lida) return { tipo: 'esperar', motivo: 'lendo a fila da seleção' };
+      const fila = Number(info.fila) || 0, mapa = Number(info.mapa) || 0;
+      if (mapa && mapa !== MAPA_SR) return { tipo: 'expandir', motivo: 'seleção fora do Summoner\'s Rift (ARAM e outros): tela da Riot' };
+      if (FILAS_CHAMPSELECT.includes(fila) || (info.custom && mapa === MAPA_SR)) return { tipo: 'tela', tela: 'champselect' };
+      return { tipo: 'expandir', motivo: `seleção da fila ${fila || 'desconhecida'}: tela da Riot` };
+    }
+    case 'GameStart': case 'InProgress': return { tipo: 'jogo' };
+    case 'Reconnect': return { tipo: 'expandir', motivo: 'reconectar é no botão da Riot' };
+    case 'FailedToLaunch': case 'TerminatedInError': return { tipo: 'expandir', motivo: 'o jogo não abriu ou caiu: tela da Riot' };
+    case 'WaitingForStats': return { tipo: 'tela', tela: 'posjogo' };
+    case 'PreEndOfGame': return { tipo: 'expandir', motivo: 'honra e telas do fim de partida são da Riot' };
+    case 'EndOfGame': return { tipo: 'tela', tela: 'posjogo' };
+    default: return { tipo: 'expandir', motivo: `fase desconhecida (${fase ?? 'sem leitura'})` };
+  }
+}
+
+// info da sessão do gameflow (só o que roteia; nada de identidade)
+export function infoDaSessao(s) {
+  const gd = s?.gameData || {};
+  const fila = Number(gd.queue?.id), mapa = Number(s?.map?.id ?? gd.queue?.mapId);
+  return { lida: true, fila: fila > 0 ? fila : null, mapa: mapa > 0 ? mapa : null, custom: !!gd.isCustomGame };
+}
+
+// camada da Riot que manda expandir -> descrição curta | null. el = filho direto do wrapper.
+export function classificarCamada(el) {
+  if (!el || el.nodeType !== 1) return null;
+  const casa = sel => { try { return !!el.matches?.(sel); } catch { return false; } };
+  const contem = sel => { try { return casa(sel) || !!el.querySelector?.(sel); } catch { return false; } };
+  const gatilho = MODAIS.gatilho.find(casa);
+  if (!gatilho) return null;
+  if (MODAIS.conhecidos.some(contem)) return null;
+  try { if (typeof el.getClientRects === 'function' && el.getClientRects().length === 0) return null; } catch { /* conta como visível */ }
+  return gatilho.replace(/^\./, '');
+}
+
+// Vigia da camada de modais. O wrapper nasce preguiçoso (getter domNode do uikit só anexa no 1º uso): observa o
+// #lol-uikit-layer-manager até ele existir. aoModal(desc) com 250 ms de folga (o conteúdo do modal chega depois da
+// camada; o do ready check precisa estar dentro para ser reconhecido).
+export function criarVigiaModais({ doc = globalThis.document, aoModal, agendar = setTimeout, limpar = clearTimeout, folgaMs = 250 }) {
+  let obsWrapper = null, obsManager = null, timer = null, wrapper = null;
+  // medição da regra 7 (passo 1 do plano): o que apareceu no wrapper, só tag e classes (nunca texto), últimas 30
+  const visto = [];
+  const aberto = () => {
+    const w = doc.getElementById?.('lol-uikit-layer-manager-wrapper');
+    if (!w) return null;
+    for (const c of Array.from(w.children || [])) { const d = classificarCamada(c); if (d) return d; }
+    return null;
+  };
+  const anotar = () => {
+    const w = doc.getElementById?.('lol-uikit-layer-manager-wrapper');
+    const camadas = Array.from(w?.children || []).filter(c => c.tagName !== 'LOL-SOCIAL-CHAT-WINDOW').map(c => ({
+      tag: String(c.tagName || '').toLowerCase(), classes: String(c.className || '').slice(0, 80),
+      filho: String(c.children?.[0]?.className || c.children?.[0]?.tagName || '').slice(0, 80), expande: classificarCamada(c),
+    }));
+    const chave = JSON.stringify(camadas);
+    if (camadas.length && visto.at(-1)?.chave !== chave) visto.push({ em: new Date().toISOString(), chave, camadas });
+    if (visto.length > 30) visto.shift();
+  };
+  const conferir = () => {
+    limpar(timer);
+    timer = agendar(() => {
+      timer = null;
+      try { anotar(); } catch { /* só medição */ }
+      const d = aberto();
+      if (d) aoModal?.(d);
+    }, folgaMs);
+  };
+  const ligarWrapper = () => {
+    const w = doc.getElementById?.('lol-uikit-layer-manager-wrapper');
+    if (!w || w === wrapper || typeof MutationObserver === 'undefined') return !!w;
+    obsWrapper?.disconnect();
+    wrapper = w;
+    obsWrapper = new MutationObserver(ms => { if (ms.some(m => m.addedNodes?.length)) conferir(); });
+    obsWrapper.observe(w, { childList: true });
+    return true;
+  };
+  // o manager também nasce por JS (rcp-fe-lol-uikit, inicializado assíncrono pelo plugin-runner; não está no
+  // index.html estático, conferido por GET em 13/10/2026): se o DOMContentLoaded chegou antes dele, observa o <body>
+  // até ele aparecer e só então desliga essa vigia larga (sem isso a regra 7 ficava cega a sessão inteira)
+  let obsCorpo = null;
+  const ligarManager = () => {
+    const m = doc.getElementById?.('lol-uikit-layer-manager');
+    if (!m || obsManager) return !!m;
+    obsManager = new MutationObserver(() => { if (ligarWrapper()) conferir(); });
+    obsManager.observe(m, { childList: true });
+    return true;
+  };
+  const ligar = () => {
+    if (typeof MutationObserver === 'undefined') return;
+    ligarWrapper();
+    if (ligarManager()) { if (wrapper) conferir(); return; }
+    if (obsCorpo || !doc.body) return;
+    obsCorpo = new MutationObserver(() => {
+      if (!ligarManager()) return;
+      obsCorpo.disconnect(); obsCorpo = null;
+      if (ligarWrapper() || wrapper) conferir();
+    });
+    obsCorpo.observe(doc.body, { childList: true, subtree: true });
+  };
+  return { ligar, aberto, conferir, ligado: () => ({ manager: !!obsManager, wrapper: !!obsWrapper, esperando: !!obsCorpo }),
+    historico: () => visto.map(({ em, camadas }) => ({ em, camadas })) };
+}
+
+const dormir = (agendar, ms) => new Promise(r => agendar(r, ms));
+
+// Núcleo testável. janela: criarJanela(); camada: {montar() -> {raiz, titulo, extras}, remover()};
+// carregarTela(nome) -> Promise<módulo> (rejeita/sem montar = tela não existe); assinar(uri, cb): socket da LCU;
+// classe(bool): html.lc-modo-compacto; modalAberto() -> desc|null; aceiteManual() -> bool; aoAplicar(estado).
+export function criarRoteador({
+  cfg, janela, camada, carregarTela, servicos = {}, lcu = lcuPadrao, avisar = avisarPadrao,
+  log = (...a) => console.log('[lol-client] compacto:', ...a), assinar = () => {}, classe = () => {},
+  modalAberto = () => null, aceiteManual = () => false, aceiteVivo = () => undefined, aoAplicar = () => {},
+  agendar = setTimeout, limpar = clearTimeout, repetir = setInterval, pararRepetir = clearInterval, agora = () => Date.now(),
+}) {
+  const reencolhidas = []; // quando a Riot devolveu a janela a 1280 com a tela compacta montada (ms)
+  const est = { fase: null, info: { lida: false }, chave: null, destino: null, override: null, forcado: null,
+    efetivo: 'expandido', motivo: 'início', tela: null, pronto: false };
+  const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
+  const assinadas = new Set();
+  let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null;
+
+  const carregar = nome => {
+    let m = modulos.get(nome);
+    if (m) return m;
+    m = { estado: 'carregando', mod: null };
+    modulos.set(nome, m);
+    Promise.resolve().then(() => carregarTela(nome)).then(mod => {
+      if (mod && typeof mod.montar === 'function') { m.estado = 'ok'; m.mod = mod; } else m.estado = 'falta';
+    }, e => { m.estado = 'falta'; log(`tela "${nome}" indisponível (${e?.message || e})`); }).then(() => resolver());
+    return m;
+  };
+
+  // o que a fase pede agora -> {modo: 'compacto'|'expandido'|'ceder'|'esperar'|'nada', tela?, mod?, motivo?}
+  function alvo() {
+    const c = cfg.compacto || {};
+    if (!c.ligado) return { modo: 'expandido', motivo: 'client compacto desligado' };
+    // sem DOM ou sem a 1ª leitura da fase: não mexe em nada (recarga com a janela pequena não pisca)
+    if (!est.pronto || !est.faseLida) return { modo: 'nada' };
+    const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual() });
+    const chave = d.tipo === 'esperar' ? est.chave : `${d.tipo}:${d.tela || ''}`;
+    // virou de destino: a escolha manual e a regra 7 valem só até aqui ("lembrar o modo por fase", plano)
+    if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; }
+    est.destino = d;
+    const quer = est.override || (c.inicioCompacto ? 'compacto' : 'expandido');
+    if (d.tipo === 'esperar') return { modo: 'esperar', motivo: d.motivo };
+    if (d.tipo === 'expandir') return { modo: 'expandido', motivo: d.motivo, daFase: true };
+    if (d.tipo === 'jogo') return { modo: 'expandido', motivo: 'partida: client normal embaixo do jogo', daFase: true };
+    if (d.tipo === 'ceder') return quer === 'compacto' ? { modo: 'ceder', motivo: 'ready check: o aceite é dono' } : { modo: 'expandido', motivo: 'expandido por ti' };
+    if (est.forcado) return { modo: 'expandido', motivo: est.forcado };
+    if (quer !== 'compacto') return { modo: 'expandido', motivo: est.override ? 'expandido por ti' : 'padrão: client normal' };
+    if (!janela.disponivel()) return { modo: 'expandido', motivo: 'sem controle da janela (riotInvoke)' };
+    const m = carregar(d.tela);
+    if (m.estado === 'carregando') return { modo: 'esperar', motivo: `carregando a tela ${d.tela}` };
+    if (m.estado !== 'ok') return { modo: 'expandido', motivo: `a tela compacta "${d.tela}" ainda não existe` };
+    // montagem nova (entrar no compacto ou trocar de tela) com tela da Riot aberta: fica no normal
+    if (!(est.efetivo === 'compacto' && montagem?.nome === d.tela)) {
+      const modal = modalAberto();
+      if (modal) { est.forcado = `o client abriu uma janela própria (${modal})`; return { modo: 'expandido', motivo: est.forcado }; }
+    }
+    return { modo: 'compacto', tela: d.tela, mod: m.mod };
+  }
+
+  function resolver() {
+    if (aplicando) { pendente = true; return; }
+    aplicando = true;
+    try {
+      let voltas = 0;
+      do { pendente = false; aplicar(alvo()); } while (pendente && ++voltas < 5);
+    } catch (e) {
+      log('roteador falhou', e);
+      emergencia();
+    } finally { aplicando = false; }
+    try { aoAplicar(estado()); } catch { /* botão */ }
+    despejarAvisos();
+  }
+
+  // último recurso: sem camada e janela normal
+  function emergencia() {
+    try { desmontarTela(); } catch { /* segue */ }
+    try { camada.remover(); } catch { /* segue */ }
+    try { classe(false); } catch { /* segue */ }
+    try { if (janela.ehCompacta()) janela.expandir(); } catch { /* segue */ }
+    est.efetivo = 'expandido'; est.motivo = 'erro no roteador'; est.tela = null;
+  }
+
+  function aplicar(a) {
+    if (a.modo === 'esperar' && est.destino?.tipo === 'esperar' && !timerSessao) {
+      // sessão do champ select não chegou: não encolhe nem expande no escuro por até ESPERA_SESSAO_MS
+      timerSessao = agendar(() => { timerSessao = null; if (!est.info.lida && est.fase === 'ChampSelect') { est.info = { lida: true }; resolver(); } }, ESPERA_SESSAO_MS);
+    }
+    if (a.modo === 'nada' || a.modo === 'esperar') return;
+    if (a.modo === 'compacto') {
+      if (est.efetivo === 'compacto' && montagem && montagem.nome === a.tela) {
+        // a Riot devolveu a janela a 1280×720 com a camada de pé (restore do plugin-runner, ux-show [S]): encolhe de
+        // novo; se ela insistir (3 vezes em 10 s), desiste e fica no client normal (camada de 1280 não é compacto)
+        if (!janela.ehCompacta()) {
+          const t = agora();
+          while (reencolhidas.length && t - reencolhidas[0] > 10000) reencolhidas.shift();
+          if (reencolhidas.length >= 3) { est.forcado = 'a janela voltou ao tamanho normal sozinha'; pendente = true; return; }
+          reencolhidas.push(t);
+          log('a janela voltou a 1280 sozinha: encolhendo de novo');
+          if (!janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt)) { est.forcado = 'a janela não encolheu (riotInvoke)'; pendente = true; return; }
+        }
+        if (montagem.fase !== est.fase) mudarFase(a);
+        return;
+      }
+      desmontarTela();
+      const partes = camada.montar();
+      if (!janela.ehCompacta() && !janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt)) {
+        camada.remover();
+        est.forcado = 'a janela não encolheu (riotInvoke)';
+        est.efetivo = 'expandido'; est.motivo = est.forcado; est.tela = null;
+        return;
+      }
+      classe(true);
+      est.efetivo = 'compacto'; est.motivo = null; est.tela = a.tela;
+      montarTela(a.tela, a.mod, partes);
+      return;
+    }
+    // expandido ou ceder: sem camada; ceder não mexe na janela (o #lc-aceite fica centrado nela)
+    desmontarTela();
+    camada.remover();
+    classe(false);
+    if (a.modo === 'expandido' && janela.ehCompacta()) janela.expandir();
+    if (est.efetivo !== a.modo || est.motivo !== a.motivo) log(`${a.modo}: ${a.motivo}`);
+    est.efetivo = a.modo; est.motivo = a.motivo; est.tela = null;
+  }
+
+  function mudarFase(a) {
+    const m = montagem;
+    m.fase = est.fase;
+    if (typeof m.mod.atualizar === 'function') {
+      try { const r = m.mod.atualizar(m.ctx); if (r && typeof r.then === 'function') r.catch(e => falhou(e, m.token)); } catch (e) { falhou(e, m.token); }
+      return;
+    }
+    desmontarTela();
+    montarTela(a.tela, a.mod, camada.montar());
+  }
+
+  function montarTela(nome, mod, partes) {
+    const t = ++token;
+    const m = { nome, mod, token: t, fase: est.fase, partes, timers: new Set(), intervalos: new Set(), subs: new Map(), ctx: null };
+    montagem = m;
+    const vivo = () => montagem === m && m.token === token;
+    const seguro = fn => (...args) => {
+      if (!vivo()) return undefined;
+      try {
+        const r = fn(...args);
+        if (r && typeof r.then === 'function') r.catch(e => falhou(e, t));
+        return r;
+      } catch (e) { falhou(e, t); return undefined; }
+    };
+    const ctx = {
+      cfg, servicos, tela: nome,
+      get fase() { return est.fase; },
+      get info() { return { ...est.info }; },
+      raiz: partes.raiz, titulo: partes.titulo, extras: partes.extras,
+      lcu: (metodo, url, corpo) => lcu(metodo, url, corpo),
+      vivo, seguro,
+      observar(uri, cb) {
+        if (!vivo()) return;
+        if (!m.subs.has(uri)) m.subs.set(uri, new Set());
+        m.subs.get(uri).add(seguro(cb));
+        assinarUri(uri);
+      },
+      tempo(fn, ms) {
+        if (!vivo()) return null;
+        const id = agendar(() => { m.timers.delete(id); seguro(fn)(); }, ms);
+        m.timers.add(id);
+        return id;
+      },
+      intervalo(fn, ms) {
+        if (!vivo()) return null;
+        const id = repetir(seguro(fn), ms);
+        m.intervalos.add(id);
+        return id;
+      },
+      falhou: e => falhou(e, t),
+      expandir: () => expandirPorTi(),
+      avisar: (msg, erro) => avisar(msg, erro),
+      dormir: ms => dormir(agendar, ms),
+    };
+    m.ctx = ctx;
+    try {
+      const r = mod.montar(partes.raiz, ctx);
+      if (r && typeof r.then === 'function') r.catch(e => falhou(e, t));
+    } catch (e) { falhou(e, t); }
+  }
+
+  function desmontarTela() {
+    const m = montagem;
+    if (!m) return;
+    montagem = null;
+    token++;
+    for (const id of m.timers) limpar(id);
+    for (const id of m.intervalos) pararRepetir(id);
+    m.subs.clear();
+    try { m.mod.desmontar?.(m.partes.raiz, m.ctx); } catch (e) { log(`desmontar "${m.nome}" falhou`, e); }
+    for (const p of [m.partes.raiz, m.partes.titulo, m.partes.extras]) try { p?.replaceChildren?.(); } catch { /* segue */ }
+  }
+
+  // eventos da LCU: um observe por uri (o socket do Pengu não tem como desassinar); entrega só à tela montada
+  function assinarUri(uri) {
+    if (assinadas.has(uri)) return;
+    assinadas.add(uri);
+    try {
+      assinar(uri, msg => { const s = montagem?.subs.get(uri); if (s) for (const cb of [...s]) cb(msg); });
+    } catch (e) { log('assinar', uri, e); }
+  }
+
+  // erro de tela: client normal até a próxima virada de destino (tenta de novo na próxima fase)
+  function falhou(e, t) {
+    if (t !== undefined && (!montagem || montagem.token !== t)) return; // tela velha: ignora
+    log('tela compacta falhou', e);
+    est.forcado = `erro na tela compacta (${e?.message || e})`;
+    avisarDepois('a tela compacta falhou: abri o client normal', true);
+    resolver();
+  }
+
+  // aviso que sai no fim do próximo resolver() (dentro da camada que vai sumir ele se perderia): chamar antes dele
+  const avisos = [];
+  function avisarDepois(msg, erro = false) { avisos.push([msg, erro]); }
+  function despejarAvisos() {
+    while (avisos.length) { const [msg, erro] = avisos.shift(); try { avisar(msg, erro); } catch { /* segue */ } }
+  }
+
+  function expandirPorTi() {
+    est.override = 'expandido';
+    resolver();
+  }
+
+  function compactarPorTi() {
+    est.override = 'compacto';
+    est.forcado = null;
+    resolver();
+    if (est.efetivo !== 'compacto' && est.destino?.tipo !== 'esperar' && !(modulos.get(est.destino?.tela)?.estado === 'carregando'))
+      avisar(`modo compacto indisponível agora: ${est.motivo || 'sem tela'}`, true);
+  }
+
+  function estado() {
+    return { fase: est.fase, info: { ...est.info }, destino: est.destino, efetivo: est.efetivo, motivo: est.motivo, tela: est.tela,
+      override: est.override, forcado: est.forcado, janelaCompacta: janela.ehCompacta(), camada: !!camada.existe?.(),
+      telas: Object.fromEntries([...modulos].map(([k, v]) => [k, v.estado])) };
+  }
+
+  return {
+    aoFase(fase) {
+      if (est.faseLida && fase === est.fase) return;
+      est.faseLida = true; // null (leitura falhou de vez) também conta: destino "fase desconhecida" = client normal
+      if (fase === 'ChampSelect') est.info = { lida: false }; // a sessão de antes pode ser de outra fila
+      est.fase = fase;
+      resolver();
+    },
+    aoSessao(s) {
+      const novo = infoDaSessao(s);
+      const v = est.info;
+      if (v.lida && v.fila === novo.fila && v.mapa === novo.mapa && v.custom === novo.custom) return;
+      est.info = novo;
+      if (timerSessao && est.info.lida) { limpar(timerSessao); timerSessao = null; }
+      resolver();
+    },
+    aoModal(desc) {
+      if (est.efetivo !== 'compacto' || !desc) return;
+      est.forcado = `o client abriu uma janela própria (${desc})`;
+      avisarDepois(`${est.forcado}: client normal`);
+      resolver();
+    },
+    alternar() {
+      if (!cfg.compacto?.ligado) { avisar('client compacto desligado nas configurações', true); return; }
+      if (est.efetivo === 'compacto') expandirPorTi(); else compactarPorTi();
+    },
+    compactar: compactarPorTi,
+    expandir: expandirPorTi,
+    marcarPronto() { est.pronto = true; resolver(); },
+    reavaliar: resolver,
+    sincronizar: resolver, // cfg mudou (ligado, inicioCompacto, tamanho)
+    estado,
+    preCarregar() { for (const nome of Object.keys(TELAS)) carregar(nome); },
+    montada: () => (montagem ? { nome: montagem.nome, ctx: montagem.ctx } : null),
+  };
+}
+
+// Liga tudo no client. servicos: o que as telas usam do resto do plugin (fila rápida, winrate, runas, pós-jogo...).
+export function iniciarCompacto(context, cfg, servicos = {}) {
+  const doc = document;
+  const invocar = invocadorRiot(window);
+  const janela = criarJanela({ invocar, medir: () => [window.innerWidth, window.innerHeight] });
+  let rot = null;
+  // arrastar pelo topo da camada (Window.MoveTo; unidade [S]): sempre sobra um pedaço do topo à vista
+  const tela = () => globalThis.screen || {};
+  const arrasto = criarArrasto({
+    posicao: () => [Number(window.screenX ?? window.screenLeft), Number(window.screenY ?? window.screenTop)],
+    mover: (x, y) => janela.mover(x, y),
+    limites: () => {
+      const s = tela(), x0 = Number(s.availLeft) || 0, y0 = Number(s.availTop) || 0;
+      const aw = Number(s.availWidth), ah = Number(s.availHeight), w = Number(window.innerWidth) || 420;
+      return { minX: x0 - (w - 120), maxX: Number.isFinite(aw) ? x0 + aw - 120 : undefined, minY: y0, maxY: Number.isFinite(ah) ? y0 + ah - 60 : undefined };
+    },
+    raf: fn => requestAnimationFrame(fn),
+  });
+  const camada = criarCamada({
+    doc,
+    arrasto,
+    aoExpandir: () => rot?.expandir(),
+    aoMinimizar: () => janela.minimizar(),
+    aoFechar: () => janela.sair(),
+    avisoFechar: () => (rot?.estado().fase === 'ChampSelect'
+      ? 'fechar o client agora é dodge: perde PDL e fica um tempo sem poder buscar. fechar mesmo assim?'
+      : 'fechar o client?'),
+  });
+  const botao = criarBotaoModo({ doc, aoClicar: () => rot?.compactar(), raf: fn => requestAnimationFrame(fn) });
+  const vigia = criarVigiaModais({ doc, aoModal: d => rot?.aoModal(d) });
+  rot = criarRoteador({
+    cfg, janela, camada,
+    carregarTela: nome => import(TELAS[nome]),
+    servicos: { context, ...servicos },
+    assinar: (uri, cb) => context.socket.observe(uri, cb),
+    classe: ligado => doc.documentElement.classList.toggle(CLASSE, ligado),
+    modalAberto: () => vigia.aberto(),
+    aceiteManual: () => doc.documentElement.classList.contains('lc-aceite-manual'),
+    // pengu/index.js passa o retorno do iniciarAceite (null = o módulo quebrou no init: o popup da Riot segue
+    // escondido pelo estilo.css e ninguém aceita; ceder com a janela pequena perderia a partida)
+    aceiteVivo: () => ('aceite' in servicos ? !!servicos.aceite : undefined),
+    // botão "▣ modo compacto" só no client normal (no "ceder" do ready check a janela é a pequena); na seleção a
+    // barra da Riot não aparece: botão flutuante
+    aoAplicar: e => botao.sincronizar(!!cfg.compacto?.ligado && e.efetivo === 'expandido', { flutuante: e.fase === 'ChampSelect' }),
+  });
+
+  const lerSessao = () => lcuPadrao('GET', '/lol-gameflow/v1/session').then(r => { if (r.ok && r.json) rot.aoSessao(r.json); });
+  context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => {
+    const f = msg?.data;
+    if (typeof f !== 'string') return;
+    rot.aoFase(f);
+    if (f === 'ChampSelect') lerSessao();
+  });
+  context.socket.observe('/lol-gameflow/v1/session', msg => { if (msg?.eventType !== 'Delete' && msg?.data) rot.aoSessao(msg.data); });
+  // fase inicial (recarga do plugin no meio de qualquer fase); falha = tenta de novo, a fase do socket também chega
+  const lerFase = async (tentativa = 0) => {
+    const r = await lcuPadrao('GET', '/lol-gameflow/v1/gameflow-phase');
+    if (typeof r.json === 'string') { rot.aoFase(r.json); if (r.json === 'ChampSelect') lerSessao(); return; }
+    if (tentativa < 5) setTimeout(() => lerFase(tentativa + 1), 3000);
+    else rot.aoFase(null);
+  };
+  lerSessao().catch(() => {});
+  lerFase().catch(() => {});
+
+  // DOM só depois do DOMContentLoaded (o Pengu chama init antes do <body>: ARMADILHAS § Client)
+  const ligarDom = () => {
+    estilo('lc-compacto-estilo', CSS, doc);
+    botao.ligar();
+    vigia.ligar();
+    // popup do ready check que volta (aceite manual): sai do "ceder" e expande
+    if (typeof MutationObserver !== 'undefined')
+      new MutationObserver(() => { if (rot.estado().fase === 'ReadyCheck') rot.reavaliar(); })
+        .observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });
+    // atalho só com a chave ligada: desligado, o Ctrl+Shift+M segue para o client como se o plugin não existisse
+    window.addEventListener('keydown', e => {
+      if (!cfg.compacto?.ligado || !ehAtalho(e)) return;
+      e.preventDefault(); e.stopPropagation();
+      rot.alternar();
+    }, true);
+    // a Riot pode devolver a janela a 1280×720 sozinha (restore, ux-show do aceite.js) [S]: relê agora e de novo depois
+    // da folga do ResizeTo (GRACA_MEDIDA_MS), senão a camada de 1280 ficava de pé até a próxima fase
+    let tResize = null, tResize2 = null;
+    window.addEventListener('resize', () => {
+      clearTimeout(tResize); clearTimeout(tResize2);
+      tResize = setTimeout(() => rot.reavaliar(), 300);
+      tResize2 = setTimeout(() => rot.reavaliar(), GRACA_MEDIDA_MS + 200);
+    });
+    rot.preCarregar();
+    rot.marcarPronto();
+  };
+  if (doc.body) ligarDom();
+  else doc.addEventListener('DOMContentLoaded', ligarDom, { once: true });
+
+  // janelas do chat (tela 5, coletor/chat_janelas.py): conversa nova só abre sozinha com o compacto ligado, e o
+  // coletor só sabe disso pelo POST /chat/plugin {compacto}. Manda na carga, quando a chave muda e, ligado, de novo a
+  // cada CHAT_REAVISO_MS: o coletor sobe depois do client e reinicia (volta com compacto=None). Falha = calada.
+  const chat = criarAvisoChat({ cfg, coletor: servicos.coletor, repetir: setInterval });
+  chat.avisar();
+
+  // medição (passo 1): camadas da Riot vistas, para conferir a lista da regra 7 depois de uma partida real
+  // (node tools/cdp.mjs eval com window.__lolClient.compacto.modais(); só tag e classe, nunca texto)
+  return {
+    ...rot,
+    sincronizar() { rot.sincronizar(); chat.mudou(); }, // cfg mudou: roteador + aviso ao coletor se a chave virou
+    modais: () => vigia.historico(),
+  };
+}
+
+export const CHAT_REAVISO_MS = 60000;
+// aviso do modo ao coletor (testável). coletor: fetch do coach.js (injetado; sem ele, o padrão da chat-ponte)
+export function criarAvisoChat({ cfg, coletor, repetir = setInterval, intervaloMs = CHAT_REAVISO_MS }) {
+  let ultimo = null;
+  const avisar = () => {
+    ultimo = !!cfg.compacto?.ligado;
+    try { return Promise.resolve(coletor ? avisarModo(ultimo, coletor) : avisarModo(ultimo)).catch(() => false); } catch { return Promise.resolve(false); }
+  };
+  const id = repetir(() => { if (cfg.compacto?.ligado) avisar(); }, intervaloMs);
+  try { id?.unref?.(); } catch { /* browser: número */ }
+  return { avisar, mudou: () => (!!cfg.compacto?.ligado !== ultimo ? avisar() : Promise.resolve(null)), ultimo: () => ultimo };
+}

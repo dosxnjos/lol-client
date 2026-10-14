@@ -8,6 +8,8 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - Busca na fila só por clique do Gabriel (fila rápida, jogar de novo), sempre pelos freios de `pengu/freios.js`
   (tilt e madrugada, 2º clique); escrita da coleta de recompensas só por
   `ROTAS_COLETA` (`pengu/recompensas.js`), nunca rota que gasta (baú, criação, fichas, passe).
+- Client compacto (`pengu/compacto/`): erro, campo ausente ou modal desconhecido → expandir ou botão cinza com motivo,
+  nunca decidir pelo jogador; rota [S] ainda sem medição nunca é premissa ([plano](roadmap/2026-10-13-client-compacto.md) passo 1).
 - Resposta falsa (avisos calados) só GET das `ROTAS` de `pengu/sem-popups.js`; nunca a sessão do champ select
   (o coletor lê `isAutofilled`). Plano: [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,

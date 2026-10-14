@@ -30,6 +30,7 @@ EVENTOS = (
     "OnJsonApiEvent_lol-end-of-game_v1_eog-stats-block",
     "OnJsonApiEvent_lol-ranked_v1_current-ranked-stats",
     "OnJsonApiEvent_lol-champ-select_v1_session",
+    "OnJsonApiEvent_lol-chat_v1_conversations",   # mensagem nova abre a janela da conversa (chat_janelas.py)
 )
 FASES_LOBBY = ("Lobby", "Matchmaking", "ReadyCheck")
 FASES_JOGO = ("GameStart", "InProgress", "Reconnect", "WaitingForStats", "PreEndOfGame", "EndOfGame")
@@ -140,11 +141,12 @@ class LCU:
             corpo = r.read()
         return json.loads(corpo) if corpo else None
 
-    def post(self, caminho, corpo=None, timeout=10):
-        """única escrita do coletor na LCU: aceitar/recusar o ready check por clique na janelinha
-        (aviso_partida.py). Nada aqui chama POST sozinho."""
+    def post(self, caminho, corpo=None, timeout=10, metodo="POST"):
+        """escrita do coletor na LCU, sempre por clique do Gabriel: aceitar/recusar o ready check na janelinha
+        (aviso_partida.py) e, nas janelas do chat (chat_janelas.py), enviar mensagem, convidar e marcar a conversa
+        como lida (metodo="PUT"). Nada aqui escreve sozinho."""
         dados = json.dumps(corpo).encode() if corpo is not None else b""
-        req = urllib.request.Request(f"https://127.0.0.1:{self.porta}{caminho}", data=dados, method="POST",
+        req = urllib.request.Request(f"https://127.0.0.1:{self.porta}{caminho}", data=dados, method=metodo,
                                      headers={"Authorization": self.auth, "Accept": "application/json",
                                               "Content-Type": "application/json"})
         with urllib.request.urlopen(req, context=self.ctx, timeout=timeout) as r:
@@ -470,6 +472,19 @@ def _aviso_padrao(lcu, atraso_s):
     return aviso_partida.AvisoPartida(lcu, atraso_s)
 
 
+def _chat_padrao(coach, lcu):
+    """janelas do chat fora do client nas rotas /chat/* do servidor do coach; falha aqui nunca derruba o coletor"""
+    srv = getattr(coach, "srv", None)
+    if srv is None:
+        return None
+    try:
+        import chat_janelas
+        return chat_janelas.ChatJanelas(lcu, base=f"http://127.0.0.1:{srv.porta}").instalar(srv)
+    except Exception as e:
+        log.warning("chat em janelas fora: %s: %s", type(e).__name__, e)
+        return None
+
+
 class Coletor:
     def __init__(self, args, coach=None, fab_aviso=None):
         self.args = args
@@ -487,6 +502,7 @@ class Coletor:
         self.cs = RetratoChampSelect()
         self.fila_atual = None
         self.ultima_cs = None  # chave do último retrato, para ligar o game_id
+        self.chat = _chat_padrao(coach, lambda: self.lcu)  # janelas do chat (tela 5); None sem coach/servidor
 
     def ocioso(self):
         return time.monotonic() - self.ultimo_ok >= self.ocioso_s
@@ -560,7 +576,10 @@ class Coletor:
     async def evento(self, nome, corpo):
         # despacha pela uri, não pelo nome: assinatura genérica ("OnJsonApiEvent") chega com o nome genérico
         uri, dado = corpo.get("uri") or "", corpo.get("data")
-        if uri == "/lol-gameflow/v1/gameflow-phase":
+        if uri.startswith("/lol-chat/"):
+            if self.chat:   # só memória (sem IO): quem abre a janela é a thread do chat
+                self.chat.evento(uri, corpo.get("eventType"), dado)
+        elif uri == "/lol-gameflow/v1/gameflow-phase":
             await self.fase(dado)
         elif uri == "/lol-end-of-game/v1/eog-stats-block" and dado and corpo.get("eventType") != "Delete":
             banco.gravar_eog(self.c, dado)
@@ -633,6 +652,8 @@ class Coletor:
         if not isinstance(fase, str):
             return
         await self.aviso_partida(fase)   # antes das leituras abaixo: o ready check dura 12 s
+        if self.chat:
+            self.chat.fase(fase)         # conversa nova só abre sozinha fora da fila/seleção/partida
         gid = fila = None
         try:
             s = await asyncio.to_thread(self.lcu.get, "/lol-gameflow/v1/session")

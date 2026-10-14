@@ -1,0 +1,15 @@
+// prova de carga do client compacto no CEF do client real, SÓ import() (nada é montado, lido da LCU ou escrito):
+//   node tools/cdp.mjs eval tools/compacto-importar.js
+// esperado: cada módulo com o número de exports (e " montar" nas telas); "ERRO ..." = o módulo não sobe no CEF 108.
+(async () => {
+  const v = Date.now();
+  const base = 'https://plugins/lol-client/';
+  const mods = ['compacto/comum.js', 'compacto/modo.js', 'compacto/chat-ponte.js', 'compacto/chat-botao.js', 'compacto/index.js',
+    'compacto/tela-lobby.js', 'compacto/tela-fila.js', 'compacto/tela-champselect.js', 'compacto/tela-posjogo.js', 'posjogo/index.js'];
+  const out = {};
+  for (const m of mods) {
+    try { const mod = await import(`${base}${m}?v=${v}`); out[m] = Object.keys(mod).length + (typeof mod.montar === 'function' ? ' montar' : ''); }
+    catch (e) { out[m] = 'ERRO ' + (e?.message || e); }
+  }
+  return out;
+})()
