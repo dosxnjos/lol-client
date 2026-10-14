@@ -155,7 +155,7 @@ function desenharObjetivos(e) {
   if (ob.janela) mortos.append(chip(`JANELA: ${ob.inimigosMortos.length} mortos`, 'verde'));
   for (const m of ob.inimigosMortos || []) mortos.append(chip(`${m.nome} ${m.renascerS} s`, 'verde'));
   for (const m of ob.aliadosMortos || []) mortos.append(chip(`${m.nome} ${m.renascerS} s`, 'vermelho'));
-  // feitiços inimigos em recarga (feiticos.py: chat por OCR ou F9 + 1..5), os que voltam antes
+  // feitiços inimigos em recarga (feiticos.py: chat por OCR ou atalho F7), os que voltam antes
   for (const f of (e.feiticos || []).slice(0, 3)) mortos.append(chip(f.texto, 'amarelo'));
   if (!mortos.childElementCount) mortos.append(chip('ninguém morto', 'velho'));
   // 60 s antes de um objetivo o rodapé vira o preparo (quem está morto, sumido); fora disso, o item

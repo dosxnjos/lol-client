@@ -44,8 +44,8 @@ TIPOS = {
     # retorno dos atalhos (o próprio Gabriel apertou a tecla), nunca vermelho (vermelho é perigo; foi o que
     # confundiu no treino de 13/10/2026). retorno=True: só preenche tempo ocioso (MotorAvisos._distribuir):
     # sai na hora sem alerta na moldura, nunca apaga nem passa na frente de alerta, não corta fala e não
-    # conta no intervalo da voz. Cada evento sai com o destino dele (Aviso.destinos): F9 armado e "sem
-    # inimigo" só na moldura; marcado e desfeito, voz + moldura.
+    # conta no intervalo da voz. Cada evento sai com o destino dele (Aviso.destinos): batida do F7
+    # ("flash: mid?"), cancelado e "sem inimigo" só na moldura; marcado e desfeito, voz + moldura.
     "feitico_marcado":   dict(prio=45, validade=3, repetir=1, urgente=False, retorno=True, destinos="vm", cor="verde", icone="relogio"),
     "overlay_f8":        dict(prio=45, validade=3, repetir=1, urgente=False, retorno=True, destinos="m", cor="azul", icone="olho"),
 }
@@ -116,13 +116,22 @@ TEXTOS = {
                          "descontraido": ("o {rota} já passou do nível {pico}, respeita", "{campeao} nível {nivel}")},
     "pico_item": {"serio": ("o {rota} fechou item", "{campeao} fechou item"),
                   "descontraido": ("o {rota} fechou item, ficou forte", "{campeao} fechou item")},
-    # retorno do F9 (tipo feitico_marcado; molde por evento, ver aviso_atalho). {rota} = top, jungler,
+    # retorno do F7 (tipo feitico_marcado; molde por evento, ver aviso_atalho). {rota} = top, jungler,
     # mid, atirador, suporte (frase genérica, sem nome de campeão); {feitico} = "flash" (minúsculo)
     "feitico_marcado": {"serio": ("{feitico} do {rota} marcado", "{rota} sem {feitico}"),
                         "descontraido": ("anotado: {rota} sem {feitico}", "{rota} sem {feitico}")},
-    "feitico_desfeito": {"serio": ("marcação desfeita", "marcação desfeita"),
-                         "descontraido": ("beleza, desfiz a marcação", "marcação desfeita")},
-    "feitico_armado": {"serio": ("flash: 1 a 5", "flash: 1-5"), "descontraido": ("flash: 1 a 5", "flash: 1-5")},
+    # desfeito: a voz não tem rota (catálogo), o rótulo diz qual (o segurar F7 desfaz a última AÇÃO dele; revisão do
+    # passo 10: sem a rota ele não percebia se saiu a errada). do_chat: segurou e o gasto veio do chat, fica (só moldura)
+    "feitico_desfeito": {"serio": ("marcação desfeita", "desfeito: {rota}"),
+                         "descontraido": ("beleza, desfiz a marcação", "desfeito: {rota}")},
+    "feitico_do_chat": {"serio": ("{rota}: chat confirmou", "{rota}: chat confirmou"),
+                        "descontraido": ("{rota}: chat confirmou", "{rota}: chat confirmou")},
+    # batida do F7 (só moldura, fora do valores_catalogo: nunca falado): a rota selecionada antes de marcar
+    "feitico_selecionado": {"serio": ("{feitico}: {rota}?", "{feitico}: {rota}?"),
+                            "descontraido": ("{feitico}: {rota}?", "{feitico}: {rota}?")},
+    "feitico_cancelado": {"serio": ("nada marcado", "nada marcado"), "descontraido": ("nada marcado", "nada marcado")},
+    "feitico_nada_a_desfazer": {"serio": ("nada a desfazer", "nada a desfazer"),
+                                "descontraido": ("nada a desfazer", "nada a desfazer")},
     "feitico_sem_inimigo": {"serio": ("sem inimigo nessa posição", "sem inimigo"),
                             "descontraido": ("ninguém nessa posição", "sem inimigo")},
     "feitico_sem_feitico": {"serio": ("{rota} sem feitiço para marcar", "sem feitiço"),
@@ -304,7 +313,7 @@ class Aviso:
     urgente: bool | None = None
     textos: dict | None = None
     molde: str = ""       # chave de TEXTOS quando o tipo tem falas por evento (feitico_marcado); vazio = o tipo
-    # destinos: vazio = os do tipo; preenchido = só esses DENTRO dos do tipo (o F9 armado só na moldura)
+    # destinos: vazio = os do tipo; preenchido = só esses DENTRO dos do tipo (a batida do F7 só na moldura)
     destinos: str = ""
     tom: str = ""         # vazio = o tom do motor; "serio" força (gank de outra rota: "sai daí" é para outro)
     # grupo: contagem própria do `intervalo` do tipo (o jungler longe com junglerLonge="tudo" sai com os destinos do
@@ -312,6 +321,10 @@ class Aviso:
     grupo: str = ""
     # só retorno (TIPOS retorno=True): s sem alerta na moldura antes de sair; 0 = GAP_MOLDURA (o do atalho apertado)
     ocioso_s: float = 0.0
+    # só retorno: sai na hora mesmo com alerta na moldura (a batida do F7: "flash: mid?" é o que ele confere antes de
+    # a marcação sair 1,2 s depois; esperar o gap de 2,5 s fazia a marcação sair às cegas no meio de um gank). Não mexe
+    # no relógio da moldura: o próximo alerta entra como entraria
+    imediato: bool = False
     # preenchidos pelo motor (validade > 0 posta pelo gatilho sobrepõe a do tipo: gank de outra rota)
     fala: str = ""
     rotulo: str = ""
@@ -514,7 +527,8 @@ class MotorAvisos:
         # novo substitui os anteriores, e não mexe em _ultima_moldura (um alerta que chega depois apaga o retorno
         # na hora, nunca o contrário)
         desde = agora - self._ultima_moldura
-        retornos = [a for a in self._fila_moldura if self._e_retorno(a) and desde >= (a.ocioso_s or self.GAP_MOLDURA)]
+        retornos = [a for a in self._fila_moldura
+                    if self._e_retorno(a) and (a.imediato or desde >= (a.ocioso_s or self.GAP_MOLDURA))]
         if retornos:
             a = max(retornos, key=lambda x: x.em)
             for x in retornos:
@@ -583,13 +597,16 @@ def aviso_de(d):
                  textos=None if d.get("dados") else d.get("textos"))
 
 
-_RETORNO_F9 = {   # evento do F9 -> (molde em TEXTOS, destinos, cor)
-    "armado": ("feitico_armado", "m", "azul"),
+_RETORNO_F9 = {   # evento do atalho F7 -> (molde em TEXTOS, destinos, cor)
+    "selecionado": ("feitico_selecionado", "m", "azul"),     # cada batida: "flash: mid?"
     "marcado": ("feitico_marcado", "vm", "verde"),
-    # gasto lido no ping do chat (feiticos.LeitorChat): o mesmo rótulo do F9 ("top sem flash"), só na moldura (o
+    # gasto lido no ping do chat (feiticos.LeitorChat): o mesmo rótulo do F7 ("top sem flash"), só na moldura (o
     # chat é lido sozinho, de aliado também: voz a cada ping seria ruído; a voz fala quando ele VOLTA)
     "chat": ("feitico_marcado", "m", "verde"),
-    "desfeito": ("feitico_desfeito", "vm", "azul"),
+    "desfeito": ("feitico_desfeito", "vm", "azul"),           # segurar F7 sem seleção, com marcação a desfazer
+    "nada_a_desfazer": ("feitico_nada_a_desfazer", "m", "azul"),
+    "do_chat": ("feitico_do_chat", "m", "azul"),              # segurar F7 sobre gasto que o chat confirmou: fica
+    "cancelado": ("feitico_cancelado", "m", "azul"),          # segurar F7 no meio das batidas
     "sem_inimigo": ("feitico_sem_inimigo", "m", "azul"),
     "sem_feitico": ("feitico_sem_feitico", "m", "azul"),
 }
@@ -597,9 +614,10 @@ _RETORNO_F9 = {   # evento do F9 -> (molde em TEXTOS, destinos, cor)
 
 def aviso_atalho(evento, chave, rota=None, feitico=None, estado=None):
     """retorno ao jogador de um atalho que ELE apertou -> Aviso para o MotorAvisos.
-    evento do F9: "armado" (rótulo "flash: 1-5"), "marcado" (voz "flash do <rota> marcado" + rótulo
-    "<rota> sem flash"), "desfeito" (voz "marcação desfeita"), "sem_inimigo", "sem_feitico" (feiticos.
-    Feiticos.marcar); "overlay" = F8 (estado "ligado"/"desligado"). rota = ROTA_FALA (top,
+    evento do F7: "selecionado" (cada batida, rótulo "flash: mid?"), "marcado" (voz "flash do <rota> marcado" +
+    rótulo "<rota> sem flash"), "desfeito" (voz "marcação desfeita"), "nada_a_desfazer", "cancelado" (segurar F7),
+    "sem_inimigo", "sem_feitico" (feiticos.Feiticos.marcar/desfazer); "chat" = gasto lido no chat; "overlay" = F8
+    (estado "ligado"/"desligado"). rota = ROTA_FALA (top,
     jungler, mid, atirador, suporte; "inimigo" quando a Live Client não deu a posição dele). chave única
     por aperto (repetir do tipo = 1 s). Cor: azul ou verde."""
     if evento == "overlay":
@@ -607,7 +625,7 @@ def aviso_atalho(evento, chave, rota=None, feitico=None, estado=None):
     molde, destinos, cor = _RETORNO_F9[evento]
     f = (str(feitico or "flash").split() or ["flash"])[0].lower()
     a = Aviso("feitico_marcado", {"rota": rota or "?", "feitico": f}, f"{evento}:{chave}", cor=cor,
-              molde=molde, destinos=destinos)
+              molde=molde, destinos=destinos, imediato=evento == "selecionado")
     if evento == "chat":   # ninguém apertou nada: espera a moldura quieta como entre dois alertas (não troca a cor
         #                    logo depois de um gank) e, para isso, vale mais tempo na fila
         a.ocioso_s, a.validade = MotorAvisos.INTERVALO_MOLDURA, MotorAvisos.INTERVALO_MOLDURA + 5

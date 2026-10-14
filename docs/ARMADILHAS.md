@@ -579,16 +579,26 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   na frente (hipótese: raw input com `RIDEV_NOHOTKEYS`). O F9 ainda por cima é tecla do jogo (`Config\input.ini`,
   `evtToggleMouseClip=[F9]`: a "borda vermelha fina" que ele viu é o LoL travando o cursor).
   Hoje o atalho **observa** a tecla (`coletor/teclas.py`, `GetAsyncKeyState` em 25 ms, só com o jogo na frente; é o
-  que o OBS faz): nada é enviado nem comido, então a tecla também vai ao jogo. Por isso F7 (livre) arma, o
-  **numérico** 1..5 escolhe (o 1, 2, 3 e 5 de cima são itens dele, o 4 é a sentinela) e F7 duas vezes marca o
-  adversário da rota; o coletor loga aviso se alguma dessas virar tecla do LoL (`teclas.conflitos_no_lol`). Sem hook
+  que o OBS faz): nada é enviado nem comido, então a tecla também vai ao jogo. Por isso o atalho é **só o F7**
+  (livre), em batidas: número de cima **nunca** (1, 2, 3, 5 itens, 4 sentinela, e com Ctrl/Alt/Shift emote, smart
+  cast e self cast: o item dispararia junto), e o numérico de 14/10 à tarde não serve no note dele (sem numérico; fica
+  opcional). Como as batidas funcionam: [COLETOR](COLETOR.md) § Como o F7 funciona. O coletor loga aviso se F7, F8 ou
+  o numérico virarem tecla do LoL (`teclas.conflitos_no_lol`; só vê o que o LoL grava em `input.ini`/
+  `PersistedSettings.json`, não a ligação padrão: o F12 de print, se o LoL usar, não aparece). Sem hook
   `WH_KEYBOARD_LL`: com o GIL ocupado (minimapa, overlay) ele atrasaria toda tecla do jogo. Risco (Vanguard/termos):
   ler o estado da tecla é o que Discord/OBS fazem; o que a casa não faz é mandar tecla (`SendInput`/`keybd_event`).
   Risco que sobra (UIPI): `GetAsyncKeyState` devolve 0 se o jogo roda com integridade maior que o coletor (Riot
   Client aberto como administrador); o log `teclas: ... coletor como administrador: sim/não` diz o lado do coletor.
-  F7 duas vezes **marca** (com voz) o Flash do adversário da rota: quem aperta F7 de novo para "cancelar" marca; desfaz
-  com F7 F7 outra vez em até 10 s. Sem prova in-game até a próxima partida (log `atalho: F7 recebido`,
+  Uma batida do F7 **marca** (com voz) o Flash do adversário da rota se nada mais for apertado em 1,2 s: quem bate F7
+  sem querer marca; desfaz **segurando** o F7 1 s (a "F7 F7 em 10 s desfaz" de antes anularia duas marcações lentas
+  do mesmo inimigo). O desfazer é da **última ação do F7** (pilha), nunca "a marcação mais nova do atalho" em `usos`:
+  essa 1ª versão apagava a de outro inimigo quando a batida caía num gasto que o chat já tinha (revisão do passo 10).
+  Sem prova in-game até a próxima partida (log `atalho: F7 recebido`,
   `overlay do minimapa ... (F8)`); antes de ranqueada, `python coletor/feiticos.py --sonda 30` no modo treino.
+  **Note:** a fileira F pode mandar brilho/som sem o Fn (`VK_F7` nunca chega); a sonda apertando F7 **sem** Fn diz.
+- **Retorno de atalho que espera a moldura quieta** (gap de 2,5 s) → a batida do F7 ("flash: mid?") nunca aparecia
+  com um alerta na tela, e a marcação sai 1,2 s depois de soltar: às cegas no meio do gank. A batida sai com
+  `Aviso.imediato` (por cima do alerta, sem mexer no relógio da moldura); o resto do retorno segue esperando.
 - **F8 e F9 "não fazem nada" no jogo** (treino 3292803384, 13/10/2026) → registro deu certo (nenhum
   aviso de falha no log; o mesmo código fora do jogo, com `keybd_event`, alterna e marca), mas nenhum
   F8 chegou (o `alternar` loga cada um). A borda vermelha que o Gabriel viu ao apertar F9 não é do coach
@@ -600,7 +610,7 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   tecla recebida: apertar na partida sem linha "recebido" = o jogo segurou; `python coletor\feiticos.py
   --sonda 30` fora da partida separa o teclado. Se o jogo segurar, `RegisterHotKey` não serve lá e a
   saída (`GetAsyncKeyState`, ainda só leitura) é decisão. **Resolvido em 14/10/2026** (entrada acima: o jogo segura,
-  o F9 é tecla dele; hoje F7/numérico/F8 observados). O `--sonda` agora observa (F7, F8, F9, numérico).
+  o F9 é tecla dele; hoje F7 em batidas e F8 observados, numérico opcional). O `--sonda` agora observa (F7, F8, F9, numérico).
   O retorno ao jogador também faltava: no treino não há inimigo, o F9 + n devolvia `None` calado e o F8
   só muda um overlay vazio; hoje todo aperto tem rótulo na moldura ([COLETOR](COLETOR.md) § Feitiços).
 - **Janela Tk rouba o foco ao nascer, mesmo com `WS_EX_NOACTIVATE`** (13/10/2026, janelinha do ready check)

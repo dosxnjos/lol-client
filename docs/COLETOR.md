@@ -324,8 +324,8 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   como `regra`. Lista simples (formato até 13/10/2026) = calado nos dois: o motor, o `servidor_local` e o
   plugin migram.
 - **Aviso por evento**: `Aviso.molde` escolhe a fala em `TEXTOS` quando um tipo tem falas por evento
-  (`feitico_marcado`: `feitico_armado`, `feitico_desfeito`, `feitico_sem_inimigo`…), e `Aviso.destinos`
-  só restringe os do tipo (o F7 armado vai só para a moldura). O `adversario_voltou` também: `adversario_outra_rota`
+  (`feitico_marcado`: `feitico_selecionado`, `feitico_desfeito`, `feitico_sem_inimigo`…), e `Aviso.destinos`
+  só restringe os do tipo (a batida do F7 vai só para a moldura). O `adversario_voltou` também: `adversario_outra_rota`
   ("o top apareceu no mid") quando o adversário reaparece fora da rota dele.
 - **Retorno de atalho** (`retorno=True` em `TIPOS`: `feitico_marcado`, `overlay_f8`) só preenche tempo
   ocioso: na moldura sai quando nenhum alerta está na tela (2,5 s desde o último; o mais novo substitui os
@@ -476,8 +476,8 @@ versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Mar
   resolução do `game.cfg`, senão o principal; o `monitors[1]` do mss aqui é a 2ª tela); OCR sem resposta
   em 10 s mata o PowerShell e sobe outro no próximo print; recorte calibrado sozinho pelas linhas `mm:ss` e
   guardado em `dados\calibracao-chat.json`; OCR do Windows pt-BR num PowerShell persistente, imagem
-  pelo stdin, nada em disco) e `Atalhos` (F7 + numérico 1..5 = TOP..UTILITY: Flash dele agora; repetir em
-  10 s desfaz). Dedupe: mesmo inimigo e feitiço a ≤ 60 s = um gasto; linha > 300 s antes do
+  pelo stdin, nada em disco) e `Atalhos` (F7 em batidas: escolhe a rota, parado marca o Flash dele agora,
+  segurar desfaz; abaixo). Dedupe: mesmo inimigo e feitiço a ≤ 60 s = um gasto; linha > 300 s antes do
   `gameTime` cai (a linha fica na tela 2 min ou mais). O `processar_linhas` devolve só o gasto **novo** (a linha
   relida a cada print só confirma, `ultima_leitura`); o coach loga `coach: chat -> gasto novo: <campeão> <feitiço>
   às mm:ss (<rota>)` e mostra "<rota> sem flash" (verde) na moldura, sem voz (a voz fala quando ele volta); ping
@@ -485,28 +485,51 @@ versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Mar
 - **Como o F7 funciona** (desde 14/10/2026; antes F9 por `RegisterHotKey`, que não dispara com o jogo na frente e o
   F9 é tecla do LoL dele, [ARMADILHAS](ARMADILHAS.md) § Windows): `coletor\teclas.py` **observa** o teclado
   (`GetAsyncKeyState` a cada 25 ms, só com o jogo em primeiro plano; nada é enviado nem comido, a tecla também vai
-  ao jogo). F7 arma por **2 s**; nesses 2 s o **numérico** 1..5 escolhe (o 1..5 de cima são itens no LoL: não
-  contam; NumLock desligado manda setas, que mexem a câmera: também não). 1 top, 2 jungler, 3 mid, 4 atirador,
-  5 suporte = "ele acabou de usar o Flash" (sem Flash, o outro feitiço com recarga); **F7 duas vezes** = o
-  adversário da minha rota (`Feiticos.n_adversario`); o mesmo número de novo em ≤ 10 s desfaz. Ao ligar, o coletor
-  confere no `Config\input.ini`/`PersistedSettings.json` do LoL se F7, F8 ou o numérico viraram tecla do jogo e
-  loga aviso (`teclas.conflitos_no_lol`). `Feiticos.marcar(n)` devolve
-  `marcado`/`desfeito`/`sem_inimigo`/`sem_feitico` + a rota da fala (`ROTA_FALA`), e o coach responde pelo
-  `MotorAvisos` (tipo `feitico_marcado`, `avisos.aviso_atalho`; nunca vermelho, vermelho é perigo):
+  ao jogo). **Só o F7** (desde 14/10 ~20:30: o note do Gabriel não tem numérico, e o 1..5 de cima são itens no
+  LoL: ler não tira a tecla do jogo, o item dispararia junto). Máquina em `feiticos.Atalhos` (constantes
+  `JANELA_BATIDAS_S` 1,2 e `SEGURAR_S` 1,0):
+  - **1 batida** seleciona o adversário da minha rota (`Feiticos.n_adversario`; sem rota conhecida, o top);
+  - **cada batida a mais** passa para a próxima rota: top → jungler → mid → atirador → suporte, dando a volta a
+    partir da minha (eu top: 2 batidas = jungler, 5 = suporte, 6 = top de novo). Cada batida mostra a seleção na
+    moldura ("flash: mid?", `Feiticos.previa`);
+  - **parado 1,2 s depois de soltar** = marca o selecionado: "ele acabou de usar o Flash" (sem Flash, o outro
+    feitiço com recarga), com voz. A janela recomeça a cada batida e conta da soltura;
+  - **segurar 1 s** sem nada sendo escolhido = desfaz a **última ação do F7** (pilha `Feiticos._pilha_f7`), até
+    `DESFAZ_PRAZO_S` 60 s depois dela (`Feiticos.desfazer`). Se o chat viu aquele gasto (antes, ou um aliado pingou
+    depois), ele fica ("<rota>: chat confirmou"); senão sai, com toda ação que caiu nele (duas batidas lentas no
+    mesmo = 1 gasto). Segurar no meio das batidas = cancela, nada marcado. O segurar (1 s) é menor que a janela e a
+    janela só conta depois de soltar: segurando, nada marca antes.
+  - Marcar de novo o mesmo inimigo é o mesmo gasto (dedupe de 60 s), **nunca** desfaz (até 14/10 o mesmo número em
+    10 s desfazia: com o F7 só, duas marcações lentas do top se anulariam).
+  - **Numérico** 1..5 (opcional, quem tiver; NumLock desligado manda setas, que mexem a câmera: não contam) dentro
+    da seleção marca aquele número na hora. Fora dela, nada.
+  - Com o jogo fora da frente nenhum aperto conta; a seleção feita no jogo marca mesmo se ele sair da frente na janela.
+
+  Ao ligar, o coletor confere no `Config\input.ini`/`PersistedSettings.json` do LoL se F7, F8 ou o numérico viraram
+  tecla do jogo e loga aviso (`teclas.conflitos_no_lol`; ligação padrão que o LoL não grava nesses arquivos, como a
+  de print, não aparece). `Feiticos.marcar(n)` devolve `marcado`/`sem_inimigo`/`sem_feitico` e `Feiticos.desfazer()`
+  `desfeito`/`do_chat`/`nada_a_desfazer`, com a rota da fala (`ROTA_FALA`), e o coach responde pelo `MotorAvisos` (tipo
+  `feitico_marcado`, `avisos.aviso_atalho`; nunca vermelho, vermelho é perigo):
 
   | evento | moldura (rótulo, cor) | voz |
   | --- | --- | --- |
-  | F7 armado | "flash: 1-5", azul | — |
+  | batida do F7 | "flash: <rota>?", azul, **na hora, mesmo por cima de alerta** (`Aviso.imediato`; sem posição na Live Client: o nome do campeão) | — |
   | gasto lido no chat | "<rota> sem flash", verde (espera 10 s sem alerta) | — |
   | marcado | "<rota> sem flash", verde | "flash do <rota> marcado" (descontraído: "anotado: <rota> sem flash") |
-  | desfeito | "marcação desfeita", azul | "marcação desfeita" |
+  | desfeito (segurar) | "desfeito: <rota>", azul | "marcação desfeita" |
+  | segurar sobre gasto que o chat viu | "<rota>: chat confirmou", azul (fica marcado) | — |
+  | segurar sem marcação a desfazer (ou > 60 s) | "nada a desfazer", azul | — |
+  | segurar no meio das batidas | "nada marcado", azul | — |
   | sem inimigo na posição (treino) | "sem inimigo", azul | — |
 
   Rota da fala genérica (top, jungler, mid, atirador, suporte; "inimigo" quando a Live Client não deu a
   posição dele, porque aí a ordem é a do `allPlayers` e a rota da tecla seria mentira), nunca nome de
-  campeão. Com um alerta na tela (gank vermelho), o retorno da moldura espera ele acabar. A voz e a tela do
-  retorno se calam na seção LOL-CLIENT como qualquer tipo. No log: `atalho: F7 + numérico 1..5 observado`,
-  `atalho: F7 recebido`, `atalho: F7 + n recebido`, `atalho: F7 duas vezes recebido`, `coach: F7+n -> <resultado>`
+  campeão. Com um alerta na tela (gank vermelho), o retorno da moldura espera ele acabar, menos a batida do F7: é o
+  que ele confere antes de a marcação sair 1,2 s depois, então troca a borda na hora (D38 do plano de calibração). A voz e a tela do
+  retorno se calam na seção LOL-CLIENT como qualquer tipo. No log: `atalho: F7 observado (batidas ...)`,
+  `atalho: F7 recebido, batida 1 seleciona n (<rota>)`, `atalho: F7 batida k seleciona n`, `atalho: F7 parado 1.2 s
+  depois de k batida(s): marca n`, `atalho: F7 segurado 1.0 s: desfazer ...`/`seleção cancelada`, `atalho: F7 +
+  numérico n recebido`, `coach: atalho n -> <resultado>`, `coach: F7 segurado -> desfeito|nada_a_desfazer`
   (o F8, também observado: `overlay: F8 observado`, `overlay do minimapa ligado/desligado (F8)`). Sem a linha
   "recebido" depois de apertar = o coach não viu a tecla. `python coletor\feiticos.py --sonda 30` imprime cada
   F7/F8/F9/numérico observado (só lê; funciona com o jogo aberto).

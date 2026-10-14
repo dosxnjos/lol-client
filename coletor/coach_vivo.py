@@ -188,7 +188,7 @@ class _Partida:
         self._fonte_ov = None             # overlay_minimapa.fonte_jungler, quando cap e jungler existem
         self._n_retorno = 0               # chave única de cada retorno de atalho (F8/F7) e do chat
         # o retorno sai da thread que observa a tecla por esta fila: publicar pode esperar a janela da moldura
-        # nascer (até 5 s), e a thread do F7 parada perderia teclas e o fim da janela de 2 s
+        # nascer (até 5 s), e a thread do F7 parada perderia batidas, o segurar e o fim da janela de 1,2 s
         self._fila_retorno = queue.Queue()
         self._thread(self._laco_retorno, "coach-retorno")
         self._carregar_estatico()        # antes da config: o OCR e o atalho precisam do Feiticos
@@ -236,7 +236,8 @@ class _Partida:
             if self.f is not None:  # troca a tabela sem perder o que já foi marcado
                 novo.usos, novo.anunciados, novo.runas = self.f.usos, self.f.anunciados, self.f.runas
                 novo._sem_usou = self.f._sem_usou
-                # a rota que o F7 F7 marca e a última leitura do chat (sem elas, o atalho fica mudo até o próximo laço)
+                novo._pilha_f7 = self.f._pilha_f7   # sem ela o segurar F7 não desfaz nada depois da troca
+                # a rota onde a 1ª batida do F7 começa e a última leitura do chat (sem elas, o atalho fica mudo até o próximo laço)
                 novo.minha_posicao, novo.ultima_leitura = self.f.minha_posicao, self.f.ultima_leitura
             self.f = novo
         self.picos = sugestoes.PicosDeForca(est["lendarios"]) if est else None
@@ -335,8 +336,10 @@ class _Partida:
                 self.coach.avisa("OCR do chat", e)
             try:
                 at = self.coach.fab["atalhos"](self._atalho)
-                at.ao_armar = self._armado   # retorno ao jogador ("flash: 1-5" na moldura)
-                at.n_proprio = self._n_proprio   # F7 duas vezes = o adversário da minha rota
+                at.ao_selecionar = self._selecionado   # cada batida do F7: "flash: mid?" na moldura
+                at.ao_desfazer = self._desfazer          # segurar F7 sem seleção
+                at.ao_cancelar = self._cancelado         # segurar F7 no meio das batidas
+                at.n_proprio = self._n_proprio   # a 1ª batida seleciona o adversário da minha rota
                 self.atalhos = at.iniciar()
             except Exception as e:  # sem o atalho a partida segue (o chat continua)
                 self.coach.avisa("atalho F7", e)
@@ -375,8 +378,19 @@ class _Partida:
             except Exception as e:
                 self.coach.avisa("retorno do atalho", e)
 
-    def _armado(self):
-        self._retorno("armado")
+    def _selecionado(self, n):
+        with self.trava_f:
+            p = self.f.previa(n) if self.f is not None else {"rota": "?", "feitico": "flash"}
+        self._retorno("selecionado", rota=p["rota"], feitico=p["feitico"])
+
+    def _desfazer(self):
+        with self.trava_f:
+            r = self.f.desfazer(self.relogio()) if self.f is not None else {"resultado": "nada_a_desfazer"}
+        log.info("coach: F7 segurado -> %s (%s, %s)", r["resultado"], r.get("inimigo"), r.get("feitico"))
+        self._retorno(r["resultado"], rota=r.get("rota"), feitico=r.get("feitico"))
+
+    def _cancelado(self):
+        self._retorno("cancelado")
 
     def _n_proprio(self):
         with self.trava_f:
@@ -385,7 +399,7 @@ class _Partida:
     def _atalho(self, n):
         with self.trava_f:
             r = self.f.marcar(n, self.relogio())
-        log.info("coach: F7+%d -> %s (%s, %s, %s)", n, r["resultado"], r["rota"], r["inimigo"], r["feitico"])
+        log.info("coach: atalho %d -> %s (%s, %s, %s)", n, r["resultado"], r["rota"], r["inimigo"], r["feitico"])
         self._retorno(r["resultado"], rota=r["rota"], feitico=r["feitico"])
 
     def _overlay_alternado(self, ligado):
@@ -407,7 +421,7 @@ class _Partida:
     def _lido_no_chat(self, novos):
         """gasto NOVO lido no chat (o processar_linhas já tira a repetição da linha que segue na tela): log com o
         ping interpretado (campeão inimigo e feitiço, nunca a linha crua: tem nome de jogador) e retorno na moldura,
-        como o do F9 ("top sem flash", verde, só no tempo ocioso). Antes só havia "N gasto(s)" a cada 3 s pelo mesmo
+        como o do F7 ("top sem flash", verde, só no tempo ocioso). Antes só havia "N gasto(s)" a cada 3 s pelo mesmo
         ping e nada na tela: o Gabriel não tinha como saber se o coach pegou (partida 3293149183)."""
         from feiticos import mmss
         with self.trava_f:

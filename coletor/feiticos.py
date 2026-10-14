@@ -2,8 +2,9 @@
 # Fontes, nesta ordem (API primeiro; a Live Client não tem recarga de feitiço de ninguém):
 #   1. ping de feitiço dos aliados no chat do jogo, lido por OCR do Windows (Windows.Media.Ocr pt-BR)
 #      num recorte do chat calibrado sozinho; o chat não passa pela LCU (medido em 13/10/2026);
-#   2. atalho manual F7 + numérico 1..5 (inimigo por rota; F7 duas vezes = o adversário da minha rota) quando o
-#      próprio Gabriel vê o flash.
+#   2. atalho manual F7 quando o próprio Gabriel vê o flash: 1 batida = o adversário da minha rota, cada batida a mais
+#      passa para a próxima rota (top, jungler, mid, atirador, suporte, e volta), parado 1,2 s marca; segurar F7
+#      desfaz. Numérico 1..5 opcional (quem tiver); números de cima nunca (são itens no LoL).
 # Linha que não se cruza: só print do monitor (mss) e LEITURA do teclado (teclas.py, GetAsyncKeyState);
 # nada de enviar tecla, ler memória ou mexer no processo do jogo. Nada de imagem em disco.
 # Formato real do ping (MEDICAO § 4): "mm:ss <aliado> (<campeão>): <inimigo> usou <feitiço>".
@@ -31,15 +32,20 @@ RUNA_PERSPICACIA = 8347          # Perspicácia Cósmica: +18 de aceleração de
 ARVORE_INSPIRACAO = 8300         # a runa só existe nessa árvore
 ACEL_RUNA = 18
 ACEL_BOTA = {3158: 10, 3171: 20}  # Botas Ionianas da Lucidez, Lucidez Escarlate (3171 vem de 3158)
-ROTAS = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")  # atalho 1..5
-# como a rota sai na fala/rótulo do retorno do F9 e do feitiço que voltou (frase genérica: sem nome de
+ROTAS = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")  # atalho 1..5 (ordem das batidas do F7)
+# como a rota sai na fala/rótulo do retorno do F7 e do feitiço que voltou (frase genérica: sem nome de
 # campeão, que a voz pré-gravada não tem). Dona da tabela: avisos.py (catálogo do pacote de voz)
 from avisos import ROTA_FALA, rota_fala  # noqa: E402
 JANELA_DEDUPE = 60    # mesmo (inimigo, feitiço) com horário a <= 60 s = o mesmo gasto (aliados repetem o ping)
 LINHA_VELHA = 300     # linha de chat > 300 s antes do gameTime (maior recarga): leitura errada ou inútil.
                       # a linha fica na tela bem mais que 90 s (00562.0: ping de 7:06 lido aos 9:22)
 ITEM_VELHO = 60       # item do inimigo sem mudança visível há > 60 s na hora do ping: bota "±"
-DESFAZ_ATALHO = 10    # F9 + mesmo número de novo em <= 10 s desfaz
+# desfazer (segurar F7) = a última AÇÃO do atalho (pilha Feiticos._pilha_f7), até DESFAZ_PRAZO_S depois dela: errou a
+# rota, percebe quando ouve "flash do mid marcado". Gasto que o chat viu (antes ou depois do F7) nunca se apaga. Até
+# 14/10 ~20:30 era "mesmo número de novo em 10 s", que com o F7 sozinho viraria armadilha (marcar o top de novo em 10 s
+# apagaria a marcação); a 1ª versão do segurar procurava "a mais nova do atalho" em usos e tirava a de OUTRO inimigo
+# quando a última batida tinha caído num gasto do chat (revisão do passo 10, D37).
+DESFAZ_PRAZO_S = 60
 
 # chat em 2560x1080 nesta HUD (MEDICAO § 4): reserva quando a calibração ainda não achou linha
 CAIXA_RESERVA = (1400, 815, 1900, 985)
@@ -340,7 +346,7 @@ def _eu(live):
 class Feiticos:
     """Cronômetro dos feitiços de invocador dos 5 inimigos.
     atualizar(allgamedata) a cada amostra da Live Client (1 s); processar_linhas(textos, gt) com o OCR
-    do chat; atalho(n, gt) com o F9 + n; estado(gt) para o painel; voltaram(gt) para a voz.
+    do chat; marcar(n, gt)/desfazer(gt) com o atalho F7; estado(gt) para o painel; voltaram(gt) para a voz.
     runas_por_campeao: {championId: [perkIds]} do spectator-v5 (riotapi), opcional;
     campeao_id: {nome da Live Client: championId} (champion-summary da LCU), para casar os dois."""
 
@@ -354,8 +360,9 @@ class Feiticos:
         self.usos = {}          # (inimigo, feitiço) -> [uso, ...]; uso = dict
         self.anunciados = set()
         self.ultima_leitura = {"novos": 0, "confirmados": 0, "sem_usou": []}   # resumo do último processar_linhas
-        self.minha_posicao = ""  # TOP..UTILITY do activePlayer (o "F7 duas vezes" marca o adversário dela)
+        self.minha_posicao = ""  # TOP..UTILITY do activePlayer (a 1ª batida do F7 seleciona o adversário dela)
         self._sem_usou = set()  # (inimigo, feitiço, ts) de pings sem "usou" já logados
+        self._pilha_f7 = []     # ações do atalho (desfazer), a mais nova no fim: {"uso", "em" (gt do aperto)}
 
     def definir_runas(self, runas_por_campeao):
         """as runas do spectator chegam depois (thread do carregamento): vale para os próximos gastos"""
@@ -435,6 +442,8 @@ class Feiticos:
         lista = self.usos.setdefault((inimigo, feitico), [])
         for u in lista:
             if abs(u["ts"] - ts) <= JANELA_DEDUPE:
+                if fonte == "chat":
+                    u["chat"] = True   # o chat viu este gasto: o segurar F7 não apaga (Feiticos.desfazer)
                 u["votos"][ts] = u["votos"].get(ts, 0) + 1
                 novo_ts = min(u["votos"], key=lambda t: (-u["votos"][t], t))   # moda; empate = o mais cedo
                 if novo_ts != u["ts"] and u["fonte"] == "chat":
@@ -474,10 +483,27 @@ class Feiticos:
         self.ultima_leitura = {"novos": len(out), "confirmados": confirmados, "sem_usou": sem_usou}
         return out
 
+    def previa(self, n):
+        """o que a batida do F7 seleciona antes de marcar: {"n", "rota", "inimigo", "feitico"} para o rótulo
+        "flash: mid?". rota = ROTA_FALA do inimigo nessa posição; sem posição na Live Client (blind, ARAM) a ordem é a
+        do allPlayers e a rota seria mentira, então vai o nome do campeão (o rótulo pode ter nome; a voz, não); sem
+        inimigo (treino) = a rota da tecla. feitico = o que marcar(n) marcaria ("flash", minúsculo)"""
+        r = {"n": n, "rota": ROTA_FALA[ROTAS[n - 1]] if 1 <= n <= len(ROTAS) else "?", "inimigo": None,
+             "feitico": "flash"}
+        if 1 <= n <= len(self.ordem):
+            nome = self.ordem[n - 1]
+            reg = self.inimigos[nome]
+            rota = rota_fala(reg.get("rota"))
+            fs = [f for f in reg["feiticos"] if f not in SEM_CRONOMETRO]
+            f = "Flash" if "Flash" in fs else (fs[0] if fs else "Flash")
+            r.update(inimigo=nome, rota=nome if rota == "inimigo" else rota, feitico=(str(f).split() or ["flash"])[0].lower())
+        return r
+
     def marcar(self, n, gt=None):
-        """F9 + n (1..5 = TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY): Flash dele gasto agora.
-        Repetir o mesmo número em <= 10 s desfaz. Devolve sempre o resultado, para o retorno ao jogador:
-        {"resultado": "marcado"|"desfeito"|"sem_inimigo"|"sem_feitico", "n", "rota" (ROTA_FALA: top,
+        """atalho n (1..5 = TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY): Flash dele gasto agora. Marcar de novo o mesmo
+        (aliado no chat ou outra batida) é o mesmo gasto (dedupe de 60 s), nunca desfaz: desfazer é desfazer().
+        Devolve sempre o resultado, para o retorno ao jogador:
+        {"resultado": "marcado"|"sem_inimigo"|"sem_feitico", "n", "rota" (ROTA_FALA: top,
         jungler, mid, atirador, suporte; "inimigo" se ele veio sem posição), "inimigo", "feitico", "uso"}. Sem inimigo na posição n (modo
         treino, personalizada sozinho) = "sem_inimigo"."""
         gt = self.gt if gt is None else gt
@@ -496,19 +522,50 @@ class Feiticos:
             r["resultado"] = "sem_feitico"
             return r
         r["feitico"] = f
-        lista = self.usos.setdefault((nome, f), [])
-        for u in list(lista):
-            if u["fonte"] == "atalho" and 0 <= gt - u["ts"] <= DESFAZ_ATALHO:
-                lista.remove(u)
-                r["resultado"] = "desfeito"
-                return r
         u = self.registrar(nome, f, gt, "atalho")
+        if u:   # novo ou o mesmo gasto de antes (dedupe): a ação vai à pilha do desfazer do mesmo jeito
+            self._pilha_f7.append({"uso": u, "em": gt})
         r.update(resultado="marcado" if u else "sem_feitico", uso=u)   # sem recarga conhecida: nada a marcar
         return r
 
+    def _vivo(self, u, gt):
+        """o uso segue em usos (não foi desfeito) e o cronômetro ainda corre"""
+        return any(x is u for x in self.usos.get((u["inimigo"], u["feitico"]), [])) and u["volta_em"] > gt
+
+    def desfazer(self, gt=None):
+        """segurar F7: desfaz a última AÇÃO do atalho (pilha _pilha_f7), até DESFAZ_PRAZO_S depois dela.
+        - o gasto que ela marcou foi visto no chat (antes, ou um aliado pingou depois) -> "do_chat": fica, só sai o voto
+          dela (não foi ele quem decidiu sozinho; a 1ª versão apagava a marcação de OUTRO inimigo nesse caso);
+        - senão -> "desfeito": o uso sai de usos, com todas as ações que caíram nele (duas batidas lentas no mesmo = 1
+          gasto: 1 segurar desfaz, o seguinte vai à ação anterior);
+        - nada vivo na pilha, ou a última ação tem mais de DESFAZ_PRAZO_S -> "nada_a_desfazer" (F7 segurado sem querer
+          minutos depois não apaga a marcação certa).
+        {"resultado", "rota" (ROTA_FALA), "inimigo", "feitico", "uso"}"""
+        gt = self.gt if gt is None else gt
+        r = {"resultado": "nada_a_desfazer", "rota": None, "inimigo": None, "feitico": None, "uso": None}
+        while self._pilha_f7 and not self._vivo(self._pilha_f7[-1]["uso"], gt):
+            self._pilha_f7.pop()           # desfeita antes, ou o cronômetro já venceu
+        if not self._pilha_f7 or gt - self._pilha_f7[-1]["em"] > DESFAZ_PRAZO_S:
+            return r
+        acao = self._pilha_f7.pop()
+        u = acao["uso"]
+        r.update(rota=self.rota_de(u["inimigo"]), inimigo=u["inimigo"], feitico=u["feitico"], uso=u)
+        if u["fonte"] == "chat" or u.get("chat"):
+            votos, t = u["votos"], acao["em"]   # o voto desta ação (marcar vota no horário em que ele apertou)
+            if votos.get(t, 0) > 1:
+                votos[t] -= 1
+            elif t in votos and len(votos) > 1:
+                del votos[t]
+            r["resultado"] = "do_chat"
+            return r
+        self.usos[(u["inimigo"], u["feitico"])] = [x for x in self.usos[(u["inimigo"], u["feitico"])] if x is not u]
+        self._pilha_f7 = [a for a in self._pilha_f7 if a["uso"] is not u]
+        r["resultado"] = "desfeito"
+        return r
+
     def n_adversario(self):
-        """o número do atalho do meu adversário direto (a minha posição: TOP = 1 ... UTILITY = 5), para o "F7 duas
-        vezes"; None sem posição (blind, ARAM) ou sem inimigo nela"""
+        """o número do atalho do meu adversário direto (a minha posição: TOP = 1 ... UTILITY = 5), onde a 1ª batida
+        do F7 começa; None sem posição (blind, ARAM) ou sem inimigo nela"""
         pos = getattr(self, "minha_posicao", "")
         if pos not in ROTAS:
             return None
@@ -520,7 +577,7 @@ class Feiticos:
         return rota_fala((self.inimigos.get(inimigo) or {}).get("rota"))
 
     def atalho(self, n, gt=None):
-        """como marcar(), devolvendo só o uso (None = desfeito, sem inimigo ou sem feitiço)"""
+        """como marcar(), devolvendo só o uso (None = sem inimigo ou sem feitiço)"""
         return self.marcar(n, gt)["uso"]
 
     def estado(self, gt=None):
@@ -652,16 +709,20 @@ class LeitorChat:
         self.ocr.parar()
 
 
-# ---------- atalho F7 + numérico 1..5 (só OBSERVA o teclado: coletor/teclas.py) ----------
+# ---------- atalho F7 (só OBSERVA o teclado: coletor/teclas.py) ----------
 # Até 14/10/2026 era F9 + 1..5 por RegisterHotKey, que nunca disparou com o jogo na frente (partidas 3292803384 e
 # 3293149183): o F9 ia para o jogo (no LoL dele é evtToggleMouseClip, a "borda vermelha fina") e 1, 2, 3 e 5 são
-# teclas de item. Observar não come tecla, então a escolha vai para o numérico (nenhuma ligação no LoL) e o armar para
-# o F7 (livre). O F9 deixa de ser do coach.
+# teclas de item. Observar não come tecla: número de cima dispararia o item junto. Depois, F7 + numérico; o note do
+# Gabriel não tem numérico (14/10 ~20:30), então o atalho é só o F7 (D34 do plano de calibração):
+#   1 batida  = seleciona o adversário da minha rota (rótulo "flash: top?" na moldura);
+#   + batidas = a próxima rota (top, jungler, mid, atirador, suporte, dando a volta), cada uma com o rótulo;
+#   parado JANELA_BATIDAS_S depois de SOLTAR = marca o selecionado (voz "flash do mid marcado");
+#   segurar SEGURAR_S = desfaz a última marcação (sem seleção em curso) ou cancela a seleção (com ela; nada marca).
+# A janela conta da soltura e é maior que o segurar: segurando, nada marca antes de o desfazer valer.
+# Numérico 1..5 (opcional, quem tiver): dentro da seleção, marca na hora aquele número.
 
-# vocabulário da máquina de estado (tratar): o do hotkey antigo, para os testes e o log seguirem iguais
-WM_HOTKEY, WM_TIMER = 0x0312, 0x0113
-ID_ARMAR = 1
-IDS_NUMERO = {11 + i: i + 1 for i in range(5)}   # evento -> 1..5
+JANELA_BATIDAS_S = 1.2   # parado este tempo depois de soltar o F7 = marca o selecionado
+SEGURAR_S = 1.0          # F7 apertado este tempo sem soltar = desfazer/cancelar (< janela, ver acima)
 TECLA_ARMAR = "F7"
 VK_ARMAR = 0x76
 VK_NUMERO = {0x61 + i: i + 1 for i in range(5)}  # numérico 1..5 (VK_NUMPAD1..5; com o NumLock desligado o numérico
@@ -669,25 +730,36 @@ VK_NUMERO = {0x61 + i: i + 1 for i in range(5)}  # numérico 1..5 (VK_NUMPAD1..5
 
 
 class Atalhos:
-    """F7 arma por janela_s; nesse tempo o numérico 1..5 escolhe o inimigo e chama ao_marcar(n); F7 de novo (duas
-    vezes) = o adversário da minha rota (n_proprio(), atributo opcional). Lê o teclado por teclas.Observador
-    (GetAsyncKeyState: só leitura, a tecla segue para o jogo) e só com o jogo em primeiro plano (na_tela).
-    ao_armar() / ao_expirar() (opcionais, atributos) são o gancho do retorno ao jogador ("flash: 1-5" na moldura).
+    """F7 em batidas (ver o comentário da seção): a 1ª seleciona o adversário da minha rota (n_proprio(), atributo
+    opcional; sem rota conhecida, o top), cada outra passa para a próxima rota, e parado janela_s depois de soltar
+    chama ao_marcar(n); segurar segurar_s chama ao_desfazer() (nada sendo escolhido) ou ao_cancelar() (com seleção).
+    ao_selecionar(n) a cada batida é o retorno ao jogador ("flash: mid?" na moldura). Numérico 1..5 dentro da seleção
+    marca na hora. Lê o teclado por teclas.Observador (GetAsyncKeyState: só leitura, a tecla segue para o jogo) e só
+    conta aperto com o jogo em primeiro plano (na_tela). relogio é injetável (teste: tempo simulado).
     Cada tecla vai para o log: sem "F7 recebido" depois de apertar = o coach não viu (ARMADILHAS § Windows)."""
 
-    def __init__(self, ao_marcar, tecla=VK_ARMAR, janela_s=2.0, ao_armar=None, ao_expirar=None, na_tela=None,
-                 estado=None):
-        self.ao_marcar, self.tecla, self.janela_ms = ao_marcar, tecla, int(janela_s * 1000)
-        self.ao_armar, self.ao_expirar = ao_armar, ao_expirar
-        self.n_proprio = None              # () -> n da minha rota (1..5) ou None: o "F7 duas vezes"
+    def __init__(self, ao_marcar, tecla=VK_ARMAR, janela_s=JANELA_BATIDAS_S, segurar_s=SEGURAR_S, ao_selecionar=None,
+                 ao_desfazer=None, ao_cancelar=None, na_tela=None, estado=None, relogio=None):
+        self.ao_marcar, self.tecla, self.janela_s, self.segurar_s = ao_marcar, tecla, janela_s, segurar_s
+        self.ao_selecionar, self.ao_desfazer, self.ao_cancelar = ao_selecionar, ao_desfazer, ao_cancelar
+        self.n_proprio = None              # () -> n da minha rota (1..5) ou None: onde a 1ª batida começa
         self.na_tela = na_tela if na_tela is not None else jogo_na_tela
         self.estado = estado               # vk -> bool (teste); None = GetAsyncKeyState
+        self.relogio = relogio or time.monotonic
         self.nome = TECLA_ARMAR if tecla == VK_ARMAR else hex(tecla)
-        self.armado = False
-        self._armado_em = 0.0
+        self.selecionado = None            # 1..5 da 1ª batida até marcar/cancelar; None = nada sendo escolhido
+        self.batidas = 0
+        self._baixo_em = None              # F7 apertado (contou) e ainda não solto: o segurar conta daqui
+        self._solto_em = None              # última soltura na seleção: a janela de marcar conta daqui
+        self._antes_do_aperto = None       # seleção antes deste aperto (None = o aperto começou do zero)
         self.thread = None
         self._parar = None
         self.obs = None
+
+    @property
+    def armado(self):
+        """há uma seleção em curso (nome antigo, do F7 que armava)"""
+        return self.selecionado is not None
 
     @staticmethod
     def _chamar(f, *a):
@@ -699,64 +771,106 @@ class Atalhos:
         except Exception as e:
             log.warning("atalho: retorno falhou: %s: %s", type(e).__name__, e)
 
-    # máquina de estado (pura: o teste chama direto, sem tecla nenhuma)
-    def tratar(self, msg, wparam, registrar=None, desregistrar=None):
-        registrar = registrar or (lambda: None)
-        desregistrar = desregistrar or (lambda: None)
-        if msg == WM_HOTKEY and wparam == ID_ARMAR:
-            if not self.armado:
-                self.armado, self._armado_em = True, time.monotonic()
-                registrar()
-                log.info("atalho: %s recebido, numérico 1..5 por %.0f s (%s de novo = adversário de rota)",
-                         self.nome, self.janela_ms / 1000, self.nome)
-                self._chamar(self.ao_armar)
-                return None
-            n = None
-            if self.n_proprio is not None:
-                try:
-                    n = self.n_proprio()
-                except Exception as e:
-                    log.warning("atalho: rota própria falhou: %s: %s", type(e).__name__, e)
-            if n:   # F7 duas vezes: o adversário da minha rota (sem rota conhecida, segue armado)
-                self.armado = False
-                desregistrar()
-                log.info("atalho: %s duas vezes recebido (adversário de rota = %d)", self.nome, n)
-                self._chamar(self.ao_marcar, n)
-                return n
+    def _inicio(self):
+        """onde a 1ª batida começa: o adversário da minha rota; sem rota (blind, ARAM, treino) ou erro, o top"""
+        n = None
+        if self.n_proprio is not None:
+            try:
+                n = self.n_proprio()
+            except Exception as e:
+                log.warning("atalho: rota própria falhou: %s: %s", type(e).__name__, e)
+        return n if isinstance(n, int) and 1 <= n <= len(ROTAS) else 1
+
+    def _limpar(self):
+        self.selecionado, self.batidas = None, 0
+        self._baixo_em = self._solto_em = self._antes_do_aperto = None
+
+    # máquina de estado (pura: o teste chama direto com o tempo que quiser, sem tecla nenhuma)
+    def apertou(self, agora=None):
+        """borda do F7 (só com o jogo na frente): seleciona o próximo; devolve o n selecionado"""
+        agora = self.relogio() if agora is None else agora
+        self._antes_do_aperto = self.selecionado
+        self._baixo_em, self._solto_em = agora, None
+        if self.selecionado is None:
+            n, self.batidas = self._inicio(), 1
+            log.info("atalho: %s recebido, batida 1 seleciona %d (%s); parado %.1f s marca, mais batidas trocam a "
+                     "rota, segurar %.1f s desfaz", self.nome, n, ROTA_FALA[ROTAS[n - 1]], self.janela_s, self.segurar_s)
+        else:
+            n = self.selecionado % len(ROTAS) + 1
+            self.batidas += 1
+            log.info("atalho: %s batida %d seleciona %d (%s)", self.nome, self.batidas, n, ROTA_FALA[ROTAS[n - 1]])
+        self.selecionado = n
+        self._chamar(self.ao_selecionar, n)
+        return n
+
+    def soltou(self, agora=None):
+        """borda de soltura do F7: a janela de marcar começa (soltura de aperto que não contou: nada)"""
+        if self._baixo_em is None:
+            return
+        self._baixo_em = None
+        if self.selecionado is not None:
+            self._solto_em = self.relogio() if agora is None else agora
+
+    def numero(self, n):
+        """numérico 1..5 (opcional): dentro da seleção marca n na hora; fora dela, nada (não marca sem o F7)"""
+        if self.selecionado is None:
             return None
-        if msg == WM_HOTKEY and wparam in IDS_NUMERO and self.armado:
-            self.armado = False
-            desregistrar()
-            n = IDS_NUMERO[wparam]
-            log.info("atalho: %s + %d recebido", self.nome, n)
+        self._limpar()
+        log.info("atalho: %s + numérico %d recebido", self.nome, n)
+        self._chamar(self.ao_marcar, n)
+        return n
+
+    def tique(self, agora=None):
+        """a cada volta do Observador: segurou -> desfazer/cancelar; parado depois de soltar -> marcar.
+        Devolve o que fez: n marcado, "desfazer", "cancelado" ou None"""
+        agora = self.relogio() if agora is None else agora
+        if self._baixo_em is not None and agora - self._baixo_em >= self.segurar_s:
+            estava = self._antes_do_aperto
+            self._limpar()   # a soltura deste aperto já não conta (_baixo_em None)
+            if estava is None:
+                log.info("atalho: %s segurado %.1f s: desfazer a última marcação", self.nome, self.segurar_s)
+                self._chamar(self.ao_desfazer)
+                return "desfazer"
+            log.info("atalho: %s segurado %.1f s: seleção cancelada, nada marcado", self.nome, self.segurar_s)
+            self._chamar(self.ao_cancelar)
+            return "cancelado"
+        if self.selecionado is not None and self._solto_em is not None and agora - self._solto_em >= self.janela_s:
+            n, batidas = self.selecionado, self.batidas
+            self._limpar()
+            log.info("atalho: %s parado %.1f s depois de %d batida(s): marca %d (%s)", self.nome, self.janela_s,
+                     batidas, n, ROTA_FALA[ROTAS[n - 1]])
             self._chamar(self.ao_marcar, n)
             return n
-        if msg == WM_TIMER and self.armado:
-            self.armado = False
-            desregistrar()
-            log.info("atalho: %s expirou sem número", self.nome)
-            self._chamar(self.ao_expirar)
         return None
 
-    # adaptador: tecla observada -> evento da máquina; a janela de 2 s expira pelo tique do Observador
+    # adaptador: tecla observada -> evento da máquina; a janela fecha pelo tique do Observador
     def _apertou(self, vk):
         if vk == self.tecla:
-            self.tratar(WM_HOTKEY, ID_ARMAR)
+            self.apertou()
         elif vk in VK_NUMERO:
-            self.tratar(WM_HOTKEY, 10 + VK_NUMERO[vk])
+            self.numero(VK_NUMERO[vk])
+
+    def _soltou(self, vk):
+        if vk == self.tecla:
+            self.soltou()
 
     def _tique(self):
-        if self.armado and time.monotonic() - self._armado_em >= self.janela_ms / 1000:
-            self.tratar(WM_TIMER, 0)
+        self.tique()
+
+    def observador(self):
+        """o teclas.Observador ligado nesta máquina (o teste roda passo() na mão, sem thread)"""
+        import teclas
+        return teclas.Observador([self.tecla, *VK_NUMERO], self._apertou, na_tela=self.na_tela,
+                                 estado=self.estado, tique=self._tique, ao_soltar=self._soltou)
 
     def iniciar(self):
         import teclas
         teclas.avisar_conflitos([self.nome, "Num 1", "Num 2", "Num 3", "Num 4", "Num 5"], "atalho")
-        self.obs = teclas.Observador([self.tecla, *VK_NUMERO], self._apertou, na_tela=self.na_tela,
-                                     estado=self.estado, tique=self._tique)
+        self.obs = self.observador()
         self._parar, self.thread = teclas.em_thread(self.obs, "atalhos-feiticos")
-        log.info("atalho: %s + numérico 1..5 observado (GetAsyncKeyState, só leitura; a tecla segue para o jogo)",
-                 self.nome)
+        log.info("atalho: %s observado (batidas escolhem a rota, parado %.1f s marca, segurar %.1f s desfaz; "
+                 "numérico 1..5 opcional; GetAsyncKeyState, só leitura: a tecla segue para o jogo)",
+                 self.nome, self.janela_s, self.segurar_s)
         return self
 
     def parar(self):
@@ -768,7 +882,8 @@ class Atalhos:
 
 
 def sonda(segundos=30.0):
-    """imprime cada F7/F8/F9/numérico 1..5 observado (coletor/teclas.py: só lê o teclado, em qualquer janela)"""
+    """imprime cada F7/F8/F9/numérico 1..5 observado (coletor/teclas.py: só lê o teclado, em qualquer janela).
+    F9 e numérico ficam na sonda para separar "teclado não manda" de "coach não vê"; o atalho é o F7"""
     import teclas
     return teclas.sonda(segundos)
 

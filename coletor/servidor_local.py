@@ -43,7 +43,7 @@ CONFIG_PADRAO = {
     "minimapa": True,          # passos 13–15c: captura, jungler e alertas de posição
     "overlayMinimapa": True,   # passo 15b: área provável do jungler por cima do minimapa (F8 alterna)
     "alertasTela": True,       # passo 15c: moldura na borda da tela
-    "feiticos": True,          # passo 15e: OCR do chat e atalho F7 + numérico 1..5
+    "feiticos": True,          # passo 15e: OCR do chat e atalho F7 (batidas; numérico 1..5 opcional)
     "carregamento": True,      # passo 18: os 10 pela Riot API na tela de carregamento
     "mentor": True,            # passo 20
     "mentorModelo": "sonnet",  # passo 20: vencedor da comparação de 13/10/2026 (sonnet, effort medium)

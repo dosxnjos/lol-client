@@ -911,12 +911,20 @@ def extra_retorno_atalho():
             m.tick(t)
         return m, voz, mol
 
-    # armado → marcado → desfeito → sem inimigo, em sequência rápida (< 2,5 s entre eles: retorno substitui
+    # batida → marcado → desfeito → nada a desfazer → cancelado → sem inimigo, em sequência rápida (< 2,5 s entre eles: retorno substitui
     # retorno na hora, sem alerta na tela)
-    m, voz, mol = rodar_eventos([("armado", {}), ("marcado", {"rota": "atirador", "feitico": "Flash"}),
-                                 ("desfeito", {"rota": "atirador", "feitico": "Flash"}), ("sem_inimigo", {"rota": "mid"})])
-    caso("retorno F9: rótulos na moldura na hora (flash: 1-5, atirador sem flash, marcação desfeita, sem inimigo)",
-         [r for _, r in mol.mostradas] == ["flash: 1-5", "atirador sem flash", "marcação desfeita", "sem inimigo"],
+    # (14/10 ~20:30: o F7 só; cada batida mostra a rota selecionada, segurar desfaz ou cancela)
+    m, voz, mol = rodar_eventos([("selecionado", {"rota": "atirador", "feitico": "flash"}),
+                                 ("marcado", {"rota": "atirador", "feitico": "Flash"}),
+                                 ("desfeito", {"rota": "atirador", "feitico": "Flash"}), ("nada_a_desfazer", {}),
+                                 ("cancelado", {}), ("sem_inimigo", {"rota": "mid"}),
+                                 ("do_chat", {"rota": "mid", "feitico": "Flash"})])
+    # o desfeito diz QUAL na moldura (revisão do passo 10: a voz "marcação desfeita" não tem rota, e o segurar podia
+    # tirar a marcação de outro sem ele perceber); do_chat = segurou e o gasto veio do chat, fica
+    caso("retorno F7: rótulos na moldura na hora (flash: atirador?, atirador sem flash, desfeito: atirador, "
+         "nada a desfazer, nada marcado, sem inimigo, mid: chat confirmou)",
+         [r for _, r in mol.mostradas] == ["flash: atirador?", "atirador sem flash", "desfeito: atirador",
+                                           "nada a desfazer", "nada marcado", "sem inimigo", "mid: chat confirmou"],
          str(mol.mostradas))
     caso("retorno F9: voz só no marcado e no desfeito, na hora, sem urgência (não corta fala em curso)",
          voz.faladas == [("flash do atirador marcado", False), ("marcação desfeita", False)], str(voz.faladas))
@@ -979,7 +987,7 @@ def extra_retorno_atalho():
          falas6[:2] == [(0, "dragão em um minuto"), (2, "flash do mid marcado")] and len(falas6) == 3
          and falas6[2][0] == 20,
          str(falas6))
-    # voz: objetivo em 0, jungler apareceu em 17 (esperando os 20 s), F9 + 3 em 18 → o jungler ainda fala em 20
+    # voz: objetivo em 0, jungler apareceu em 17 (esperando os 20 s), atalho 3 em 18 → o jungler ainda fala em 20
     m7v = VozFalsa()
     m7 = MotorAvisos(textos=TEXTOS, voz=m7v, moldura=MolduraFalsa())
     m7.publicar(Aviso("objetivo_60s", {"objetivo": "dragão"}, "d"), 0.0)
@@ -990,26 +998,31 @@ def extra_retorno_atalho():
     caso("retorno F9 não atrasa nem vence alerta de posição na fila da voz (jungler fala em 20 s)",
          [f for f, _ in m7v.faladas] == ["dragão em um minuto", "flash do mid marcado", "jungler no rio top"]
          and not m7.suprimidos["vencido"], f"{m7v.faladas} {dict(m7.suprimidos)}")
-    # moldura: gank vermelho em 0, F9 em 0,5, F9 + 2 em 1,2 → o vermelho fica os 2 s; o retorno sai depois
-    # (só o mais novo: 'jungler sem flash')
+    # moldura: gank vermelho em 0, batida do F7 em 0,5, marca 2 em 1,2. A batida ("flash: jungler?") sai NA HORA por
+    # cima do alerta: é a seleção que ele confere antes de a marcação sair 1,2 s depois de soltar (D34); antes ela
+    # esperava o gap de 2,5 s e, com um alerta na tela, a marcação saía às cegas (revisão do passo 10, achado 2). O
+    # marcado (tem voz) segue esperando o gap; a batida não mexe no relógio da moldura (o próximo alerta entra na hora)
     m8m = MolduraFalsa()
     m8 = MotorAvisos(textos=TEXTOS, voz=VozFalsa(), moldura=m8m)
     m8.publicar(Aviso("gank", {"zona": "no rio", "zc": "rio"}, "rio"), 0.0)
-    m8.publicar(aviso_atalho("armado", 1), 0.5)
+    m8.publicar(aviso_atalho("selecionado", 1, rota="jungler", feitico="flash"), 0.5)
     m8.publicar(aviso_atalho("marcado", 2, rota="jungler", feitico="Flash"), 1.2)
     for t in (1.5, 2.0, 2.5, 3.0):
         m8.tick(t)
     tempos8 = [(t, a.rotulo) for t, d, a in m8.emitidos if d == "moldura"]
-    caso("retorno não apaga a borda vermelha de um gank (espera o gap; o mais novo substitui o armado)",
-         m8m.mostradas == [("vermelho", "gank rio"), ("verde", "jungler sem flash")] and tempos8[1][0] >= 2.5,
-         str(tempos8))
+    caso("batida do F7 com alerta na tela: 'flash: jungler?' na hora (por cima do gank); o marcado espera o gap",
+         m8m.mostradas == [("vermelho", "gank rio"), ("azul", "flash: jungler?"), ("verde", "jungler sem flash")]
+         and tempos8[1][0] == 0.5 and tempos8[2][0] >= 2.5, str(tempos8))
+    m8.publicar(Aviso("jungler_apareceu", {"zona": "no rio top", "zc": "rio top", "campeao": "Ekko"}, "rio2"), 3.1)
+    caso("depois da batida por cima, o alerta seguinte segue a regra de sempre (a batida não conta como borda)",
+         m8m.mostradas[-1] == ("vermelho", "jungler rio top"), str(m8m.mostradas))
     # moldura: retorno na tela e um alerta chega → o alerta entra na hora (o retorno nunca segura alerta)
     m9m = MolduraFalsa()
     m9 = MotorAvisos(textos=TEXTOS, voz=VozFalsa(), moldura=m9m)
-    m9.publicar(aviso_atalho("armado", 1), 0.0)
+    m9.publicar(aviso_atalho("selecionado", 1, rota="top", feitico="flash"), 0.0)
     m9.publicar(Aviso("jungler_apareceu", {"zona": "no rio top", "zc": "rio top", "campeao": "Ekko"}, "rio"), 0.3)
     caso("alerta entra na moldura na hora com um retorno na tela",
-         m9m.mostradas == [("azul", "flash: 1-5"), ("vermelho", "jungler rio top")], str(m9m.mostradas))
+         m9m.mostradas == [("azul", "flash: top?"), ("vermelho", "jungler rio top")], str(m9m.mostradas))
 
 
 def janela_real():

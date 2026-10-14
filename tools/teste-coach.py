@@ -434,6 +434,162 @@ def caso_chat_feitico():
          antes_troca[0] == "TOP" and depois_troca == antes_troca, f"antes {antes_troca[0]!r}, depois {depois_troca[0]!r}")
 
 
+def caso_atalho_f7():
+    """14/10/2026 ~20:30: o note do Gabriel não tem numérico ("meu note tem 1 a 0 embaixo do f1 a f12") e os números de
+    cima são itens. O atalho virou só o F7: batidas escolhem a rota a partir da minha ("flash: mid?" na moldura), parado
+    1,2 s marca (voz "flash do mid marcado"), segurar desfaz. Aqui o caminho inteiro do coach: _Partida liga o atalho
+    pela fábrica (_ligar_feiticos), o teclado é falso e o tempo da tecla simulado; o retorno sai pela fila e pelo motor"""
+    import coach_vivo
+    import feiticos
+
+    class Peca:
+        ligado = True
+        ao_mostrar = ao_desenhar = ao_alternar = _thread = None
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __getattr__(self, nome):
+            return lambda *a, **k: None
+
+    class Janela:
+        def fase(self, f):
+            pass
+
+        def fechar(self):
+            pass
+
+    class Leitor:
+        def passo(self, gt=None):
+            return []
+
+        def parar(self):
+            pass
+
+    def sem(*a):
+        raise RuntimeError("fora do teste")
+
+    tec = {"t": 0.0, "baixas": set(), "jogo": True}
+
+    class AtalhosTeste(feiticos.Atalhos):   # o de verdade, sem thread: o teste roda o Observador na mão
+        def iniciar(self):
+            self.obs = self.observador()
+            self.obs.passo()
+            return self
+
+        def parar(self):
+            pass
+
+    criados = []
+
+    def fab_atalhos(ao_marcar):
+        a = AtalhosTeste(ao_marcar, estado=lambda vk: vk in tec["baixas"], na_tela=lambda: tec["jogo"],
+                         relogio=lambda: tec["t"])
+        criados.append(a)
+        return a
+
+    def andar(s):
+        for _ in range(int(round(s / 0.025))):
+            tec["t"] = round(tec["t"] + 0.025, 3)
+            criados[0].obs.passo()
+
+    def bater(vezes=1, segura=0.1, depois=0.2):
+        for _ in range(vezes):
+            tec["baixas"].add(feiticos.VK_ARMAR)
+            andar(segura)
+            tec["baixas"].discard(feiticos.VK_ARMAR)
+            andar(depois)
+
+    def jog(nome, time_, pos, f=("Flash", "Teleporte")):
+        return {"championName": nome, "team": time_, "position": pos, "riotId": nome, "level": 6, "items": [],
+                "scores": {"creepScore": 50}, "runes": {},
+                "summonerSpells": {"summonerSpellOne": {"displayName": f[0]}, "summonerSpellTwo": {"displayName": f[1]}}}
+    live = {"activePlayer": {"riotId": "Renekton"}, "gameData": {"gameTime": 560.0},
+            "allPlayers": [jog("Renekton", "ORDER", "TOP"), jog("Malphite", "CHAOS", "TOP"),
+                           jog("Cho'Gath", "CHAOS", "JUNGLE", ("Golpear", "Flash")), jog("Ahri", "CHAOS", "MIDDLE"),
+                           jog("Jinx", "CHAOS", "BOTTOM", ("Curar", "Flash")), jog("Lulu", "CHAOS", "UTILITY")]}
+
+    def esvaziar(p, gt):
+        """espera a fila do retorno (thread coach-retorno) publicar tudo no motor"""
+        fim = time.monotonic() + 3
+        while time.monotonic() < fim and not p._fila_retorno.empty():   # o laço não chama task_done
+            time.sleep(0.02)
+        time.sleep(0.15)
+        p.motor.tick(gt)
+
+    def novos(p, desde):
+        return [(d, a.rotulo if d == "moldura" else a.fala) for _, d, a in list(p.motor.emitidos)[desde:]
+                if a.tipo == "feitico_marcado"]   # deque de 500: aqui saem poucas dezenas
+
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        arq.write_text(json.dumps({"voz": True, "minimapa": False, "feiticos": True, "carregamento": False,
+                                   "mentor": False, "amostrasAoVivo": False, "painelAoVivo": False}), encoding="utf-8")
+        fab = {"voz": Peca, "moldura": Peca, "overlay": Peca, "estatico": sem, "mentor": sem, "captura": sem,
+               "janela": lambda url, ligado: Janela(), "atalhos": fab_atalhos, "leitor_chat": lambda f: Leitor()}
+        c = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=arq, liveclient="http://127.0.0.1:9", fabricas=fab)
+        p = c.iniciar_partida(9004, 420)
+        p.relogio.atualizar(560.0)
+        with p.trava_f:
+            p.f.atualizar(live)
+        ligado = bool(criados) and p.atalhos is criados[0] and criados[0].n_proprio is not None
+        # 3 batidas (eu top): top, jungler, mid; parado 1,2 s marca o mid
+        i0 = len(p.motor.emitidos)
+        bater(3)
+        esvaziar(p, 561.0)
+        sel3 = novos(p, i0)
+        andar(1.2)     # a soltura foi vista 0,025 s depois de soltar: 0,2 + 1,2 passa da janela
+        esvaziar(p, 562.0)
+        mid = novos(p, i0 + len(sel3))
+        with p.trava_f:
+            uso_mid = [u["inimigo"] for u in p.f.usos.get(("Ahri", "Flash"), [])]
+        # a tabela de feitiços é trocada no meio da partida (estático chegou): o desfazer segue valendo (pilha copiada)
+        p._montar_feiticos()
+        with p.trava_f:
+            p.f.atualizar(live)
+        # segurar F7 (nada sendo escolhido): desfaz o mid, com voz
+        i1 = len(p.motor.emitidos)
+        bater(segura=1.1, depois=0.3)
+        esvaziar(p, 563.5)
+        desfeito = novos(p, i1)
+        with p.trava_f:
+            sobrou = p.f.usos.get(("Ahri", "Flash"), [])
+        # segurar de novo: nada a desfazer; bater e segurar na 2ª: cancelado, nada marcado
+        i2 = len(p.motor.emitidos)
+        bater(segura=1.1, depois=0.3)
+        esvaziar(p, 565.0)
+        nada = novos(p, i2)
+        i3 = len(p.motor.emitidos)
+        bater(1)
+        bater(segura=1.1, depois=1.5)
+        esvaziar(p, 567.0)
+        cancel = novos(p, i3)
+        with p.trava_f:
+            marcados = sum(len(v) for v in p.f.usos.values())
+        # jogo fora da frente: F7 não faz nada
+        i4 = len(p.motor.emitidos)
+        tec["jogo"] = False
+        bater(2)
+        andar(1.5)
+        esvaziar(p, 569.0)
+        fora = novos(p, i4)
+        c.encerrar_partida()
+    caso("atalho F7: a _Partida liga o atalho pela fábrica com a rota própria", ligado)
+    caso("atalho F7: 3 batidas (eu top) mostram 'flash: top?', 'flash: jungler?', 'flash: mid?' na moldura, sem voz",
+         [r for d, r in sel3 if d == "moldura"] == ["flash: top?", "flash: jungler?", "flash: mid?"]
+         and not [r for d, r in sel3 if d == "voz"], str(sel3))
+    caso("atalho F7: parado 1,2 s marca o mid: voz 'flash do mid marcado' + moldura 'mid sem flash', cronômetro da Ahri",
+         ("voz", "flash do mid marcado") in mid and ("moldura", "mid sem flash") in mid and uso_mid == ["Ahri"], f"{mid} {uso_mid}")
+    caso("atalho F7: segurar desfaz o mid, mesmo depois de trocar a tabela (voz 'marcação desfeita', moldura "
+         "'desfeito: mid') e o cronômetro some",
+         ("voz", "marcação desfeita") in desfeito and ("moldura", "desfeito: mid") in desfeito and sobrou == [],
+         f"{desfeito} {sobrou}")
+    caso("atalho F7: segurar sem marcação = 'nada a desfazer' (só moldura); bater e segurar = 'nada marcado'",
+         nada and nada[-1] == ("moldura", "nada a desfazer") and not [x for x in nada if x[0] == "voz"]
+         and cancel and cancel[-1] == ("moldura", "nada marcado") and marcados == 0, f"{nada} {cancel} marcados {marcados}")
+    caso("atalho F7: com o jogo fora da frente, nada", fora == [], str(fora))
+
+
 def caso_catalogo():
     # plano voz pré-gravada, passos 3 e 3b: fala genérica e finita; o catálogo cobre todo molde falado
     import ao_vivo
@@ -825,6 +981,7 @@ def principal():
     caso_ouro_rota()
     caso_visto_minimapa()
     caso_chat_feitico()
+    caso_atalho_f7()
     caso_catalogo()
     caso_fila_voz()
     caso_pacote_voz()

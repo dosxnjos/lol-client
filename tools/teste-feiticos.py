@@ -2,10 +2,12 @@
 uso: python tools/teste-feiticos.py [--sem-gravacao]
 - recarga com bota e Perspicácia Cósmica (300 × 100/110 = 272,7; 3158 + 8347 = 234,4);
 - leitura das linhas de ping (formato real, ruído de OCR, descartes), dedupe de aliados repetindo;
-- atalho F7 + numérico 1..5 (máquina de estado simulada e teclado observado com estado falso, sem tecla nenhuma),
-  F7 duas vezes = adversário de rota, teclas livres no LoL do Gabriel, observador real liga e para;
-- marcar(): marcado / desfeito / sem inimigo (modo treino) / sem feitiço, com a rota da fala; ganchos
-  ao_armar/ao_expirar do retorno ao jogador (a voz e a moldura do retorno: teste-alertas.py);
+- atalho só com o F7 (teclado observado com estado falso e relógio simulado, sem tecla nenhuma): 1, 2, 5 e 6
+  batidas a partir da minha rota, janela que recomeça na soltura, segurar = desfazer/cancelar, jogo fora da frente,
+  números de cima nunca, numérico opcional; teclas livres no LoL do Gabriel, observador real liga e para;
+- marcar() (marcar de novo não desfaz), desfazer() (a última do atalho com cronômetro correndo, nunca a do chat),
+  previa() (rótulo da batida); sem inimigo (modo treino) / sem feitiço, com a rota da fala (a voz e a moldura do
+  retorno: teste-alertas.py; o caminho inteiro no coach: teste-coach.py caso_atalho_f7);
 - com a gravação 20261013-071040: OCR das telas + Live Client tocadas em ordem -> cronômetros.
 """
 import json
@@ -127,22 +129,76 @@ def main():
     f2.processar_linhas(["19:20 Amo (Annie): Seraphine Exaustão"], 1162.0)
     confere("sem 'usou' não liga cronômetro", ("Seraphine", "Exaustão") not in f2.usos)
 
-    # 5. atalho F9 + n (inimigo por rota) e desfazer
+    # 5. atalho n (inimigo por rota): marcar de novo NÃO desfaz (o F7 sozinho marcaria o top 2 vezes seguidas);
+    #    desfazer é o segurar F7 (Feiticos.desfazer: a última marcação do atalho com o cronômetro correndo)
     f3 = F.Feiticos()
     f3.atualizar(live(300.0, list(reversed(ini))))
     confere("ordem do atalho = TOP, JUNGLE, MIDDLE, BOTTOM, UTILITY", f3.ordem == nomes, str(f3.ordem))
     u = f3.atalho(2, 300.0)
-    confere("F9 + 2 = Flash do Ekko agora", u and u["inimigo"] == "Ekko" and u["feitico"] == "Flash" and u["ts"] == 300.0)
-    confere("F9 + 2 de novo em 4 s desfaz", f3.atalho(2, 304.0) is None and not f3.usos[("Ekko", "Flash")])
-    confere("F9 + 9 (sem inimigo) não faz nada", f3.atalho(9, 305.0) is None)
+    confere("atalho 2 = Flash do Ekko agora", u and u["inimigo"] == "Ekko" and u["feitico"] == "Flash" and u["ts"] == 300.0)
+    r = f3.marcar(2, 304.0)
+    confere("marcar 2 de novo em 4 s = o mesmo gasto, nunca desfaz (antes desfazia: com o F7 só, armadilha)",
+            r["resultado"] == "marcado" and len(f3.usos[("Ekko", "Flash")]) == 1 and f3.usos[("Ekko", "Flash")][0]["ts"] == 300.0,
+            f"{r['resultado']}, {[x['ts'] for x in f3.usos[('Ekko', 'Flash')]]}")
+    confere("atalho 9 (sem inimigo) não faz nada", f3.atalho(9, 305.0) is None)
+    f3.registrar("Yasuo", "Flash", 306.0, "chat")   # gasto lido no chat: o segurar F7 não apaga o que ele não marcou
+    r = f3.desfazer(308.0)
+    confere("desfazer = a última marcação do atalho (Ekko), não a do chat (Yasuo)",
+            r["resultado"] == "desfeito" and r["inimigo"] == "Ekko" and r["rota"] == "jungler"
+            and not f3.usos[("Ekko", "Flash")] and f3.usos[("Yasuo", "Flash")], str({k: r[k] for k in ("resultado", "inimigo", "rota")}))
+    confere("desfazer sem marcação do atalho = nada_a_desfazer (o do chat fica)",
+            f3.desfazer(309.0)["resultado"] == "nada_a_desfazer" and f3.usos[("Yasuo", "Flash")])
+    f3.marcar(1, 310.0)
+    f3.marcar(4, 320.0)
+    r = f3.desfazer(330.0)
+    confere("duas marcações: desfazer tira a mais nova (atirador), a outra fica (top)",
+            r["inimigo"] == "Tristana" and r["rota"] == "atirador" and f3.usos[("Riven", "Flash")]
+            and not f3.usos[("Tristana", "Flash")], str(r["inimigo"]))
+    r = f3.marcar(3, 331.0)   # o Yasuo já tem o Flash do chat às 306: a marcação é o mesmo gasto, e o chat não se desfaz
+    rd = f3.desfazer(332.0)
+    # revisão adversarial do passo 10 (achado 1): antes o desfazer procurava "a mais nova do atalho" em usos e tirava
+    # a do top (Riven, certa), com a voz dizendo só "marcação desfeita"; o que ele desfaz é a última AÇÃO dele
+    confere("marcar quem o chat já pegou = o mesmo gasto; segurar depois NÃO tira a do top: responde 'veio do chat'",
+            r["resultado"] == "marcado" and [x["fonte"] for x in f3.usos[("Yasuo", "Flash")]] == ["chat"]
+            and rd["resultado"] == "do_chat" and rd["rota"] == "mid" and f3.usos[("Riven", "Flash")]
+            and f3.usos[("Yasuo", "Flash")], str({k: rd[k] for k in ("resultado", "inimigo", "rota")}))
+    f3.marcar(1, 340.0)
+    confere("marcação com o cronômetro vencido não se desfaz (Riven 340 + 300 s)",
+            f3.desfazer(641.0)["resultado"] == "nada_a_desfazer" and f3.usos[("Riven", "Flash")])
+    # pilha das ações do F7 (achado 1 da revisão): marcado pelo F7 e depois pingado no chat = confirmado, não se apaga;
+    # duas batidas lentas no mesmo = 1 gasto, 1 segurar desfaz e o 2º não acha nada; prazo DESFAZ_PRAZO_S
+    f6 = F.Feiticos()
+    f6.atualizar(live(500.0, ini))
+    f6.marcar(1, 500.0)                                          # F7: Flash da Riven
+    f6.processar_linhas(["08:22 Amo (Annie): Riven usou Flash"], 503.0)   # aliado pinga o mesmo Flash (502)
+    rd = f6.desfazer(504.0)
+    confere("marcado pelo F7 e confirmado no chat: segurar não apaga ('veio do chat'), o cronômetro fica",
+            rd["resultado"] == "do_chat" and len(f6.usos[("Riven", "Flash")]) == 1, f"{rd['resultado']} {f6.usos[('Riven', 'Flash')]}")
+    f6.marcar(2, 510.0)
+    f6.marcar(2, 513.0)                                          # duas batidas lentas no jungler: o mesmo gasto
+    r1, r2 = f6.desfazer(514.0), f6.desfazer(515.0)
+    confere("duas marcações lentas do mesmo = 1 gasto: 1º segurar desfaz (rota no retorno), o 2º não acha nada (a "
+            "ação da Riven já foi respondida) e a Riven fica",
+            r1["resultado"] == "desfeito" and r1["rota"] == "jungler" and not f6.usos[("Ekko", "Flash")]
+            and r2["resultado"] == "nada_a_desfazer" and f6.usos[("Riven", "Flash")], f"{r1['resultado']} {r2['resultado']}")
+    f6.marcar(3, 600.0)
+    rp = f6.desfazer(600.0 + F.DESFAZ_PRAZO_S - 1)
+    confere("dentro do prazo: desfaz o mid", rp["resultado"] == "desfeito" and rp["rota"] == "mid"
+            and not f6.usos[("Yasuo", "Flash")], rp["resultado"])
+    f6.marcar(4, 700.0)
+    rv = f6.desfazer(700.0 + F.DESFAZ_PRAZO_S + 1)
+    confere(f"segurar mais de {F.DESFAZ_PRAZO_S} s depois da marcação: nada a desfazer (F7 segurado sem querer minutos "
+            "depois não apaga a certa)", rv["resultado"] == "nada_a_desfazer" and f6.usos[("Tristana", "Flash")], rv["resultado"])
+    f3.usos.clear()
+    pv = [f3.previa(n) for n in range(1, 6)]
+    confere("prévia da batida: rota da fala e 'flash' (Tristana: barreira e flash -> flash)",
+            [(p["rota"], p["feitico"]) for p in pv] == [(x, "flash") for x in ("top", "jungler", "mid", "atirador", "suporte")],
+            str([(p["rota"], p["feitico"]) for p in pv]))
 
     # 5b. marcar(): resultado para o retorno ao jogador (rota genérica, sem nome de campeão na fala)
     r = f3.marcar(4, 310.0)
     confere("marcar 4 = marcado, rota 'atirador', Flash", r["resultado"] == "marcado" and r["rota"] == "atirador"
             and r["feitico"] == "Flash" and r["uso"] and r["uso"]["inimigo"] == "Tristana", str({k: r[k] for k in ("resultado", "rota", "feitico")}))
-    r = f3.marcar(4, 315.0)
-    confere("marcar 4 de novo em 5 s = desfeito", r["resultado"] == "desfeito" and r["uso"] is None
-            and not f3.usos[("Tristana", "Flash")])
     rotas = [f3.marcar(n, 400.0 + 20 * n)["rota"] for n in range(1, 6)]
     confere("rotas da fala: top, jungler, mid, atirador, suporte", rotas == ["top", "jungler", "mid", "atirador", "suporte"], str(rotas))
     treino = F.Feiticos()
@@ -159,19 +215,151 @@ def main():
     r = blind.marcar(2, 120.0)
     confere("inimigo sem posição: fala 'inimigo', nunca a rota da tecla (2 = jungler)",
             r["resultado"] == "marcado" and r["rota"] == "inimigo", str({k: r[k] for k in ("resultado", "rota", "inimigo")}))
+    p = blind.previa(2)
+    confere("prévia sem posição: o rótulo leva o nome do campeão (a rota seria mentira); sem inimigo, a rota da tecla",
+            p["rota"] == "Ekko" and treino.previa(3)["rota"] == "mid", f"{p['rota']} / {treino.previa(3)['rota']}")
 
-    # 6. máquina do hotkey (mensagens simuladas: nada de tecla enviada)
-    marcados, reg = [], []
-    a = F.Atalhos(marcados.append)
-    confere("número sem F9 antes: ignorado", a.tratar(F.WM_HOTKEY, 12) is None and not marcados)
-    a.tratar(F.WM_HOTKEY, F.ID_ARMAR, lambda: reg.append("+"), lambda: reg.append("-"))
-    n = a.tratar(F.WM_HOTKEY, 13, lambda: reg.append("+"), lambda: reg.append("-"))
-    confere("F9 arma (registra 1..5), 3 escolhe e desarma", n == 3 and marcados == [3] and reg == ["+", "-"])
-    a.tratar(F.WM_HOTKEY, F.ID_ARMAR, lambda: reg.append("+"), lambda: reg.append("-"))
-    a.tratar(F.WM_TIMER, 0, lambda: reg.append("+"), lambda: reg.append("-"))
-    confere("F9 sem número em 2 s: desarma (1..5 voltam para o jogo)", not a.armado and reg[-1] == "-")
-    armou, expirou = [], []
+    # 6. atalho só com o F7 (14/10 ~20:30: o note do Gabriel não tem numérico e os números de cima são itens).
+    #    Teclado OBSERVADO com estado falso e relógio simulado (passos de 25 ms, como a thread): nada de tecla enviada
     import logging
+    import teclas
+
+    class Teclado:
+        """F7/numérico apertados à mão sobre o Observador de verdade (Atalhos.observador), tempo simulado"""
+
+        def __init__(self, proprio=1, jogo=True, ao_marcar=None):
+            self.t, self.baixas, self.jogo = 0.0, set(), jogo
+            self.marcas, self.sel, self.desf, self.canc = [], [], [], []
+            self.a = F.Atalhos(ao_marcar or (lambda n: self.marcas.append((n, self.t))), ao_selecionar=self.sel.append,
+                               ao_desfazer=lambda: self.desf.append(self.t), ao_cancelar=lambda: self.canc.append(self.t),
+                               estado=lambda vk: vk in self.baixas, na_tela=lambda: self.jogo, relogio=lambda: self.t)
+            self.a.n_proprio = lambda: proprio
+            self.obs = self.a.observador()
+            self.obs.passo()            # 1ª leitura com tudo solto (tecla já segura ao ligar não conta)
+
+        def andar(self, s):
+            for _ in range(int(round(s / 0.025))):
+                self.t = round(self.t + 0.025, 3)
+                self.obs.passo()
+
+        def bater(self, vk=F.VK_ARMAR, segura=0.1, depois=0.2, vezes=1):
+            for _ in range(vezes):
+                self.baixas.add(vk)
+                self.andar(segura)
+                self.baixas.discard(vk)
+                self.andar(depois)
+
+        def n_marcados(self):
+            return [n for n, _ in self.marcas]
+
+    k = Teclado()
+    k.bater()
+    k.andar(0.9)        # 1,1 s depois de soltar: ainda escolhendo
+    antes = list(k.marcas)
+    k.andar(0.3)
+    confere("1 batida: seleciona o adversário da minha rota (top) e só marca parado 1,2 s depois de soltar",
+            k.sel == [1] and antes == [] and k.n_marcados() == [1] and not k.a.armado, f"sel {k.sel}, marcas {k.marcas}")
+    k = Teclado()
+    k.bater(vezes=2)
+    k.andar(1.5)
+    confere("2 batidas: top -> jungler, marca o jungler", k.sel == [1, 2] and k.n_marcados() == [2], f"{k.sel} {k.marcas}")
+    k = Teclado()
+    k.bater(vezes=5)
+    k.andar(1.5)
+    confere("5 batidas: top, jungler, mid, atirador, suporte; marca o suporte", k.sel == [1, 2, 3, 4, 5]
+            and k.n_marcados() == [5], f"{k.sel} {k.marcas}")
+    k = Teclado()
+    k.bater(vezes=6)
+    k.andar(1.5)
+    confere("6 batidas: dá a volta e marca o top de novo", k.sel == [1, 2, 3, 4, 5, 1] and k.n_marcados() == [1],
+            f"{k.sel} {k.marcas}")
+    k = Teclado(proprio=3)
+    k.bater(vezes=6)
+    k.andar(1.5)
+    k2 = Teclado(proprio=3)
+    k2.bater(vezes=2)
+    k2.andar(1.5)
+    confere("eu no mid: começa no mid e dá a volta (mid, atirador, suporte, top, jungler, mid); 2 batidas = atirador",
+            k.sel == [3, 4, 5, 1, 2, 3] and k.n_marcados() == [3] and k2.n_marcados() == [4], f"{k.sel} {k2.marcas}")
+    k = Teclado(proprio=None)
+    k.bater()
+    k.andar(1.5)
+    confere("sem rota conhecida (blind, treino): a 1ª batida é o top", k.sel == [1] and k.n_marcados() == [1], str(k.sel))
+    k = Teclado()
+    k.bater(segura=0.1, depois=0.05)
+    k.bater(segura=0.1, depois=1.0)   # batida dentro da janela: a janela recomeça na soltura
+    meio = list(k.marcas)
+    k.andar(0.3)
+    confere("a janela recomeça a cada batida (1,0 s depois da 2ª: nada; 1,3 s: jungler)",
+            meio == [] and k.n_marcados() == [2], f"{meio} {k.marcas}")
+
+    # segurar: sem seleção = desfazer; no meio das batidas = cancelar; o desfazer vem antes de qualquer marcação
+    k = Teclado()
+    k.bater(segura=1.1, depois=2.0)
+    confere("segurar F7 1 s (do zero) = desfazer, e nada marca depois de soltar",
+            len(k.desf) == 1 and abs(k.desf[0] - 1.05) < 1e-9 and k.marcas == [] and not k.canc and not k.a.armado,
+            f"desf {k.desf}, marcas {k.marcas}, sel {k.sel}")
+    k = Teclado()
+    k.bater(vezes=2)
+    k.bater(segura=1.1, depois=2.0)
+    confere("bater 2 e segurar na 3ª = cancela a seleção: nada marcado, nada desfeito",
+            len(k.canc) == 1 and k.marcas == [] and not k.desf, f"canc {k.canc}, marcas {k.marcas}")
+    k = Teclado()
+    k.bater(segura=0.9, depois=1.5)
+    confere("segurar 0,9 s (menos que 1 s) é batida: marca o top", k.n_marcados() == [1] and not k.desf, str(k.marcas))
+    k = Teclado()
+    k.bater(segura=3.0, depois=0.0)    # segurado muito tempo: 1 desfazer só, nada marca segurando
+    k.andar(2.0)
+    confere("segurar 3 s: 1 desfazer só, nenhuma marcação (a janela conta da soltura)",
+            len(k.desf) == 1 and k.marcas == [], f"{k.desf} {k.marcas}")
+
+    # jogo fora da frente, números de cima, numérico opcional
+    k = Teclado(jogo=False)
+    k.bater(vezes=2)
+    k.bater(segura=1.2)
+    k.andar(1.5)
+    confere("F7 com outro programa na frente: nada (nem seleção, nem marcação, nem desfazer)",
+            k.sel == [] and k.marcas == [] and not k.desf and not k.canc, f"{k.sel} {k.marcas}")
+    k = Teclado()
+    k.bater()
+    k.jogo = False                     # foi para o navegador no meio: a escolha feita no jogo vale
+    k.andar(1.5)
+    confere("seleção feita no jogo marca mesmo se o jogo sair da frente na janela", k.n_marcados() == [1], str(k.marcas))
+    k = Teclado()
+    for vk in (0x31, 0x32, 0x33, 0x34, 0x35):   # 1..5 de cima: itens/sentinela no LoL dele, nunca do coach
+        k.bater(vk)
+    k.andar(1.5)
+    confere("números de cima (1..5) não fazem nada: nem observados", k.sel == [] and k.marcas == []
+            and not ({0x31, 0x32, 0x33, 0x34, 0x35} & set(k.obs.teclas)), str(k.obs.teclas))
+    k = Teclado()
+    k.bater()
+    k.bater(0x63)                      # numérico 3 dentro da seleção: marca o mid na hora
+    k.andar(1.5)
+    k.bater(0x61)                      # numérico sem F7 antes: nada
+    k.andar(1.5)
+    confere("numérico (opcional) dentro da seleção marca na hora; sem F7 antes, nada",
+            k.n_marcados() == [3] and k.marcas[0][1] < 0.5, str(k.marcas))
+    k = Teclado()
+    k.bater()
+    k.andar(1.5)
+    k.bater()
+    k.andar(1.5)
+    confere("duas batidas lentas (> 1,2 s) = duas marcações do top (o Feiticos trata como o mesmo gasto)",
+            k.n_marcados() == [1, 1], str(k.marcas))
+
+    # soltura vista pelo Observador mesmo fora do jogo (o aperto, não)
+    vistos = []
+    est = {"f7": False}
+    o = teclas.Observador([F.VK_ARMAR], lambda vk: vistos.append(("aperto", vk)), na_tela=lambda: False,
+                          estado=lambda vk: est["f7"], ao_soltar=lambda vk: vistos.append(("solta", vk)))
+    o.passo()
+    vistos.clear()
+    est["f7"] = True
+    o.passo()
+    est["f7"] = False
+    o.passo()
+    confere("Observador: aperto só com o jogo na frente; soltura sempre (o Atalhos ignora a de aperto que não contou)",
+            vistos == [("solta", F.VK_ARMAR)], str(vistos))
 
     class Captura(logging.Handler):   # o aviso do callback quebrado vai para cá, não para o stderr
         def __init__(self):
@@ -185,49 +373,27 @@ def main():
     F.log.propagate = False
     nivel = F.log.level
     F.log.setLevel(logging.INFO)   # no coletor quem põe INFO é o logger "coletor"; aqui ele não existe
-    b = F.Atalhos(lambda n: 1 / 0, ao_armar=lambda: armou.append(1), ao_expirar=lambda: expirou.append(1))
-    b.tratar(F.WM_HOTKEY, F.ID_ARMAR)
-    b.tratar(F.WM_HOTKEY, F.ID_ARMAR)   # F9 de novo armado: não chama o retorno 2 vezes
-    n = b.tratar(F.WM_HOTKEY, 11)        # ao_marcar quebra: a máquina segue (exceção vira log, não mata a thread)
-    b.tratar(F.WM_HOTKEY, F.ID_ARMAR)
-    b.tratar(F.WM_TIMER, 0)
+    k = Teclado(ao_marcar=lambda n: 1 / 0)   # ao_marcar quebra: a máquina segue (exceção vira log, não mata a thread)
+    k.bater(vezes=2)
+    k.andar(1.5)
+    k.bater(segura=1.1)
+    k.bater()
+    k.bater(segura=1.1, depois=0.5)
+    k.bater()
+    k.andar(1.5)
     F.log.removeHandler(cap_log)
     F.log.propagate = True
     F.log.setLevel(nivel)
-    confere("retorno: ao_armar 1 vez por F9, ao_expirar no tempo; callback quebrado não derruba", armou == [1, 1]
-            and expirou == [1] and n == 1 and not b.armado, f"armou {armou}, expirou {expirou}")
-    confere("log do atalho: F7 recebido, F7 + 1 recebido, retorno quebrado avisado, expirou",
-            any("F7 recebido" in x for x in cap_log.linhas) and any("F7 + 1 recebido" in x for x in cap_log.linhas)
-            and any("retorno falhou: ZeroDivisionError" in x for x in cap_log.linhas)
-            and any("expirou" in x for x in cap_log.linhas), str(len(cap_log.linhas)))
-
-    # 6a. teclado OBSERVADO (partida 3293149183: o RegisterHotKey nunca disparou com o jogo na frente; o F9 é do LoL)
-    import teclas
-    apertadas = set()
-    tela = {"jogo": True}
-    marcas = []
-    c = F.Atalhos(marcas.append, estado=lambda vk: vk in apertadas, na_tela=lambda: tela["jogo"])
-    c.n_proprio = lambda: 1
-    obs = teclas.Observador([c.tecla, *F.VK_NUMERO], c._apertou, na_tela=c.na_tela, estado=c.estado, tique=c._tique)
-
-    def tecla(*vks):
-        for vk in vks:
-            apertadas.add(vk)
-            obs.passo()
-            obs.passo()            # segurada: 1 aperto só
-            apertadas.discard(vk)
-            obs.passo()
-    obs.passo()                    # 1ª leitura com tudo solto (tecla já segura ao ligar não conta)
-    tecla(F.VK_ARMAR, 0x63)        # F7, numérico 3
-    tecla(F.VK_ARMAR, F.VK_ARMAR)  # F7 duas vezes = adversário da minha rota (1 = top)
-    tecla(0x33)                    # "3" de cima (item 3 no LoL) não é do coach
-    tecla(F.VK_ARMAR, 0x33)
-    c._armado_em -= 3              # passa a janela de 2 s
-    obs.passo()
-    tela["jogo"] = False           # F7 com outro programa na frente: nada
-    tecla(F.VK_ARMAR, 0x61)
-    confere("F7 + numérico 3 marca o mid; F7 duas vezes marca o adversário da minha rota; '3' de cima e fora do jogo, nada",
-            marcas == [3, 1] and not c.armado, f"{marcas}")
+    confere("callback quebrado não derruba: depois dele, segurar desfaz, cancela e a batida seguinte seleciona",
+            k.sel == [1, 2, 1, 1, 2, 1] and len(k.desf) == 1 and len(k.canc) == 1 and not k.a.armado,
+            f"sel {k.sel}, desf {k.desf}, canc {k.canc}")
+    confere("log do atalho: F7 recebido, batida 2, parado marca, segurado desfaz/cancela, retorno quebrado avisado",
+            any("F7 recebido, batida 1 seleciona 1 (top)" in x for x in cap_log.linhas)
+            and any("F7 batida 2 seleciona 2 (jungler)" in x for x in cap_log.linhas)
+            and any("parado 1.2 s depois de 2 batida(s): marca 2 (jungler)" in x for x in cap_log.linhas)
+            and any("segurado 1.0 s: desfazer" in x for x in cap_log.linhas)
+            and any("seleção cancelada" in x for x in cap_log.linhas)
+            and any("retorno falhou: ZeroDivisionError" in x for x in cap_log.linhas), str(cap_log.linhas[:3]))
     confere("o observador só lê: nada de RegisterHotKey/SendInput/keybd_event no código dos atalhos",
             not any(p in (RAIZ / "coletor" / m).read_text(encoding="utf-8")
                     for m in ("teclas.py", "feiticos.py") for p in ("RegisterHotKey(", "SendInput", "keybd_event")))

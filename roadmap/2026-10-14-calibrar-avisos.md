@@ -2,7 +2,8 @@
 
 - **Data:** 14/10/2026 · **Alvo:** `coletor/avisos.py` (motor e `AlertasPosicao`), `coletor/coach_vivo.py` (gank),
   `coletor/overlay_minimapa.py` (janela e desenho), `coletor/vitrine.py` (composição), provas em `tools/`; passo 7:
-  `coletor/servidor_local.py` (esquema da config), `pengu/config.js` e `pengu/blocos.js` (Configurações)
+  `coletor/servidor_local.py` (esquema da config), `pengu/config.js` e `pengu/blocos.js` (Configurações); passo 10:
+  `coletor/teclas.py`, `coletor/feiticos.py` (`Atalhos`), `coletor/avisos.py` (retorno), `coletor/coach_vivo.py`
 - **Continua:** [voz pré-gravada e foco](2026-10-13-voz-pregravada-e-foco.md) (o catálogo de falas de lá não muda)
 - **Fora:** `pengu/posjogo/**` e `coletor/mentor.py` (outra frente mexe neles)
 
@@ -83,13 +84,18 @@ Quem decidiu: o agente executor (opus, técnico). Reverter = `git revert` do com
 | D23 | (passo 8, corrigida na revisão) overlay: a janela fica como está (a hipótese do print foi derrubada com prova). A causa do "não funcionou mais" é **defeito do desenho**, não gosto: o desfoque σ=2 do `alfa_alvo` diluía a mancha pequena (jungler recém-visto = calor de 1–2 px) a 2–8% de alfa; 4 dos 7 quadros de calor da partida ficaram abaixo de 16% (145059-03 0,09; 145529-13 0,11; 145659-15 0,04; 150000-21 0,15). Correção: pedaço pequeno (área < π·(2·`MANCHA_MIN_PX`)²) alarga 3 px antes do desfoque e o pico volta ao de antes do desfoque (nunca acima); zona grande fica com a borda de antes. Força e cor não mudam. Fica também o diagnóstico no log (`janela pronta`, `na tela {...}`, aviso se o jogo estava por cima na ordem Z) e a 2ª fase do `--demo` | alta | mancha de ponto grande demais ou "pulando" na tela (ele dizer): baixar `MANCHA_MIN_PX` para 2 (ponto ainda com área ≥ π·4² px acima de 10%). O log "na tela, sem o jogo por cima" **não** prova que ele viu: a janela TOPMOST sobre o jogo sem borda (`WindowMode=2`) não perde na ordem Z |
 | D24 | (passo 8, revisão) eu na base (inclui a base presumida da D20) ou morto: **intruso** na minha rota só conta com aliado lá, a mesma regra do gank ("nem tinha aliado nenhum meu no top, então não fazia sentido se preocupar"). Quem chega enquanto estou fora já está na rota quando eu volto e não vira intruso (regra de 13/10). O "o top voltou" (morador) não muda | média | ele dizer que quer saber, da base, quem está esperando na rota dele: tirar o filtro `longe` do laço de intrusos em `AlertasPosicao.observar` |
 | D25 | (passo 9) chat: `processar_linhas` devolve só o gasto **novo** (a linha relida só confirma, `ultima_leitura`); o coach loga o ping interpretado (campeão inimigo, feitiço, mm:ss; nunca a linha crua) e mostra "<rota> sem flash" na moldura (evento `chat` do `feitico_marcado`, só moldura, verde); ping sem "usou" vai 1 vez ao log e segue sem cronômetro | alta | a borda do chat virar ruído (ping de aliado repetido em outro minuto): tirar o `_retorno("chat")` de `_lido_no_chat` (fica o log) |
-| D26 | (passo 9) atalho por **observação** do teclado (`coletor/teclas.py`: `GetAsyncKeyState` a cada 25 ms, só com o jogo em primeiro plano; nada enviado nem comido; o que o OBS faz). F9 sai (é `evtToggleMouseClip` no LoL dele); **F7** arma, **numérico** 1..5 escolhe (1, 2, 3, 5 de cima são itens), **F7 duas vezes** = adversário da minha rota; aviso no log se o LoL ligar alguma dessas teclas. Sem `WH_KEYBOARD_LL` (com o GIL ocupado atrasaria toda tecla do jogo). Risco Vanguard/termos: ler o estado da tecla, sem escrever nada no jogo, é a categoria de Discord/OBS | média | nenhum "F7 recebido" com ele apertando na próxima partida (o jogo também esconderia o estado assíncrono): raw input com `RIDEV_INPUTSINK` numa janela própria; teclado sem numérico: outra tecla livre (F10, F11) |
+| D26 | (passo 9; a escolha das teclas foi revista na D34: só F7) atalho por **observação** do teclado (`coletor/teclas.py`: `GetAsyncKeyState` a cada 25 ms, só com o jogo em primeiro plano; nada enviado nem comido; o que o OBS faz). F9 sai (é `evtToggleMouseClip` no LoL dele); **F7** arma, **numérico** 1..5 escolhe (1, 2, 3, 5 de cima são itens), **F7 duas vezes** = adversário da minha rota; aviso no log se o LoL ligar alguma dessas teclas. Sem `WH_KEYBOARD_LL` (com o GIL ocupado atrasaria toda tecla do jogo). Risco Vanguard/termos: ler o estado da tecla, sem escrever nada no jogo, é a categoria de Discord/OBS | média | nenhum "F7 recebido" com ele apertando na próxima partida (o jogo também esconderia o estado assíncrono): raw input com `RIDEV_INPUTSINK` numa janela própria; teclado sem numérico: outra tecla livre (F10, F11) |
 | D27 | (passo 9) F8 do overlay também observado, só com o jogo na frente (antes `RegisterHotKey` global, que também nunca chegou in-game) | média | o mesmo da D26 |
 | D28 | (passo 9, revista) moldura: `INTERVALO_MOLDURA` 10 s entre bordas de cor diferente; dentro dele sai na hora o alerta de prio **maior** que a da borda na tela se a cor não descer (`GRAVIDADE_COR` azul < verde < amarelo < vermelho), e o da **mesma cor** passados 2,5 s (a anterior acabou: o 2º gank); o resto espera e cai; alerta de posição que esperou > `IDADE_MOLDURA` 3 s não vai à tela velho; o retorno lido no chat espera os 10 s sem alerta (o do atalho apertado segue nos 2,5 s). A 1ª versão (só urgente furava) calava o intruso amarelo atrás de um "voltou" azul e o 2º gank, porque 10 s > validade de 5–6 s (revisão P1/P2) | média | ele achar que ainda pisca vermelho demais num gank longo: exigir prio ≥ a da borda também na mesma cor; perigo vermelho → amarelo calado (ex.: jungler 80 e logo intruso 85): permitir a descida passados 2,5 s |
 | D32 | (passo 9, revisão P5) "o top apareceu no mid" (`adversario_outra_rota`) só na fase de rotas (`MID_JANELA[1]`, 14:00; `calados["voltou_fim_das_rotas"]`); entre duas faixas vale a de centro mais perto (P4). O "voltou pra rota" na rota dele segue sem limite | média | ele sentir falta das rotações do meio de jogo: liberar com destino só painel (`vp` sem borda) |
 | D33 | (passo 9, revisão P7) piso do pulso da moldura 0,6 (`PULSO_MIN`; era 0,45: o azul escurecido no vale ficava ~115/255 sobre o mapa escuro) | média (gosto) | ele achar que a borda não pulsa: baixar para 0,5, ou pulsar só o degradê |
 | D29 | (passo 9) `adversario_voltou` (adversário direto da rota do champ select, qualquer rota minha): calado comigo morto ou na base (inclusive a presumida da D20, `calados["voltou_eu_fora"]`); na rota dele, o de sempre; em outra, molde novo `adversario_outra_rota` ("o top apareceu no mid", rótulo "Malphite mid"); fica de fora quando ele entra na rota onde eu estou (é intruso) ou é o mid que tinha sumido (o "mid indo X" já diz). Catálogo 452 → 476 (`76d3c16afdfb`); as 24 novas tocam na Maria até a tarefa de voz gravar | média | ele reclamar do "apareceu" em rotação comum: exigir ≥ `VOLTOU_S` também fora da rota dele, ou só fala (sem borda) |
 | D30 | (passo 9) moldura em `UpdateLayeredWindow` com alfa por px: 12 px da beirada em alfa 255 na cor a 80% (`CORES_MOLDURA`), degradê `FADE_INICIO` 0,6 → 0 em 10% do menor lado com curva (1 − t)², rótulo em caixa opaca (Pillow, Segoe UI Bold); pulso = alfa constante (sem redesenhar); vitrine compõe o mesmo RGBA. Escolha de cor/força nas Configurações **não** feita: a tela é `pengu/**` (outra frente) | média (gosto) | ele achar a borda fraca/forte: `FADE`, `FADE_INICIO`, `ESCURECER` no topo de `moldura.py` |
+| D34 | (passo 10, revê a escolha da D26) atalho **só F7**, em batidas: 1ª seleciona o adversário da minha rota (sem rota conhecida, o top), cada batida a mais a próxima rota (top → jungler → mid → atirador → suporte, dando a volta a partir da minha), a moldura mostra a seleção ("flash: mid?"), parado `JANELA_BATIDAS_S` 1,2 s **contados da soltura** marca (voz "flash do mid marcado"). Numérico 1..5 fica opcional (dentro da seleção marca na hora); números de cima nunca. Máquina pura com relógio injetável em `feiticos.Atalhos` (`apertou`/`soltou`/`numero`/`tique`); `teclas.Observador` ganha `ao_soltar` | alta | ele achar 1,2 s lento ou rápido demais (bater sem querer marca / espera demais): mexer em `JANELA_BATIDAS_S`; nenhum "F7 recebido" in-game: o mesmo da D26 (raw input com `RIDEV_INPUTSINK`) |
+| D35 | (passo 10; o "qual desfaz" foi revisto na D37) desfazer = **segurar F7** `SEGURAR_S` 1 s: sem seleção em curso desfaz a última marcação **do atalho** com o cronômetro ainda correndo (`Feiticos.desfazer`; o gasto lido no chat nunca, não foi ele que marcou); no meio das batidas cancela a seleção, nada marcado. `marcar(n)` não desfaz mais (antes: o mesmo número em 10 s desfazia; com o F7 só, duas marcações lentas do top se anulariam): marcar de novo é o mesmo gasto (dedupe de 60 s). Segurar < janela e a janela só conta depois de soltar: segurando, nada marca antes do desfazer | média | ele segurar F7 sem querer e perder marcação (então: exigir 1,5 s) ou querer desfazer uma marcação de mais de 5 min (não existe: o cronômetro já venceu) |
+| D36 | (passo 10) retorno novo só na moldura, fora do `valores_catalogo` (catálogo da voz inalterado: 476, `76d3c16afdfb`): `selecionado` "flash: <rota>?" (sem posição na Live Client, o nome do campeão no rótulo; a voz nunca tem nome), `nada_a_desfazer` "nada a desfazer", `cancelado` "nada marcado"; o `armado` "flash: 1-5" sai. Voz só no marcado e no desfeito, as frases que já existiam | alta | — |
+| D37 | (passo 10, revisão adversarial achado 1, fable) o segurar F7 desfaz a **última ação do F7** (pilha `Feiticos._pilha_f7`, copiada na troca da tabela em `_montar_feiticos`), não "a marcação mais nova do atalho" em `usos`: a 1ª versão, com a batida caindo num gasto que o chat já tinha (dedupe), apagava a marcação certa de **outro** inimigo, e apagava gasto do F7 que um aliado tinha confirmado no chat. Gasto que o chat viu (`uso["chat"]`, antes ou depois) nunca se apaga: retorno `do_chat` "<rota>: chat confirmou" (só moldura). Prazo `DESFAZ_PRAZO_S` 60 s depois da ação (achado 4: F7 segurado sem querer minutos depois apagava a certa). Rótulo do desfeito diz qual: "desfeito: <rota>" (a voz segue "marcação desfeita"; catálogo inalterado, 476 `76d3c16afdfb` medido) | alta | ele querer desfazer depois de 60 s (subir o prazo) ou querer apagar um gasto que o chat leu errado (hoje não dá; exigiria outro gesto, ex.: segurar 3 s) |
+| D38 | (passo 10, revisão adversarial achado 2, fable) a batida do F7 (`selecionado`) sai na moldura **na hora, por cima de alerta** (`Aviso.imediato`): o retorno esperava `GAP_MOLDURA` 2,5 s sem alerta e a marcação sai 1,2 s depois de soltar, então com gank na tela ele nunca via "flash: mid?" antes de marcar (contradizia a D34). Não mexe em `_ultima_moldura`: o alerta seguinte entra como entraria. Custo assumido: bater F7 no meio de um gank troca a borda vermelha pela azul (a voz do gank segue; foi ele que apertou) | média | ele perder um gank por causa do rótulo: rótulo da batida na cor da borda atual em vez de azul, ou segurar o fim da janela até o rótulo aparecer |
 | D31 | (passo 9) `eog` sem `multiUserChatPassword`/`mucJwtDto`/`password`/`jwt` (`banco.SEGREDOS`, em qualquer profundidade): filtrado no `gravar_eog`, limpo no `abrir()` e pela CLI com backup antes; `secure_delete` + `wal_checkpoint(TRUNCATE)` para os bytes antigos não ficarem nas páginas livres nem no `-wal` | alta | — |
 
 Espelho do mapa: a geometria das rotas é absoluta (rota top = canto de cima à esquerda para os dois times);
@@ -283,14 +289,84 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
      nova na tela do jogo (só vista na área de trabalho e na conta); o Flash do Malphite (o log novo diz se o ping
      dele sai sem "usou"); o "apareceu no mid" numa partida real.
    - **Falta (orquestrador / outra frente):** reiniciar o coletor no lobby (o `abrir()` já limpa qualquer banco
-     antigo); `pengu/blocos.js` linhas 147 e 208 ainda dizem "F9" (texto da tela, frente do `pengu/**`); contar ao
-     Gabriel: **F7** arma (F7 F7 = o adversário da tua rota, **com voz**: apertar F7 de novo para "cancelar" marca;
-     desfaz com F7 F7 em até 10 s), **numérico** 1–5 escolhe, F8 segue igual, e o F9 voltou a ser só do jogo
-     (trava o cursor).
+     antigo); `pengu/blocos.js` linhas 147 e 208 ainda dizem "F9" (texto da tela, frente do `pengu/**`; o texto novo
+     está no passo 10). O que contar ao Gabriel sobre o F7 mudou no passo 10 (o "F7 + numérico" daqui não vale mais).
    - **Buraco registrado (não mexido):** se a tarefa `lol-client-voz` se desativar por "completo" e o catálogo
      crescer depois, ninguém a religa (o `estado` avisa, a tarefa não roda); hoje ela está `Ready`, então as 24
      novas entram. Correção possível: o coletor rodar `voz-agendada.py instalar` quando `faltam > 0` e a tarefa
      estiver desativada.
+
+10. **Atalho do Flash só com o F7** (14/10/2026 ~20:30). Executor que nunca viu a conversa: depois do passo 9 o
+    atalho era "F7 arma + numérico 1..5 escolhe" (D26). O Gabriel joga num note e disse: "meu note tem 1 a 0 embaixo
+    do f1 a f12" (não tem teclado numérico). Os números de cima não servem: o coach só **lê** a tecla
+    (`GetAsyncKeyState`, ARMADILHAS § Windows), não a tira do jogo, e no `Config\input.ini` dele 1, 2, 3, 5 são itens,
+    4 a sentinela, e com Ctrl/Alt/Shift viram emote, smart cast e self cast: apertar "3" para marcar o mid usaria o
+    item 3. Teclas F no `input.ini`: F1–F5 câmera, F9 trava o cursor, Ctrl+F10 HUD (F10 sozinho livre); F6, F7, F8
+    (o overlay), F11 e F12 sem ligação gravada. O `input.ini`/`PersistedSettings.json` só gravam o que ele mudou, não a
+    ligação padrão: o F12 como tecla de print do LoL **não dá para conferir** nesses arquivos (nenhum outro arquivo de
+    texto da instalação tem a tabela). Não importa aqui: o atalho usa só F7 e F8.
+    - **Desenho** (D34–D36): só F7. 1 batida = o adversário da rota dele, e parado ~1,2 s marca o Flash com a voz
+      ("flash do top marcado"). Cada batida a mais dentro da janela passa para a próxima rota, top → jungler → mid →
+      atirador → suporte, começando pela dele e dando a volta (eu top: 2 = jungler, 5 = suporte, 6 = top de novo); a
+      moldura mostra quem está selecionado ("flash: mid?"). Segurar F7 1 s desfaz a última marcação (no meio das
+      batidas, cancela: nada marcado). Numérico 1..5, para quem tiver, segue: dentro da seleção marca na hora.
+    - **Arquivos:** `coletor/teclas.py` (`Observador(ao_soltar=)`: borda de soltura, em qualquer janela),
+      `coletor/feiticos.py` (`Atalhos` reescrito: `apertou`/`soltou`/`numero`/`tique` com relógio injetável,
+      `observador()`, `JANELA_BATIDAS_S`, `SEGURAR_S`; `Feiticos.previa`, `Feiticos.desfazer`; `marcar` sem o desfazer
+      de 10 s), `coletor/avisos.py` (`_RETORNO_F9`: `selecionado`, `nada_a_desfazer`, `cancelado`; moldes só de
+      moldura; `armado` sai), `coletor/coach_vivo.py` (`_selecionado`, `_desfazer`, `_cancelado` ligados em
+      `_ligar_feiticos`), comentário em `servidor_local.py`; docs: COLETOR § Como o F7 funciona, ARMADILHAS § Windows,
+      README (linha do Flash), CLAUDE.md (linha do atalho).
+    - **Provas** (vermelhas no `HEAD` cc3b35f, rodadas numa worktree dele com os testes novos: `teste-feiticos` quebra
+      em "marcar 2 de novo em 4 s = o mesmo gasto" (lá desfazia) e em `desfazer` inexistente; `teste-coach` quebra no
+      `Atalhos(relogio=)`; `teste-alertas` em `KeyError: 'selecionado'`; e as sequências pelo Observador no `Atalhos` do
+      HEAD: 1 batida marca nada, 2 batidas marcam o top, 5 marcam [top, top], 6 marcam [top, top, top], segurar
+      não faz nada): `python tools\teste-feiticos.py --sem-gravacao` (teclado falso e relógio simulado em passos de
+      25 ms pelo `Observador` de verdade: 1, 2, 5 e 6 batidas eu top; 6 e 2 batidas eu mid; sem rota = top; a janela
+      recomeça na soltura; segurar do zero = desfazer em 1 s, nada marca depois; bater 2 e segurar = cancelado;
+      segurar 0,9 s é batida; segurar 3 s = 1 desfazer, nenhuma marcação; jogo fora da frente = nada; números de
+      cima nem observados; numérico dentro marca na hora, sem F7 nada; callback quebrado não derruba; log;
+      `Feiticos.desfazer`: a mais nova do atalho, nunca a do chat, nada com cronômetro vencido; `previa` com nome do
+      campeão sem posição), `python tools\teste-coach.py` (`caso_atalho_f7`: a `_Partida` liga o atalho pela fábrica,
+      3 batidas mostram "flash: top?/jungler?/mid?", parado marca a Ahri com voz "flash do mid marcado" e moldura
+      "mid sem flash", segurar desfaz com voz, "nada a desfazer", "nada marcado", jogo fora = nada; catálogo 476
+      `76d3c16afdfb`), `python tools\teste-alertas.py --sem-janela` (rótulos do retorno novos; 119/119),
+      `python tools\teste-overlay.py` (F8 pelo mesmo `Observador`). `rodar-testes.py` não rodado (abre janela; o
+      orquestrador roda no lobby se quiser).
+    - **Texto da tela** (`pengu/blocos.js`, frente do `pengu/**`, não editado aqui; o orquestrador troca):
+      linha 147 `['feitico_marcado', 'Retorno do F9 (Flash marcado)']` → `['feitico_marcado', 'Retorno do F7 (Flash
+      marcado)']`; linha 208, o 4º argumento do `caixaCoach(ctx, 'feiticos', ...)` → `'Lê os pings de feitiço do chat
+      (OCR) e conta a recarga. Na partida, F7 marca na mão o flash do inimigo: uma batida escolhe o adversário da tua
+      rota, cada batida a mais passa para a próxima (top, jungler, mid, atirador, suporte) e a borda mostra quem está
+      escolhido; parado cerca de 1 segundo, marca. Segurar F7 desfaz a última marcação.'`
+    - **Revisão adversarial (só leitura) e correção** (D37, D38). Bloqueavam: (1) o segurar desfazia a marcação de
+      **outro** inimigo quando a última batida caía num gasto que o chat já tinha, e apagava gasto do F7 confirmado
+      depois no chat; o teste afirmava isso. Corrigido com a pilha das ações do F7 (D37) e o prazo de 60 s (achado 4).
+      (2) "flash: mid?" não aparecia com alerta na tela há < 2,5 s, e a marcação saía às cegas: a batida passa por
+      cima (D38). Provas vermelhas antes da correção, verdes depois: `teste-feiticos` ("marcar quem o chat já pegou
+      ... responde 'veio do chat'" dava `desfeito` da Riven; "marcado pelo F7 e confirmado no chat" dava `desfeito []`;
+      duas lentas no mesmo; prazo), `teste-alertas` (batida com gank na tela mostra o rótulo em 0,5 s; alerta seguinte
+      entra; rótulos "desfeito: atirador" e "mid: chat confirmou"; 120/120), `teste-coach` (desfazer depois da troca
+      da tabela no meio da partida; moldura "desfeito: mid"; 47/47). Ficam como pendência, sem bloquear: (2b) F8 no
+      meio das batidas troca o rótulo por "overlay ligado"; (3) ver abaixo; (5) rótulo mostra a rota da fila, não a
+      da lane (troca de rota), e posição faltando em só alguns inimigos desloca o ciclo; (6) batida de < 50 ms entre
+      duas leituras de 25 ms pode se perder, e `_selecionado` pega a `trava_f` na thread do teclado; (7) segurar do
+      zero mostra "flash: top?" antes do "desfeito"; (8) segurar e perder o foco segurando ainda desfaz.
+    - **Sem prova (próxima partida):** antes dela, `python coletor\feiticos.py --sonda 30` apertando o F7 **sem** o Fn
+      (achado 3: em muitos notes a fileira F manda brilho/som sem o Fn e o `VK_F7` nunca chega). Se não aparecer, plano
+      B: Fn travado (Fn+Esc em vários notes) ou tecla configurável. Depois, o F7 in-game (log `atalho: F7 recebido,
+      batida 1 seleciona ...`); se 1,2 s é um bom tempo para ele (bater sem querer marca; ouvir a voz confirma).
+    - **Falta (orquestrador):** reiniciar o coletor no lobby (o código novo só vale com o coletor reiniciado); trocar os
+      2 textos de `pengu/blocos.js`; contar ao Gabriel: "F7 uma vez = flash do teu adversário de rota (a voz confirma
+      em ~1 s); F7 mais vezes = top, jungler, mid, atirador, suporte, a borda mostra quem; segurar F7 = desfaz a
+      última, até 1 min depois (o que o chat já viu fica)"; e pedir a sonda do F7 sem Fn antes da partida.
+    - **O que o pedido não dizia:** completei: segurar no **meio** das batidas cancela em vez de desfazer (senão
+      cancelar um F7 sem querer apagaria a marcação anterior, que estava certa); desfazer só a marcação **do atalho**
+      com o cronômetro correndo (o gasto lido no chat não foi ele que marcou); a janela conta da **soltura** e é maior
+      que o segurar (segurando devagar, nada marca a rota errada antes do desfazer); sem posição na Live Client
+      (blind, ARAM) o rótulo da batida mostra o **nome do campeão** (a rota seria mentira); retorno "nada a desfazer"
+      e "nada marcado" para todo segurar ter resposta na tela. Fica de fora: confirmar a seleção ao sair do jogo no
+      meio da janela marca do mesmo jeito (a escolha foi feita no jogo).
 
 ## O que o overlay mostra (para o Gabriel)
 
@@ -339,7 +415,8 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
   Gabriel não tinha como saber que o coach pegou); a borda do chat espera 10 s sem alerta (não troca a cor logo
   depois de um gank).
 - completei (passo 9): "F7 duas vezes" = o adversário da tua rota (teclado sem numérico e o caso mais comum);
-  aviso no log se o LoL dele passar a usar F7, F8 ou o numérico.
+  aviso no log se o LoL dele passar a usar F7, F8 ou o numérico. (Substituído no passo 10: 1 batida já é o
+  adversário da rota, e as outras andam pelas rotas.)
 - completei (passo 9): o banco é limpo também no `abrir()` (outro banco antigo, cópia, backup restaurado) e a limpeza
   usa `secure_delete` + checkpoint (um UPDATE comum deixava o token nas páginas livres e no `-wal`); `jwt` entrou na
   lista do `chat_janelas.PROIBIDOS`.

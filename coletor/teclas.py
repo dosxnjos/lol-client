@@ -8,7 +8,9 @@
 # comida (a tecla segue para quem tem o foco), nada entra no processo do jogo. Sem hook de teclado (WH_KEYBOARD_LL):
 # com o GIL ocupado (minimapa, overlay) o hook atrasaria TODA tecla do jogo; o polling não atrasa nada.
 # Por isso o atalho usa teclas que o LoL do Gabriel não usa (Config\input.ini e PersistedSettings.json, 14/10/2026:
-# F1–F5 câmera, F9 trava o cursor, Ctrl+F10 HUD; 1, 2, 3, 5, t, y itens, 4 sentinela; numérico nenhum).
+# F1–F5 câmera, F9 trava o cursor, Ctrl+F10 HUD; 1, 2, 3, 5, t, y itens, 4 sentinela; numérico nenhum). Os números
+# de cima NUNCA são do coach: ler não tira a tecla do jogo, então o número dispararia o item junto (o note dele nem
+# tem numérico: desde 14/10 ~20:30 o atalho é só o F7, batidas e segurar; o numérico fica opcional).
 import ctypes
 import json
 import logging
@@ -37,33 +39,45 @@ class Observador:
     """passo() lê as `teclas` (vk) e chama ao_apertar(vk) na borda solta -> apertada, só com na_tela() verdadeiro (o
     jogo em primeiro plano: F7 no navegador com o Gabriel morto não marca nada). Segurar a tecla = 1 aperto.
     estado(vk) -> bool é injetável (teste, sem tecla nenhuma). rodar(parar) é o laço da thread; tique() (opcional)
-    roda a cada volta (a janela de 2 s do atalho expira por ele)."""
+    roda a cada volta, depois das bordas (a janela das batidas do F7 fecha por ele). ao_soltar(vk) (opcional) na
+    borda apertada -> solta, em qualquer janela (quem usa ignora a soltura de um aperto que não contou): é o que
+    separa bater de segurar."""
 
-    def __init__(self, teclas, ao_apertar, na_tela=None, estado=None, intervalo=INTERVALO_S, tique=None):
+    def __init__(self, teclas, ao_apertar, na_tela=None, estado=None, intervalo=INTERVALO_S, tique=None,
+                 ao_soltar=None):
         self.teclas = tuple(teclas)
-        self.ao_apertar, self.na_tela, self.tique = ao_apertar, na_tela, tique
+        self.ao_apertar, self.na_tela, self.tique, self.ao_soltar = ao_apertar, na_tela, tique, ao_soltar
         self.estado = estado or _estado_real()
         self.intervalo = intervalo
         self._antes = {vk: True for vk in self.teclas}   # começa "apertada": tecla já segura ao ligar não conta
         self.apertos = 0
 
     def passo(self):
-        out = []
+        out, soltas = [], []
         for vk in self.teclas:
             agora = self.estado(vk)
             if agora and not self._antes[vk]:
                 out.append(vk)
+            elif not agora and self._antes[vk]:
+                soltas.append(vk)
             self._antes[vk] = agora
         if out and (self.na_tela is None or self.na_tela()):
             for vk in out:
                 self.apertos += 1
-                try:
-                    self.ao_apertar(vk)
-                except Exception as e:   # callback quebrado não mata a thread (exceção na thread some calada)
-                    log.warning("teclas: tratamento de %s falhou: %s: %s", NOME.get(vk, vk), type(e).__name__, e)
+                self._chamar(self.ao_apertar, vk)
+        if self.ao_soltar is not None:
+            for vk in soltas:
+                self._chamar(self.ao_soltar, vk)
         if self.tique is not None:
             self.tique()
         return out
+
+    @staticmethod
+    def _chamar(f, vk):
+        try:
+            f(vk)
+        except Exception as e:   # callback quebrado não mata a thread (exceção na thread some calada)
+            log.warning("teclas: tratamento de %s falhou: %s: %s", NOME.get(vk, vk), type(e).__name__, e)
 
     def rodar(self, parar):
         try:
