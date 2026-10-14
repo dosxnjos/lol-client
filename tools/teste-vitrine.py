@@ -265,17 +265,17 @@ def caso_taxa(tmp):
         v.overlay(img, (300, 200, 100), q)
         esperar(v, 1, 0.3)
     n0 = v.n
-    relogio["t"] = 19.0
+    relogio["t"] = vitrine.INTERVALO_S - 1
     v.overlay(img, (300, 200, 100), q)
     esperar(v, 2, 0.5)
     n19 = v.n
-    relogio["t"] = 21.0
+    relogio["t"] = vitrine.INTERVALO_S + 1
     v.overlay(img, (300, 200, 100), q)
     v.moldura("verde", "baron em 60s", (0, 0, 800, 600), 12)   # outro tipo: taxa própria
     esperar(v, 3)
     n21 = v.n
     v.parar()
-    caso("taxa: 10 quadros no mesmo instante = 1 print; 19 s depois nada; 21 s depois mais 1; outro tipo à parte",
+    caso("taxa: 10 quadros no mesmo instante = 1 print; 1 s antes do intervalo nada; 1 s depois mais 1; outro tipo à parte",
          (n0, n19, n21) == (1, 1, 3), f"{n0}, {n19}, {n21}")
     tela2 = TelaFalsa(400, 300)
     v2 = vitrine.Vitrine(lambda: 0, pasta=tmp / "teto", primeiro_plano=lambda: True, capturar=tela2.capturar,
