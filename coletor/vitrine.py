@@ -2,13 +2,13 @@
 # funcionando numa partida de verdade. As duas janelas ficam fora do print de propósito
 # (WDA_EXCLUDEFROMCAPTURE: senão o próprio coach leria o overlay ao capturar o minimapa; ARMADILHAS §
 # Tela), então a vitrine NÃO liga a exclusão: grava o print do jogo (que não vê as janelas) e compõe por
-# cima a camada que o coach desenhou naquele instante (overlay: a imagem do `renderizar`, na mesma
-# posição, chave e alfa; moldura: a mesma rotina GDI da janela, `moldura.renderizar`).
+# cima a camada que o coach desenhou naquele instante (overlay: o quadro RGBA que a janela mandou ao
+# UpdateLayeredWindow, alfa por px, na mesma posição; moldura: a mesma rotina GDI da janela, `moldura.renderizar`).
 #
 # Liga para UMA partida (`python tools/vitrine.py ligar`): marca em dados/vitrine.json (pasta do banco),
 # válida por 3 h até a partida começar; a partida que começa consome e, ao acabar, apaga a marca.
 # Só grava com o jogo JÁ em primeiro plano: nunca traz janela para a frente, nunca manda tecla ou clique
-# (incidente de foco de 13/10/2026, ARMADILHAS § Tela). Tudo numa thread própria: o laço do coach, o Tk
+# (incidente de foco de 13/10/2026, ARMADILHAS § Tela). Tudo numa thread própria: o laço do coach, a janela
 # do overlay e o fio da moldura só enfileiram. Falha de disco ou de print só vai para o log.
 # Saída: temp/vitrine/<AAAA-MM-DD>/ (pngs + vitrine.jsonl); passa por revisão de privacidade antes de
 # entrar em qualquer resumo (LEIA-ME-privacidade.txt na pasta).
@@ -151,15 +151,20 @@ def da_partida(caminho, game_id, relogio, agora=None, **kw):
 
 # ---------- composição ----------
 
-def compor(fundo, camada, x, y, alfa, chave):
-    """o que aparece na tela: `camada` (RGB) em (x, y) sobre `fundo` (RGB), com os px da `chave`
-    transparentes e o resto misturado com alfa 0–255 (o mesmo byte da janela layered).
-    A camada pode passar da borda do fundo (é cortada)."""
+def compor(fundo, camada, x, y, alfa=None, chave=None):
+    """o que aparece na tela: `camada` em (x, y) sobre `fundo` (RGB). Camada RGBA (overlay do minimapa, alfa
+    por px desde 14/10/2026) = a conta do UpdateLayeredWindow (overlay_minimapa.compor_sobre); camada RGB
+    (moldura) = px da `chave` transparentes e o resto misturado com `alfa` 0–255 (o mesmo byte da janela
+    layered). A camada pode passar da borda do fundo (é cortada)."""
     out = fundo.copy()
     h, w = camada.shape[:2]
     H, W = fundo.shape[:2]
     x0, y0, x1, y1 = max(0, x), max(0, y), min(W, x + w), min(H, y + h)
     if x0 >= x1 or y0 >= y1:
+        return out
+    if camada.shape[2] == 4:
+        import overlay_minimapa
+        out[y0:y1, x0:x1] = overlay_minimapa.compor_sobre(out[y0:y1, x0:x1], camada[y0 - y:y1 - y, x0 - x:x1 - x])
         return out
     c = camada[y0 - y:y1 - y, x0 - x:x1 - x].astype(np.uint16)
     f = out[y0:y1, x0:x1].astype(np.uint16)
@@ -236,8 +241,8 @@ def _salvar_png(caminho, rgb_ou_rgba):
 # ---------- a vitrine de uma partida ----------
 
 class Vitrine:
-    """overlay(img, ret, quadro) e moldura(cor, rotulo, geo, espessura) são os ganchos (chamados do Tk
-    do overlay e do fio da moldura): só conferem a taxa e enfileiram. A thread "vitrine" confere o jogo
+    """overlay(img, ret, quadro) e moldura(cor, rotulo, geo, espessura) são os ganchos (chamados do fio
+    da janela do overlay e do fio da moldura): só conferem a taxa e enfileiram. A thread "vitrine" confere o jogo
     em primeiro plano, tira o print, compõe e grava. parar() fecha a thread e apaga a marca."""
 
     def __init__(self, relogio, game_id=None, marca=None, pasta=PASTA_PADRAO, intervalo_s=INTERVALO_S,
@@ -248,7 +253,8 @@ class Vitrine:
         self.intervalo, self.maximo, self.n = intervalo_s, maximo, gravados
         self.primeiro_plano, self.capturar, self.monitor = primeiro_plano, capturar, monitor
         self.camada_moldura, self.agora = camada_moldura, agora
-        # o mesmo byte que o Tk passa ao SetLayeredWindowAttributes (-alpha 0.55 -> 140) e a mesma chave
+        # overlay com alfa por px (14/10/2026): a camada RGBA traz o próprio alfa; estes dois só valem para camada
+        # RGB antiga (cor-chave + alfa global). alfa_overlay = opacidade máxima do calor, registrada no jsonl
         self.alfa_overlay = int((overlay_minimapa.ALPHA if alfa_overlay is None else alfa_overlay) * 255)
         self.chave_overlay = tuple(overlay_minimapa.CHAVE if chave_overlay is None else chave_overlay)
         self.tipo_aviso = None            # f(rotulo) -> tipo do aviso (o coach liga ao motor); None = sem
@@ -367,9 +373,11 @@ class Vitrine:
         if not self.primeiro_plano():
             return [], None
         comp = compor(fundo, img, L - reg["left"], T - reg["top"], self.alfa_overlay, self.chave_overlay)
-        # a camada exata do renderizar (px da chave = transparente), para conferir e recompor depois
-        camada = np.dstack([img, np.where(np.all(img == np.array(self.chave_overlay, np.uint8), axis=2), 0, 255)
-                            .astype(np.uint8)])
+        # a camada exata que foi à tela (RGBA com o alfa por px), para conferir e recompor depois; a versão
+        # antiga (RGB + cor-chave) vira RGBA com a chave transparente e o alfa global
+        camada = img if img.shape[2] == 4 else np.dstack(
+            [img, np.where(np.all(img == np.array(self.chave_overlay, np.uint8), axis=2), 0, self.alfa_overlay)
+             .astype(np.uint8)])
         d = self._dia()
         a1, a2 = self._nome("minimapa", "composto"), self._nome("minimapa", "camada")
         _salvar_png(d / a1, comp)

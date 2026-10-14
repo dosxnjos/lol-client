@@ -85,7 +85,7 @@ def principal():
              (gv.eventos([{"EventID": 1, "EventName": "DragonKill", "EventTime": 507.9, "DragonType": "Water"},
                           {"EventID": 2, "EventName": "DragonKill", "EventTime": 1230.0, "DragonType": "Fire"}]
                          if t >= 1250 else []) or gv.atualizar(t)) is not None]
-    extras = [conc >= 0.95, np.isfinite(df[rf, cf]), (vazio == ov.CHAVE).all(), regen == [500, 900, 1250, 1700]]
+    extras = [conc >= 0.95, np.isfinite(df[rf, cf]), (vazio[..., 3] == 0).all(), regen == [500, 900, 1250, 1700]]
     print(f"extras: grade regerada em gt {regen} (1ª, 2º dragão + 20 s com quadros posteriores, 5 min); tipo {gv.tipo}")
     print(f"extras: 1 quadro x mediana concordam {conc:.1%}; fonte azul -> vermelha andando {df[rf, cf]:.0f} "
           f"unidades; overlay sem calor 100% transparente: {bool(extras[2])} -> {'ok' if all(extras) else 'FALHOU'}")

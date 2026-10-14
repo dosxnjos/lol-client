@@ -155,7 +155,7 @@ no lugar; nada lê memória, injeta ou clica. Módulos (todos em `coletor/`, tes
 | `jungler.py` | `EstadoJungler`: pista = último avistamento, objetivo com `KillerName`, abate com ele, renascer na fonte; zonas (rota/rio/selva/base, relativas ao meu time) com prior por horário; `gank()` | `teste-jungler.py` 5/5; `--real` toca a partida medida |
 | `selva.py` | `EstadoSelva`: lado de início, rota provável e campos limpos pelo tempo, nível 3 previsto, contra-selva; horários em [SELVA](SELVA.md) | `teste-selva.py` 2/2 + partida real |
 | `alcance.py` | `Grade` (caminhável do próprio minimapa; Dijkstra 8-vizinhos, ~40 ms), `Area` (velocidade × tempo, um salto da [MOBILIDADE](MOBILIDADE.md), Flash = 0,5), `GradeViva` (regera ~20 s após o 2º `DragonKill` e a cada 5 min; `dados/mapas/`), `velocidade()` (Data Dragon + bota) | `teste-alcance.py` 4/4 |
-| `overlay_minimapa.py` | janela Tk click-through, topo, sem foco, **fora do print** (`WDA_EXCLUDEFROMCAPTURE`) sobre o retângulo; calor ∩ fog; some 30 s após a última pista e mostra "jungler sumido há X s" (caixa do tamanho do texto) por 10 s, depois some até a próxima pista; F8 liga/desliga (retorno "overlay ligado/desligado" na moldura, azul; registro e cada F8 recebido vão para o log) | `python coletor/overlay_minimapa.py --demo` (estilos, `WindowFromPoint`, desenho e exclusão do print) |
+| `overlay_minimapa.py` | janela Win32 click-through, topo, sem foco, **fora do print** (`WDA_EXCLUDEFROMCAPTURE`) sobre o retângulo, desenhada por `UpdateLayeredWindow` com alfa por px (desde 14/10/2026; antes Tk com cor-chave, que serrilhava); calor ∩ fog em **uma cor só** (`COR`) com a probabilidade na opacidade (`ALPHA_MIN` 12% em toda a área com calor ≥ `LIMIAR` a `ALPHA` 45%), borda desfocada (`SUAVE_PX`) e transição contínua (`Transicao`, τ 0,35 s, ~15 quadros/s só enquanto muda); some 30 s após a última pista (esmaecendo) e mostra "jungler sumido há X s" (caixa do tamanho do texto) por 10 s, depois some até a próxima pista; F8 liga/desliga (retorno "overlay ligado/desligado" na moldura, azul; registro e cada F8 recebido vão para o log) | `tools/teste-overlay.py` (cor, opacidade, borda, transição, conta da composição, custo ~2% de um núcleo animando); `python coletor/overlay_minimapa.py --demo` (estilos, `WindowFromPoint`, desenho contra a conta e exclusão do print) |
 
 Ligação no laço ao vivo (quem integra; `relogio()` = `gameTime` estimado do laço, `live` = última
 amostra da Live Client):
@@ -171,8 +171,10 @@ jg.jogadores(live["allPlayers"], gt, velocidade=alcance.velocidade(jungler_campe
 jg.eventos(live["events"]["Events"]); gv.eventos(live["events"]["Events"])
 jg.observar(cap.deteccoes(max_idade=1)); g = gv.atualizar(gt); jg.trocar_grade(g)
 jg.preparar(gt)                             # Dijkstra da pista nova aqui, não na thread do overlay
-estado = jg.estado(gt, fog); aviso = jg.gank(gt, minha_rota, minha_pos)   # fog = cap.ultimo_terreno()["fog"] só com cap.no_ar
-# gank(): None com ele na tela (visto há ≤ 3 s: o AlertasPosicao avisa); eu jungler → rota do meu ícone
+estado = jg.estado(gt, fog)                 # fog = cap.ultimo_terreno()["fog"] só com cap.no_ar
+aviso = avisos.decidir_gank(lambda r, alvo: jg.gank(gt, r, alvo, fog), pos, reserva)   # pos = AlertasPosicao
+# gank(): None com ele na tela (visto há ≤ 3 s: o AlertasPosicao avisa). decidir_gank: a rota de ONDE ESTOU
+# (ícone; sem ícone, a do champ select) urgente; outra rota só com aliado visto nela, amarelo (§ Avisos ao vivo)
 selva = jg.selva.estado(gt)
 ov = overlay_minimapa.OverlayMinimapa(overlay_minimapa.fonte_jungler(cap, jg, relogio)); ov.iniciar()
 ```
@@ -180,6 +182,12 @@ ov = overlay_minimapa.OverlayMinimapa(overlay_minimapa.fonte_jungler(cap, jg, re
 Medido no replay da partida real (recortes a cada 10 s, Ekko contra a timeline 1/min): zona mais
 provável certa 9/24 (38%), entre as 3 primeiras 16/24 (67%), posição real dentro da área 23/24.
 Ao vivo a 6 fps deve melhorar; a avaliação de verdade é o passo 15.
+
+**Como ler o overlay** (para o Gabriel): a mancha vermelha clara é onde o jungler deles **pode** estar agora;
+quanto mais forte o vermelho, mais provável; o vermelho mais fraco (12%) marca até onde ele pode ter ido. Ela cresce aos poucos enquanto ele está sumido (ele anda), não
+pinta onde o teu time está vendo e some devagar 30 s depois da última pista. Até 14/10/2026 eram três cores:
+amarelo (pouca chance), laranja (média), vermelho (o mais provável do momento) e um contorno branco (até onde
+ele conseguiria ter ido). Ajuste de cor e força: `COR`, `ALPHA`, `ALPHA_MIN` no topo do `overlay_minimapa.py`.
 
 ## MCP (`mcp\servidor.py`)
 
@@ -285,7 +293,8 @@ relogio = RelogioJogo()                                   # laço ao vivo: relog
 motor = MotorAvisos(tom="serio", relogio=relogio, voz=Voz(), moldura=Moldura())
 live = GatilhosLive(motor)                                # a cada allgamedata: live.atualizar(dados, objetivos=…); motor.tick()
 pos = AlertasPosicao.do_live(motor, dados)                # 1º allgamedata com GameStart
-pos.observar(cap.deteccoes(max_idade=1), relogio(), quadro_valido=cap.no_ar, mortos=live.mortos)  # ≥ 1/s
+pos.observar(cap.deteccoes(max_idade=1), relogio(), quadro_valido=cap.no_ar, mortos=live.mortos,
+             eventos=live.eventos.values())                                                  # ≥ 1/s
 motor.publicar(Aviso("gank", {"zona": "no top", "zc": "top"}, "top"))   # jungler.py; regra do coach.py: Aviso(id, textos={tom: (fala, rótulo)})
 motor.estado()                                            # bloco "aviso" do /estado (faixa do painel)
 motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela": [...]})  # seção do 7b
@@ -314,19 +323,43 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   `ORDER`/`CHAOS` (ou 100/200), `x`/`y` em unidades do mapa (0–14870 × 0–14980, origem na base azul),
   `visto_em` = `gameTime` do quadro. `quadro_valido=False` quando o jogo não está na tela: pausa (e
   2 s de ressincronia ao voltar). Morto não "some" (`mortos`).
-- **Regras**: anti-spam por `tipo:chave` (`repetir`), voz com 1 fala a cada 20 s (gank e intruso
+- **Regras**: anti-spam por `tipo:chave` (`repetir`; gank 60 s); por **tipo**, independente da chave,
+  `intervalo` e `teto` por partida (`TIPOS`: `mid_sumiu` 120 s e 4, `jungler_apareceu` 20 s, `mid_indo` 30 s;
+  calibração de 14/10/2026); a voz não repete a **mesma frase** em 60 s (`REPETIR_FALA_S`, qualquer tipo, fora
+  o retorno de atalho; `suprimidos["fala_repetida"]`), urgente só em 10 s (`REPETIR_FALA_URGENTE_S`: o mesmo
+  texto urgente pode ser outro perigo, ex. o gank de outra rota que virou o da minha); `Aviso.validade` e
+  `Aviso.tom` postos pelo gatilho sobrepõem os do tipo/motor; voz com 1 fala a cada 20 s (gank e intruso
   vermelho furam e cortam a fala comum; alerta de posição com prio ≥ 70 fala ≥ 5 s depois de uma fala
   informativa de prio < 50, marcado `furou`), aviso que esperou além da `validade` cai; moldura 1 por
   vez (2,5 s entre elas); painel mostra o de maior prioridade dos últimos ~8 s. Tabela de tipos,
   cores e limiares no topo de `avisos.py` (`TIPOS`, `OBJETIVOS`, constantes das classes).
-- **Posição**: jungler apareceu (≥ 8 s fora de vista ou 1º avistamento); mid sumiu (6 s sem
-  detecção, fora da base dele) e "mid indo X" ao reaparecer fora do mid; intruso = inimigo que não
+- **Onde estou** (`AlertasPosicao.onde_estou`, 14/10/2026): meu ícone visto há ≤ 4 s numa rota = ela; no rio
+  ou na selva, a rota cuja faixa me contém (senão nenhuma: andando pela selva longe das rotas nenhuma rota é
+  vigiada, só vale o raio de 4000 do jungler e o gank das rotas com aliado); na base **deles** (split push), a
+  faixa da rota sem margem (perto do nexo, onde as 3 se cruzam, nenhuma); morto, na minha base ou sem ícone = a
+  rota do champ select. Vale para a rota vigiada (intruso), o jungler e o gank. Geometria das rotas absoluta,
+  base e selva relativas ao meu time (`analise.regiao`): nada fixa "top".
+- **Gank** (`avisos.decidir_gank`, chamado pelo `coach_vivo`): o da rota onde estou sai urgente, vermelho, prio
+  100; o de outra rota (o Gabriel avisa os colegas) só com aliado visto nela há ≤ 5 s e adiantado, amarelo,
+  prio 75, sem urgência, no máximo 1 a cada 30 s (`coach_vivo.GANK_OUTRA_S`), sempre no tom sério e com validade
+  de 22 s na fila (`VALIDADE_GANK_OUTRA`: espera a fala anterior em vez de cair mudo); cada aliado da rota é
+  testado, o mais adiantado primeiro (`aliados_na_rota`); 1 gank por vez (a minha rota vence; entre as outras,
+  a de maior massa). Morto ou na base, a minha rota não é alvo.
+- **Posição**: jungler apareceu (≥ 8 s fora de vista ou 1º avistamento) com voz e borda só se importa para
+  onde estou (a ≤ 4000 de mim ou na zona de gank da minha rota, `avisos.ZONAS_DA_ROTA`); longe = só a faixa do
+  painel, azul, prio 15 (abaixo das informativas); eu de selva, o jungler deles importa no mapa todo. Mid sumiu (6 s sem detecção, visto por último na rota do meio ou no rio) só entre 1:30 e 14:00,
+  antes de cair torre externa do mid, e calado com eu morto, eu na base, cerco (2+ inimigos na minha base ou
+  torre de inibidor/nexo/inibidor meu caído, pelo nome do evento) ou luta (3+ inimigos à vista a ≤ 2500 de um
+  deles; cada um na sua rota não é luta): motivo em
+  `AlertasPosicao.calados`. "Mid indo X" ao reaparecer fora do mid, só depois de um sumiço que passou na
+  relevância ou foi calado só por luta, eu morto ou eu na base (`LIBERA_MID_INDO`), aceito ou não o "mid sumiu"
+  pelo motor (intervalo, teto); nunca fora da fase de rotas, em cerco ou depois de morrer e renascer; intruso = inimigo que não
   mora na rota vigiada (moradores: top no top, mid no mid, atirador e suporte no bot; o jungler deles
   não mora em nenhuma) chegando a ≤ 1500 da faixa dela (regiões de [INSIGHTS](INSIGHTS.md)), vermelho
   se jungler ou 2+, amarelo se 1; "chegando" = **ele** entrou na faixa ou reapareceu nela, nunca eu
   entrando numa rota onde ele já estava. Adversário da rota do champ select que volta depois de ≥ 20 s
-  sumido = azul. Rota vigiada = a do meu ícone, senão a posição da Live Client; jungler sem ícone numa
-  rota não vigia nada (com o ícone numa rota, o jungler deles chegando = vermelho urgente, o contra-gank).
+  sumido = azul. Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
+  nada (com o ícone numa rota, o jungler deles chegando = vermelho urgente, o contra-gank).
   Na minha rota, intruso vence "mid indo".
 - **Textos** (dois tons, `sério`/`descontraído`): padrão em `avisos.TEXTOS`; editáveis na seção
   `## Avisos ao vivo` do arquivo de lições (`pengu\posjogo\licoes.md`, senão `docs\LICOES.md`, onde ela
@@ -446,7 +479,7 @@ tudo que bloqueia roda em `asyncio.to_thread`. `--sem-coach` desliga.
 | champ select (cada sessão) | `draft.Draft.analisar_sessao` → `GET /draft`; `GET /draft/<meu campeão>` junta `matchups` (`analise.matchups`) e `traumas` dele contra os inimigos travados (cache de 10 min por campeão): é o que o selo do plugin lê |
 | `InProgress`/`Reconnect` | processo **abaixo do normal**; laço ao vivo (`AoVivo`, só um ouvinte para sempre); por partida: `MotorAvisos` + `GatilhosLive` (voz, moldura, faixa do painel), `Captura` do minimapa + `EstadoJungler`/`GradeViva` + overlay, `Feiticos` + OCR do chat a cada 3 s + atalho F9, `PicosDeForca`, dado estático (cache; a LCU refaz por patch em thread); janela do painel |
 | carregamento (Live Client com `gameTime` ~0) | `Carregamento.verificar` (Riot API, uma vez por partida) → `carregamento` no `/estado`; `bloco_carregamento` → `composicao`; runas do spectator → `Feiticos.definir_runas` |
-| jogo, a cada leitura (1 s) | avisos da Live Client, `AlertasPosicao` sobre as detecções, jungler (gank só com rota: o Gabriel de selva não tem), feitiços que voltaram e picos de força → motor, `preparo_objetivo`, item curado do [ITENS](ITENS.md) no lugar do genérico; uma previsão do jungler a cada 10 s |
+| jogo, a cada leitura (1 s) | avisos da Live Client, `AlertasPosicao` sobre as detecções (com os eventos: torres e inibidores), jungler (gank pelo `avisos.decidir_gank`: a rota onde estou e, com aliado nela, as outras), feitiços que voltaram e picos de força → motor, `preparo_objetivo`, item curado do [ITENS](ITENS.md) no lugar do genérico; uma previsão do jungler a cada 10 s |
 | `WaitingForStats`/`PreEndOfGame` | para o que olha a tela: captura, overlay, OCR, atalho, moldura |
 | `EndOfGame` ou fase fora do jogo | para tudo (threads com `join`), grava `previsoes_jungler`, `Carregamento.encerrar()` (esquece puuid/Riot ID), prioridade normal |
 | partida no banco (backfill) | revisão da previsão (`revisoes_jungler`, `GET /revisao/<gameId>`) e `Mentor.posjogo` (não em personalizada/treino) |
@@ -476,11 +509,12 @@ retoma na mesma partida; reinício limpo do coletor encerra a vitrine). A mesma 
 (Reconnect, `AoVivo` morto, fase relida) segue gravando: o coach só apaga a marca com outro `game_id` ou no fim; marca
 consumida sem `game_id` (GET da sessão falhou no `InProgress`) é adotada pela partida que vier com id. `ligar` com uma
 partida gravando (marca consumida há < 2 h) recusa (rc 1); o fim de uma partida só apaga a marca que ela consumiu.
-Vale só com o coletor iniciado com estes ganchos. Ganchos: `OverlayMinimapa.ao_desenhar(img, ret, quadro)` a cada quadro mostrado e
+Vale só com o coletor iniciado com estes ganchos. Ganchos: `OverlayMinimapa.ao_desenhar(img, ret, quadro)` a cada quadro mostrado (com a imagem parada, o quadro da tela a cada 400 ms) e
 `Moldura.ao_mostrar(cor, rotulo, geo, espessura)` a cada alerta; só enfileiram, a thread `vitrine` faz o resto:
 jogo **já** em primeiro plano (`minimapa.janela_do_jogo_em_primeiro_plano`; nunca traz janela para a frente) →
-print `mss` → primeiro plano conferido de novo (alt-tab no meio = descartado) → composição com o pixel desenhado (overlay: a imagem do `renderizar`, chave transparente, alfa 140
-= o `-alpha 0.55` do Tk; moldura: `moldura.renderizar`, a mesma rotina GDI da janela, alfa 255 = início do pulso).
+print `mss` → primeiro plano conferido de novo (alt-tab no meio = descartado) → composição com o pixel desenhado (overlay: o quadro RGBA que a janela mandou ao `UpdateLayeredWindow`,
+composto pela mesma conta, `overlay_minimapa.compor_sobre`; moldura: `moldura.renderizar`, a mesma rotina GDI da
+janela, alfa 255 = início do pulso).
 Saída em `temp\vitrine\<data>\`: `*-minimapa-composto.png` (mapa + 40 px de margem) e `*-camada.png` (RGBA exata),
 `*-moldura-<cor>-tela.png` (tela inteira em 1280 px, chat medido, canto de baixo à esquerda e topo central
 pixelados antes de compor), `vitrine.jsonl` (gameTime, tipo, aviso, rótulo, `revisao_privacidade: "pendente"`) e
@@ -500,7 +534,8 @@ minimapa a 6 fps, que a frente mediu em ~5%, e os PowerShell filhos de voz e OCR
 a 10x (p95 4,8 ms, máx ~300 ms no Dijkstra do jungler; na rodada do fechamento 3,2% / 12,0%, p95 5,4 ms e um
 passo de 1229 ms); 29–31 falas em 33 min, nenhuma chave repetida,
 menor intervalo 20,0 s; aviso de dragão 60 s antes nos 5; `EndOfGame` desliga em < 0,1 s e não sobra
-thread; `dados\` intocado. Prints do painel em `temp\ensaio\painel-*.png`.
+thread; `dados\` intocado. Prints do painel em `temp\ensaio\painel-*.png`. O `temp\ensaio\relatorio.json` conta
+falas **e molduras** por tipo, os `suprimidos` do motor e os "mid sumiu" calados por motivo (14/10/2026).
 
 **Plugin contra um coach de verdade** (`python tools\servidor-teste-plugin.py [--fixture]`): `Coach` com mentor
 real na 8765, banco copiado em `temp\pengu\` e config em `temp\pengu\config.json`; lê o champ select da LCU (só

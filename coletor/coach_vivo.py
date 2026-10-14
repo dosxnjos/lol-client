@@ -32,6 +32,7 @@ FASES_TELA_FORA = ("WaitingForStats", "PreEndOfGame")   # jogo acabou, client ai
 OCR_S = 3.0              # passo do OCR do chat (feitiços)
 PREVISAO_S = 10          # uma previsão do jungler gravada a cada 10 s de gameTime (revisão no pós-jogo)
 ROTA_CURTA = {"TOP": "top", "MIDDLE": "mid", "BOTTOM": "bot", "UTILITY": "bot"}
+GANK_OUTRA_S = 30.0   # gank de outra rota: no máximo 1 a cada 30 s de jogo (o da minha rota não espera)
 ESQUEMA_PREVISAO = """
 create table if not exists previsoes_jungler (
   game_id integer, gt real, campeao text, x real, y real, visto_ha real, zona text, p real,
@@ -178,6 +179,7 @@ class _Partida:
         self.icones_pedidos = False
         self.previsoes = []
         self.balde_prev = None
+        self.gank_outra_em = float("-inf")   # gameTime do último gank de OUTRA rota publicado (1 a cada GANK_OUTRA_S)
         self.runas_ok = False
         self.parando = threading.Event()
         self.tela_parada = threading.Event()
@@ -274,7 +276,7 @@ class _Partida:
     def _parar_minimapa(self):
         cap, self.cap = self.cap, None
         ov, self.ov = self.ov, None
-        for peca in (ov, cap):   # o Tk do overlay sai no próximo passo (~0,4 s); a captura no próximo ciclo
+        for peca in (ov, cap):   # a janela do overlay fecha no WM_CLOSE (na hora); a captura no próximo ciclo
             if peca is None:
                 continue
             peca.parar()
@@ -442,7 +444,8 @@ class _Partida:
             try:
                 dets = cap.deteccoes(max_idade=1)
                 if self.pos is not None:
-                    self.pos.observar(dets, self.relogio(), quadro_valido=cap.no_ar, mortos=self.live.mortos)
+                    self.pos.observar(dets, self.relogio(), quadro_valido=cap.no_ar, mortos=self.live.mortos,
+                                      eventos=self.live.eventos.values())
             except Exception as e:
                 av("detecções do minimapa", e)
             extra["jungler"], extra["selva"] = self._jungler(limpo, est, gt, dets)
@@ -541,17 +544,17 @@ class _Partida:
             terr = self.cap.ultimo_terreno() if self.cap is not None and self.cap.no_ar else None
             fog = terr["fog"] if terr is not None and terr["fog"].shape[0] == jg.lado else None
             estado = jg.estado(gt, fog)
+            # gank de onde estou (meu ícone; a rota do champ select só sem ícone) e, com aliado visto nela, de
+            # outra rota (o Gabriel avisa os colegas): avisos.decidir_gank, calibração de 14/10/2026
             eu = est.get("euJogador") or {}
-            rota = ROTA_CURTA.get(str(eu.get("rota") or "").upper())
-            if not rota and self.pos is not None:
-                # eu na selva: vigia a rota em que o meu ícone está (contra-gank), se estiver numa
-                rota = {"rota_top": "top", "rota_meio": "mid", "rota_bot": "bot"}.get(
-                    next(iter(self.pos.rotas_vigiadas()), None))
-            if rota:
-                g = jg.gank(gt, rota, self.pos.minha_pos if self.pos else None, fog)
-                if g:
-                    self.motor.publicar(avisos.Aviso("gank", {"zona": f"no {rota}", "zc": rota, "zt": rota},
-                                                     chave=rota))
+            reserva = ROTA_CURTA.get(str(eu.get("rota") or "").upper())
+            # a distribuição do jungler sai 1 vez por passo, não 1 por rota perguntada (custo do Dijkstra/bincount)
+            zonas = estado.get("zonas") if estado.get("status") in ("visto", "provavel", "sumido") else None
+            a = avisos.decidir_gank(lambda r, alvo: jg.gank(gt, r, alvo, fog, zonas=zonas or None), self.pos,
+                                    reserva, self.relogio() if self.pos is not None else None)
+            if a is not None and (a.urgente is not False or gt - self.gank_outra_em >= GANK_OUTRA_S):
+                if self.motor.publicar(a) and a.urgente is False:
+                    self.gank_outra_em = gt
             if self.ov is not None and self._fonte_ov is None:
                 import overlay_minimapa
                 self._fonte_ov = overlay_minimapa.fonte_jungler(self.cap, jg, self.relogio)

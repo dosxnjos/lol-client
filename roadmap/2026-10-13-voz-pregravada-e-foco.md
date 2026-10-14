@@ -3,6 +3,8 @@
 - **Data:** 13/10/2026 · **Alvo:** `coletor/avisos.py`, `coletor/voz.py`, `pengu/aceite.js`, `pengu/blocos.js`,
   ferramentas novas em `tools/` · **Depende de:** v2 entregue (`0d1f1db`, plano
   [2026-10-13-lol-client-v2-coach.md](2026-10-13-lol-client-v2-coach.md))
+- **Continuação (14/10/2026):** [calibrar os avisos e o overlay](2026-10-14-calibrar-avisos.md) (relevância do
+  "mid sumiu" e do jungler, gank nas 3 rotas, overlay suave); o catálogo de falas daqui não muda
 
 ## Pedido (palavras do Gabriel, 13/10/2026)
 

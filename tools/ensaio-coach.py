@@ -5,7 +5,7 @@
 #   voz        Voz(saida=registro): a fila e o fio são os de verdade, sem som
 #   moldura    registro (nada desenha na tela do Gabriel)
 #   minimapa   Captura de verdade processando os recortes gravados (1 a cada 10 s de jogo)
-#   overlay    OverlayMinimapa de verdade (Tk), escondido (mostrar=False) e sem F8
+#   overlay    OverlayMinimapa de verdade (janela Win32), escondido (mostrar=False) e sem F8
 #   feitiços   LeitorChat de verdade (OCR do Windows) lendo os prints gravados; atalho F9 falso
 #   Riot API   carregamento.py de verdade com respostas falsas (nada sai da máquina)
 #   mentor     Mentor de verdade com o Claude falso; janela do painel: registro (não abre o Edge)
@@ -438,6 +438,11 @@ async def ensaio(a):
                  f", {n_furou} alerta(s) de posição à frente de fala informativa"
                  + (f"; curtos: {curtos[:5]}" if curtos else ""))
         rel["falas_por_tipo"] = tipos
+        # a moldura também conta (calibração 14/10/2026: o reclamado foi a borda, 25 "mid sumiu" numa partida)
+        rel["molduras_por_tipo"] = dict(sorted({av.tipo: sum(1 for _, d_, b in emit if d_ == "moldura" and b.tipo == av.tipo)
+                                                for _, d_, av in emit if d_ == "moldura"}.items()))
+        rel["suprimidos"] = dict(p.motor.suprimidos)
+        rel["mid_sumiu_calados"] = dict(getattr(p.pos, "calados", None) or {})
         rel["faixa_do_painel"] = len(avisos_painel)
         rel["falas"] = [(round(t), av.tipo, av.fala) for t, av in voz]
         # voz pré-gravada (plano voz pré-gravada, passo 3): toda fala sai do catálogo do pacote, fora o texto
@@ -519,6 +524,8 @@ async def ensaio(a):
     conferir(not restos, f"threads não daemon no fim: {restos or 'nenhuma'}")
     (SAIDA / "relatorio.json").write_text(json.dumps(rel, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"falas por tipo: {rel.get('falas_por_tipo')}")
+    print(f"molduras por tipo: {rel.get('molduras_por_tipo')}; suprimidos {rel.get('suprimidos')}; "
+          f"'mid sumiu' calados {rel.get('mid_sumiu_calados')}")
     print(f"{'ok' if not falhas else 'FALHOU'} ({len(falhas)} falha(s)); detalhe em {SAIDA / 'relatorio.json'} e "
           f"{SAIDA / 'ensaio.log'}")
     return 1 if falhas else 0

@@ -270,9 +270,10 @@ class EstadoJungler:
             st, txt = "provavel", f"provável: {zonas[0][0]} ({'visto' if self.pista['fonte'] == 'visto' else self.pista['fonte']} há {int(dt)} s)"
         return {**base, "status": st, "texto": txt, "zonas": zonas, "confianca": conf, "segundos": round(dt, 1)}
 
-    def gank(self, t, minha_rota, minha_pos=None, fog=None):
-        """aviso "gank provável <rota>" ou None. minha_rota: top/mid/bot; minha_pos (x, y) do meu ícone
-        para saber se estou adiantado (mais perto da base inimiga que da minha)"""
+    def gank(self, t, minha_rota, minha_pos=None, fog=None, zonas=None):
+        """aviso "gank provável <rota>" ou None. minha_rota: top/mid/bot; minha_pos (x, y) de quem seria
+        gankado (meu ícone, ou o do aliado da rota) para saber se está adiantado (mais perto da base inimiga
+        que da dele). zonas: a distribuicao(t, fog)[0] já calculada no passo (o coach pergunta das 3 rotas)"""
         if not self.pista or (self.morto_ate is not None and t < self.morto_ate):
             return None
         dt = t - self.pista["t"]
@@ -282,7 +283,8 @@ class EstadoJungler:
             # na tela agora: é posição, não previsão; quem avisa é o AlertasPosicao (intruso/jungler
             # apareceu). Sem isto o mesmo evento saía 2× urgente e repetia a cada 30 s com ele parado
             return None
-        zonas, _ = self.distribuicao(t, fog)
+        if zonas is None:
+            zonas, _ = self.distribuicao(t, fog)
         massa = sum(p for r, p in zonas if r in zonas_de_gank(minha_rota))
         if massa < GANK_MASSA:
             return None

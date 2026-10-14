@@ -452,6 +452,15 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   `monitor_do_jogo` (game.cfg) escolhia a outra tela e o recorte saía vazio, sem log. Hoje: recomeço mantém, `ligar`
   recusa, recorte pela lista de monitores e log "fora de todo monitor". Alt-tab entre a conferência e o print
   descarta (o print teria a área de trabalho).
+- **Overlay serrilhado e "pintando feio"** (Gabriel, 14/10/2026) → janela com cor-chave (`-transparentcolor`) +
+  alfa global: cada px é 100% transparente ou 100% da cor, então nenhum desfoque suaviza a borda, e misturar
+  `UpdateLayeredWindow` com o `-alpha` do Tk (que chama `SetLayeredWindowAttributes`) troca o modo da janela.
+  Hoje: janela Win32 só com `UpdateLayeredWindow` (BGRA pré-multiplicado, alfa por px); a vitrine compõe com
+  a mesma conta (`overlay_minimapa.compor_sobre`).
+- **Área de pouca chance do overlay quase invisível** (revisão 14/10/2026) → o calor é constante dentro de cada
+  zona do jungler, então uma rampa de opacidade sobre o **valor** do calor pinta a zona inteira fraca (calor
+  0,05 a ~7%), não só a borda. Piso `ALPHA_MIN` em todo px com calor ≥ `LIMIAR`; quem suaviza a borda é o
+  desfoque. Overlay parado não redesenha: a vitrine recebe o quadro da tela a cada 400 ms pelo mesmo gancho.
 - **Overlay "não aparece" no canto do minimapa da área de trabalho** → um `Windows.UI.Core.CoreWindow`
   sempre-no-topo (painel do sistema) cobria (2197, 716) em 13/10/2026: até uma janela branca opaca
   saía (50, 50, 50) no print. Testar o desenho em outro ponto (`--demo --left 1000 --top 300`).
@@ -599,6 +608,20 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   cai em (8000–9000, 8000–9000) assim que ela cresce: não diz nada. O coach grava o centro **dentro da
   zona mais provável**. Nenhum dos dois passou de 2/26 a ≤ 1000 no ensaio (zona certa 4/29), mas lá o
   minimapa é 1 recorte a cada 10 s e a fog tem até 10 s: quem mede de verdade é o passo 15, ao vivo a 6 fps.
+- **"Mid sumiu" 25 vezes numa partida, com a base caindo** (partida 3293092537, 14/10/2026) → a chave do aviso
+  era o segundo em que o mid foi visto (nova a cada sumiço), então o `repetir` nunca barrava; o mesmo com o
+  `jungler_apareceu` (chave = zona do rótulo: "rio bot" → "bot" → "selva bot" deram 3 bordas em 13 s). Chave que
+  muda a cada evento não é anti-spam: hoje há `intervalo` e `teto` por **tipo** no `TIPOS` e a relevância (fase
+  de rotas, cerco, luta, eu morto/na base) no `AlertasPosicao` ([COLETOR](COLETOR.md) § Avisos ao vivo).
+- **"O coach repetiu a frase 3 vezes" na transcrição do Reco** (14/10/2026) → o log tinha 1 fala ("o top chegou
+  no nível 16", "curar do suporte voltou", "dragão em um minuto"); a transcrição repete trechos do áudio do
+  sistema (até o "A destruição" do anunciador saiu 5 vezes). Repetição se confere no `dados\coletor.log`
+  (`aviso voz …`), nunca só na transcrição.
+- **Filtro de repetição que cala o aviso certo** (revisão 14/10/2026) → "mesma frase em 60 s" calava o gank
+  urgente da minha rota depois do mesmo texto vindo de outra rota (urgente hoje: 10 s); "mid indo" ligado ao
+  "mid sumiu" **aceito** morria quando o motor barrava o sumiu por intervalo/teto (hoje: liga pela relevância);
+  gank de outra rota com a validade de 6 s do tipo vencia mudo atrás da fala de 20 s (hoje: 22 s). Todo filtro
+  novo pede o teste do lado oposto: o aviso legítimo que ele não pode calar (`teste-coach`, `teste-alertas`).
 
 - **Plugin e painel param de falar com o coletor** sem erro no coletor (13/10/2026) → um `python -m
   http.server 8765` de teste subiu na mesma porta do `servidor_local` (127.0.0.1:8765): no Windows os dois

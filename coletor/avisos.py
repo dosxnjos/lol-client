@@ -3,6 +3,7 @@
 # Client, 1 s) e AlertasPosicao (detecções do minimapa). Contrato: docs/COLETOR.md § Avisos ao vivo.
 # Tempo em tudo = gameTime em segundos (RelogioJogo extrapola entre as leituras da Live Client).
 # Só stdlib; nada aqui lê memória do jogo nem toca no processo dele.
+import math
 import re
 import sys
 import threading
@@ -21,13 +22,19 @@ CORES = {"vermelho": (235, 45, 45), "amarelo": (245, 200, 40), "azul": (60, 145,
 # tipo -> prio (maior fala antes), validade (s esperando a vez na voz/moldura), repetir (s em que a
 # mesma chave é descartada), urgente (fura o intervalo de 20 s da voz), destinos (v voz, p painel,
 # m moldura), cor e ícone (o painel desenha). Ajuste aqui, não espalhado pelo código.
+# Opcionais, por TIPO e independentes da chave (calibração de 14/10/2026: a chave do mid_sumiu mudava a cada
+# sumiço e o `repetir` nunca valia; 25 molduras numa partida): intervalo (s mínimos entre dois avisos aceitos do
+# tipo com os mesmos destinos) e teto (avisos aceitos por partida; o motor é um por partida).
 TIPOS = {
-    "gank":              dict(prio=100, validade=6, repetir=30, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
+    "gank":              dict(prio=100, validade=6, repetir=60, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
     "intruso_grupo":     dict(prio=95, validade=6, repetir=15, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
     "intruso":           dict(prio=85, validade=6, repetir=15, urgente=False, destinos="vpm", cor="amarelo", icone="perigo"),
-    "jungler_apareceu":  dict(prio=80, validade=5, repetir=20, urgente=False, destinos="vpm", cor="vermelho", icone="olho"),
-    "mid_indo":          dict(prio=70, validade=6, repetir=20, urgente=False, destinos="vpm", cor="amarelo", icone="seta"),
-    "mid_sumiu":         dict(prio=60, validade=8, repetir=30, urgente=False, destinos="vpm", cor="amarelo", icone="interrogacao"),
+    "jungler_apareceu":  dict(prio=80, validade=5, repetir=20, urgente=False, destinos="vpm", cor="vermelho", icone="olho",
+                              intervalo=20),
+    "mid_indo":          dict(prio=70, validade=6, repetir=20, urgente=False, destinos="vpm", cor="amarelo", icone="seta",
+                              intervalo=30),
+    "mid_sumiu":         dict(prio=60, validade=8, repetir=30, urgente=False, destinos="vpm", cor="amarelo", icone="interrogacao",
+                              intervalo=120, teto=4),
     "janela_objetivo":   dict(prio=55, validade=10, repetir=45, urgente=False, destinos="vp", cor="verde", icone="objetivo"),
     "objetivo_60s":      dict(prio=50, validade=20, repetir=120, urgente=False, destinos="vp", cor="azul", icone="relogio"),
     "mortes_cedo":       dict(prio=45, validade=30, repetir=900, urgente=False, destinos="vp", cor="amarelo", icone="caveira"),
@@ -294,7 +301,8 @@ class Aviso:
     molde: str = ""       # chave de TEXTOS quando o tipo tem falas por evento (feitico_marcado); vazio = o tipo
     # destinos: vazio = os do tipo; preenchido = só esses DENTRO dos do tipo (o F9 armado só na moldura)
     destinos: str = ""
-    # preenchidos pelo motor
+    tom: str = ""         # vazio = o tom do motor; "serio" força (gank de outra rota: "sai daí" é para outro)
+    # preenchidos pelo motor (validade > 0 posta pelo gatilho sobrepõe a do tipo: gank de outra rota)
     fala: str = ""
     rotulo: str = ""
     validade: float = 0.0
@@ -340,6 +348,12 @@ class MotorAvisos:
     PRIO_INFO, PRIO_FURA, FURA_S = 50, 70, 5.0
     GAP_MOLDURA = 2.5
     PAINEL_S = 8.0
+    # a mesma fala (texto normalizado) não sai de novo na voz dentro disto, qualquer tipo e chave (calibração
+    # 14/10/2026: gank top a 31 s do anterior; chaves diferentes com a mesma frase). Retorno de atalho fica fora.
+    REPETIR_FALA_S = 60.0
+    # urgente: só barra o eco imediato (revisão 14/10/2026: com 60 s o gank urgente da minha rota saía mudo
+    # depois de um "gank provável no bot" de outra rota, e o 2º mergulho "2 inimigos no top" também)
+    REPETIR_FALA_URGENTE_S = 10.0
 
     def __init__(self, tom="serio", textos=None, relogio=None, voz=None, moldura=None, log=None):
         self.tom = tom if tom in TONS else "serio"
@@ -352,6 +366,9 @@ class MotorAvisos:
         self.suprimidos = Counter()
         self._lock = threading.RLock()
         self._ultimo = {}                   # tipo:chave -> em do último aceito
+        self._ultimo_tipo = {}              # (tipo, destinos) -> em do último aceito (TIPOS["intervalo"])
+        self._n_tipo = Counter()            # tipo -> aceitos nesta partida (TIPOS["teto"])
+        self._falas = {}                    # fala normalizada -> em da última vez que saiu na voz
         self._fila_voz, self._fila_moldura, self._painel = [], [], []
         self._ultima_fala = self._ultima_moldura = float("-inf")
         self._prio_fala = None              # prio da última fala (a regra do FURA_S olha para ela)
@@ -373,13 +390,15 @@ class MotorAvisos:
         a.prio = p["prio"] if a.prio is None else a.prio
         a.cor = a.cor or p["cor"]
         a.urgente = p["urgente"] if a.urgente is None else a.urgente
-        a.validade, a.repetir, a.icone = p["validade"], p["repetir"], p["icone"]
+        a.validade = a.validade if a.validade and a.validade > 0 else p["validade"]
+        a.repetir, a.icone = p["repetir"], p["icone"]
         # destinos do aviso só restringem os do tipo (nunca acrescentam: a config é por tipo)
         a.destinos = "".join(d for d in a.destinos if d in p["destinos"]) if a.destinos else p["destinos"]
         if not a.chave.startswith(f"{a.tipo}:"):     # republicar o mesmo Aviso não prefixa de novo
             a.chave = f"{a.tipo}:{a.chave or '-'}"
         moldes = a.textos or self.textos.get(a.molde or a.tipo) or {}
-        fala, rotulo = moldes.get(self.tom) or moldes.get("serio") or (a.tipo, a.tipo)
+        tom = a.tom if a.tom in TONS else self.tom
+        fala, rotulo = moldes.get(tom) or moldes.get("serio") or (a.tipo, a.tipo)
         a.fala = _formatar(fala, a.dados)
         a.rotulo = _curto(_formatar(rotulo, a.dados))
 
@@ -397,7 +416,17 @@ class MotorAvisos:
             if ult is not None and agora - ult < aviso.repetir:
                 self.suprimidos["repetido"] += 1
                 return False
+            p = TIPOS.get(aviso.tipo, TIPO_REGRA)
+            ct = (aviso.tipo, aviso.destinos)
+            if p.get("intervalo") and agora - self._ultimo_tipo.get(ct, float("-inf")) < p["intervalo"]:
+                self.suprimidos["intervalo"] += 1
+                return False
+            if p.get("teto") is not None and self._n_tipo[aviso.tipo] >= p["teto"]:
+                self.suprimidos["teto"] += 1
+                return False
             self._ultimo[aviso.chave] = agora
+            self._ultimo_tipo[ct] = agora
+            self._n_tipo[aviso.tipo] += 1
             if "p" in aviso.destinos and self.ligado["painel"] and not sem_tela:
                 self._painel.append(aviso)
             if "v" in aviso.destinos and self.ligado["voz"] and not sem_voz:
@@ -449,16 +478,26 @@ class MotorAvisos:
         for a in sorted((a for a in self._fila_voz if self._e_retorno(a)), key=lambda x: x.em):
             self._fila_voz.remove(a)
             self._emitir(agora, "voz", a)
-        if self._fila_voz:
+        while self._fila_voz:
             a = self._melhor(self._fila_voz)
             desde = agora - self._ultima_fala
             fura = (not a.urgente and desde < self.INTERVALO_VOZ and a.prio >= self.PRIO_FURA and desde >= self.FURA_S
                     and self._prio_fala is not None and self._prio_fala < self.PRIO_INFO)
-            if desde >= self.INTERVALO_VOZ or a.urgente or fura:
-                self._fila_voz.remove(a)
-                self._ultima_fala, self._prio_fala = agora, a.prio
-                a.furou = fura
-                self._emitir(agora, "voz", a)
+            if not (desde >= self.INTERVALO_VOZ or a.urgente or fura):
+                break
+            self._fila_voz.remove(a)
+            chave_fala = normalizar_fala(a.fala)
+            # urgente (gank onde estou, intruso vermelho) usa janela curta: o mesmo texto pode ser OUTRO perigo
+            # (gank de outra rota virou o da minha; 2º mergulho); a repetição do mesmo evento a chave já barra
+            janela = self.REPETIR_FALA_URGENTE_S if a.urgente else self.REPETIR_FALA_S
+            if agora - self._falas.get(chave_fala, float("-inf")) < janela:
+                self.suprimidos["fala_repetida"] += 1      # a mesma frase há pouco: cai e o próximo da fila tenta
+                continue
+            self._falas[chave_fala] = agora
+            self._ultima_fala, self._prio_fala = agora, a.prio
+            a.furou = fura
+            self._emitir(agora, "voz", a)
+            break
 
     def _emitir(self, agora, destino, a):
         self.emitidos.append((agora, destino, a))
@@ -550,9 +589,11 @@ def _zona_textos(reg, m):
 MARGEM_ROTA = 1500  # "perto da rota" = faixa da rota (INSIGHTS) alargada por isto, fora das bases
 
 
-def perto_da_rota(rota, x, y, margem=MARGEM_ROTA):
+def perto_da_rota(rota, x, y, margem=MARGEM_ROTA, com_base=False):
+    """(x, y) na faixa da rota alargada por `margem`; dentro das bases é sempre False, salvo com_base=True
+    (onde_estou com o meu ícone fundo na base deles: split push na torre do inibidor)"""
     a = analise
-    if x * x + y * y < a.R_BASE ** 2 or (a.XMAX - x) ** 2 + (a.YMAX - y) ** 2 < a.R_BASE ** 2:
+    if not com_base and (x * x + y * y < a.R_BASE ** 2 or (a.XMAX - x) ** 2 + (a.YMAX - y) ** 2 < a.R_BASE ** 2):
         return False
     if rota == "rota_top":
         return x < a.F_ROTA + margem or y > a.YMAX - a.F_ROTA - margem or y - x > a.D_QUINA - margem
@@ -710,7 +751,47 @@ class _Visto:
     reg: str = ""
     visivel: bool = False
     perto: set = field(default_factory=set)   # rotas (das 3) de que estava perto no último quadro visível
+    # o sumiço passou na relevância (ou foi calado só por luta, eu morto ou na base): libera o "mid indo X" na
+    # volta, ACEITO ou não o "mid sumiu" pelo motor (revisão 14/10/2026: barrado pelo intervalo/teto, o roam
+    # do mid para outra rota sumia junto, e é o aviso que o Gabriel repassa aos colegas)
     sumiu_avisado: bool = False
+    sumiu_tratado: bool = False     # o sumiço já foi avaliado (avisado ou calado): 1 decisão por sumiço
+
+
+ROTAS = ("rota_top", "rota_meio", "rota_bot")
+PRIO_JUNGLER_LONGE = 15   # jungler longe de mim: só painel, abaixo de toda informativa (objetivo 50, regra 20)
+# zona de gank de cada rota para o "jungler apareceu" (calibração 14/10/2026: o Gabriel no top não quer saber do
+# jungler na selva bot deles, mas quer a selva top). Chave = região de analise.regiao (relativa ao meu time) +
+# metade do mapa pela diagonal do meio (absoluta: a rota top é a mesma para os dois times). Casa com
+# jungler.zonas_de_gank; o mid é cercado pelos dois rios.
+ZONAS_DA_ROTA = {
+    "rota_top": ("rota_top", "rio top", "selva_aliada top", "selva_inimiga top"),
+    "rota_meio": ("rota_meio", "rio top", "rio bot"),
+    "rota_bot": ("rota_bot", "rio bot", "selva_aliada bot", "selva_inimiga bot"),
+}
+
+
+def chave_zona(x, y, meu_time):
+    """'rota_top' | 'rio top' | 'selva_inimiga bot' | 'base_aliada top'… (região + metade do mapa)"""
+    reg = analise.regiao(x, y, meu_time)
+    return reg if reg in ROTAS else f"{reg} {'top' if y > x else 'bot'}"
+
+
+# estruturas pelo nome da Live Client (ARMADILHAS § Live Client: a torre é do time que PERDEU). Medido nas
+# partidas 3292746609 e 3293092537: Turret_T{Order|Chaos}_L{0 bot, 1 mid, 2 top}_P{3 externa, 2 interna,
+# 1 inibidor, 4/5 nexo}_…; Inhib_T{Order|Chaos}_L{n}_P1_…
+def estruturas(eventos, meu_time):
+    """{'mid_externa': torre externa do mid (de qualquer time) caiu, 'cerco': torre de inibidor, de nexo ou
+    inibidor MEU caiu} a partir da lista de eventos da Live Client."""
+    meu = "_TOrder_" if time_num(meu_time) == 100 else "_TChaos_"
+    out = {"mid_externa": False, "cerco": False}
+    for e in eventos or ():
+        nome = str(e.get("TurretKilled") or e.get("InhibKilled") or "")
+        if e.get("EventName") == "TurretKilled" and "_L1_P3_" in nome:
+            out["mid_externa"] = True
+        if meu in nome and (e.get("EventName") == "InhibKilled" or re.search(r"_P[145]_", nome)):
+            out["cerco"] = True
+    return out
 
 
 class AlertasPosicao:
@@ -728,13 +809,31 @@ class AlertasPosicao:
       quadro_valido: False quando o jogo não está na tela (print do monitor com outra janela):
                  pausa tudo; ausência num quadro inválido não conta como sumiço.
       mortos: nomes mortos agora (GatilhosLive.mortos): morto não "some".
+      eventos: lista de eventos da Live Client (GatilhosLive.eventos.values()): torres e inibidores caídos.
+
+    Relevância (calibração de 14/10/2026, roadmap/2026-10-14-calibrar-avisos.md): "onde estou" (onde_estou)
+    = meu ícone visto há ≤ MINHA_POS_S; morto, na minha base ou sem ícone → a rota do champ select (reserva).
+    Jungler que aparece longe de mim (fora de RAIO_PERTO e da ZONAS_DA_ROTA da minha rota) vai só ao painel.
+    "Mid sumiu" só na fase de rotas e calado em cerco, luta, comigo morto ou na base (_mid_sumiu_calado).
     """
     SUMIR_S = 3.0      # sem detecção por 3 s = fora de vista (a detecção pisca entre quadros)
     APARECEU_S = 8.0   # jungler: só "apareceu" depois de 8 s fora de vista (ou o 1º avistamento)
-    MID_SUMIU_S = 6.0  # mid sem detecção por 6 s (fora da base dele e vivo) = "mid sumiu"
+    MID_SUMIU_S = 6.0  # mid sem detecção por 6 s (visto por último na rota do meio e vivo) = "mid sumiu"
     VOLTOU_S = 20.0   # adversário fora de vista ≥ 20 s que reaparece perto da rota = voltou
     RESYNC_S = 2.0     # depois de uma pausa (quadros inválidos) só observa, sem alertar
     FRESCO_S = 0.6     # detecção com visto_em mais velho que isto = posição antiga, não visível agora
+    MINHA_POS_S = 4.0  # meu ícone visto há mais que isto = não sei onde estou (vale a rota do champ select)
+    RAIO_PERTO = 4000  # jungler a até isto de mim importa onde quer que eu esteja (~11 s a 345 de velocidade)
+    # "mid sumiu" só na fase de rotas: os minions chegam ao mid ~1:00; aos 14:00 caem as placas e os times
+    # agrupam. Medido 14/10/2026: o aviso saía aos 0:37 e 7 vezes com a base do Gabriel caindo (22–24 min)
+    MID_JANELA = (90.0, 840.0)
+    CERCO_N = 2        # inimigos vistos na minha base nos últimos CERCO_S = cerco
+    CERCO_S = 10.0
+    LUTA_N = 3         # inimigos à vista juntos (a até LUTA_RAIO de um deles) = luta/agrupamento: "mid sumiu" não diz nada
+    LUTA_RAIO = 2500
+    # motivos de calar o "mid sumiu" que NÃO calam o "mid indo X" na volta: o roam dele para outra rota ainda é
+    # recado para os colegas (luta no bot = o mid indo para ela; eu morto ou na base ainda aviso o time)
+    LIBERA_MID_INDO = ("luta", "eu_morto", "eu_na_base")
 
     def __init__(self, motor, meu_campeao, meu_time, jogadores):
         """jogadores: {nome: {"time": 100|200|"ORDER"|"CHAOS", "posicao": "TOP"|...|"UTILITY"|"JUNGLE"}}
@@ -754,7 +853,14 @@ class AlertasPosicao:
         self.rivais = self.ocupantes.get(self.minha_rota, set())   # adversários da rota do champ select
         self.mid = next((n for n in self.inimigos if self.jog[n].get("posicao") == "MIDDLE"), None)
         self.st = {n: _Visto() for n in self.inimigos}
+        self.aliados = {n for n, p in self.jog.items() if p["time"] == self.meu_time and n != meu_campeao}
+        self.aliados_pos = {}             # nome -> (gameTime, x, y) do último quadro em que o aliado foi visto
         self.minha_pos = None
+        self.minha_pos_t = None           # gameTime em que o meu ícone foi visto por último
+        self.eu_morto = False
+        self.agora = 0.0                  # gameTime do último observar (para quem lê de fora: coach_vivo)
+        self.calados = Counter()          # motivo -> "mid sumiu" calado pela relevância (prova e diagnóstico)
+        self._estr, self._n_eventos = {"mid_externa": False, "cerco": False}, -1
         self._invalido = False
         self._resync_ate = float("-inf")
 
@@ -763,15 +869,92 @@ class AlertasPosicao:
         eu, jog, _ = jogadores_do_live(dados)
         return cls(motor, eu, (jog.get(eu) or {}).get("time"), jog)
 
-    def rotas_vigiadas(self):
-        """Rota do meu ícone, se ele estiver numa rota; senão a posição do champ select; jungler
-        sem ícone visto numa rota não vigia nada."""
-        if self.minha_pos:
-            reg, _ = zona(*self.minha_pos, self.meu_time)
-            if reg in ("rota_top", "rota_meio", "rota_bot"):
-                return {reg}
-        r = ROTA_DA_POSICAO.get(self.minha_posicao)
+    def onde_estou(self, agora=None):
+        """{'fonte': 'icone'|'base'|'morto'|'reserva', 'pos': (x, y)|None, 'reg': região|None, 'rota': rota_*|None}.
+        Ícone fresco numa rota → ela; no rio/selva → a única rota cuja faixa (MARGEM_ROTA) me contém, senão
+        nenhuma; na minha base, morto ou sem ícone → a rota do champ select (vou voltar para ela)."""
+        agora = self.agora if agora is None else agora
+        reserva = ROTA_DA_POSICAO.get(self.minha_posicao)
+        if self.eu_morto:
+            return {"fonte": "morto", "pos": None, "reg": None, "rota": reserva}
+        if self.minha_pos is None or self.minha_pos_t is None or agora - self.minha_pos_t > self.MINHA_POS_S:
+            return {"fonte": "reserva", "pos": None, "reg": None, "rota": reserva}
+        x, y = self.minha_pos
+        reg = analise.regiao(x, y, self.meu_time)
+        if reg == "base_aliada":
+            return {"fonte": "base", "pos": (x, y), "reg": reg, "rota": reserva}
+        if reg in ROTAS:
+            return {"fonte": "icone", "pos": (x, y), "reg": reg, "rota": reg}
+        if reg == "base_inimiga":
+            # split push fundo (torre do inibidor deles): a rota pela faixa sem a margem, dentro da base; no
+            # meio da base (perto do nexo) as 3 faixas se cruzam = nenhuma (revisão 14/10/2026)
+            perto = [r for r in ROTAS if perto_da_rota(r, x, y, margem=0, com_base=True)]
+            return {"fonte": "icone", "pos": (x, y), "reg": reg, "rota": perto[0] if len(perto) == 1 else None}
+        perto = [r for r in ROTAS if perto_da_rota(r, x, y)]
+        return {"fonte": "icone", "pos": (x, y), "reg": reg, "rota": perto[0] if len(perto) == 1 else None}
+
+    def rotas_vigiadas(self, agora=None):
+        """A rota de onde estou (onde_estou): ícone numa rota, senão a do champ select; no rio ou na selva
+        longe das rotas, nenhuma (jungler sem ícone numa rota não vigia nada)."""
+        r = self.onde_estou(agora)["rota"]
         return {r} if r else set()
+
+    def importa_para_mim(self, x, y, agora=None):
+        """o jungler em (x, y) importa para onde estou? Perto de mim (RAIO_PERTO) ou na zona de gank da minha
+        rota (ZONAS_DA_ROTA). Eu jungler: tudo importa (o jungler deles é o meu adversário direto: invasão,
+        contra-selva, objetivo; decisão D11 de 14/10/2026). Sem ícone e sem rota (ARAM): tudo importa."""
+        if self.minha_posicao == "JUNGLE":
+            return True
+        o = self.onde_estou(agora)
+        if o["fonte"] == "icone" and math.hypot(x - o["pos"][0], y - o["pos"][1]) <= self.RAIO_PERTO:
+            return True
+        if o["rota"] is None:
+            return o["pos"] is None
+        return chave_zona(x, y, self.meu_time) in ZONAS_DA_ROTA[o["rota"]]
+
+    def aliados_na_rota(self, rota, agora=None, max_idade=5.0):
+        """[(x, y)] dos aliados (fora eu) vistos há ≤ max_idade na faixa da rota ('rota_top'...), o mais
+        adiantado (mais longe da minha fonte) primeiro: é quem o jungler deles ganka"""
+        agora = self.agora if agora is None else agora
+        out = [(x, y) for t, x, y in self.aliados_pos.values() if agora - t <= max_idade and perto_da_rota(rota, x, y)]
+        fx, fy = (0.0, 0.0) if time_num(self.meu_time) == 100 else (analise.XMAX, analise.YMAX)
+        return sorted(out, key=lambda p: -math.hypot(p[0] - fx, p[1] - fy))
+
+    def aliado_na_rota(self, rota, agora=None, max_idade=5.0):
+        """(x, y) do aliado mais adiantado na faixa da rota, ou None (aliados_na_rota)"""
+        lista = self.aliados_na_rota(rota, agora, max_idade)
+        return lista[0] if lista else None
+
+    def _mid_sumiu_calado(self, s, agora, n_visiveis):
+        """motivo para NÃO avisar "mid sumiu" agora, ou None (avisa)"""
+        if agora < self.MID_JANELA[0]:
+            return "cedo"
+        if agora >= self.MID_JANELA[1]:
+            return "fim_das_rotas"
+        if self._estr["mid_externa"]:
+            return "torre_do_mid"
+        if s.reg not in ("rota_meio", "rio"):
+            return "fora_da_rota"        # visto por último já fundo (selva, base): "sumiu" não diz nada; o rio
+            #                              conta (o mid que entra na moita do rio e some é o roam clássico)
+        na_base = sum(1 for n in self.inimigos if self.st[n].reg == "base_aliada" and self.st[n].visto is not None
+                      and agora - self.st[n].visto <= self.CERCO_S)
+        if self._estr["cerco"] or na_base >= self.CERCO_N:
+            return "cerco"
+        # daqui para baixo, LIBERA_MID_INDO: o contexto do jogo passou, só o momento não serve para o "sumiu"
+        if self.eu_morto:
+            return "eu_morto"
+        if self.onde_estou(agora)["fonte"] == "base":
+            return "eu_na_base"
+        if n_visiveis >= self.LUTA_N:
+            return "luta"                # n_visiveis = o maior grupo de inimigos à vista JUNTOS (_agrupados)
+        return None
+
+    def _agrupados(self, vistos, mortos):
+        """o maior número de inimigos à vista a até LUTA_RAIO de um deles (luta, agrupamento). Na fase de
+        rotas o top, o mid e a dupla do bot à vista ao mesmo tempo, cada um na sua rota, não é luta."""
+        pos = [vistos[n] for n in self.inimigos if n in vistos and n not in mortos]
+        return max((sum(1 for q in pos if math.hypot(p[0] - q[0], p[1] - q[1]) <= self.LUTA_RAIO) for p in pos),
+                   default=0)
 
     def _nome(self, d):
         c = d.get("campeao")
@@ -781,8 +964,14 @@ class AlertasPosicao:
         alvo = [n for n, p in self.jog.items() if (p.get("campeao") or n) == c and (t is None or p["time"] == t)]
         return alvo[0] if alvo else None
 
-    def observar(self, deteccoes, agora=None, quadro_valido=True, mortos=()):
+    def observar(self, deteccoes, agora=None, quadro_valido=True, mortos=(), eventos=None):
         agora = self.motor.relogio() if agora is None else agora
+        self.agora = agora
+        if eventos is not None:
+            eventos = list(eventos)
+            if len(eventos) != self._n_eventos:   # a lista é acumulativa: só recalcula quando cresce
+                self._n_eventos, self._estr = len(eventos), estruturas(eventos, self.meu_time)
+        self.eu_morto = self.eu in mortos
         if not quadro_valido:
             self._invalido = True
             return []
@@ -798,21 +987,31 @@ class AlertasPosicao:
             if n and n not in vistos:
                 vistos[n] = (float(d["x"]), float(d["y"]))
         if self.eu in vistos:
-            self.minha_pos = vistos[self.eu]
-        vigiadas = self.rotas_vigiadas()
+            self.minha_pos, self.minha_pos_t = vistos[self.eu], agora
+        for n in self.aliados & set(vistos):
+            self.aliados_pos[n] = (agora, *vistos[n])
+        n_visiveis = self._agrupados(vistos, mortos)
+        vigiadas = self.rotas_vigiadas(agora)
         avisos, intrusos = [], []
         for n in sorted(self.inimigos):
             s = self.st[n]
             if n in mortos:
-                s.visivel, s.perto, s.sumiu_avisado = False, set(), True
+                # morto não "some" nem "vai" a lugar nenhum: o renascer na fonte não vira "mid indo selva"
+                s.visivel, s.perto, s.sumiu_tratado, s.sumiu_avisado = False, set(), True, False
                 continue
             if n not in vistos:
                 if s.visivel and s.visto is not None and agora - s.visto >= self.SUMIR_S:
                     s.visivel, s.perto = False, set()
-                if (n == self.mid and not quieto and s.visto is not None and not s.sumiu_avisado
-                        and agora - s.visto >= self.MID_SUMIU_S and s.reg != "base_inimiga"):
-                    s.sumiu_avisado = True
-                    avisos.append(Aviso("mid_sumiu", {"campeao": self.jog[n].get("campeao", n)}, f"{int(s.visto)}"))
+                if (n == self.mid and not quieto and s.visto is not None and not s.sumiu_tratado
+                        and agora - s.visto >= self.MID_SUMIU_S):
+                    s.sumiu_tratado = True
+                    motivo = self._mid_sumiu_calado(s, agora, n_visiveis)
+                    # libera o "mid indo X" independente do motor aceitar o "sumiu" (intervalo, teto)
+                    s.sumiu_avisado = motivo is None or motivo in self.LIBERA_MID_INDO
+                    if motivo:
+                        self.calados[motivo] += 1
+                    else:   # chave fixa: o teto e o intervalo do tipo (TIPOS) valem por partida
+                        avisos.append(Aviso("mid_sumiu", {"campeao": self.jog[n].get("campeao", n)}, "mid"))
                 continue
             x, y = vistos[n]
             reg, (zc, zt, zf) = zona(x, y, self.meu_time)
@@ -824,7 +1023,8 @@ class AlertasPosicao:
             perto = sorted(r for r in vigiadas if r in perto_todas and (estava_fora or r not in s.perto))
             chegou = bool(perto)
             mid_tinha_sumido = s.sumiu_avisado
-            s.visto, s.pos, s.reg, s.visivel, s.perto, s.sumiu_avisado = agora, (x, y), reg, True, perto_todas, False
+            s.visto, s.pos, s.reg, s.visivel, s.perto = agora, (x, y), reg, True, perto_todas
+            s.sumiu_avisado = s.sumiu_tratado = False
             if quieto:
                 continue
             camp = self.jog[n].get("campeao", n)
@@ -844,7 +1044,12 @@ class AlertasPosicao:
                 intrusos.append((n, {**dados, "zc": rz[0], "zt": rz[1], "zona": rz[2]}, perto[0]))
                 continue
             if n == self.jungler and estava_fora and (fora_s is None or fora_s >= self.APARECEU_S):
-                avisos.append(Aviso("jungler_apareceu", dados, zc))
+                if self.importa_para_mim(x, y, agora):
+                    avisos.append(Aviso("jungler_apareceu", dados, zc))
+                else:   # longe de onde estou: só a faixa do painel (2ª tela), sem voz nem borda, e abaixo das
+                    # informativas (prio < PRIO_INFO): não tira "dragão em um minuto" da faixa
+                    avisos.append(Aviso("jungler_apareceu", dados, f"longe:{zc}", destinos="p", cor="azul",
+                                        prio=PRIO_JUNGLER_LONGE))
             elif n == self.mid and mid_tinha_sumido and reg not in ("rota_meio", "base_inimiga"):
                 avisos.append(Aviso("mid_indo", dados, zt))
         for n, dados, rota in intrusos:
@@ -857,6 +1062,46 @@ class AlertasPosicao:
             else:
                 avisos.append(Aviso("intruso", dados, f"{n}:{rota}"))
         return [a for a in avisos if self.motor.publicar(a, agora)]
+
+
+ROTA_CURTA_DE = {"rota_top": "top", "rota_meio": "mid", "rota_bot": "bot"}
+PRIO_GANK_OUTRA = 75   # gank em outra rota: passa à frente de fala informativa (PRIO_FURA), nunca corta fala
+VALIDADE_GANK_OUTRA = MotorAvisos.INTERVALO_VOZ + 2   # s na fila da voz (revisão 14/10/2026: com 6 s vencia mudo)
+
+
+def decidir_gank(gank, pos=None, reserva=None, agora=None):
+    """O gank da vez (Aviso) ou None. Calibração 14/10/2026: o gank é de onde o Gabriel ESTÁ, não da rota do
+    champ select, e o das outras rotas também fala (ele avisa os colegas).
+    gank(rota_curta, alvo_pos) -> dict com "prob" ou None: jungler.EstadoJungler.gank com t e fog já postos;
+    alvo_pos = quem seria gankado (o "adiantado" do jungler.py olha para ele; None = não confere).
+    pos: AlertasPosicao (onde_estou, aliados_na_rota) ou None; reserva: rota curta do champ select, usada só
+    sem `pos`. A minha rota (ícone numa rota, ou a do champ select sem ícone) vence: urgente, vermelho, prio
+    100. Morto ou na base, eu não sou alvo. Outra rota só com aliado visto nela (ele é o alvo): a de maior
+    massa, amarelo, prio PRIO_GANK_OUTRA, não urgente. Um gank por vez: o jungler não ganka duas rotas."""
+    minha, minha_pos = reserva, None
+    if pos is not None:
+        o = pos.onde_estou(agora)
+        minha = None if o["fonte"] in ("base", "morto") else ROTA_CURTA_DE.get(o["rota"])
+        minha_pos = o["pos"] if o["fonte"] == "icone" else None
+    if minha and gank(minha, minha_pos):
+        return Aviso("gank", {"zona": f"no {minha}", "zc": minha, "zt": minha}, chave=minha)
+    if pos is None:
+        return None
+    melhor = None
+    for rota, curta in ROTA_CURTA_DE.items():
+        if curta == minha:
+            continue
+        # cada aliado da rota, o mais adiantado primeiro: basta um passar no "adiantado" do jungler.gank
+        g = next((g for g in (gank(curta, alvo) for alvo in pos.aliados_na_rota(rota, agora)) if g), None)
+        if g and (melhor is None or g.get("prob", 0) > melhor[1].get("prob", 0)):
+            melhor = (curta, g)
+    if melhor is None:
+        return None
+    curta = melhor[0]
+    # validade ≥ o intervalo da voz: sem urgência ele espera a fala anterior acabar (20 s) em vez de vencer
+    # na fila sem ser dito; tom sério sempre ("sai daí" do descontraído é para quem está na rota)
+    return Aviso("gank", {"zona": f"no {curta}", "zc": curta, "zt": curta}, chave=f"outra:{curta}",
+                 prio=PRIO_GANK_OUTRA, urgente=False, cor="amarelo", tom="serio", validade=VALIDADE_GANK_OUTRA)
 
 
 def _centro_rota(rota):

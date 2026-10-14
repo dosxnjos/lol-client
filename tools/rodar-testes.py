@@ -42,6 +42,7 @@ TESTES = [
     [PY, "tools/teste-minimapa.py"],
     [PY, "tools/teste-jungler.py"],
     [PY, "tools/teste-alcance.py"],
+    [PY, "tools/teste-overlay.py"],        # desenho do overlay sem janela (a janela: overlay_minimapa.py --demo)
     [PY, "tools/teste-selva.py"],
     [PY, "tools/teste-feiticos.py"],
     [PY, "tools/teste-ocr-chat.py"],

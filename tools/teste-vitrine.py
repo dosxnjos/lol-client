@@ -2,8 +2,8 @@
 # Nada aqui tira print da tela de verdade (fonte de print falsa) nem traz janela para a frente. Casos:
 #   1. marca: ligar -> a partida consome; mesma partida (coletor reiniciado) retoma; acabou -> apaga;
 #      marca de outra partida ou expirada -> apagada e nada liga
-#   2. overlay: a camada gravada é o `renderizar` pixel a pixel e o composto é a mistura exata
-#      (chave = print; resto = alfa 140 da janela), com o recorte cortado na borda do monitor
+#   2. overlay: a camada gravada é o `renderizar` (RGBA) pixel a pixel e o composto é a mistura exata
+#      (alfa 0 = print; resto = conta do UpdateLayeredWindow com o alfa do px), recorte cortado na borda do monitor
 #   3. moldura: composto = `moldura.renderizar` (mesma rotina GDI da janela) por cima do print com
 #      chat/topo pixelados; borda e rótulo nítidos mesmo sobre a região pixelada
 #   4. taxa: 1 por tipo a cada 90 s, no máximo 25 (aqui 3) por partida
@@ -194,15 +194,17 @@ def caso_overlay(tmp):
         x, y, w, h = ln[0]["recorte"]
         fundo = tela.img[y:y + h, x:x + w].astype(int)
         ox, oy = L - x, T - y
-        chave = np.all(img == np.array(overlay_minimapa.CHAVE), axis=2)
+        # alfa por px (14/10/2026): transparente = alfa 0; o resto = a conta do UpdateLayeredWindow
+        # (cor pré-multiplicada + fundo × (255 − alfa)), refeita aqui à parte
+        chave = img[:, :, 3] == 0
         dentro = comp[oy:oy + lado, ox:ox + lado].astype(int)
         f_dentro = fundo[oy:oy + lado, ox:ox + lado]
-        a = int(overlay_minimapa.ALPHA * 255)
-        esperado = (img.astype(int) * a + f_dentro * (255 - a) + 127) // 255
-        camada_ok = np.array_equal(camada[:, :, :3][~chave], img[~chave]) and \
-            (camada[:, :, 3][chave] == 0).all() and (camada[:, :, 3][~chave] == 255).all()
+        a = img[:, :, 3:4].astype(int)
+        esperado = (img[:, :, :3].astype(int) * a + 127) // 255 + (f_dentro * (255 - a) + 127) // 255
+        camada_ok = np.array_equal(camada, img)
         chave_ok = np.array_equal(dentro[chave], f_dentro[chave])
         mist_ok = np.array_equal(dentro[~chave], esperado[~chave])
+        a = f"por px até {int(a.max())}"
         margem_ok = np.array_equal(comp[:oy].astype(int), fundo[:oy]) and np.array_equal(comp[:, :ox].astype(int), fundo[:, :ox])
         corte_ok = (x, y) == (L - vitrine.MARGEM, T - vitrine.MARGEM) and x + w == 2560 and y + h == 1080
         ok = camada_ok and chave_ok and mist_ok and margem_ok and corte_ok and ln[0]["gameTime"] == 754.3 \

@@ -105,6 +105,87 @@ def caso_fura_informativo():
          and m.suprimidos["vencido"] == 1, f"falas {f}, vencidos {m.suprimidos['vencido']}")
 
 
+def caso_repetidos():
+    # calibração 14/10/2026: a mesma fala não volta em 60 s (chave diferente, mesma frase), gank da mesma rota
+    # não volta em 60 s, feitiço que voltou e pico de nível não repetem, e teto/intervalo do tipo independem da chave
+    m = MotorAvisos(textos=TEXTOS)
+    g = lambda: Aviso("gank", {"zona": "no top", "zc": "top"}, "top")  # noqa: E731
+    m.publicar(g(), 0.0)
+    m.publicar(g(), 31.0)                                                   # o caso de 11:54:30 → 11:55:01
+    m.publicar(Aviso("gank", {"zona": "no top", "zc": "top"}, "top-de-novo"), 5.0)    # outra chave, eco em 5 s
+    for t in range(6, 100):
+        m.tick(float(t))
+    m.publicar(g(), 100.0)
+    fg = [t for t, a in falas(m) if a.tipo == "gank"]
+    caso("gank: a mesma rota não repete em 60 s; o eco da mesma frase urgente em < 10 s também não",
+         fg == [0.0, 100.0] and m.suprimidos["repetido"] == 1 and m.suprimidos["fala_repetida"] == 1,
+         f"ganks em {fg}; suprimidos {dict(m.suprimidos)}")
+
+    # revisão 14/10/2026 (P1): "gank provável no bot" de OUTRA rota (não urgente) e, 30 s depois, eu no bot e o
+    # gank urgente com a mesma frase: a voz fala os dois (o 2º é outro perigo, agora em mim)
+    m = MotorAvisos(textos=TEXTOS)
+    m.publicar(Aviso("gank", {"zona": "no bot", "zc": "bot", "zt": "bot"}, "outra:bot", prio=75, urgente=False,
+                     cor="amarelo", tom="serio", validade=avisos.VALIDADE_GANK_OUTRA), 100.0)
+    m.publicar(Aviso("gank", {"zona": "no bot", "zc": "bot", "zt": "bot"}, "bot"), 130.0)
+    # e a frase NÃO urgente repetida em < 60 s continua calada (jungler apareceu: mesma frase, chave nova)
+    ja = lambda k: Aviso("jungler_apareceu", {"campeao": "Ekko", "zona": "no rio top", "zc": "rio top",  # noqa: E731
+                                              "zt": "rio", "rota": "jungler"}, k)
+    m.publicar(ja("a"), 200.0)
+    m.publicar(ja("b"), 230.0)
+    for t in range(131, 260):
+        m.tick(float(t))
+    fv = [(t, a.chave) for t, a in falas(m)]
+    caso("fala repetida: urgente com a mesma frase de um não urgente fala; não urgente repetido em < 60 s não",
+         fv == [(100.0, "gank:outra:bot"), (130.0, "gank:bot"), (200.0, "jungler_apareceu:a")]
+         and m.suprimidos["fala_repetida"] == 1, f"falas {fv}; suprimidos {dict(m.suprimidos)}")
+
+    # revisão 14/10/2026 (P2): gank de outra rota 5 s depois de um "jungler apareceu" (prio 80) espera a voz
+    # (20 s) em vez de vencer mudo na fila (validade do tipo era 6 s)
+    m = MotorAvisos(textos=TEXTOS)
+    m.publicar(ja("x"), 200.0)
+    m.publicar(Aviso("gank", {"zona": "no bot", "zc": "bot", "zt": "bot"}, "outra:bot", prio=75, urgente=False,
+                     cor="amarelo", tom="serio", validade=avisos.VALIDADE_GANK_OUTRA), 205.0)
+    for t in range(206, 240):
+        m.tick(float(t))
+    fv = [(t, a.tipo) for t, a in falas(m)]
+    caso("gank de outra rota com a voz ocupada espera a vez e é falado (validade ≥ intervalo da voz)",
+         fv == [(200.0, "jungler_apareceu"), (220.0, "gank")] and not m.suprimidos["vencido"],
+         f"falas {fv}; suprimidos {dict(m.suprimidos)}")
+
+    # tom descontraído: o gank de outra rota sai no tom sério ("sai daí" é para quem está na rota)
+    m = MotorAvisos(tom="descontraido", textos=TEXTOS)
+    a_outra = Aviso("gank", {"zona": "no bot", "zc": "bot", "zt": "bot"}, "outra:bot", urgente=False, tom="serio")
+    a_minha = Aviso("gank", {"zona": "no top", "zc": "top", "zt": "top"}, "top")
+    m.publicar(a_outra, 0.0)
+    m.publicar(a_minha, 1.0)
+    caso("gank de outra rota no tom sério mesmo com o motor descontraído; o da minha rota segue o tom",
+         a_outra.fala == TEXTOS["gank"]["serio"][0].format(zona="no bot")
+         and a_minha.fala == TEXTOS["gank"]["descontraido"][0].format(zona="no top"),
+         f"outra {a_outra.fala!r}; minha {a_minha.fala!r}")
+
+    m = MotorAvisos(textos=TEXTOS)
+    d = {"rota": "suporte", "feitico": "curar", "feitico_nome": "Curar", "campeao": "Janna"}
+    for i, t in enumerate((0.0, 3.0, 25.0)):            # 3 leituras do chat com horários diferentes do mesmo gasto
+        m.publicar(avisos.aviso_de({"tipo": "feitico_voltou", "chave": f"Janna:Curar:{i}", "dados": d}), t)
+        m.tick(t)
+    for t in range(26, 60):
+        m.tick(float(t))
+    pv = {"campeao": "Jax", "rota": "top", "nivel": 16, "pico": 16}
+    m.publicar(avisos.aviso_de({"tipo": "pico_nivel", "chave": "Jax:16", "dados": pv, "molde": "pico_nivel"}), 60.0)
+    m.publicar(avisos.aviso_de({"tipo": "pico_nivel", "chave": "Jax:16", "dados": pv, "molde": "pico_nivel"}), 85.0)
+    for t in range(61, 110):
+        m.tick(float(t))
+    ff = [a.fala for _, a in falas(m)]
+    caso("feitiço que voltou e nível não repetem", ff == ["curar do suporte voltou", "o top chegou no nível 16"],
+         f"falas {ff}")
+
+    m = MotorAvisos(textos=TEXTOS)
+    aceitos = [t for t in range(0, 900, 30)
+               if m.publicar(Aviso("mid_sumiu", {"campeao": "Yasuo"}, f"m{t}"), float(t))]
+    caso("teto (4) e intervalo (120 s) do mid_sumiu valem com chave nova a cada vez",
+         aceitos == [0, 120, 240, 360], f"aceitos em {aceitos}; suprimidos {dict(m.suprimidos)}")
+
+
 def caso_validade():
     m = MotorAvisos(textos=TEXTOS)
     m.publicar(Aviso("ouro_guardado", {"ouro": 2000}, "o"), 0.0)
@@ -452,6 +533,7 @@ def principal():
     caso_gank()
     caso_fura_informativo()
     caso_validade()
+    caso_repetidos()
     caso_tom()
     caso_textos_md()
     caso_catalogo()

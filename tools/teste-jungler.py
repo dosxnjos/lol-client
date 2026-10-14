@@ -131,7 +131,7 @@ def principal():
               and f2["texto"] == "jungler sumido há 38 s" and f3["calor"] is None and f3["texto"] is None)
     # revisão 13/10/2026: a caixa do texto não cobre a largura toda do mapa
     img_txt = ov.renderizar(None, 347, "jungler sumido há 42 s")
-    opaco = (img_txt != np.array(ov.CHAVE, np.uint8)).any(axis=2)
+    opaco = img_txt[..., 3] > 0          # RGBA com alfa por px (14/10/2026): transparente = alfa 0
     larg = int(opaco.any(axis=0).sum())
     ex.append(larg < 347 * 0.6 and opaco[30:].sum() == 0)
     print(f"extras: abate com assistência -> {s['texto']}; calor do overlay some após 30 s: {sumiu is None}; "

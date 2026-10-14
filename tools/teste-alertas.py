@@ -15,7 +15,7 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "coletor"))
-from avisos import TEXTOS, AlertasPosicao, MotorAvisos  # noqa: E402
+from avisos import TEXTOS, AlertasPosicao, Aviso, MotorAvisos  # noqa: E402
 
 resultados = []
 # partida de medição (3292746609): Zac na selva, ORDER; inimigos CHAOS
@@ -52,17 +52,22 @@ def det(campeao, pos, t):
     return {"campeao": campeao, "time": JOGADORES[campeao]["time"], "x": pos[0], "y": pos[1], "visto_em": t}
 
 
-def rodar(eu, roteiro, dur, quadros_invalidos=(), mortos=None):
-    """roteiro(t) -> lista de (campeao, pos) visíveis no quadro t. Devolve (motor, moldura, alertas)."""
+def rodar(eu, roteiro, dur, quadros_invalidos=(), mortos=None, inicio=0, eventos=None, al_out=None):
+    """roteiro(t) -> lista de (campeao, pos) visíveis no quadro t. Devolve (motor, moldura, alertas).
+    inicio: gameTime do 1º quadro ("mid sumiu" só vale na fase de rotas, 90–840 s); eventos(t) -> lista de
+    eventos da Live Client; al_out: lista que recebe o AlertasPosicao (para ler `calados`)."""
     moldura = MolduraFalsa()
     motor = MotorAvisos(textos=TEXTOS, moldura=moldura)
     al = AlertasPosicao(motor, eu, JOGADORES[eu]["time"], JOGADORES)
+    if al_out is not None:
+        al_out.append(al)
     saida = []
-    for t in range(dur):
+    for t in range(inicio, inicio + dur):
         t = float(t)
         valido = t not in quadros_invalidos
         dets = [det(c, p, t) for c, p in roteiro(t)] if valido else []
-        for a in al.observar(dets, t, quadro_valido=valido, mortos=(mortos(t) if mortos else ())):
+        for a in al.observar(dets, t, quadro_valido=valido, mortos=(mortos(t) if mortos else ()),
+                             eventos=(eventos(t) if eventos else None)):
             saida.append((t, a))
         motor.tick(t)
     return motor, moldura, saida
@@ -93,11 +98,12 @@ def seq_a():
 
 
 def seq_b():
-    # Yasuo no mid 0–5, some 6–13 (8 s), reaparece no top em 14 (eu na selva: sem rota vigiada)
+    # Yasuo no mid 300–305, some 306–313 (8 s), reaparece no top em 314 (eu na selva: sem rota vigiada).
+    # Em 300 s de jogo: o "mid sumiu" só vale na fase de rotas (90–840 s, calibração de 14/10/2026)
     def r(t):
-        return [("Yasuo", MID)] if t <= 5 else [("Yasuo", TOP_ROTA)] if t >= 14 else []
-    m, mol, s = rodar("Zac", r, 24)
-    esp = [(11, "mid_sumiu", "mid sumiu", "amarelo"), (14, "mid_indo", "mid indo top", "amarelo")]
+        return [("Yasuo", MID)] if t <= 305 else [("Yasuo", TOP_ROTA)] if t >= 314 else []
+    m, mol, s = rodar("Zac", r, 24, inicio=300)
+    esp = [(311, "mid_sumiu", "mid sumiu", "amarelo"), (314, "mid_indo", "mid indo top", "amarelo")]
     caso("B. mid some 8 s e reaparece no top → 'mid sumiu' e 'mid indo top'", resumo(s) == esp and sem_repeticao(s),
          f"{resumo(s)}")
 
@@ -222,6 +228,197 @@ def extra_contra_gank():
         res.append([(x[1], x[3], a.urgente) for x, (_, a) in zip(resumo(s), s) if x[0] == 2 + fora])
     caso("extra: contra-gank (eu jungler numa rota, jungler deles chega) → vermelho urgente",
          res == [[("intruso", "vermelho", True)]] * 2, f"{res}")
+
+
+# ---------- calibração de 14/10/2026 (roadmap/2026-10-14-calibrar-avisos.md) ----------
+BASE_MINHA = (2500, 2000)            # base ORDER (azul)
+SELVA_BOT_DELES = (11000, 7000)      # selva CHAOS, metade bot
+RIO_BOT = (9400, 4600)
+SELVA_TOP_ORDER, SELVA_BOT_ORDER = (3500, 7000), (9000, 3500)
+BOT_ROTA = (12000, 1500)
+
+
+def destinos_de(motor, aviso):
+    return sorted({d for _, d, a in motor.emitidos if a is aviso})
+
+
+def calib_jungler_onde_estou():
+    """jungler só com voz e borda quando importa para onde o Gabriel ESTÁ (ícone), senão só o painel"""
+    def caso_j(eu, eu_pos, jg, jg_pos):
+        def r(t):
+            v = [(eu, eu_pos)] if eu_pos else []
+            return v + ([(jg, jg_pos)] if t >= 12 else [])
+        m, mol, s = rodar(eu, r, 15)
+        a = s[0][1] if len(s) == 1 else None
+        # o longe vai ao painel ABAIXO das informativas: um "dragão em um minuto" na faixa continua lá
+        m.publicar(Aviso("objetivo_60s", {"objetivo": "dragão"}, "d"), 14.0)
+        faixa = (m.painel(14.0) or {}).get("tipo")
+        return a and (a.tipo, a.destinos, a.cor, destinos_de(m, a), faixa)
+    longe = ("jungler_apareceu", "p", "azul", [], "objetivo_60s")
+    perto = ("jungler_apareceu", "vpm", "vermelho", ["moldura", "voz"], "jungler_apareceu")
+    SELVA_TOP_DELES, SELVA_TOP_ORDER = (8000, 10500), (4500, 6500)   # longe da faixa das rotas (não é intruso)
+    tabela = [
+        ("top no top, jungler na selva bot deles → só painel", ("Illaoi", TOP_ROTA, "Ekko", SELVA_BOT_DELES), longe),
+        ("top no top, jungler no rio bot → só painel", ("Illaoi", TOP_ROTA, "Ekko", RIO_BOT), longe),
+        ("top no top, jungler na selva top deles → voz e borda", ("Illaoi", TOP_ROTA, "Ekko", SELVA_TOP_DELES), perto),
+        ("top andando no mid, jungler no rio bot → voz e borda", ("Illaoi", MID, "Ekko", RIO_BOT), perto),
+        ("top sem ícone (reserva: rota do champ select), rio bot → só painel", ("Illaoi", None, "Ekko", RIO_BOT), longe),
+        ("top sem ícone, selva top deles → voz e borda", ("Illaoi", None, "Ekko", SELVA_TOP_DELES), perto),
+        ("espelho: top CHAOS no top, jungler ORDER na selva bot dele → só painel",
+         ("Riven", TOP_ROTA, "Zac", SELVA_BOT_ORDER), longe),
+        ("espelho: top CHAOS no top, jungler ORDER na selva top dele → voz e borda",
+         ("Riven", TOP_ROTA, "Zac", SELVA_TOP_ORDER), perto),
+        # revisão 14/10/2026 (D11): de selva, o jungler deles importa no mapa todo (invasão, objetivo)
+        ("eu jungler na minha selva, jungler deles na selva bot dele (longe) → voz e borda",
+         ("Zac", (3800, 7800), "Ekko", SELVA_BOT_DELES), perto),
+    ]
+    for nome, args, esp in tabela:
+        got = caso_j(*args)
+        caso(f"14/10 jungler: {nome}", got == esp, f"{got}")
+
+
+def calib_mid_sumiu():
+    """'mid sumiu' só na fase de rotas, sem cerco/luta/eu morto/eu na base, teto 4 e 120 s entre eles"""
+    def some_em(t_some):
+        return lambda t: [("Yasuo", MID)] if t < t_some else []
+
+    def um(nome, eu, roteiro, inicio, dur, motivo, mortos=None, eventos=None):
+        al = []
+        m, mol, s = rodar(eu, roteiro, dur, inicio=inicio, mortos=mortos, eventos=eventos, al_out=al)
+        sumiu = [x for x in resumo(s) if x[1] == "mid_sumiu"]
+        caso(f"14/10 mid sumiu calado: {nome}", not sumiu and al[0].calados.get(motivo) == 1,
+             f"{sumiu}; calados {dict(al[0].calados)}")
+
+    um("aos 0:20 (minions nem chegaram)", "Illaoi", some_em(26), 20, 15, "cedo")
+    um("aos 22 min (fim da fase de rotas)", "Illaoi", some_em(1325), 1320, 15, "fim_das_rotas")
+    um("torre externa do mid caiu", "Illaoi", some_em(605), 600, 15, "torre_do_mid",
+       eventos=lambda t: [{"EventID": 1, "EventName": "TurretKilled", "TurretKilled": "Turret_TChaos_L1_P3_2254202041_0"}])
+    um("eu morto", "Illaoi", lambda t: some_em(605)(t) + [("Illaoi", TOP_ROTA)], 600, 15, "eu_morto",
+       mortos=lambda t: {"Illaoi"} if t >= 606 else set())
+    um("eu na minha base", "Illaoi", lambda t: some_em(605)(t) + [("Illaoi", BASE_MINHA)], 600, 15, "eu_na_base")
+    um("2 inimigos na minha base (cerco)", "Illaoi",
+       lambda t: some_em(605)(t) + [("Riven", BASE_MINHA), ("Tristana", (3000, 2500))], 600, 15, "cerco")
+    um("inibidor meu caiu (cerco)", "Illaoi", some_em(605), 600, 15, "cerco",
+       eventos=lambda t: [{"EventID": 9, "EventName": "InhibKilled", "InhibKilled": "Inhib_TOrder_L1_P1_1931666598_0"}])
+    um("3 inimigos à vista (luta)", "Illaoi",
+       lambda t: some_em(605)(t) + [("Riven", TOP_ROTA_2), ("Ekko", TOP_FUNDO), ("Seraphine", TOP_ROTA)], 600, 15, "luta")
+    um("visto por último na selva dele (já estava fundo)", "Illaoi",
+       lambda t: [("Yasuo", MID if t < 600 else (8000, 10500))] if t < 605 else [], 595, 20, "fora_da_rota")
+
+    def avisa(nome, roteiro):
+        al = []
+        m, mol, s = rodar("Illaoi", roteiro, 20, inicio=595, al_out=al)
+        sumiu = [x for x in resumo(s) if x[1] == "mid_sumiu"]
+        caso(f"14/10 mid sumiu AVISA: {nome}", len(sumiu) == 1 and not al[0].calados, f"{sumiu}; calados {dict(al[0].calados)}")
+
+    # revisão: top, mid e dupla do bot à vista, cada um na sua rota, é a fase de rotas normal (não é luta)
+    avisa("top, mid e dupla do bot à vista cada um na sua rota (não é luta)",
+          lambda t: [("Riven", TOP_ROTA_2), ("Tristana", BOT_TRISTANA), ("Seraphine", BOT_SERAPHINE)]
+          + ([("Yasuo", MID)] if t < 600 else []))
+    avisa("entrou na moita do rio e sumiu (o roam clássico)",
+          lambda t: [("Yasuo", MID if t < 598 else RIO_TOP)] if t < 600 else [])
+
+    # o mid some 10 s a cada 40 s de 100 a 840: 18 sumiços → no máximo 4, a ≥ 120 s um do outro, voz e borda iguais
+    m, mol, s = rodar("Illaoi", lambda t: [("Yasuo", MID)] if (t % 40) < 30 else [], 740, inicio=100)
+    ts = [t for t, a in s if a.tipo == "mid_sumiu"]
+    bordas = [r for c, r in mol.mostradas if r == "mid sumiu"]
+    caso("14/10 mid sumiu: teto 4 por partida e 120 s entre eles (18 sumiços na fase de rotas)",
+         len(ts) == 4 and all(b - a >= 120 for a, b in zip(ts, ts[1:])) and len(bordas) == 4,
+         f"aceitos em {ts}; bordas {len(bordas)}; suprimidos {dict(m.suprimidos)}")
+
+    # revisão 14/10/2026 (P1): o "mid indo X" não depende de o motor ACEITAR o "mid sumiu". Sumiço aos 116 s
+    # (aceito), volta ao mid, some de novo (barrado pelo intervalo de 120 s) e reaparece no bot aos 200 s
+    def roam(destino):
+        return lambda t: [("Yasuo", MID)] if t <= 110 or 130 <= t <= 150 else [("Yasuo", destino)] if t >= 200 else []
+    m, mol, s = rodar("Illaoi", roam((11500, 1500)), 140, inicio=100)
+    caso("14/10 mid indo: sai com o 2º 'mid sumiu' barrado pelo intervalo (roam para o bot, recado aos colegas)",
+         [(int(t), a.tipo) for t, a in s] == [(116, "mid_sumiu"), (200, "mid_indo")] and m.suprimidos["intervalo"] == 1,
+         f"{resumo(s)}; suprimidos {dict(m.suprimidos)}")
+    # calado por LUTA (3 inimigos juntos no bot: a dupla e o jungler deles), o mid reaparece no bot: "mid indo bot"
+    luta = [("Tristana", BOT_TRISTANA), ("Seraphine", BOT_SERAPHINE), ("Ekko", (BOT_TRISTANA[0] - 800, BOT_TRISTANA[1] + 600))]
+    al = []
+    m, mol, s = rodar("Illaoi", lambda t: luta + ([("Yasuo", MID)] if t < 600 else [("Yasuo", (11500, 1500))] if t >= 620 else []),
+                      30, inicio=595, al_out=al)
+    caso("14/10 mid indo: o 'sumiu' calado por luta ainda libera o 'mid indo bot' (o mid indo para a luta)",
+         [a.tipo for _, a in s if a.tipo in ("mid_sumiu", "mid_indo")] == ["mid_indo"] and al[0].calados.get("luta") == 1,
+         f"{resumo(s)}; calados {dict(al[0].calados)}")
+    # calado por FIM DA FASE DE ROTAS (22 min): nem "sumiu" nem "mid indo" depois
+    m, mol, s = rodar("Illaoi", lambda t: [("Yasuo", MID)] if t < 1325 else [("Yasuo", (11500, 1500))] if t >= 1345 else [],
+                      30, inicio=1320)
+    caso("14/10 mid indo: depois de 14:00 nem 'sumiu' nem 'mid indo' (o roam no meio de jogo não é notícia)",
+         not [a for _, a in s if a.tipo in ("mid_sumiu", "mid_indo")], f"{resumo(s)}")
+
+    # mid morre no mid, renasce e passa pela selva dele: nem "sumiu" nem "mid indo"
+    def r(t):
+        return [("Yasuo", MID)] if t <= 605 else [("Yasuo", (8000, 10500))] if t >= 640 else []   # selva dele
+    m, mol, s = rodar("Illaoi", r, 50, inicio=600, mortos=lambda t: {"Yasuo"} if 606 <= t < 640 else set())
+    caso("14/10 mid morto que renasce e passa pela selva: nem 'sumiu' nem 'mid indo'", s == [], f"{resumo(s)}")
+
+
+def calib_gank():
+    """gank de onde estou (urgente) e de outra rota com aliado nela (amarelo, sem urgência)"""
+    from avisos import decidir_gank, catalogo
+
+    def montar(eu_pos, aliados=(), mortos=()):
+        motor = MotorAvisos(textos=TEXTOS, moldura=MolduraFalsa())
+        al = AlertasPosicao(motor, "Illaoi", "ORDER", JOGADORES)
+        dets = ([det("Illaoi", eu_pos, 500.0)] if eu_pos else []) + [det(n, p, 500.0) for n, p in aliados]
+        al.observar(dets, 500.0, mortos=mortos)
+        return motor, al
+
+    def gank_de(*rotas):
+        chamadas = []
+
+        def g(rota, alvo):
+            chamadas.append((rota, alvo))
+            return {"prob": 0.6 + 0.1 * rotas.index(rota)} if rota in rotas else None
+        return g, chamadas
+
+    def roda(nome, eu_pos, rotas, esp, aliados=(), mortos=()):
+        motor, al = montar(eu_pos, aliados, mortos)
+        g, ch = gank_de(*rotas)
+        a = decidir_gank(g, al, agora=500.0)
+        got = None
+        if a is not None:
+            motor.publicar(a, 500.0)
+            got = (a.zc if "zc" in a.__dict__ else a.dados["zc"], a.cor, a.urgente, a.prio, a.fala)
+        caso(f"14/10 gank: {nome}", got == esp, f"{got}; chamadas {ch}")
+        return ch
+
+    fala_cat = set(catalogo())
+    roda("eu no top, gank no top → urgente vermelho", TOP_ROTA, ("top",),
+         ("top", "vermelho", True, 100, "gank provável no top"))
+    roda("eu andando no mid → o gank é do mid, não do top do champ select", MID, ("mid", "top"),
+         ("mid", "vermelho", True, 100, "gank provável no mid"))
+    roda("eu sem ícone → rota do champ select (reserva)", None, ("top",),
+         ("top", "vermelho", True, 100, "gank provável no top"))
+    roda("gank no bot com aliado no bot, eu no top → amarelo, prio 75, sem urgência", TOP_ROTA, ("bot",),
+         ("bot", "amarelo", False, 75, "gank provável no bot"), aliados=[("Nilah", BOT_ROTA)])
+    roda("gank no bot sem aliado visto no bot → nada", TOP_ROTA, ("bot",), None)
+    roda("minha rota vence a outra (top e mid com aliado no mid)", TOP_ROTA, ("mid", "top"),
+              ("top", "vermelho", True, 100, "gank provável no top"), aliados=[("Annie", MID)])
+    roda("eu morto: minha rota não é alvo; sem aliado lá, nada", TOP_ROTA, ("top",), None, mortos={"Illaoi"})
+    roda("eu na base: outra rota com aliado ainda fala", BASE_MINHA, ("bot",),
+         ("bot", "amarelo", False, 75, "gank provável no bot"), aliados=[("Nilah", BOT_ROTA)])
+    # revisão 14/10/2026 (P2): split push na torre do inibidor top deles (dentro do raio da base inimiga): a rota
+    # onde estou é o top (antes: nenhuma, e o gank sumia); no meio da base deles (nexo), nenhuma
+    roda("split push na torre do inibidor top deles → gank no top urgente", (10481, 13650), ("top",),
+         ("top", "vermelho", True, 100, "gank provável no top"))
+    roda("perto do nexo deles (as 3 faixas se cruzam) → nenhuma rota minha", (13300, 13400), ("top",), None)
+    # revisão (P3): 2 aliados no bot; o jungler.gank só aceita o adiantado. Antes o 1º em ordem alfabética
+    # (Nilah, atrás) reprovava e o aviso sumia; agora cada aliado é tentado, o mais adiantado primeiro
+    motor, al = montar(TOP_ROTA, [("Nilah", (6000, 1200)), ("Yuumi", (11800, 3000))])
+    ch = []
+
+    def so_adiantado(rota, alvo):
+        ch.append((rota, alvo))
+        return {"prob": 0.7} if rota == "bot" and alvo is not None and alvo[0] > 7400 else None
+    a = decidir_gank(so_adiantado, al, agora=500.0)
+    caso("14/10 gank: outra rota com 2 aliados, só o adiantado passa → avisa (testa o mais adiantado primeiro)",
+         a is not None and a.dados["zc"] == "bot" and ch[1:2] == [("bot", (11800.0, 3000.0))],
+         f"{a and a.dados}; chamadas {ch}")
+    caso("14/10 gank: as falas das 3 rotas estão no catálogo do pacote (nenhuma frase nova)",
+         {"gank provável no top", "gank provável no mid", "gank provável no bot"} <= fala_cat)
 
 
 def extra_destinos():
@@ -457,6 +654,9 @@ def principal():
     extra_contra_gank()
     extra_destinos()
     extra_retorno_atalho()
+    calib_jungler_onde_estou()
+    calib_mid_sumiu()
+    calib_gank()
     if not a.sem_janela:
         janela_real()
     n = sum(resultados)
