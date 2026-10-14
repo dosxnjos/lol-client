@@ -8,6 +8,9 @@ Pedido: — | client compacto (lobby, fila, champ select com trocas, pós-jogo, 
 - **Protótipo para aprovação:** [temp/2026-10-13-prototipo-client-compacto.html](../temp/2026-10-13-prototipo-client-compacto.html)
   (abre com duplo clique; nada de rede) · prints de cada tela em `temp/prototipo-compacto/tela-N.png` (1 a 7, mais
   `tela-3b.png`: finalização com troca de campeão recebida). `temp/` não é versionado.
+- **Protótipo do fim de partida (passo 12, aguardando aprovação):**
+  [temp/2026-10-14-prototipo-compacto-fim-de-partida.html](../temp/2026-10-14-prototipo-compacto-fim-de-partida.html)
+  · prints em `temp/prototipo-fim-de-partida/tela-{A,B,B-detalhes,C,D}.png`.
 - **Ler antes:** hub [cerebro/projetos/lol-client.md](../../cerebro/projetos/lol-client.md) ·
   [CLAUDE.md](../CLAUDE.md) · [docs/ARMADILHAS.md](../docs/ARMADILHAS.md) (§ Client e Pengu, § LCU API) ·
   [README](../README.md) · irmãos: [jogar de novo](2026-10-13-jogar-de-novo.md) (freios, penalidade),
@@ -520,6 +523,60 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     `temp/` e o parecer dele colado aqui.
     **reprova se:** item d com código de produto antes da aprovação dele; correção feita direto em arquivo de outra
     frente; aviso "runa aplicada" em dobro na tela 3; algum caminho do b2 abre o painel com a camada ainda à vista.
+12. [ ] **Fim de partida compacto (proposta, aguardando aprovação do Gabriel).** ⛔ Nenhum código de produto antes das 4
+    telas aprovadas (mesma regra do passo 0). Pedidos dele (14/10/2026): ~15:30 "Tem como a tela pós-jogo, de honra, de
+    detalhes do pós-jogo, com o chat, a análise do mentor etc, também funcionarem no modo compacto?" e depois "No modo
+    compacto, também quero o chat pós-jogo. Com aquela mesma ideia de botar a foto dos campeões. Pode ficar ali na parte
+    de baixo, em cima do botão de jogar de novo."
+    **Protótipo:** [temp/2026-10-14-prototipo-compacto-fim-de-partida.html](../temp/2026-10-14-prototipo-compacto-fim-de-partida.html)
+    (abre com duplo clique, zero requisição externa, janela 420×680 = `compacto.alt` atual; `#A` a `#D` abrem direto).
+    Telas: **A honra** (`PreEndOfGame`, sequência `honor-vote`) · **B pós-jogo** (`EndOfGame`: faixa V/D + KDA + farm +
+    PDL; abas resumo = mentor + lições e detalhes = tu × adversário direto e os 10) · **C chat da sala** (dentro da B,
+    logo acima do JOGAR DE NOVO, foto do campeão de quem falou; também na A, recolhido) · **D navegação** (carregando em
+    `WaitingForStats` e o fluxo das fases). Dados da partida real 3293137136; só o Gabriel com nome (resto "aliado
+    N"/"inimigo N" + campeão), mensagens de chat inventadas. Prints de 14/10 16:32–16:36 em
+    `temp/prototipo-fim-de-partida/`; o `tela-A.png` foi refeito às 16:45 depois do ajuste do relógio. O HTML é a
+    referência. **Parecer** (botão "copiar meu parecer", chave `lc-prototipo-fim-de-partida-v1`): 1ª linha
+    `parecer do protótipo do fim de partida compacto (14/10/2026)`, depois `tela A honra: …`, `tela B pós-jogo: …`,
+    `tela C chat da sala: …`, `tela D navegação: …`, cada uma `aprovada`, `ajuste: <texto>` ou `sem parecer`.
+
+    **Viabilidade (14/10/2026, só leitura: GET na LCU, JS da Riot do `assets.wad`, logs, `dados/lol.db`; sonda redigida
+    da partida 3293149183 em `temp/posjogo-sonda-2026-10-14.jsonl`; nenhum POST/PATCH/voto).** As 4 telas cabem como
+    camada nossa por cima (a UI da Riot fica em 1280 e o Ember dela segue rodando embaixo). [S] = não medido.
+
+    | tela | leitura | escrita (só por clique dele, rotas e corpos do front da Riot) | limite / [S] |
+    | --- | --- | --- | --- |
+    | A honra | `GET /lol-honor-v2/v1/ballot` (+ evento): `eligibleAllies[4]`, `eligibleOpponents[5]` (puuid, campeão, função, `skinSplashPath`), `votePool.votes` (1 a 4 por partida), `honoredPlayers[]` ao vivo (medido 0→1→4) = fonte de "já votei"; fim = `GET /lol-pre-end-of-game/v1/currentSequenceEvent` deixa de ser `honor-vote`; `SecondsToVote` 40 em `/lol-honor-v2/v1/config` | votar `POST /lol-honor/v1/honor {recipientPuuid, honorType:"HEART"}`; pronto/pular `POST /lol-honor/v1/ballot` sem corpo; pular a espera `POST /lol-pre-end-of-game/v1/skip-pre-end-of-game` (a Riot só oferece com ballot vazio depois de 5 s). Fora: `honor-v2/v1/honor-player`, `DELETE ballot`, `complete/{seq}`, `ballot/refresh` | a cerimônia da Riot segue viva embaixo (relógio, envio automático, som `honor-vote-cast.ogg`): voto nosso não desconta o contador dela, então sem "pronto" a fase espera os 40 s; "pronto" nosso + envio automático dela = 2 `POST ballot`, efeito [S]; nosso relógio é estimativa (a LCU não dá o tempo que falta) e **ao zerar não trava nada**: voto e pronto valem até o evento; ballot vazio no 1º GET = esperar o evento; fila sem honra ou ballot vazio passados ~5 s → "sem honra nesta partida", sem pular sozinho; som da Riot embaixo [S] (precedente `aceite.embrulharAudio`) |
+    | B pós-jogo | `GET /lol-end-of-game/v1/eog-stats-block` (+ evento; 404 fora do pós-jogo; já existe antes da honra, ARMADILHAS § tabela `eog`): `gameLength`, `queueType`, `teams[2]`, 10 jogadores com campeão, Riot ID, `items[7]`, feitiços, posição, `stats` (183 chaves); PDL pelo `lp` do coletor (46→64 medido; nas 2 partidas de 14/10 o valor novo já estava no `PreEndOfGame`); mentor `GET 127.0.0.1:8765/mentor/<gameId>` (`nada/pensando/pronto/erro`, rótulos Veredito/O essencial/Mandou bem/Próxima partida, parser `partesMentor` de `pengu/posjogo/abas.js`) | perguntar `POST /mentor/<id>/pergunta {pergunta}` → 202; jogar de novo = tela 4 aprovada (freios) | mentor fica pronto 57–106 s depois do fim (n=7): "analisando…" nunca segura o jogar de novo; sem coletor = botão cinza com motivo; 10 linhas de ~30 px cabem, itens/runas/feitiços ficam no "⤢ análise completa"; nomes de terceiros só como o client já mostra no pós-jogo (`cfg.chatPosjogo.nomes`), sempre `esc()`, nunca no log; PDL sem coletor segue [S] (11.c4) |
+    | C chat da sala | `GET /lol-chat/v1/conversations` com `type:"postGame"` (id `<gameId>-eog@lol-post-game.br1.pvp.net`), `.../{id}/messages` (`fromPuuid` → elenco do eog, como o `montarElenco` de `pengu/chat-posjogo.js`; reserva: puuid do ballot); `GET /lol-chat/v1/player-mutes` → `isSystemMuted` | enviar `POST /lol-chat/v1/conversations/{id}/messages {type:"chat", body, …}` [S] (nunca medido) | sala nasce 0,1–1 s depois do `PreEndOfGame` e morre ao sair do pós-jogo (5 a 8 saíram em 30–60 s); `password`/`mucJwtDto` da conversa nunca guardados nem logados; mora **na camada do plugin**, não nas janelas de `coletor/chat_janelas.py` (barram `@post-game.` de propósito) |
+    | D navegação | `gameflow-phase` + `currentSequenceEvent` | nenhuma | `WaitingForStats` 0,7–7 s; honra 10–43 s (teto 40); celebrações (`challenge-level-up`, `missions`, `ranked-celebration`) < 0,1 s quando vazias; voltar ao compacto depois de uma celebração expandida [S] (11.c3) |
+
+
+    **Fica de fora do compacto (expande, regra 7), e por quê:** denunciar, adicionar amigo e silenciar (menu "..." é modal
+    da Riot), aba Progresso, celebrações (subir de elo, desafio, nível de honra) e o chat de dentro da partida (só existe
+    na tela do jogo). **Única mudança de regra:** a regra 7 (`pengu/compacto/index.js`, ~linha 81: honra expande) passa a
+    valer só fora de `honor-vote`; ver § Descartado (linha da honra reaberta). **Termos/Vanguard:** só LCU, nada toca o
+    processo do jogo; voto, pronto e pular só por clique dele (nada automático, nem "votar no último").
+    **Ligações:** 11.b5 (lições sem coletor, consumo na tela 4), 11.c4 (PDL), 11.d3 (sem caminho para reabrir a análise no
+    compacto: o "analisando…" do protótipo diz que a resposta reabre pelo 📊 do client normal), 11.e (esta frente).
+    **Ajustes da revisão (14/10/2026, antes de pedir o parecer):** relógio estimado zerado não desabilita mais coração nem
+    pronto (antes travava voto válido se a Riot começou a contar depois de nós) e o botão "tempo acabou · ver o pós-jogo",
+    que prometia uma ação que a LCU não tem, saiu (o protótipo ganhou o simulador "a Riot fechou a honra"); o "analisando"
+    deixou de prometer o painel grande depois (11.d3); derrota marcada como simulada (PDL inventado); de onde vem o
+    elenco do chat na honra e a volta das celebrações marcada [S].
+    **O que o pedido não dizia:** (i) a tabela `eog` de `dados/lol.db` (26 linhas) guarda `multiUserChatPassword` e
+    `mucJwtDto` crus, credencial da sala: proposta para a frente do coletor (tirar os campos ao gravar e limpar as linhas
+    antigas; `coletor/` tem trabalho de outra sessão em aberto, não mexido aqui); (ii) `/lol-honor-v2/v1/vote-completion`
+    só atualiza minutos depois: não serve de sinal de fim, quem serve é o `currentSequenceEvent`.
+    **Fora deste passo:** a 2ª metade da mensagem dele ("A ideia do malfight sendo notificado quando eu estou morto é a
+    mesma coisa que eu falei antes. Se eu estiver na base ou morto, não faz sentido avisar. Agora, de outra forma, tem que
+    avisar se voltou e em qual lane voltou.") é do coach ao vivo (`coletor/coach_vivo.py`, `coletor/avisos.py`): vai para
+    [calibrar os avisos](2026-10-14-calibrar-avisos.md), que outra sessão está editando agora (D2/D20 já calam o "mid
+    sumiu" com ele morto ou na base; falta o "voltou, em qual rota").
+    — **prova:** parecer colado no chat com as 4 linhas `aprovada` → registrar data e frase dele aqui; só então vira plano
+    de construção (rotas [S] medidas antes de depender: 2º `POST ballot`, envio na sala, som da cerimônia).
+    **reprova se:** qualquer `ajuste:`/`sem parecer` (ajusta o protótipo e pede de novo) ou código em `pengu/` desta frente
+    antes da aprovação.
 
 ## Revisão da construção (13/10/2026)
 
@@ -596,7 +653,7 @@ expande (decisão acima).
 | paridade, 14/10: esconder TFT, coluna larga, evento, CLASSIC e loja no compacto | CSS sobre telas da Riot que a camada cobre; volta a valer ao expandir | orquestrador (conferência de 14/10) |
 | paridade, 14/10: esconder o popup do ready check no compacto | o popup já fica embaixo da camada | orquestrador (conferência de 14/10) |
 | paridade, 14/10: aceitar/recusar dentro da camada com o aceite automático desligado | a decisão é do popup da Riot (o compacto expande) e a janelinha do coletor já serve nos dois modos; tela própria de recusar iria contra "nada decide pelo jogador" | orquestrador (conferência de 14/10) |
-| paridade, 14/10: ARAM e seleção com banco, reconectar, honra, falha ao abrir o jogo | telas da Riot; já descartadas neste plano (regra 7) | orquestrador |
+| paridade, 14/10: ARAM e seleção com banco, reconectar, honra, falha ao abrir o jogo | telas da Riot; já descartadas neste plano (regra 7). **Honra reaberta** pelo passo 12 (só a sequência `honor-vote`; celebrações seguem expandindo): vale o parecer dele na tela A | orquestrador |
 | paridade, 14/10: `ux-show`/`ux-flash` do popup de runas no compacto | quem escolhe é a tela 3, e ele já está nela porque acabou de travar | orquestrador (conferência de 14/10) |
 
 ## Relatório
