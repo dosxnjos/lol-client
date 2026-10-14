@@ -1006,7 +1006,7 @@ def main():
         else:
             log(f"nada a fazer hoje: o que falta ({p['faltam']}) ou está fora do alvo ({p['fora_do_alvo']}) já foi "
                 f"tentado hoje; amanhã de novo")
-        resumo("completo")
+        resumo("completo" if p["concluido"] else "nada_hoje")
         return 0
     try:   # prioridade baixa: o processador é de quem estiver usando a máquina
         import psutil
