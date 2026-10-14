@@ -1,7 +1,8 @@
 # Calibrar os avisos ao vivo e o overlay do minimapa (2ª ranqueada de 14/10/2026)
 
 - **Data:** 14/10/2026 · **Alvo:** `coletor/avisos.py` (motor e `AlertasPosicao`), `coletor/coach_vivo.py` (gank),
-  `coletor/overlay_minimapa.py` (janela e desenho), `coletor/vitrine.py` (composição), provas em `tools/`
+  `coletor/overlay_minimapa.py` (janela e desenho), `coletor/vitrine.py` (composição), provas em `tools/`; passo 7:
+  `coletor/servidor_local.py` (esquema da config), `pengu/config.js` e `pengu/blocos.js` (Configurações)
 - **Continua:** [voz pré-gravada e foco](2026-10-13-voz-pregravada-e-foco.md) (o catálogo de falas de lá não muda)
 - **Fora:** `pengu/posjogo/**` e `coletor/mentor.py` (outra frente mexe neles)
 
@@ -71,6 +72,11 @@ Quem decidiu: o agente executor (opus, técnico). Reverter = `git revert` do com
 | D12 | (revisão) urgente com a mesma frase só barra em 10 s (`REPETIR_FALA_URGENTE_S`), não 60: o mesmo texto urgente pode ser outro perigo (gank de outra rota que virou o da minha rota; 2º mergulho). Repetição do mesmo evento a chave já barra (gank 60 s, intruso 15 s). Substitui a nota de D4 sobre o 2º "2 inimigos no top" | alta | — |
 | D13 | (revisão) gank de outra rota: validade 22 s na fila (`VALIDADE_GANK_OUTRA` ≥ intervalo da voz: com os 6 s do tipo vencia mudo atrás de um "jungler apareceu"), tom sério sempre ("sai daí" do descontraído é para quem está na rota), cada aliado da rota testado, o mais adiantado primeiro (antes: o 1º em ordem alfabética, e se ele estava atrás o aviso sumia) | média | o aviso de outra rota chegar atrasado demais para servir (então: furar a fila em vez de esperar) |
 | D14 | (revisão) "onde estou" na base **deles** (split push na torre do inibidor): a rota pela faixa sem margem dentro da base; perto do nexo (3 faixas) nenhuma. Antes: nenhuma rota e nenhum gank | alta | — |
+| D15 | (passo 7) cada regra nova vira chave **plana** em `cfg.coach` / `servidor_local.CONFIG_PADRAO`, padrão = o comportamento de D1–D14; entra pela mescla do `pengu/config.js` sem `VERSAO` nova (nenhum valor antigo a corrigir, como o `compacto`). Texto fora da lista volta ao padrão nos dois lados: `carregar()` do plugin (`ESCOLHAS`) e `ler_config` + `salvar_config` do coletor (antes só o POST conferia) | alta | — |
+| D16 | (passo 7) gank de outra rota = caixa própria (`gankOutraRota`), não um tipo novo de aviso: tipo novo mudaria o `AVISOS`/`TIPOS_LIGAVEIS` e quem já calou "Gank provável" deixaria de calar o de outra rota. Ligado, ele segue as caixas voz/tela do "Gank provável" | alta | o Gabriel querer voz/tela separadas para o gank de outra rota |
+| D17 | (passo 7) jungler longe = **uma lista de 3** (`junglerLonge`: só painel / falar e piscar a borda / não mostrar) em vez de duas caixas: cobre "escolher ou não" nos dois sentidos num controle só. "Tudo" publica igual ao perto (voz, borda, vermelho), mas com o intervalo de 20 s contado à parte (`Aviso.grupo="longe"`; revisão de 14/10/2026: sem isso o longe calava o perto que vinha depois) | média | o Gabriel achar a lista confusa |
+| D18 | (passo 7) filtro do "mid sumiu" desligado = a regra de antes de 14/10 (só não conta o mid visto por último na base dele, motivo `base_dele`) **com** teto 4 e 120 s (D3), que são "limites de repetição"; corte da frase repetida desligado tira as duas janelas (60 s e os 10 s do urgente: antes de D4 não havia nenhuma) | alta | — |
+| D19 | (passo 7) overlay: cores vermelho claro (padrão, `COR`), laranja `(240,140,50)` e **roxo** `(170,90,230)`; azul fica fora porque é a cor dos aliados no minimapa (mancha azul = "aliado ali"). Força sutil (0,30/0,08), normal (`ALPHA`/`ALPHA_MIN`), forte (0,60/0,18). Transição desligada = `tau` 0 (alvo na tela no 1º quadro). Troca em voo por `OverlayMinimapa.aplicar_estilo`; o estilo entra no estado do quadro, então o "parado" não segura a imagem velha | média (gosto) | o Gabriel pedir azul ou outra cor: 1 linha em `overlay_minimapa.CORES` + `servidor_local.ESCOLHAS` + `pengu/config.js OVERLAY_CORES` |
 
 Espelho do mapa: a geometria das rotas é absoluta (rota top = canto de cima à esquerda para os dois times);
 base e selva são relativas ao meu time (`analise.regiao`, `jungler.nome_zona`), e `zonas_de_gank` usa os
@@ -90,6 +96,36 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
    com o jogo fechado: `ensaio-coach.py` antes/depois, `overlay_minimapa.py --demo`, `teste-alertas.py`.
 6. Docs: COLETOR (§ Minimapa, § Avisos ao vivo, § Coach na partida, vitrine), ARMADILHAS (chave nova a cada
    evento; cor-chave serrilha; eco do Reco).
+7. **Tudo opcional nas Configurações** (pedido do Gabriel, 14/10/2026 ~12:25: "acho que todas essas opções de fala
+   e notificação devem ser opcionais para a pessoa escolher ou não nas configurações"). Decisões D15–D19. Cada
+   regra nova nasce ligada como está (padrão = passos 1–6); a tela é Configurações › LOL-CLIENT, texto de leigo.
+   - Chaves (mesmo nome e padrão em `pengu/config.js PADRAO.coach` e `coletor/servidor_local.py CONFIG_PADRAO`;
+     texto validado por `ESCOLHAS` nos dois): `gankOutraRota` (true), `junglerLonge` (`painel`), `midSumiuFiltro`
+     (true), `cortarFalaRepetida` (true), `overlayCor` (`vermelho`), `overlayForca` (`normal`), `overlaySuave` (true).
+   - Coletor: `avisos.decidir_gank(..., outras=)`, `AlertasPosicao.configurar(filtro_mid=, jungler_longe=)`,
+     `MotorAvisos.configurar(cortar_repetida=)`, `overlay_minimapa.estilo()/Estilo/aplicar_estilo` (desenho com
+     estilo opcional; sem ele, as constantes do módulo). `coach_vivo._Partida.configurar` aplica tudo na largada e a
+     cada `POST /config`; `_configurar_pos` também quando o `AlertasPosicao` nasce (depois da largada).
+   - Tela (`pengu/blocos.js`): bloco **Voz** ganha "Não repetir a mesma frase em menos de 1 minuto" e o texto
+     certo da voz (Aoede gravada, Maria do Windows só para a frase que falta; antes dizia "voz Maria do Windows");
+     bloco **Alertas** ganha "Avisar gank nas outras rotas", a lista "Jungler inimigo longe de ti" e "Avisar 'mid
+     sumiu' só quando faz sentido"; bloco **Minimapa** ganha "Cor da mancha", "Força da cor", "Mancha muda aos
+     poucos" e um "Como ler".
+   - Provas (cada chave: desligada muda, ligada = hoje): `node tools/teste-config.mjs` (padrão, mescla sem regravar,
+     inválido = padrão, controles na tela), `python tools/teste-alertas.py --sem-janela` (`escolhas_config`: gank,
+     jungler longe nos 3 modos, filtro do mid em 0:20/22 min/cerco, teto mantido, corte da frase, esquema do
+     coletor, listas iguais nos 3 lugares), `python tools/teste-overlay.py` (cor, força, sem transição, troca em
+     voo), `python tools/teste-coach.py` (`caso_escolhas_config`: largada, `AlertasPosicao` tardio, overlay e POST).
+     Catálogo inalterado (`b7043050b0b7`). Com o jogo fechado: `python tools/rodar-testes.py` (42/42 em 14/10).
+   - Revisão (14/10/2026): `junglerLonge="tudo"` dividia o intervalo de 20 s com o jungler de perto e calava ele →
+     `Aviso.grupo` (o motor conta o intervalo por tipo, destinos e grupo; caso "longe aos 0 s não cala o PERTO aos
+     12 s" nos modos tudo e painel); o `caso_escolhas_config` passa a criar o `AlertasPosicao` pelo `passo()` real
+     (allgamedata com `GameStart`); textos da tela corrigidos (longe = de onde tu está agora, a linha do tipo cala
+     perto e longe; a mancha some 30 s depois da última pista; "Vermelho (padrão)"). Ficou como está: valor
+     inválido no `POST /config` volta ao padrão (não mantém o salvo), como diz a doc; só plugin com bug chega lá.
+     Sem prova: `gankOutraRota=false` lido em `coach_vivo._jungler` (o `decidir_gank(outras=False)` está provado).
+   - Falta (orquestrador, no lobby): reiniciar o coletor e recarregar o client para a tela nova aparecer; olhar a
+     seção LOL-CLIENT com os textos novos.
 
 ## O que o overlay mostra (para o Gabriel)
 
@@ -112,6 +148,12 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
 - completei: frescor do meu próprio ícone (antes valia a última posição para sempre: morto ou na fonte, o
   coach achava que eu continuava na rota), porque toda regra nova depende de "onde estou".
 - completei: ensaio passa a contar molduras por tipo além das falas, porque o reclamado foi a moldura.
+- completei (passo 7): valor de texto inválido no `dados\config.json` (editado à mão, versão futura) caía direto na
+  partida, porque o `ler_config` não conferia a lista (só o POST); agora volta ao padrão também na leitura, e no
+  plugin a mescla, que só olhava o tipo, confere as listas novas.
+- completei (passo 7): "Como ler" a mancha no bloco Minimapa (ele perguntou o que eram as cores, ~12:10).
+- fica de fora (passo 7, não pedido): atalho Ctrl+K para as chaves novas e o `alfa` que a vitrine grava no jsonl
+  (segue o `ALPHA` do módulo, não a força escolhida; a imagem gravada já sai com a força certa).
 - fica de fora (não pedido): "o top voltou pra rota" (5 falas, 8 molduras); as 5 falas estão a mais de 1 min
   uma da outra no log, então a regra de fala repetida em 60 s **não** muda nada nela. Fica para a calibração
   que o Gabriel disse que vai trazer.

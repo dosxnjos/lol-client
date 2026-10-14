@@ -302,6 +302,9 @@ class Aviso:
     # destinos: vazio = os do tipo; preenchido = só esses DENTRO dos do tipo (o F9 armado só na moldura)
     destinos: str = ""
     tom: str = ""         # vazio = o tom do motor; "serio" força (gank de outra rota: "sai daí" é para outro)
+    # grupo: contagem própria do `intervalo` do tipo (o jungler longe com junglerLonge="tudo" sai com os destinos do
+    # de perto e, sem grupo, calava o de perto por 20 s: revisão de 14/10/2026)
+    grupo: str = ""
     # preenchidos pelo motor (validade > 0 posta pelo gatilho sobrepõe a do tipo: gank de outra rota)
     fala: str = ""
     rotulo: str = ""
@@ -362,19 +365,23 @@ class MotorAvisos:
         self.voz, self.moldura, self.log = voz, moldura, log
         self.ligado = {"voz": True, "moldura": True, "painel": True}
         self.desligados = normalizar_desligados(None)
+        # corte da mesma frase na voz (REPETIR_FALA_S / _URGENTE_S); False = como antes de 14/10/2026 (config
+        # cortarFalaRepetida, pedido do Gabriel de 14/10/2026: toda regra nova de aviso é escolha dele)
+        self.cortar_repetida = True
         self.emitidos = deque(maxlen=500)   # (em, destino, Aviso)
         self.suprimidos = Counter()
         self._lock = threading.RLock()
         self._ultimo = {}                   # tipo:chave -> em do último aceito
-        self._ultimo_tipo = {}              # (tipo, destinos) -> em do último aceito (TIPOS["intervalo"])
+        self._ultimo_tipo = {}              # (tipo, destinos, grupo) -> em do último aceito (TIPOS["intervalo"])
         self._n_tipo = Counter()            # tipo -> aceitos nesta partida (TIPOS["teto"])
         self._falas = {}                    # fala normalizada -> em da última vez que saiu na voz
         self._fila_voz, self._fila_moldura, self._painel = [], [], []
         self._ultima_fala = self._ultima_moldura = float("-inf")
         self._prio_fala = None              # prio da última fala (a regra do FURA_S olha para ela)
 
-    def configurar(self, tom=None, voz=None, moldura=None, painel=None, desligados=None):
-        """Liga/desliga pela seção do 7b: tom ('serio'|'descontraido'), destinos e tipos desligados."""
+    def configurar(self, tom=None, voz=None, moldura=None, painel=None, desligados=None, cortar_repetida=None):
+        """Liga/desliga pela seção do 7b: tom ('serio'|'descontraido'), destinos, tipos desligados e o corte
+        da frase repetida. None = mantém."""
         with self._lock:
             if tom in TONS:
                 self.tom = tom
@@ -383,6 +390,8 @@ class MotorAvisos:
                     self.ligado[k] = bool(v)
             if desligados is not None:
                 self.desligados = normalizar_desligados(desligados)
+            if cortar_repetida is not None:
+                self.cortar_repetida = bool(cortar_repetida)
 
     def _preparar(self, a, agora):
         p = TIPOS.get(a.tipo, TIPO_REGRA)
@@ -417,7 +426,7 @@ class MotorAvisos:
                 self.suprimidos["repetido"] += 1
                 return False
             p = TIPOS.get(aviso.tipo, TIPO_REGRA)
-            ct = (aviso.tipo, aviso.destinos)
+            ct = (aviso.tipo, aviso.destinos, aviso.grupo)
             if p.get("intervalo") and agora - self._ultimo_tipo.get(ct, float("-inf")) < p["intervalo"]:
                 self.suprimidos["intervalo"] += 1
                 return False
@@ -490,7 +499,7 @@ class MotorAvisos:
             # urgente (gank onde estou, intruso vermelho) usa janela curta: o mesmo texto pode ser OUTRO perigo
             # (gank de outra rota virou o da minha; 2º mergulho); a repetição do mesmo evento a chave já barra
             janela = self.REPETIR_FALA_URGENTE_S if a.urgente else self.REPETIR_FALA_S
-            if agora - self._falas.get(chave_fala, float("-inf")) < janela:
+            if self.cortar_repetida and agora - self._falas.get(chave_fala, float("-inf")) < janela:
                 self.suprimidos["fala_repetida"] += 1      # a mesma frase há pouco: cai e o próximo da fila tenta
                 continue
             self._falas[chave_fala] = agora
@@ -760,6 +769,8 @@ class _Visto:
 
 ROTAS = ("rota_top", "rota_meio", "rota_bot")
 PRIO_JUNGLER_LONGE = 15   # jungler longe de mim: só painel, abaixo de toda informativa (objetivo 50, regra 20)
+# o que fazer com o jungler que aparece longe de mim (config junglerLonge; mesma lista em servidor_local.ESCOLHAS)
+JUNGLER_LONGE = ("painel", "tudo", "nada")
 # zona de gank de cada rota para o "jungler apareceu" (calibração 14/10/2026: o Gabriel no top não quer saber do
 # jungler na selva bot deles, mas quer a selva top). Chave = região de analise.regiao (relativa ao meu time) +
 # metade do mapa pela diagonal do meio (absoluta: a rota top é a mesma para os dois times). Casa com
@@ -863,6 +874,17 @@ class AlertasPosicao:
         self._estr, self._n_eventos = {"mid_externa": False, "cerco": False}, -1
         self._invalido = False
         self._resync_ate = float("-inf")
+        # escolhas do Gabriel (config midSumiuFiltro e junglerLonge; padrão = a calibração de 14/10/2026)
+        self.filtro_mid = True            # False: "mid sumiu" como antes (só não conta o mid visto por último
+        #                                   na base dele); teto e intervalo do tipo seguem valendo no motor
+        self.jungler_longe = "painel"     # JUNGLER_LONGE: "painel" só a 2ª tela, "tudo" voz e borda, "nada" nem isso
+
+    def configurar(self, filtro_mid=None, jungler_longe=None):
+        """escolhas das Configurações (coach_vivo); None = mantém; valor desconhecido do jungler = 'painel'"""
+        if filtro_mid is not None:
+            self.filtro_mid = bool(filtro_mid)
+        if jungler_longe is not None:
+            self.jungler_longe = jungler_longe if jungler_longe in JUNGLER_LONGE else "painel"
 
     @classmethod
     def do_live(cls, motor, dados):
@@ -927,6 +949,8 @@ class AlertasPosicao:
 
     def _mid_sumiu_calado(self, s, agora, n_visiveis):
         """motivo para NÃO avisar "mid sumiu" agora, ou None (avisa)"""
+        if not self.filtro_mid:          # filtro desligado nas Configurações: a regra de antes de 14/10/2026
+            return "base_dele" if s.reg == "base_inimiga" else None
         if agora < self.MID_JANELA[0]:
             return "cedo"
         if agora >= self.MID_JANELA[1]:
@@ -1046,10 +1070,15 @@ class AlertasPosicao:
             if n == self.jungler and estava_fora and (fora_s is None or fora_s >= self.APARECEU_S):
                 if self.importa_para_mim(x, y, agora):
                     avisos.append(Aviso("jungler_apareceu", dados, zc))
-                else:   # longe de onde estou: só a faixa do painel (2ª tela), sem voz nem borda, e abaixo das
+                elif self.jungler_longe == "tudo":
+                    # longe, falado como o de perto, mas com contagem de intervalo própria (grupo): senão o "longe"
+                    # de agora calava o "perto" dos próximos 20 s, o aviso que importa
+                    avisos.append(Aviso("jungler_apareceu", dados, f"longe:{zc}", grupo="longe"))
+                elif self.jungler_longe == "painel":
+                    # longe de onde estou: só a faixa do painel (2ª tela), sem voz nem borda, e abaixo das
                     # informativas (prio < PRIO_INFO): não tira "dragão em um minuto" da faixa
                     avisos.append(Aviso("jungler_apareceu", dados, f"longe:{zc}", destinos="p", cor="azul",
-                                        prio=PRIO_JUNGLER_LONGE))
+                                        prio=PRIO_JUNGLER_LONGE, grupo="longe"))
             elif n == self.mid and mid_tinha_sumido and reg not in ("rota_meio", "base_inimiga"):
                 avisos.append(Aviso("mid_indo", dados, zt))
         for n, dados, rota in intrusos:
@@ -1069,7 +1098,7 @@ PRIO_GANK_OUTRA = 75   # gank em outra rota: passa à frente de fala informativa
 VALIDADE_GANK_OUTRA = MotorAvisos.INTERVALO_VOZ + 2   # s na fila da voz (revisão 14/10/2026: com 6 s vencia mudo)
 
 
-def decidir_gank(gank, pos=None, reserva=None, agora=None):
+def decidir_gank(gank, pos=None, reserva=None, agora=None, outras=True):
     """O gank da vez (Aviso) ou None. Calibração 14/10/2026: o gank é de onde o Gabriel ESTÁ, não da rota do
     champ select, e o das outras rotas também fala (ele avisa os colegas).
     gank(rota_curta, alvo_pos) -> dict com "prob" ou None: jungler.EstadoJungler.gank com t e fog já postos;
@@ -1077,7 +1106,8 @@ def decidir_gank(gank, pos=None, reserva=None, agora=None):
     pos: AlertasPosicao (onde_estou, aliados_na_rota) ou None; reserva: rota curta do champ select, usada só
     sem `pos`. A minha rota (ícone numa rota, ou a do champ select sem ícone) vence: urgente, vermelho, prio
     100. Morto ou na base, eu não sou alvo. Outra rota só com aliado visto nela (ele é o alvo): a de maior
-    massa, amarelo, prio PRIO_GANK_OUTRA, não urgente. Um gank por vez: o jungler não ganka duas rotas."""
+    massa, amarelo, prio PRIO_GANK_OUTRA, não urgente. Um gank por vez: o jungler não ganka duas rotas.
+    outras=False (config gankOutraRota desligada): só a minha rota."""
     minha, minha_pos = reserva, None
     if pos is not None:
         o = pos.onde_estou(agora)
@@ -1085,7 +1115,7 @@ def decidir_gank(gank, pos=None, reserva=None, agora=None):
         minha_pos = o["pos"] if o["fonte"] == "icone" else None
     if minha and gank(minha, minha_pos):
         return Aviso("gank", {"zona": f"no {minha}", "zc": minha, "zt": minha}, chave=minha)
-    if pos is None:
+    if pos is None or not outras:
         return None
     melhor = None
     for rota, curta in ROTA_CURTA_DE.items():

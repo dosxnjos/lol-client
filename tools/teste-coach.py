@@ -525,6 +525,82 @@ def caso_cache_estatico():
     log_coach.propagate = True
 
 
+def caso_escolhas_config():
+    """as escolhas das regras de aviso (roadmap/2026-10-14-calibrar-avisos.md, passo 7) chegam às peças da partida:
+    na largada (config.json), no AlertasPosicao que nasce depois e a cada POST /config (Coach.configurar)"""
+    import logging
+
+    import coach_vivo
+    import overlay_minimapa
+    import servidor_local
+    log_coach = logging.getLogger("coletor.coach")
+    log_coach.propagate = False
+    log_coach.addHandler(logging.NullHandler())
+
+    class Peca:
+        ligado = True
+        ao_mostrar = ao_desenhar = ao_alternar = _thread = None
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __getattr__(self, nome):
+            return lambda *a, **k: None
+
+    class OverlayFalso(Peca):
+        def __init__(self, *a, **k):
+            self.estilos = []
+
+        def aplicar_estilo(self, e):
+            self.estilos.append(e)
+
+    class Janela:
+        def fase(self, f):
+            pass
+
+        def fechar(self):
+            pass
+
+    def sem(*a):
+        raise RuntimeError("fora do teste")
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        arq.write_text(json.dumps({"voz": False, "minimapa": True, "feiticos": False, "carregamento": False, "mentor": False,
+                                   "amostrasAoVivo": False, "painelAoVivo": False, "cortarFalaRepetida": False,
+                                   "midSumiuFiltro": False, "junglerLonge": "nada", "overlayCor": "roxo",
+                                   "overlayForca": "sutil", "overlaySuave": False}), encoding="utf-8")
+        # minimapa ligado como na vida real, mas a captura de verdade fica fora: a fábrica falha (cap None) e o
+        # overlay nasce à mão em cima de uma captura falsa
+        fab = {"voz": Peca, "moldura": Peca, "overlay": OverlayFalso, "estatico": sem, "mentor": sem, "captura": sem,
+               "janela": lambda url, ligado: Janela()}
+        c = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=arq, liveclient="http://127.0.0.1:9", fabricas=fab)
+        p = c.iniciar_partida(9001, 420)
+        corte_largada = p.motor.cortar_repetida
+        # o AlertasPosicao nasce no 1º allgamedata com GameStart, depois do configurar da largada: pelo caminho real
+        # (Coach._ao_ler -> _Partida.passo), não à mão (revisão de 14/10/2026)
+        pos_antes = p.pos
+        jogo = {"activePlayer": {"riotId": "Eu#BR1"}, "gameData": {"gameTime": 100.0},
+                "events": {"Events": [{"EventID": 0, "EventName": "GameStart", "EventTime": 0.0}]},
+                "allPlayers": [{"championName": "Illaoi", "team": "ORDER", "position": "TOP", "riotId": "Eu#BR1"},
+                               {"championName": "Yasuo", "team": "CHAOS", "position": "MIDDLE", "riotId": "Ele#BR1"}]}
+        c._ao_ler(jogo, jogo, {"gt": 100.0, "fase": "jogo", "jogadores": []})
+        pos_largada = (p.pos.filtro_mid, p.pos.jungler_longe) if p.pos is not None else None
+        p.cap = Peca()
+        p._ligar_overlay()
+        est_largada = p.ov.estilos[-1] if p.ov.estilos else None
+        # POST /config: o plugin volta tudo ao padrão
+        c.configurar(servidor_local.salvar_config({"coach": {k: servidor_local.CONFIG_PADRAO[k] for k in (
+            "cortarFalaRepetida", "midSumiuFiltro", "junglerLonge", "overlayCor", "overlayForca", "overlaySuave")}}, arq))
+        depois = (p.motor.cortar_repetida, p.pos.filtro_mid, p.pos.jungler_longe, p.ov.estilos[-1])
+        c.encerrar_partida()
+    log_coach.propagate = True
+    caso("escolhas da config chegam à partida: largada (motor, AlertasPosicao tardio, overlay) e POST /config",
+         corte_largada is False and pos_antes is None and pos_largada == (False, "nada")
+         and est_largada == overlay_minimapa.estilo("roxo", "sutil", False)
+         and depois == (True, True, "painel", overlay_minimapa.estilo()),
+         f"largada corte {corte_largada}, pos {pos_largada}, overlay {est_largada}; depois do POST {depois}")
+
+
 def principal():
     ap = argparse.ArgumentParser()
     ap.add_argument("--live", type=Path, default=LIVE_PADRAO)
@@ -541,6 +617,7 @@ def principal():
     caso_pacote_voz()
     caso_relogio()
     caso_cache_estatico()
+    caso_escolhas_config()
     caso_replay(a.live)
     n = sum(resultados)
     print(f"\n{'ok' if n == len(resultados) else 'FALHOU'} ({n}/{len(resultados)})")

@@ -96,7 +96,60 @@ const casos = [
     b => b.coach.aceiteAtrasoS === null && b.coach.aceiteFlutuante === true],
   ['corpoConfig não altera o cfg.coach', (() => { const c = { aceite: { ligado: true, atrasoS: 8 }, coach: {} }; corpoConfig(c); return c; })(),
     c => !('aceiteAtrasoS' in c.coach)],
+  // regras de aviso de 14/10/2026 viram escolha (roadmap/2026-10-14-calibrar-avisos.md, passo 7): padrão = comportamento do dia
+  ['avisos 14/10: padrão = calibração (gank outra rota, jungler longe no painel, filtro do mid, corte da frase, mancha vermelha normal suave)', carregarCom(null),
+    c => c.coach.gankOutraRota === true && c.coach.junglerLonge === 'painel' && c.coach.midSumiuFiltro === true
+      && c.coach.cortarFalaRepetida === true && c.coach.overlayCor === 'vermelho' && c.coach.overlayForca === 'normal'
+      && c.coach.overlaySuave === true && c.versao === 3],
+  ['avisos 14/10: config salva antes das chaves ganha os padrões sem regravar (sem VERSAO nova)', (() => { gravacoes = 0; const c = carregarCom({ versao: 3, coach: { voz: false } }, 3); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.coach.voz === false && c.coach.gankOutraRota === true && c.coach.junglerLonge === 'painel' && g === 0],
+  ['avisos 14/10: escolhas salvas ficam', carregarCom({ coach: { gankOutraRota: false, junglerLonge: 'nada', midSumiuFiltro: false,
+    cortarFalaRepetida: false, overlayCor: 'roxo', overlayForca: 'sutil', overlaySuave: false } }),
+    c => !c.coach.gankOutraRota && c.coach.junglerLonge === 'nada' && !c.coach.midSumiuFiltro && !c.coach.cortarFalaRepetida
+      && c.coach.overlayCor === 'roxo' && c.coach.overlayForca === 'sutil' && !c.coach.overlaySuave],
+  ['avisos 14/10: valor inválido volta ao padrão (texto fora da lista e tipo errado)', carregarCom({ coach: { junglerLonge: 'sempre',
+    overlayCor: 'azul', overlayForca: 7, gankOutraRota: 'nao', midSumiuFiltro: 0 } }),
+    c => c.coach.junglerLonge === 'painel' && c.coach.overlayCor === 'vermelho' && c.coach.overlayForca === 'normal'
+      && c.coach.gankOutraRota === true && c.coach.midSumiuFiltro === true],
+  ['avisos 14/10: definir -> salvar -> recarregar mantém a escolha', (() => { carregarCom(null); definir('coach.overlayCor', 'laranja'); definir('coach.junglerLonge', 'tudo'); return recarregar(); })(),
+    c => c.coach.overlayCor === 'laranja' && c.coach.junglerLonge === 'tudo'],
+  ['avisos 14/10: POST /config leva as chaves novas ao coletor', corpoConfig({ aceite: { ligado: false }, coach: { ...PADRAO.coach, junglerLonge: 'nada', overlaySuave: false } }),
+    b => b.coach.junglerLonge === 'nada' && b.coach.overlaySuave === false && b.coach.gankOutraRota === true && b.coach.overlayForca === 'normal'],
+  ['avisos 14/10: classes das caixas novas sem colisão', (carregarCom(null), classes()),
+    l => new Set(l.map(([k]) => k)).size === l.length
+      && ['lc-gank-outra-rota', 'lc-mid-sumiu-filtro', 'lc-cortar-fala-repetida', 'lc-overlay-suave'].every(n => l.some(([k]) => k === n))],
 ];
+
+// Configurações › LOL-CLIENT: os blocos Voz, Alertas e Minimapa montam um controle para cada chave nova (DOM mínimo)
+const elFalso = tag => ({ tag, filhos: [], className: '', textContent: '', append(...f) { this.filhos.push(...f); }, replaceChildren(...f) { this.filhos = f; } });
+document.createElement = elFalso;
+const blocos = await import('../pengu/blocos.js');
+const montarBloco = (fn, c) => {
+  const ids = [], textos = [], listas = {};
+  const ui = {
+    caixa: (id, rotulo, explicacao, valor) => { ids.push(id); textos.push(rotulo, explicacao); return elFalso('caixa'); },
+    lista: (id, rotulo, opcoes) => { ids.push(id); listas[id] = opcoes.map(([v]) => v); textos.push(rotulo); return elFalso('lista'); },
+    linha: (...f) => { const e = elFalso('linha'); e.append(...f); return e; },
+    explica: t => { textos.push(t); return elFalso('p'); },
+  };
+  fn(elFalso('div'), { cfg: c, definir: () => {}, ui });
+  return { ids, texto: textos.join(' '), listas };
+};
+const cfgPadrao = JSON.parse(JSON.stringify(PADRAO));
+const voz = montarBloco(blocos.blocoVoz, cfgPadrao), alertas = montarBloco(blocos.blocoAlertas, cfgPadrao), mini = montarBloco(blocos.blocoMinimapa, cfgPadrao);
+casos.push(
+  ['tela: Voz tem a caixa do corte da frase e fala da Aoede (Maria só de reserva)', voz,
+    v => v.ids.includes('coach.cortarFalaRepetida') && /Aoede/.test(v.texto) && !/\(voz Maria do Windows\)/.test(v.texto) && /Maria/.test(v.texto)],
+  ['tela: Alertas tem gank em outra rota, jungler longe (3 opções) e filtro do mid', alertas,
+    a => ['coach.gankOutraRota', 'coach.junglerLonge', 'coach.midSumiuFiltro'].every(i => a.ids.includes(i))
+      && JSON.stringify(a.listas['coach.junglerLonge']) === JSON.stringify(['painel', 'tudo', 'nada'])],
+  ['tela: Minimapa tem cor (3), força (3) e transição da mancha', mini,
+    m => ['coach.overlayCor', 'coach.overlayForca', 'coach.overlaySuave'].every(i => m.ids.includes(i))
+      && m.listas['coach.overlayCor'].length === 3 && JSON.stringify(m.listas['coach.overlayForca']) === JSON.stringify(['sutil', 'normal', 'forte'])],
+  ['tela: toda chave nova do PADRAO.coach tem controle', [voz, alertas, mini],
+    bs => ['gankOutraRota', 'junglerLonge', 'midSumiuFiltro', 'cortarFalaRepetida', 'overlayCor', 'overlayForca', 'overlaySuave']
+      .every(k => k in PADRAO.coach && bs.some(b => b.ids.includes('coach.' + k)))],
+);
 
 let ok = 0;
 for (const [nome, valor, conferir] of casos) {

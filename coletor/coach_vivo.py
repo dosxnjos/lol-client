@@ -242,7 +242,9 @@ class _Partida:
         """aplica a config: no início e a cada POST /config (thread do servidor)"""
         self.cfg = cfg
         self.motor.configurar(tom=cfg["tomVoz"], voz=cfg["voz"], moldura=cfg["alertasTela"],
-                              desligados=cfg["avisosDesligados"])
+                              desligados=cfg["avisosDesligados"],
+                              cortar_repetida=cfg.get("cortarFalaRepetida", True))
+        self._configurar_pos()
         if not cfg["voz"] and not inicio:
             try:
                 self.voz.desligar()
@@ -253,9 +255,27 @@ class _Partida:
         self._ligar_minimapa(cfg["minimapa"])
         if self.ov is not None:
             self.ov.ligado = bool(cfg["overlayMinimapa"])
+            self._estilo_overlay()
         elif cfg["minimapa"] and cfg["overlayMinimapa"] and self.cap is not None:
             self._ligar_overlay()
         self._ligar_feiticos(cfg["feiticos"])
+
+    def _configurar_pos(self):
+        """escolhas do "mid sumiu" e do jungler longe no AlertasPosicao, que nasce só no 1º allgamedata com
+        GameStart (depois do configurar do início): chamado no configurar e ao criar o self.pos"""
+        if self.pos is not None:
+            self.pos.configurar(filtro_mid=self.cfg.get("midSumiuFiltro", True),
+                                jungler_longe=self.cfg.get("junglerLonge", "painel"))
+
+    def _estilo_overlay(self):
+        """cor, força e transição da mancha (overlayCor/overlayForca/overlaySuave) na janela do overlay"""
+        try:
+            import overlay_minimapa
+            self.ov.aplicar_estilo(overlay_minimapa.estilo(self.cfg.get("overlayCor", "vermelho"),
+                                                           self.cfg.get("overlayForca", "normal"),
+                                                           self.cfg.get("overlaySuave", True)))
+        except Exception as e:
+            self.coach.avisa("estilo do overlay", e)
 
     def _ligar_minimapa(self, sim):
         if sim and self.cap is None and not self.tela_parada.is_set():
@@ -294,6 +314,7 @@ class _Partida:
         try:
             self.ov = self.coach.fab["overlay"](fonte)
             self.ov.ligado = bool(self.cfg["overlayMinimapa"])
+            self._estilo_overlay()
             self.ov.ao_alternar = self._overlay_alternado   # F8: "overlay ligado/desligado" na moldura
             if self.vitrine is not None:
                 self.ov.ao_desenhar = self.vitrine.overlay
@@ -435,6 +456,7 @@ class _Partida:
         if self.pos is None and self.live.eu and fase == "jogo":
             try:
                 self.pos = avisos.AlertasPosicao.do_live(self.motor, limpo)
+                self._configurar_pos()
             except Exception as e:
                 av("alertas de posição", e)
 
@@ -551,7 +573,8 @@ class _Partida:
             # a distribuição do jungler sai 1 vez por passo, não 1 por rota perguntada (custo do Dijkstra/bincount)
             zonas = estado.get("zonas") if estado.get("status") in ("visto", "provavel", "sumido") else None
             a = avisos.decidir_gank(lambda r, alvo: jg.gank(gt, r, alvo, fog, zonas=zonas or None), self.pos,
-                                    reserva, self.relogio() if self.pos is not None else None)
+                                    reserva, self.relogio() if self.pos is not None else None,
+                                    outras=self.cfg.get("gankOutraRota", True))
             if a is not None and (a.urgente is not False or gt - self.gank_outra_em >= GANK_OUTRA_S):
                 if self.motor.publicar(a) and a.urgente is False:
                     self.gank_outra_em = gt

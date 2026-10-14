@@ -2,6 +2,7 @@
 // do configuracoes.js). O painel inteiro é remontado a cada mudança do cfg: o que é carregado da LCU
 // (campeões, páginas) e o rascunho da regra nova ficam aqui no módulo, não no DOM.
 import { campeoes, paginasEditaveis } from './runas.js';
+import { JUNGLER_LONGE, OVERLAY_CORES, OVERLAY_FORCAS } from './config.js';
 
 const POSICOES = [['*', 'Qualquer posição'], ['TOP', 'Topo'], ['JUNGLE', 'Selva'], ['MIDDLE', 'Meio'], ['BOTTOM', 'Atirador'], ['UTILITY', 'Suporte']];
 const clonar = o => JSON.parse(JSON.stringify(o));
@@ -164,13 +165,20 @@ export const blocoPainel = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'painelAoVivo', 'Painel ao vivo na 2ª tela', 'Na partida, abre o painel no monitor secundário (tua rota, ameaça, teu padrão, time e objetivos) e fecha no fim.'),
   caixaCoach(ctx, 'amostrasAoVivo', 'Gravar amostras da partida', 'A cada 10 s guarda nível, itens, ouro estimado e KDA dos 10 no banco: deixa o pós-jogo mais fino.'));
 
+// voz: pacote Aoede gravado antes (coletor/voz.py), Maria do Windows só para a frase que falta no pacote
 export const blocoVoz = (corpo, ctx) => corpo.append(
-  caixaCoach(ctx, 'voz', 'Voz do coach', 'Fala os avisos em pt-BR (voz Maria do Windows), no máximo 1 a cada 20 s fora o de gank.'),
-  ctx.ui.linha(ctx.ui.lista('coach.tomVoz', 'Tom', TONS, ctx.cfg.coach.tomVoz, v => ctx.definir('coach.tomVoz', v))));
+  caixaCoach(ctx, 'voz', 'Voz do coach', 'Fala os avisos em português com a voz Aoede, gravada antes; frase que ainda não foi gravada sai na voz Maria do Windows. No máximo 1 fala a cada 20 s, fora o gank.'),
+  ctx.ui.linha(ctx.ui.lista('coach.tomVoz', 'Tom', TONS, ctx.cfg.coach.tomVoz, v => ctx.definir('coach.tomVoz', v))),
+  caixaCoach(ctx, 'cortarFalaRepetida', 'Não repetir a mesma frase em menos de 1 minuto', 'Se a voz acabou de dizer a mesma coisa, pula (aviso de perigo igual só é pulado nos primeiros 10 s). A borda e o painel mostram do mesmo jeito.'));
 
 export function blocoAlertas(corpo, ctx) {
   const { cfg, definir, ui } = ctx;
   corpo.append(caixaCoach(ctx, 'alertasTela', 'Moldura de alertas na tela', 'Borda colorida pulsando + rótulo curto por ~2 s, só com o jogo em primeiro plano.'),
+    // regras da calibração de 14/10/2026 (roadmap/2026-10-14-calibrar-avisos.md, passo 7): padrão = como ficou nela
+    caixaCoach(ctx, 'gankOutraRota', 'Avisar gank nas outras rotas', 'Quando o jungler deles parece ir pegar um colega teu em outra rota, avisa em amarelo, sem pressa, para tu avisar o time. O gank na rota onde tu está não muda com esta caixa.'),
+    ui.linha(ui.lista('coach.junglerLonge', 'Jungler inimigo longe de ti', JUNGLER_LONGE, cfg.coach.junglerLonge, v => definir('coach.junglerLonge', v))),
+    ui.explica('Longe = longe de onde tu está agora (não da rota que tu escolheu). Jogando de jungler, tudo conta como perto. "Só no painel" precisa do painel da 2ª tela ligado. A linha "Jungler inimigo apareceu" abaixo cala ele perto e longe.'),
+    caixaCoach(ctx, 'midSumiuFiltro', 'Avisar "mid sumiu" só quando faz sentido', 'Ligado: só no começo do jogo (de 1:30 a 14:00, antes de cair a 1ª torre do meio) e calado quando tu está morto ou na base, quando atacam a tua base ou no meio de uma briga. Desligado: avisa toda vez que o mid some. Nos dois casos, no máximo 4 vezes por partida, com 2 minutos entre um e outro.'),
     ui.explica('Por tipo: "voz" fala o aviso; "tela" mostra no painel e na moldura. Desmarcar os dois cala o aviso.'));
   const desl = cfg.coach.avisosDesligados;
   const trocar = (destino, tipo, ligado) => {  // lê o valor vivo: duas caixas seguidas sem remontar o painel
@@ -192,6 +200,11 @@ export function blocoAlertas(corpo, ctx) {
 export const blocoMinimapa = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'minimapa', 'Ler o minimapa', 'Print só do minimapa (~6 por segundo) para achar os ícones vistos: alimenta jungler, gank e alertas de posição. Nada do que está na fog.'),
   caixaCoach(ctx, 'overlayMinimapa', 'Overlay do jungler no minimapa', 'Área provável do jungler inimigo desde a última vez visto, por cima do minimapa; não recebe clique. Atalho: F8 liga e desliga durante a partida.'),
+  ctx.ui.linha(
+    ctx.ui.lista('coach.overlayCor', 'Cor da mancha', OVERLAY_CORES, ctx.cfg.coach.overlayCor, v => ctx.definir('coach.overlayCor', v)),
+    ctx.ui.lista('coach.overlayForca', 'Força da cor', OVERLAY_FORCAS, ctx.cfg.coach.overlayForca, v => ctx.definir('coach.overlayForca', v))),
+  caixaCoach(ctx, 'overlaySuave', 'Mancha muda aos poucos', 'Ligado: a mancha cresce e some devagar. Desligado: muda na hora, aos saltos.'),
+  ctx.ui.explica('Como ler: a mancha é onde o jungler deles pode estar agora; quanto mais forte a cor, mais provável. Ela não pinta onde o teu time está vendo e some uns 30 s depois da última pista dele.'),
   caixaCoach(ctx, 'feiticos', 'Flash e feitiços inimigos', 'Lê os pings de feitiço do chat (OCR) e conta a recarga; F9 + 1 a 5 marca na mão o flash do inimigo.'));
 
 export const blocoMentor = (corpo, ctx) => corpo.append(

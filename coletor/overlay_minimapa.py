@@ -11,11 +11,13 @@
 #   python coletor/overlay_minimapa.py --demo [--left 2197 --top 716 --lado 347]   prova sem partida
 import ctypes
 import ctypes.wintypes as wt
+import functools
 import logging
 import math
 import threading
 import time
 import unicodedata
+from dataclasses import dataclass
 
 import cv2
 import numpy as np
@@ -35,6 +37,11 @@ BUSCA_MS = 400             # fonte() (calor do jungler) lida a cada 400 ms
 TOPO_S = 1.0               # reafirma "sempre no topo" a cada 1 s com a janela visível
 TEXTO_FUNDO = (20, 20, 20, 215)
 CHAVE = (1, 0, 1)          # legado (cor-chave da versão Tk): nada mais usa como transparência; transparente = alfa 0
+# escolhas do Gabriel nas Configurações (config overlayCor/overlayForca/overlaySuave; pedido de 14/10/2026). O
+# padrão de cada uma = as constantes acima; nome desconhecido = o padrão. Os nomes são os de
+# servidor_local.ESCOLHAS (o teste-alertas.py confere). Sem azul: azul é a cor dos aliados no minimapa.
+CORES = {"vermelho": COR, "laranja": (240, 140, 50), "roxo": (170, 90, 230)}
+FORCAS = {"sutil": (0.30, 0.08), "normal": (ALPHA, ALPHA_MIN), "forte": (0.60, 0.18)}   # (ALPHA, ALPHA_MIN)
 
 GWL_EXSTYLE = -20
 WS_POPUP = 0x80000000
@@ -55,11 +62,33 @@ DPI_PER_MONITOR_V2 = -4
 
 # ---------- desenho (puro: testes e vitrine usam o mesmo) ----------
 
-def alfa_alvo(calor, lado):
+@dataclass(frozen=True)
+class Estilo:
+    """aparência da mancha: cor RGB, opacidade no mais provável (alpha) e na borda (alpha_min), constante de
+    tempo da transição (tau; 0 = muda na hora). None nos desenhos = as constantes do módulo, lidas na chamada."""
+    cor: tuple
+    alpha: float
+    alpha_min: float
+    tau: float
+
+
+def estilo(cor="vermelho", forca="normal", suave=True):
+    """Estilo das escolhas das Configurações (overlayCor, overlayForca, overlaySuave); nome desconhecido = padrão"""
+    a, a_min = FORCAS.get(forca, FORCAS["normal"])
+    return Estilo(tuple(CORES.get(cor, CORES["vermelho"])), a, a_min, TAU_S if suave else 0.0)
+
+
+def _estilo(e):
+    return e if e is not None else Estilo(tuple(COR), ALPHA, ALPHA_MIN, TAU_S)
+
+
+def alfa_alvo(calor, lado, estilo=None):
     """opacidade 0–1 (float32 lado×lado) do calor 0–1: rampa macia em volta do LIMIAR, de ALPHA_MIN na
-    borda a ALPHA no mais provável, e desfoque de SUAVE_PX (anti-aliasing). calor None = tudo 0."""
+    borda a ALPHA no mais provável (os do `estilo`, se vier), e desfoque de SUAVE_PX (anti-aliasing).
+    calor None = tudo 0."""
     if calor is None:
         return np.zeros((lado, lado), np.float32)
+    e = _estilo(estilo)
     c = np.clip(np.asarray(calor, np.float32), 0, 1)
     if c.shape[0] != lado:
         c = cv2.resize(c, (lado, lado), interpolation=cv2.INTER_LINEAR)
@@ -67,16 +96,16 @@ def alfa_alvo(calor, lado):
     # deixava zona inteira de calor 0,05 a ~7%, quase invisível: é a "até onde ele conseguiria ter ido" que o
     # contorno branco mostrava). A rampa fica só no último quarto abaixo do LIMIAR; quem suaviza é o desfoque
     borda = np.clip((c - LIMIAR * 0.75) / (LIMIAR * 0.25), 0, 1)
-    a = borda * (ALPHA_MIN + (ALPHA - ALPHA_MIN) * c)
+    a = borda * (e.alpha_min + (e.alpha - e.alpha_min) * c)
     return cv2.GaussianBlur(a, (0, 0), SUAVE_PX) if SUAVE_PX > 0 else a
 
 
-def camada(alfa, texto=None):
-    """imagem RGBA (alfa direto, não pré-multiplicado) h×w: COR com a opacidade `alfa` (0–1); alfa 0 =
-    transparente. texto vai numa caixa no topo ("jungler sumido há 42 s")."""
+def camada(alfa, texto=None, cor=None):
+    """imagem RGBA (alfa direto, não pré-multiplicado) h×w: a cor (COR sem `cor`) com a opacidade `alfa`
+    (0–1); alfa 0 = transparente. texto vai numa caixa no topo ("jungler sumido há 42 s")."""
     h, w = alfa.shape
     img = np.empty((h, w, 4), np.uint8)
-    img[..., :3] = COR
+    img[..., :3] = COR if cor is None else cor
     img[..., 3] = _alfa8(alfa)
     if texto:
         img = _escrever(img, texto, w)
@@ -87,25 +116,30 @@ def _alfa8(alfa):
     return np.clip(alfa * np.float32(255) + np.float32(0.5), 0, 255).astype(np.uint8)
 
 
-# pré-multiplicado da COR por alfa 0–255 (a mesma conta do premultiplicar), em tabela: o quadro sem texto vira
-# 4 consultas de tabela em vez de multiplicações (custo por quadro medido no tools/teste-overlay.py)
-_TABELA = np.array([[(c * a + 127) // 255 for a in range(256)] for c in (COR[2], COR[1], COR[0])], np.uint8)
+# pré-multiplicado da cor por alfa 0–255 (a mesma conta do premultiplicar), em tabela: o quadro sem texto vira
+# 4 consultas de tabela em vez de multiplicações (custo por quadro medido no tools/teste-overlay.py). Uma
+# tabela por cor escolhida (são 3), feita na 1ª vez
+@functools.lru_cache(maxsize=8)
+def _tabela(cor):
+    return np.array([[(c * a + 127) // 255 for a in range(256)] for c in (cor[2], cor[1], cor[0])], np.uint8)
 
 
-def bgra_rapido(alfa, saida=None):
-    """o BGRA pré-multiplicado de camada(alfa) sem texto, igual byte a byte a premultiplicar(camada(alfa))"""
+def bgra_rapido(alfa, saida=None, cor=None):
+    """o BGRA pré-multiplicado de camada(alfa, cor=cor) sem texto, igual byte a byte a premultiplicar(camada(...))"""
+    tab = _tabela(tuple(COR if cor is None else cor))
     a8 = _alfa8(alfa)
     out = saida if saida is not None and saida.shape[:2] == a8.shape else np.empty(a8.shape + (4,), np.uint8)
     for i in range(3):
-        np.take(_TABELA[i], a8, out=out[..., i])
+        np.take(tab[i], a8, out=out[..., i])
     out[..., 3] = a8
     return out
 
 
-def renderizar(calor, lado, texto=None):
+def renderizar(calor, lado, texto=None, estilo=None):
     """o quadro estável (sem a transição) do calor: RGBA lado×lado. É o que a janela mostra depois de
     convergir; a vitrine e os testes usam este (o quadro animado é camada(alfa_mostrado))."""
-    return camada(alfa_alvo(calor, lado), texto)
+    e = _estilo(estilo)
+    return camada(alfa_alvo(calor, lado, e), texto, e.cor)
 
 
 def premultiplicar(rgba):
@@ -168,7 +202,7 @@ class Transicao:
     (alfa mostrado, parado); parado = chegou (diferença < 1/255 em todo px) e não precisa redesenhar."""
 
     def __init__(self, tau=TAU_S):
-        self.tau = tau
+        self.tau = tau            # ≤ 0 = sem transição (overlaySuave desligado): o alvo vai à tela na hora
         self.mostrado = None
 
     def passo(self, alvo, dt):
@@ -178,6 +212,9 @@ class Transicao:
         if float(np.abs(dif).max(initial=0)) < 1 / 255:
             self.mostrado = alvo.copy()
             return self.mostrado, True
+        if self.tau <= 0:                 # salto: mostra o alvo já, mas este quadro mudou (redesenha)
+            self.mostrado = alvo.copy()
+            return self.mostrado, False
         k = 1.0 - math.exp(-max(dt, 0.0) / self.tau)
         self.mostrado += dif * np.float32(k)
         return self.mostrado, False
@@ -333,13 +370,21 @@ class OverlayMinimapa:
         self._proc = WNDPROC(self._wndproc)   # referência viva: o GC não pode levar o callback
         self.medidas = []                     # ms por quadro desenhado (prova de custo)
         self._ult_gancho = float("-inf")      # monotonic do último quadro entregue à vitrine (ao_desenhar)
+        self.estilo = estilo()                # cor, força e transição (aplicar_estilo, vindo das Configurações)
         self._zerar()
+
+    def aplicar_estilo(self, e):
+        """troca cor/força/transição em voo (POST /config, outra thread): a próxima volta do fio relê a fonte e
+        redesenha (o estilo entra no estado do quadro, então o "parado" não segura a imagem velha)"""
+        self.estilo = e
+        self._trans.tau = e.tau
+        self._ult_busca = float("-inf")
 
     def _zerar(self):
         self._quadro = None
         self._alvo = None
         self._texto = None
-        self._trans = Transicao()
+        self._trans = Transicao(self.estilo.tau)
         self._sup = None
         self._bgra = None                 # buffer reaproveitado entre quadros
         self._visivel = False
@@ -434,13 +479,14 @@ class OverlayMinimapa:
 
     def _passo(self):
         agora = time.monotonic()
+        e = self.estilo                    # uma leitura por volta: a troca em voo vale inteira na próxima
         if agora - self._ult_busca >= self.intervalo / 1000:
             self._ult_busca = agora
             f = self.fonte() or {}
             ret = f.get("ret")
             self._quadro, self._texto = f, f.get("texto")
             if ret:
-                self._alvo = alfa_alvo(f.get("calor"), int(ret[2]))   # sem calor: alvo 0 = some devagar
+                self._alvo = alfa_alvo(f.get("calor"), int(ret[2]), e)   # sem calor: alvo 0 = some devagar
         f = self._quadro or {}
         ret = f.get("ret")
         if not (self.ligado and f.get("mostrar") and ret and self._alvo is not None):
@@ -454,7 +500,7 @@ class OverlayMinimapa:
         if not texto and float(alfa.max(initial=0)) < 1 / 255:
             self._esconder()
             return
-        estado = (texto, tuple(ret))
+        estado = (texto, tuple(ret), e)
         if parado and self._desenhado == estado:
             if self._visivel and agora - self._ult_topo >= TOPO_S:
                 self._ult_topo = agora
@@ -463,13 +509,13 @@ class OverlayMinimapa:
             # busca (antes da janela Win32 era a cada 400 ms; sem isto, overlay parado = vitrine sem print)
             if (self.ao_desenhar is not None and self._visivel
                     and agora - self._ult_gancho >= self.intervalo / 1000):
-                self._gancho(camada(alfa, texto), (int(ret[0]), int(ret[1]), int(ret[2])), f, agora)
+                self._gancho(camada(alfa, texto, e.cor), (int(ret[0]), int(ret[1]), int(ret[2])), f, agora)
             return
         t0 = time.perf_counter()
         left, top, lado = (int(v) for v in ret)
         # sem texto (o caso comum): tabela direto para BGRA; a imagem RGBA só se a vitrine pede (mesmos bytes)
-        img = camada(alfa, texto) if texto or self.ao_desenhar is not None else None
-        bgra = premultiplicar(img) if texto else bgra_rapido(alfa, self._bgra)
+        img = camada(alfa, texto, e.cor) if texto or self.ao_desenhar is not None else None
+        bgra = premultiplicar(img) if texto else bgra_rapido(alfa, self._bgra, e.cor)
         self._bgra = bgra
         if self._sup is None or self._sup.lado != lado:
             if self._sup is not None:

@@ -67,9 +67,14 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 | calar o aviso de runas mudadas pelo jogo e o de golpear colocado sozinho (resposta falsa só nessas 2 rotas; o "você foi preenchido" fica: sai da sessão do champ select). O de runas logo depois de um patch ainda não foi provado | Avisos do client | (plugin: `semPopups.ligado`, `.runasAutomaticas`, `.smiteAutomatico`) |
 | painel na 2ª tela / amostras de 10 s no banco | Painel ao vivo (2ª tela) | `painelAoVivo` / `amostrasAoVivo` |
 | voz e tom (sério ou descontraído) | Voz | `voz`, `tomVoz` |
+| não repetir na voz a mesma frase em menos de 1 minuto (padrão: ligado; desligado = pode repetir) | Voz | `cortarFalaRepetida` |
 | moldura na tela e cada um dos 18 tipos de alerta (com o retorno do F8 e do F9), com voz e tela separadas | Alertas na tela | `alertasTela`, `avisosDesligados` |
+| avisar gank nas outras rotas, em amarelo (padrão: ligado; desligado = só o gank onde tu está) | Alertas na tela | `gankOutraRota` |
+| jungler inimigo longe de onde tu está: só no painel da 2ª tela (padrão), também falar e piscar a borda, ou não mostrar | Alertas na tela | `junglerLonge` (`painel`/`tudo`/`nada`) |
+| "mid sumiu" só quando faz sentido: começo do jogo, sem briga, cerco, tu morto ou na base (padrão: ligado; desligado = toda vez, ainda no máx. 4 por partida, 2 min entre eles) | Alertas na tela | `midSumiuFiltro` |
 | leitura do minimapa (jungler, gank, alertas de posição) | Minimapa e jungler | `minimapa` |
 | overlay do jungler sobre o minimapa (**F8** na partida liga/desliga; a moldura mostra "overlay ligado/desligado") | Minimapa e jungler | `overlayMinimapa` |
+| cor da mancha (vermelho, laranja, roxo), força (sutil, normal, forte) e mudar aos poucos (padrão: vermelho, normal, ligado) | Minimapa e jungler | `overlayCor`, `overlayForca`, `overlaySuave` |
 | Flash inimigo: OCR do chat e **F9 e logo depois 1 a 5** (1 top, 2 jungler, 3 mid, 4 atirador, 5 suporte) = ele acabou de usar o flash; repetir em 10 s desfaz. O F9 mostra "flash: 1-5" na borda por 2 s; marcado, a voz diz "flash do mid marcado" | Minimapa e jungler | `feiticos` |
 | os 10 na tela de carregamento (Riot API) | Tela de carregamento | `carregamento` |
 | mentor, modelo e esforço (padrão Sonnet + medium) | Mentor | `mentor`, `mentorModelo`, `mentorEffort` |

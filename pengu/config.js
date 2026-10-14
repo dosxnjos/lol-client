@@ -9,6 +9,12 @@ export const ATRASOS = [3, 4, 5, 6, 7, 8, 9, 10]; // dona única: painel (config
 export const FREIOS = [0, 2, 3, 4, 5]; // freio de tilt: 0 = desligado; padrão 2 (decisão do Gabriel, 13/10/2026)
 // nomes no chat do pós-jogo (dona única: Configurações e Ctrl+K)
 export const NOMES_CHAT = [['ambos', 'nome e campeão'], ['campeao', 'só o campeão'], ['jogador', 'só o nome']];
+// escolhas de texto das regras de aviso (dona única: Configurações e a validação do carregar). Mesmos valores de
+// servidor_local.ESCOLHAS no coletor (o teste-alertas.py confere)
+export const JUNGLER_LONGE = [['painel', 'Só no painel da 2ª tela (padrão)'], ['tudo', 'Falar e piscar a borda também'], ['nada', 'Não mostrar']];
+export const OVERLAY_CORES = [['vermelho', 'Vermelho (padrão)'], ['laranja', 'Laranja'], ['roxo', 'Roxo']];
+export const OVERLAY_FORCAS = [['sutil', 'Sutil'], ['normal', 'Normal (padrão)'], ['forte', 'Forte']];
+const ESCOLHAS = { 'coach.junglerLonge': JUNGLER_LONGE, 'coach.overlayCor': OVERLAY_CORES, 'coach.overlayForca': OVERLAY_FORCAS };
 // versão das migrações de valor (migrar): 2 = freioTilt 0 salvo antes de 13/10/2026 virou 2, uma vez só;
 // 3 = aceite.silenciarSom false salvo antes da leva de 13/10/2026 virou true, uma vez só (roadmap/2026-10-13-chat-popups-som.md).
 // A marca vive em duas casas: versao dentro da config e CHAVE_VERSAO à parte. A de fora sobrevive a um revert do
@@ -50,6 +56,11 @@ export const PADRAO = {
     alertasTela: true, feiticos: true, carregamento: true, mentor: true, mentorModelo: 'sonnet', mentorEffort: 'medium',
     avisosDesligados: { voz: [], tela: [] }, // tipos calados por destino ("tela" = painel + moldura)
     aceiteFlutuante: true, // janelinha aceitar/recusar fora do client (coletor); aceiteAtrasoS vai junto, derivado (coach.js)
+    // regras de aviso da calibração de 14/10/2026 viram escolha (pedido do Gabriel, 14/10/2026; roadmap/2026-10-14-
+    // calibrar-avisos.md passo 7). Padrão = o comportamento daquele dia. Chave nova sem valor antigo: entra pela mescla,
+    // sem VERSAO nova (como o compacto); valor de texto fora de ESCOLHAS volta ao padrão no carregar()
+    gankOutraRota: true, junglerLonge: 'painel', midSumiuFiltro: true, cortarFalaRepetida: true,
+    overlayCor: 'vermelho', overlayForca: 'normal', overlaySuave: true,
   },
   // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): ligado = botão "modo compacto", atalho
   // Ctrl+Shift+M e roteador por fase; inicioCompacto = o padrão de cada fase é a tela compacta (pedido do Gabriel,
@@ -110,6 +121,11 @@ export function carregar() {
   Object.assign(cfg, mesclar(PADRAO, migrar(salvo, marca)));
   // limiteS não é editável: dono é o PADRAO (ajuste depois de medir a janela chega a quem já salvou)
   cfg.aceite.limiteS = PADRAO.aceite.limiteS;
+  // a mescla só confere o tipo: texto fora da lista (salvo à mão ou por versão futura) volta ao padrão
+  for (const [caminho, opcoes] of Object.entries(ESCOLHAS)) {
+    const [mod, chave] = caminho.split('.');
+    if (!opcoes.some(([v]) => v === cfg[mod][chave])) cfg[mod][chave] = PADRAO[mod][chave];
+  }
   // migrou agora: grava já com a marca (a migração não roda de novo nem se ele nunca mexer na configuração)
   if (antes < VERSAO) try { DataStore.set(CHAVE, clonar(cfg)); } catch { /* ignora */ }
   // marca de fora: só depois que uma config salva passou pela versão nova (instalação nova sem nada salvo não marca)

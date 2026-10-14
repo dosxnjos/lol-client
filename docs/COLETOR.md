@@ -187,7 +187,10 @@ Ao vivo a 6 fps deve melhorar; a avaliação de verdade é o passo 15.
 quanto mais forte o vermelho, mais provável; o vermelho mais fraco (12%) marca até onde ele pode ter ido. Ela cresce aos poucos enquanto ele está sumido (ele anda), não
 pinta onde o teu time está vendo e some devagar 30 s depois da última pista. Até 14/10/2026 eram três cores:
 amarelo (pouca chance), laranja (média), vermelho (o mais provável do momento) e um contorno branco (até onde
-ele conseguiria ter ido). Ajuste de cor e força: `COR`, `ALPHA`, `ALPHA_MIN` no topo do `overlay_minimapa.py`.
+ele conseguiria ter ido). Desde 14/10/2026 o Gabriel escolhe em Configurações › Minimapa e jungler: cor da mancha
+(vermelho, o padrão, que a transparência deixa claro; laranja; roxo: azul fica fora porque é a cor dos aliados no minimapa), força (sutil,
+normal, forte) e "mancha muda aos poucos" (desligado = muda na hora). Valores: `CORES` e `FORCAS` no topo do
+`overlay_minimapa.py` (normal = `ALPHA`/`ALPHA_MIN`); a janela troca em voo por `OverlayMinimapa.aplicar_estilo`.
 
 ## MCP (`mcp\servidor.py`)
 
@@ -324,7 +327,7 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   `visto_em` = `gameTime` do quadro. `quadro_valido=False` quando o jogo não está na tela: pausa (e
   2 s de ressincronia ao voltar). Morto não "some" (`mortos`).
 - **Regras**: anti-spam por `tipo:chave` (`repetir`; gank 60 s); por **tipo**, independente da chave,
-  `intervalo` e `teto` por partida (`TIPOS`: `mid_sumiu` 120 s e 4, `jungler_apareceu` 20 s, `mid_indo` 30 s;
+  `intervalo` (contado por tipo, destinos e `Aviso.grupo`) e `teto` por partida (`TIPOS`: `mid_sumiu` 120 s e 4, `jungler_apareceu` 20 s, `mid_indo` 30 s;
   calibração de 14/10/2026); a voz não repete a **mesma frase** em 60 s (`REPETIR_FALA_S`, qualquer tipo, fora
   o retorno de atalho; `suprimidos["fala_repetida"]`), urgente só em 10 s (`REPETIR_FALA_URGENTE_S`: o mesmo
   texto urgente pode ser outro perigo, ex. o gank de outra rota que virou o da minha); `Aviso.validade` e
@@ -361,6 +364,18 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   sumido = azul. Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
   nada (com o ícone numa rota, o jungler deles chegando = vermelho urgente, o contra-gank).
   Na minha rota, intruso vence "mid indo".
+- **Escolhas nas Configurações** (pedido do Gabriel de 14/10/2026; [plano](../roadmap/2026-10-14-calibrar-avisos.md)
+  passo 7): cada regra nova da calibração é uma chave da config, padrão = o comportamento acima. `gankOutraRota`
+  false = `decidir_gank(..., outras=False)` (só a minha rota); `junglerLonge` = `AlertasPosicao.jungler_longe`
+  (`painel` como acima, `tudo` = voz e borda como o de perto, mas com o `intervalo` de 20 s contado à parte
+  (`Aviso.grupo="longe"`: o motor conta por `(tipo, destinos, grupo)`; sem isso o longe calava o perto dos próximos
+  20 s), `nada` = nem o painel); `midSumiuFiltro` false =
+  `filtro_mid` desligado (regra de antes: só não conta o mid visto por último na base dele; teto 4 e 120 s seguem);
+  `cortarFalaRepetida` false = `MotorAvisos.cortar_repetida` (sem os 60 s nem os 10 s do urgente). Quem aplica é o
+  `coach_vivo._Partida.configurar` (na largada e a cada `POST /config`) e `_configurar_pos`, chamado também quando o
+  `AlertasPosicao` nasce (1º allgamedata com `GameStart`, depois da largada). Na tela: blocos Voz, Alertas e
+  Minimapa de `pengu/blocos.js`; listas de valores em `pengu/config.js` = `servidor_local.ESCOLHAS` =
+  `overlay_minimapa.CORES/FORCAS` (o `teste-alertas.py` confere).
 - **Textos** (dois tons, `sério`/`descontraído`): padrão em `avisos.TEXTOS`; editáveis na seção
   `## Avisos ao vivo` do arquivo de lições (`pengu\posjogo\licoes.md`, senão `docs\LICOES.md`, onde ela
   mora hoje com 16 moldes), uma
@@ -495,10 +510,14 @@ na hora a cada `POST /config`): `painelAoVivo`, `amostrasAoVivo`, `voz`, `tomVoz
 (OCR e F9), `carregamento` (Riot API), `mentor`, `mentorModelo` (`sonnet`|`haiku`|`opus`) e `mentorEffort`
 (`low`|`medium`|`high`; padrão sonnet + medium, o vencedor do passo 20; aplicados no `Mentor` na criação e a
 cada `POST /config`), `avisosDesligados` (`{"voz": [...], "tela": [...]}`; a lista antiga é migrada para os
-dois, no arquivo salvo e no `POST`), `aceiteFlutuante` e `aceiteAtrasoS` (§ Aviso de partida). O plugin manda `{"coach": {...cfg.coach, aceiteAtrasoS}}`
+dois, no arquivo salvo e no `POST`), `aceiteFlutuante` e `aceiteAtrasoS` (§ Aviso de partida), e as escolhas das
+regras de aviso (§ Avisos ao vivo, "Escolhas"): `gankOutraRota`, `junglerLonge` (`painel`|`tudo`|`nada`),
+`midSumiuFiltro`, `cortarFalaRepetida`, `overlayCor` (`vermelho`|`laranja`|`roxo`), `overlayForca`
+(`sutil`|`normal`|`forte`) e `overlaySuave`. O plugin manda `{"coach": {...cfg.coach, aceiteAtrasoS}}`
 (`coach.corpoConfig`: o atraso efetivo do aceite, derivado na hora e nunca salvo no plugin) na carga, a
 cada mudança e, com o coletor fora, de novo a cada 30 s (`pengu/coach.js`); chave desconhecida, de tipo
-errado ou valor fora da lista é ignorada (volta ao padrão). Depois que o jogo sai da tela, um `POST /config`
+errado ou valor fora da lista é ignorada (volta ao padrão), no `POST` e, desde 14/10/2026, também na leitura do
+arquivo (`servidor_local.ESCOLHAS`). Depois que o jogo sai da tela, um `POST /config`
 não religa captura nem OCR daquela partida.
 
 **Modo vitrine** (`coletor\vitrine.py`; `python tools\vitrine.py ligar|estado|desligar`): prints que mostram o

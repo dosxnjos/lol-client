@@ -52,13 +52,16 @@ def det(campeao, pos, t):
     return {"campeao": campeao, "time": JOGADORES[campeao]["time"], "x": pos[0], "y": pos[1], "visto_em": t}
 
 
-def rodar(eu, roteiro, dur, quadros_invalidos=(), mortos=None, inicio=0, eventos=None, al_out=None):
+def rodar(eu, roteiro, dur, quadros_invalidos=(), mortos=None, inicio=0, eventos=None, al_out=None, escolhas=None):
     """roteiro(t) -> lista de (campeao, pos) visíveis no quadro t. Devolve (motor, moldura, alertas).
     inicio: gameTime do 1º quadro ("mid sumiu" só vale na fase de rotas, 90–840 s); eventos(t) -> lista de
-    eventos da Live Client; al_out: lista que recebe o AlertasPosicao (para ler `calados`)."""
+    eventos da Live Client; al_out: lista que recebe o AlertasPosicao (para ler `calados`); escolhas: kwargs de
+    AlertasPosicao.configurar (filtro_mid, jungler_longe), as escolhas das Configurações."""
     moldura = MolduraFalsa()
     motor = MotorAvisos(textos=TEXTOS, moldura=moldura)
     al = AlertasPosicao(motor, eu, JOGADORES[eu]["time"], JOGADORES)
+    if escolhas:
+        al.configurar(**escolhas)
     if al_out is not None:
         al_out.append(al)
     saida = []
@@ -421,6 +424,125 @@ def calib_gank():
          {"gank provável no top", "gank provável no mid", "gank provável no bot"} <= fala_cat)
 
 
+def escolhas_config():
+    """as regras de 14/10/2026 viram escolha nas Configurações (roadmap/2026-10-14-calibrar-avisos.md, passo 7):
+    cada chave desligada muda o comportamento; ligada (o padrão) = o de hoje, já provado pelos casos 14/10 acima"""
+    import json
+    import re
+    import tempfile
+    from avisos import JUNGLER_LONGE, decidir_gank
+    import servidor_local
+
+    # 1. gank em outra rota (gankOutraRota): desligado, o do bot com aliado lá some; o da minha rota fica
+    def gank_com(outras, eu_pos, rotas, aliados=()):
+        motor = MotorAvisos(textos=TEXTOS, moldura=MolduraFalsa())
+        al = AlertasPosicao(motor, "Illaoi", "ORDER", JOGADORES)
+        al.observar(([det("Illaoi", eu_pos, 500.0)] if eu_pos else []) + [det(n, p, 500.0) for n, p in aliados], 500.0)
+        a = decidir_gank(lambda r, alvo: {"prob": 0.7} if r in rotas else None, al, agora=500.0, outras=outras)
+        if a is not None:
+            motor.publicar(a, 500.0)      # cor e urgência do gank da minha rota vêm do tipo (TIPOS), no motor
+        return a and (a.dados["zc"], a.cor, a.urgente)
+    lig, desl = (gank_com(o, TOP_ROTA, ("bot",), [("Nilah", BOT_ROTA)]) for o in (True, False))
+    caso("config gankOutraRota: ligado = gank do bot amarelo (hoje); desligado = nada",
+         lig == ("bot", "amarelo", False) and desl is None, f"ligado {lig}, desligado {desl}")
+    minha = gank_com(False, TOP_ROTA, ("top", "bot"), [("Nilah", BOT_ROTA)])
+    caso("config gankOutraRota desligado: o gank da minha rota continua urgente", minha == ("top", "vermelho", True), f"{minha}")
+
+    # 2. jungler longe (junglerLonge): painel = só a faixa (hoje); tudo = voz e borda; nada = nem o painel
+    def jungler_longe(modo):
+        m, mol, s = rodar("Illaoi", lambda t: [("Illaoi", TOP_ROTA)] + ([("Ekko", SELVA_BOT_DELES)] if t >= 12 else []), 15,
+                          escolhas={"jungler_longe": modo} if modo else None)
+        return [(a.tipo, a.destinos, a.cor, destinos_de(m, a)) for _, a in s], m.painel(14.0) is not None
+    hoje = jungler_longe(None)
+    got = {modo: jungler_longe(modo) for modo in JUNGLER_LONGE}
+    caso("config junglerLonge 'painel' (padrão) = hoje: só a faixa do painel, azul",
+         got["painel"] == hoje == ([("jungler_apareceu", "p", "azul", [])], True), f"{got['painel']}")
+    caso("config junglerLonge 'tudo': o jungler longe fala e pisca a borda (vermelho)",
+         got["tudo"] == ([("jungler_apareceu", "vpm", "vermelho", ["moldura", "voz"])], True), f"{got['tudo']}")
+    caso("config junglerLonge 'nada': o jungler longe não aparece nem no painel", got["nada"] == ([], False), f"{got['nada']}")
+    # revisão 14/10/2026: no 'tudo' o longe sai com os destinos do de perto; sem contagem própria (Aviso.grupo) o
+    # longe de 0 s calava por 20 s (intervalo do tipo) o de perto aos 12 s. Os dois modos têm de deixar o perto falar
+    for modo in ("tudo", "painel"):
+        m, _, s = rodar("Illaoi", lambda t: [("Illaoi", TOP_ROTA)] + (
+            [("Ekko", SELVA_BOT_DELES)] if t < 3 else [("Ekko", RIO_TOP)] if t >= 12 else []), 16,
+            escolhas={"jungler_longe": modo})
+        got_ = [(int(t), a.chave, a.destinos) for t, a in s]
+        caso(f"config junglerLonge '{modo}': longe aos 0 s não cala o jungler PERTO aos 12 s (intervalo à parte)",
+             len(got_) == 2 and got_[0][1].startswith("jungler_apareceu:longe:")
+             and got_[1] == (12, "jungler_apareceu:rio top", "vpm") and not m.suprimidos["intervalo"],
+             f"{got_}, suprimidos {dict(m.suprimidos)}")
+    al = AlertasPosicao(MotorAvisos(textos=TEXTOS), "Illaoi", "ORDER", JOGADORES)
+    al.configurar(jungler_longe="sempre")
+    caso("config junglerLonge inválido = 'painel'", al.jungler_longe == "painel")
+
+    # 3. filtro do "mid sumiu" (midSumiuFiltro): desligado = a regra antiga, com teto e intervalo do tipo
+    def mid(filtro, roteiro, inicio, dur, eventos=None):
+        al = []
+        m, mol, s = rodar("Illaoi", roteiro, dur, inicio=inicio, eventos=eventos, al_out=al,
+                          escolhas={"filtro_mid": filtro})
+        return [int(t) for t, a in s if a.tipo == "mid_sumiu"], dict(al[0].calados), m
+    cedo = lambda t: [("Yasuo", MID)] if t < 26 else []                                       # noqa: E731
+    cerco = [{"EventID": 9, "EventName": "InhibKilled", "InhibKilled": "Inhib_TOrder_L1_P1_1931666598_0"}]
+    for nome, args in (("aos 0:20", (cedo, 20, 15)), ("aos 22 min", (lambda t: [("Yasuo", MID)] if t < 1325 else [], 1320, 15)),
+                       ("com o inibidor meu caído (cerco)", (lambda t: [("Yasuo", MID)] if t < 605 else [], 600, 15, lambda t: cerco))):
+        on, off = mid(True, *args), mid(False, *args)
+        caso(f"config midSumiuFiltro: {nome} → ligado calado, desligado avisa", not on[0] and on[1] and len(off[0]) == 1 and not off[1],
+             f"ligado {on[:2]}, desligado {off[:2]}")
+    base = mid(False, lambda t: [("Yasuo", MID if t < 600 else (13300, 13300))] if t < 603 else [], 595, 20)
+    caso("config midSumiuFiltro desligado: mid visto por último na base dele não 'some' (regra antiga)",
+         not base[0] and base[1] == {"base_dele": 1}, f"{base[:2]}")
+    ts, _, m = mid(False, lambda t: [("Yasuo", MID)] if (t % 40) < 30 else [], 20, 1400)
+    caso("config midSumiuFiltro desligado: teto 4 e 120 s entre eles continuam (limites de repetição)",
+         len(ts) == 4 and all(b - a >= 120 for a, b in zip(ts, ts[1:])) and ts[0] < 90, f"aceitos em {ts}")
+
+    # 4. corte da frase repetida (cortarFalaRepetida): duas chaves, a mesma frase, 30 s de distância
+    def falas(cortar):
+        m = MotorAvisos(textos=TEXTOS)
+        if cortar is not None:
+            m.configurar(cortar_repetida=cortar)
+        for t, k in ((0.0, "a"), (30.0, "b")):
+            m.publicar(Aviso("regra", {}, k, textos={"serio": ("mesma frase", "mesma")}), t)
+            m.tick(t)
+        return [round(t) for t, d, _ in m.emitidos if d == "voz"], m.suprimidos["fala_repetida"]
+    hoje, on, off = falas(None), falas(True), falas(False)
+    caso("config cortarFalaRepetida: ligado (padrão) = hoje, a 2ª fala igual em 30 s cai; desligado = as duas falam",
+         hoje == on == ([0], 1) and off == ([0, 30], 0), f"hoje {hoje}, ligado {on}, desligado {off}")
+
+    # 5. esquema no coletor: padrão, valores aceitos, inválido = padrão (na leitura do arquivo e no POST)
+    novas = {"gankOutraRota": True, "junglerLonge": "painel", "midSumiuFiltro": True, "cortarFalaRepetida": True,
+             "overlayCor": "vermelho", "overlayForca": "normal", "overlaySuave": True}
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        padrao = servidor_local.ler_config(arq)
+        arq.write_text(json.dumps({"junglerLonge": "sempre", "overlayCor": "azul", "overlayForca": 3, "gankOutraRota": "x",
+                                   "tomVoz": "gritando"}), encoding="utf-8")
+        lido = servidor_local.ler_config(arq)
+        salvo = servidor_local.salvar_config({"coach": {"junglerLonge": "nada", "overlayCor": "roxo", "overlayForca": "forte",
+                                                         "overlaySuave": False, "midSumiuFiltro": False}}, arq)
+        ruim = servidor_local.salvar_config({"junglerLonge": "talvez", "overlayCor": "verde"}, arq)
+    caso("config coletor: padrão das chaves novas = calibração de 14/10", all(padrao[k] == v for k, v in novas.items()), f"{padrao}")
+    caso("config coletor: arquivo com valor inválido lido = padrão (inclusive tomVoz, antes só o POST conferia)",
+         all(lido[k] == v for k, v in novas.items()) and lido["tomVoz"] == "serio", f"{ {k: lido[k] for k in novas} }")
+    caso("config coletor: POST guarda as escolhas válidas e devolve o padrão às inválidas",
+         (salvo["junglerLonge"], salvo["overlayCor"], salvo["overlayForca"], salvo["overlaySuave"], salvo["midSumiuFiltro"])
+         == ("nada", "roxo", "forte", False, False) and ruim["junglerLonge"] == "painel" and ruim["overlayCor"] == "vermelho"
+         and ruim["overlayForca"] == "forte", f"{salvo}")
+    # listas iguais nos três lugares: coletor (ESCOLHAS), overlay (CORES/FORCAS) e plugin (config.js)
+    import overlay_minimapa
+    cfg_js = (RAIZ / "pengu" / "config.js").read_text(encoding="utf-8")
+
+    def lista_js(nome):
+        m_ = re.search(rf"export const {nome} = \[(.*?)\];", cfg_js)
+        return tuple(re.findall(r"\['([a-z]+)', '", m_.group(1))) if m_ else ()
+    E = servidor_local.ESCOLHAS
+    caso("config: valores iguais no coletor, no overlay e no plugin",
+         E["junglerLonge"] == JUNGLER_LONGE == lista_js("JUNGLER_LONGE")
+         and E["overlayCor"] == tuple(overlay_minimapa.CORES) == lista_js("OVERLAY_CORES")
+         and E["overlayForca"] == tuple(overlay_minimapa.FORCAS) == lista_js("OVERLAY_FORCAS")
+         and all(f"{k}: " in cfg_js for k in novas),
+         f"coletor {E['overlayCor']}, overlay {tuple(overlay_minimapa.CORES)}, plugin {lista_js('OVERLAY_CORES')}")
+
+
 def extra_destinos():
     """chave por tipo e destino (plano 2026-10-13-voz-pregravada-e-foco.md, passo 8)"""
     from avisos import Aviso, normalizar_desligados
@@ -657,6 +779,7 @@ def principal():
     calib_jungler_onde_estou()
     calib_mid_sumiu()
     calib_gank()
+    escolhas_config()
     if not a.sem_janela:
         janela_real()
     n = sum(resultados)

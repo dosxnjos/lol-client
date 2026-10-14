@@ -121,6 +121,39 @@ def principal():
     caso("caminho rápido da janela (tabela) = premultiplicar(camada) byte a byte (o que a vitrine compõe)",
          np.array_equal(ov.bgra_rapido(m), ov.premultiplicar(ov.camada(m))))
 
+    # escolhas das Configurações (overlayCor/overlayForca/overlaySuave, pedido do Gabriel de 14/10/2026): o padrão é
+    # o desenho de cima; cada escolha muda só o que diz
+    e0 = ov.estilo()
+    caso("escolhas: padrão (vermelho, normal, suave) = as constantes do módulo; nome desconhecido = padrão",
+         e0 == ov.Estilo(tuple(ov.COR), ov.ALPHA, ov.ALPHA_MIN, ov.TAU_S) and ov.estilo("azul", "x", True) == e0
+         and np.array_equal(ov.renderizar(c, LADO, estilo=e0), ov.renderizar(c, LADO)), f"{e0}")
+    lar = ov.estilo("laranja")
+    il = ov.renderizar(c, LADO, estilo=lar)
+    pint = il[..., 3] > 0
+    caso("escolhas: cor laranja pinta tudo em laranja com a mesma opacidade do vermelho",
+         (il[pint][:, :3] == np.array(ov.CORES["laranja"], np.uint8)).all() and np.array_equal(il[..., 3], img[..., 3]))
+    maxs = {f: int(ov.renderizar(c, LADO, estilo=ov.estilo(forca=f))[..., 3].max()) for f in ov.FORCAS}
+    pisos = {f: int(ov.renderizar(zona, LADO, estilo=ov.estilo(forca=f))[..., 3][70:90, 70:190].min()) for f in ov.FORCAS}
+    caso("escolhas: força sutil < normal < forte, no ponto mais provável e no piso da área",
+         maxs["sutil"] < maxs["normal"] < maxs["forte"] and pisos["sutil"] < pisos["normal"] < pisos["forte"]
+         and all(abs(maxs[f] - round(ov.FORCAS[f][0] * 255)) <= 4 for f in ov.FORCAS), f"máx {maxs}, piso {pisos}")
+    mr = ov.alfa_alvo(c, LADO, lar) * np.float32(0.83)
+    caso("escolhas: caminho rápido (tabela por cor) = premultiplicar(camada) também em laranja e roxo",
+         all(np.array_equal(ov.bgra_rapido(mr, cor=ov.CORES[k]), ov.premultiplicar(ov.camada(mr, cor=ov.CORES[k])))
+             for k in ("laranja", "roxo")))
+    seca = ov.Transicao(ov.estilo(suave=False).tau)
+    a1 = ov.alfa_alvo(calor_disco(LADO * 0.15), LADO)
+    a2 = ov.alfa_alvo(calor_disco(LADO * 0.30), LADO)
+    passos = [seca.passo(a1, 0.1), seca.passo(a1, 0.1), seca.passo(a2, 0.1)]
+    caso("escolhas: sem transição o alvo vai à tela no 1º quadro (redesenha) e para no seguinte",
+         np.array_equal(passos[0][0], a1) and passos[0][1] is False and passos[1][1] is True
+         and np.array_equal(passos[2][0], a2) and passos[2][1] is False)
+    jan = ov.OverlayMinimapa(lambda: None, atalho=False)
+    caso("escolhas: a janela nasce no padrão e troca em voo (tau da transição e releitura da fonte)",
+         jan.estilo == e0 and jan._trans.tau == ov.TAU_S
+         and (jan.aplicar_estilo(ov.estilo("roxo", "forte", False)), jan.estilo.cor == ov.CORES["roxo"]
+              and jan._trans.tau == 0 and jan._ult_busca == float("-inf"))[1])
+
     # custo: o quadro animado (passo da transição + BGRA pela tabela) e o alvo (a cada 400 ms)
     tr = ov.Transicao()
     alvo = ov.alfa_alvo(c, LADO)

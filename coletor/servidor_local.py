@@ -55,10 +55,23 @@ CONFIG_PADRAO = {
     # atraso do aceite automático do plugin, espelhado (cfg.aceite.atrasoS); None = aceite automático
     # desligado (a janelinha conta até o ready check expirar). Padrão = PADRAO.aceite.atrasoS do plugin
     "aceiteAtrasoS": 10,
+    # escolhas das regras de aviso da calibração de 14/10/2026 (roadmap/2026-10-14-calibrar-avisos.md, passo 7);
+    # padrão = o comportamento daquele dia. Mesmos nomes e padrões no PADRAO.coach do plugin (pengu/config.js)
+    "gankOutraRota": True,         # gank nas outras rotas (amarelo, o Gabriel avisa os colegas); o da minha rota fica
+    "junglerLonge": "painel",      # jungler longe de mim: "painel" (só a 2ª tela) | "tudo" (voz e borda) | "nada"
+    "midSumiuFiltro": True,        # "mid sumiu" só na fase de rotas e sem cerco/luta/eu morto ou na base (D1/D2)
+    "cortarFalaRepetida": True,    # a voz pula a mesma frase dita há < 60 s (urgente < 10 s) (D4/D12)
+    "overlayCor": "vermelho",      # cor da mancha do jungler: overlay_minimapa.CORES
+    "overlayForca": "normal",      # opacidade: overlay_minimapa.FORCAS (normal = ALPHA/ALPHA_MIN)
+    "overlaySuave": True,          # a mancha cresce e some aos poucos (TAU_S); desligado = muda na hora
 }
 ATRASO_MAX_S = 60
+# valores aceitos das chaves de texto; fora disto = o padrão (na leitura do arquivo e no POST). As do overlay
+# são as chaves de overlay_minimapa.CORES/FORCAS (conferido pelo teste-alertas.py; o servidor não importa o
+# overlay, que carrega cv2 e a user32)
 ESCOLHAS = {"tomVoz": ("serio", "descontraido"), "mentorModelo": ("sonnet", "haiku", "opus"),
-            "mentorEffort": ("low", "medium", "high")}
+            "mentorEffort": ("low", "medium", "high"), "junglerLonge": ("painel", "tudo", "nada"),
+            "overlayCor": ("vermelho", "laranja", "roxo"), "overlayForca": ("sutil", "normal", "forte")}
 log = logging.getLogger("coletor.servidor")
 _trava_cfg = threading.Lock()
 
@@ -75,7 +88,16 @@ def ler_config(caminho=CONFIG):
     if isinstance(salvo, dict) and "aceiteAtrasoS" in salvo:   # número ou null: o teste de tipo acima não serve
         a = _atraso(salvo["aceiteAtrasoS"])
         cfg["aceiteAtrasoS"] = CONFIG_PADRAO["aceiteAtrasoS"] if a is _INVALIDO else a
+    _escolhas_validas(cfg)
     return {k: list(v) if isinstance(v, list) else v for k, v in cfg.items()}  # lista do padrão não vaza
+
+
+def _escolhas_validas(cfg):
+    """valor de texto fora de ESCOLHAS volta ao padrão (antes só o POST conferia: arquivo editado à mão ou
+    gravado por versão futura chegava à partida)"""
+    for k, validos in ESCOLHAS.items():
+        if cfg[k] not in validos:
+            cfg[k] = CONFIG_PADRAO[k]
 
 
 _INVALIDO = object()
@@ -111,9 +133,7 @@ def salvar_config(parcial, caminho=CONFIG):
                     cfg[k] = a
             elif k in CONFIG_PADRAO and type(v) is type(CONFIG_PADRAO[k]):
                 cfg[k] = [x for x in v if isinstance(x, str)] if isinstance(v, list) else v
-        for k, validos in ESCOLHAS.items():
-            if cfg[k] not in validos:
-                cfg[k] = CONFIG_PADRAO[k]
+        _escolhas_validas(cfg)
         caminho = Path(caminho)
         caminho.parent.mkdir(parents=True, exist_ok=True)
         tmp = caminho.with_suffix(".tmp")

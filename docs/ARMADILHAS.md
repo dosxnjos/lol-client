@@ -184,6 +184,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   - o iframe do chat expira: guardar referência a ele morre; procurar de novo a cada uso;
   - nunca `<script>` de CDN no plugin nem `innerHTML` com texto da LCU sem `esc()` (nome de jogador, título de
     recompensa): o plugin roda com a LCU sem credencial.
+- **Chave nova de texto com lista de valores passa inválida pela mescla** → `mesclar` (`pengu/config.js`) só
+  confere o `typeof`: `overlayCor: 'azul'` salvo fica. Lista nova entra em `ESCOLHAS` do `config.js` **e** do
+  `servidor_local.py` (o `ler_config` só passou a conferir em 14/10/2026); `teste-alertas.py` confere as três listas.
 
 ## LCU API
 
@@ -379,6 +382,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 1.
 - **Rajada de avisos com o coletor reiniciado no meio da partida** → o `GatilhosLive` nasce sem memória
   e na 1ª leitura acha `inimigo_fed`, `janela_objetivo` e `mortes_cedo` de uma vez. O motor segura (1 fala a
   cada 20 s, o resto cai pela `validade`), então sai 1 fala velha, não 3; não é bug, é o custo de reiniciar.
+- **Escolha da config que some na partida** → o `AlertasPosicao` nasce no 1º `allgamedata` com `GameStart`, depois do
+  `configurar` da largada: escolha dele aplicada só no `configurar` não pega. `coach_vivo._configurar_pos` roda nos
+  dois momentos (14/10/2026).
+- **Aviso secundário cala o principal do mesmo tipo** → o `intervalo` do tipo (`TIPOS`) é contado por `(tipo, destinos,
+  grupo)`: o jungler longe com `junglerLonge="tudo"` saía com os destinos do de perto e calava por 20 s o perto que vinha
+  depois (revisão de 14/10/2026). Variante do mesmo tipo que não deve dividir a contagem leva `Aviso.grupo` próprio.
 
 ## Tela, minimapa e chat (prints do gravador, 13/10/2026)
 
