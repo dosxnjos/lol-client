@@ -18,6 +18,7 @@ try:
     from analise import FORA_DAS_CONTAS  # noqa: E402  (dona: docs/INSIGHTS.md)
 except ImportError:  # pragma: no cover
     FORA_DAS_CONTAS = (0, 3100, 3140)
+from avisos import rota_fala  # noqa: E402  (a fala dos picos diz a rota, não o campeão: pacote de voz)
 
 # horários de objetivo (s de jogo): dono é o coletor/ao_vivo.py (medidos no banco, 202 partidas);
 # a partida 3292746609 confere (dragão a cada 326–364 s; vastilarvas 8:50, arauto 17:20, barão 23:45)
@@ -265,19 +266,23 @@ class PicosDeForca:
             if nv > ant:
                 cruzou = [n for n in NIVEIS_PICO if ant < n <= nv]
                 if cruzou:
-                    txt = f"{nome} nível {nv}" if nv - ant == 1 else f"{nome} visto nível {nv}"
+                    direto = nv - ant == 1
+                    txt = f"{nome} nível {nv}" if direto else f"{nome} visto nível {nv}"
+                    # fala pelo molde do avisos.TEXTOS ("o mid chegou no nível 6"): o pico cruzado, não o
+                    # nível real (finito: cabe no pacote de voz); o rótulo mostra o nível real com o nome
                     avisos.append({"tipo": "pico_nivel", "campeao": nome, "nivel": nv, "texto": txt,
                                    "chave": f"{nome}:{cruzou[-1]}",
-                                   "textos": {"serio": (txt, f"{nome} nível {nv}"),
-                                              "descontraido": (f"{txt}, respeita", f"{nome} nível {nv}")}})
+                                   "molde": "pico_nivel" if direto else "pico_nivel_visto",
+                                   "dados": {"campeao": nome, "rota": rota_fala(p.get("position")), "nivel": nv,
+                                             "pico": cruzou[-1]}})
                 self.nivel[nome] = nv
             if lend and not self.fechou.get(nome):
                 self.fechou[nome] = True
                 txt = f"{nome} fechou {lend[0].get('displayName')}"
                 avisos.append({"tipo": "pico_item", "campeao": nome, "item": lend[0].get("itemID"), "texto": txt,
                                "chave": f"{nome}:lendario",
-                               "textos": {"serio": (txt, f"{nome} fechou item"),
-                                          "descontraido": (f"{txt}, ficou forte", f"{nome} fechou item")}})
+                               "dados": {"campeao": nome, "rota": rota_fala(p.get("position")),
+                                         "item": lend[0].get("displayName")}})
         return avisos
 
 

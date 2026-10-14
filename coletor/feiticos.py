@@ -32,9 +32,9 @@ ARVORE_INSPIRACAO = 8300         # a runa só existe nessa árvore
 ACEL_RUNA = 18
 ACEL_BOTA = {3158: 10, 3171: 20}  # Botas Ionianas da Lucidez, Lucidez Escarlate (3171 vem de 3158)
 ROTAS = ("TOP", "JUNGLE", "MIDDLE", "BOTTOM", "UTILITY")  # atalho 1..5
-# como a rota sai na fala/rótulo do retorno do F9 (frase genérica: sem nome de campeão, que a voz
-# pré-gravada não tem)
-ROTA_FALA = {"TOP": "top", "JUNGLE": "jungler", "MIDDLE": "mid", "BOTTOM": "atirador", "UTILITY": "suporte"}
+# como a rota sai na fala/rótulo do retorno do F9 e do feitiço que voltou (frase genérica: sem nome de
+# campeão, que a voz pré-gravada não tem). Dona da tabela: avisos.py (catálogo do pacote de voz)
+from avisos import ROTA_FALA, rota_fala  # noqa: E402
 JANELA_DEDUPE = 60    # mesmo (inimigo, feitiço) com horário a <= 60 s = o mesmo gasto (aliados repetem o ping)
 LINHA_VELHA = 300     # linha de chat > 300 s antes do gameTime (maior recarga): leitura errada ou inútil.
                       # a linha fica na tela bem mais que 90 s (00562.0: ping de 7:06 lido aos 9:22)
@@ -468,7 +468,7 @@ class Feiticos:
         reg = self.inimigos[nome]
         # rota de verdade do inimigo (a Live Client dá). Sem posição (blind, ARAM, personalizada) a ordem
         # é a do allPlayers, então a rota da tecla seria mentira: a fala diz só "inimigo"
-        r.update(inimigo=nome, rota=ROTA_FALA.get(reg.get("rota"), "inimigo"))
+        r.update(inimigo=nome, rota=rota_fala(reg.get("rota")))
         fs = [f for f in reg["feiticos"] if f not in SEM_CRONOMETRO]
         f = "Flash" if "Flash" in fs else (fs[0] if fs else None)
         if not f:
@@ -513,11 +513,14 @@ class Feiticos:
                 if u["volta_em"] <= gt and chave not in self.anunciados:
                     self.anunciados.add(chave)
                     txt = f"{u['inimigo']} com {u['feitico']}"
-                    # tipo/chave/textos no formato do avisos.Aviso (motor de voz e painel)
+                    # tipo/chave/dados no formato do avisos.Aviso: a fala sai do molde "feitico_voltou" do
+                    # avisos.TEXTOS ("flash do mid voltou", genérica, no pacote de voz); o rótulo leva o nome
+                    reg = self.inimigos.get(u["inimigo"]) or {}
+                    f = (str(u["feitico"]).split() or ["?"])[0].lower()
                     out.append({"inimigo": u["inimigo"], "feitico": u["feitico"], "texto": txt,
                                 "tipo": "feitico_voltou", "chave": f"{u['inimigo']}:{u['feitico']}:{int(u['ts'])}",
-                                "textos": {"serio": (txt + (", talvez" if u["incerto"] else ""), txt),
-                                           "descontraido": (f"{txt} de novo, cuidado", txt)}})
+                                "dados": {"rota": rota_fala(reg.get("rota")), "feitico": f, "feitico_nome": u["feitico"],
+                                          "campeao": u["inimigo"], "incerto": u["incerto"]}})
         return out
 
 

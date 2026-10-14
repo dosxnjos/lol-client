@@ -86,13 +86,24 @@ def item4():
     eu = jog("Renekton", "ORDER", "TOP", nivel=5)
     pk = S.PicosDeForca(EST["lendarios"])
     seq = [(5, 4, ()), (6, 4, ()), (6, 4, ()), (6, 7, ()), (6, 7, (6333,)), (6, 7, (6333, 3047))]
-    avisos = []
+    import avisos as A
+    avisos, falas = [], []
     for nr, ne, it in seq:
         ini = [jog("Riven", "CHAOS", "TOP", nivel=nr, itens=it), jog("Ekko", "CHAOS", "JUNGLE", nivel=ne),
                jog("Yasuo", "CHAOS", "MIDDLE", nivel=9)]
-        avisos.append([a["texto"] for a in pk.atualizar(live(100.0, eu, ini))])
+        novos = pk.atualizar(live(100.0, eu, ini))
+        avisos.append([a["texto"] for a in novos])
+        for a in novos:   # a fala (voz) sai do molde genérico do avisos.py; o rótulo mantém o nome
+            m = A.MotorAvisos(textos=A.TEXTOS)
+            m.publicar(A.aviso_de(a), 0.0)
+            av = next(x for _, d, x in m.emitidos if d == "voz")
+            falas.append((av.fala, av.rotulo))
     esperado = [[], ["Riven nível 6"], [], ["Ekko visto nível 7"], ["Riven fechou Dança da Morte"], []]
-    return avisos == esperado and 6333 in EST["lendarios_set"] and 3047 not in EST["lendarios_set"], str(avisos)
+    falas_esp = [("o top chegou no nível 6", "Riven nível 6"), ("o jungler já passou do nível 6", "Ekko nível 7"),
+                 ("o top fechou item", "Riven fechou item")]
+    cat = set(A.catalogo(A.TEXTOS))
+    return (avisos == esperado and falas == falas_esp and all(f in cat for f, _ in falas)
+            and 6333 in EST["lendarios_set"] and 3047 not in EST["lendarios_set"]), f"{avisos} {falas}"
 
 
 def item5():

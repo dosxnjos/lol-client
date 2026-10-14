@@ -19,7 +19,8 @@ from pathlib import Path
 sys.stdout.reconfigure(encoding="utf-8")
 RAIZ = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(RAIZ / "coletor"))
-from avisos import TEXTOS, Aviso, GatilhosLive, MotorAvisos, RelogioJogo, carregar_textos  # noqa: E402
+import avisos  # noqa: E402
+from avisos import TEXTOS, Aviso, GatilhosLive, MotorAvisos, RelogioJogo, carregar_textos, catalogo  # noqa: E402
 from voz import Voz  # noqa: E402
 
 LIVE_PADRAO = RAIZ / "temp" / "gravacao" / "20261013-071040" / "live.jsonl"
@@ -64,7 +65,7 @@ def caso_30s():
     m = MotorAvisos(textos=TEXTOS)
     _inundar(m, lambda: [Aviso("objetivo_60s", {"objetivo": "dragão"}, "dragão:300"),
                          Aviso("ouro_guardado", {"ouro": 2100}, "ouro"),
-                         Aviso("inimigo_fed", {"campeao": "Riven"}, "Riven:3"),
+                         Aviso("inimigo_fed", {"campeao": "Riven", "rota": "top"}, "Riven:3"),
                          Aviso("mid_sumiu", {"campeao": "Yasuo"}, "m1"),
                          Aviso("janela_objetivo", {"n": 2, "objetivo": "dragão"}, "j")])
     f5 = falas(m)
@@ -118,12 +119,12 @@ def caso_validade():
 
 def caso_tom():
     m = MotorAvisos(tom="descontraido", textos=TEXTOS)
-    m.publicar(Aviso("inimigo_fed", {"campeao": "Darius"}, "d"), 0.0)
+    m.publicar(Aviso("inimigo_fed", {"campeao": "Darius", "rota": "top"}, "d"), 0.0)
     m2 = MotorAvisos(textos=TEXTOS)
     m2.configurar(desligados={"inimigo_fed"})
-    aceito = m2.publicar(Aviso("inimigo_fed", {"campeao": "Darius"}, "d"), 0.0)
+    aceito = m2.publicar(Aviso("inimigo_fed", {"campeao": "Darius", "rota": "top"}, "d"), 0.0)
     fala = falas(m)[0][1].fala
-    caso("tom descontraído e tipo desligado", fala == "Darius tá fed, nada de um contra um" and not aceito
+    caso("tom descontraído e tipo desligado", fala == "o top tá fed, nada de um contra um" and not aceito
          and falas(m)[0][1].rotulo == "evita 1x1", f"fala {fala!r}, desligado aceito={aceito}")
 
 
@@ -143,6 +144,37 @@ def caso_textos_md():
          and textos["mid_sumiu"]["descontraido"][0].startswith("cadê"), f"fonte {Path(fonte).name}, fala {a.fala!r}")
 
 
+def caso_catalogo():
+    # plano voz pré-gravada, passos 3 e 3b: fala genérica e finita; o catálogo cobre todo molde falado
+    import ao_vivo
+    import sugestoes
+    cat = catalogo()
+    grupos = catalogo(por_molde=True)
+    falados = {t for t, p in avisos.TIPOS.items() if "v" in p["destinos"] and not p.get("retorno")}
+    falados |= {m for m, d, _ in avisos._RETORNO_F9.values() if "v" in d}
+    falados |= {"feitico_voltou", "pico_nivel", "pico_nivel_visto", "pico_item"}
+    sujas = [f for f in cat if "?" in f.replace("cadê o mid?", "").replace("voltar?", "") or "{" in f]
+    caso("catálogo: cobre todo molde com voz, sem placeholder solto nem fala com campeão",
+         set(avisos.valores_catalogo()) == falados and not avisos.moldes_fora_do_catalogo()
+         and not avisos.moldes_fora_do_catalogo(TEXTOS) and not sujas and len(cat) == len(set(cat)),
+         f"{len(cat)} falas, versão {avisos.versao_catalogo(cat)}; por molde "
+         f"{ {m: len(f) for m, f in grupos.items()} }; faltam {falados ^ set(avisos.valores_catalogo())}; sujas {sujas[:3]}")
+    pontos = [(x, y) for x in range(0, 15001, 500) for y in range(0, 15001, 500)]
+    zonas = {avisos.zona(x, y, t)[1][2] for x, y in pontos for t in (100, 200)}
+    caso("catálogo: toda {zona} que zona() devolve está nos valores", zonas <= set(avisos.zonas_fala()),
+         f"fora {zonas - set(avisos.zonas_fala())}")
+    caso("catálogo: valores batem com as fontes (picos, objetivos)",
+         avisos.PICOS == tuple(sugestoes.NIVEIS_PICO) and set(avisos.OBJETIVOS_FALA) == set(ao_vivo._OBJ_AVISOS.values())
+         and set(avisos.OBJETIVOS) <= set(avisos.OBJETIVOS_FALA))
+    # md com {campeao} na fala: o molde sai do pacote (cai na Maria), o resto segue
+    t2 = {k: dict(v) for k, v in TEXTOS.items()}
+    t2["intruso"]["serio"] = ("{campeao} chegando {zona}", "intruso {zc}")
+    fora = avisos.moldes_fora_do_catalogo(t2)
+    caso("catálogo: fala com placeholder de rótulo é listada e fica fora do pacote",
+         fora == [("intruso", "serio", "campeao")] and "o top chegando no mid" not in catalogo(t2)
+         and "visita: o top no mid" in catalogo(t2), str(fora))
+
+
 def caso_fila_voz():
     ditas = []
     v = Voz(saida=lambda t: (ditas.append(t), time.sleep(0.2)))
@@ -155,6 +187,101 @@ def caso_fila_voz():
     v.parar()
     caso("fila da voz por prioridade (urgente antes)", ditas == ["primeira", "gank", "mais importante que comum", "comum"],
          f"ordem {ditas}")
+
+
+def _wav(caminho, seg=0.3, taxa=16000):
+    import wave
+    with wave.open(str(caminho), "wb") as w:
+        w.setnchannels(1)
+        w.setsampwidth(2)
+        w.setframerate(taxa)
+        w.writeframes(b"\x00\x00" * int(seg * taxa))
+
+
+def caso_pacote_voz():
+    # plano voz pré-gravada, passo 7: pacote falso com 3 wav; frase do pacote toca o arquivo, fora dele cai
+    # na Maria (saída falsa) e entra no voz-faltou.jsonl; urgente corta o .wav em curso e fura a fila
+    from voz import Pacote
+    with tempfile.TemporaryDirectory() as d:
+        d = Path(d)
+        pasta = d / "pacotes" / "falso"
+        pasta.mkdir(parents=True)
+        frases = ["mid sumiu", "gank provável no top", "ouro guardado, hora de voltar?"]
+        for i, f in enumerate(frases):
+            _wav(pasta / f"{i}.wav")
+        indice = {"voz": "falso", "modelo": "teste", "versao_catalogo": "x",
+                  "frases": {f: {"arquivo": f"{i}.wav"} for i, f in enumerate(frases)} | {"jungler no top": "sumiu.wav"}}
+        (pasta / "indice.json").write_text(json.dumps(indice, ensure_ascii=False), encoding="utf-8")
+        faltou = d / "voz-faltou.jsonl"
+        tocados, maria, cortes = [], [], []
+
+        def tocar(arq, corte, dur=0.4):
+            tocados.append(arq.name)
+            if corte.wait(dur):
+                cortes.append(arq.name)
+
+        v = Voz(saida=lambda t: (maria.append(t), time.sleep(0.05)), pacote=pasta, tocar=tocar, faltou=faltou)
+        v.falar("mid  sumiu", prioridade=60)                 # espaços extras: mesma chave do pacote
+        v.esperar(5)
+        v.falar("o top tá forte, evita o um contra um", prioridade=35)
+        v.falar("o top tá forte, evita o um contra um", prioridade=35)
+        v.falar("jungler no top", prioridade=80)            # no índice, mas o .wav sumiu: Maria
+        v.esperar(5)
+        linhas = [json.loads(l) for l in faltou.read_text(encoding="utf-8").splitlines()] if faltou.exists() else []
+        caso("pacote: frase do pacote toca o .wav; fora dele, Maria + 1 linha por frase no voz-faltou",
+             tocados == ["0.wav"] and sorted(maria) == ["jungler no top", "o top tá forte, evita o um contra um",
+                                                        "o top tá forte, evita o um contra um"]
+             and sorted(x["fala"] for x in linhas) == ["jungler no top", "o top tá forte, evita o um contra um"]
+             and all(x["pacote"] == "falso" for x in linhas)
+             and v.fontes[0] == ("mid sumiu", "pacote") and sorted(f for _, f in v.fontes[1:]) == ["maria"] * 3,
+             f"tocados {tocados}, maria {maria}, faltou {[x['fala'] for x in linhas]}, fontes {v.fontes}")
+        # urgente fura: o comum do pacote é cortado, o gank toca antes do que esperava na fila
+        tocados.clear()
+        v.falar("ouro guardado, hora de voltar?", prioridade=30)
+        time.sleep(0.1)                                      # o fio já pegou o ouro e está "tocando"
+        v.falar("mid sumiu", prioridade=60)
+        v.falar("gank provável no top", urgente=True, prioridade=100)
+        v.esperar(5)
+        caso("pacote: urgente corta o .wav em curso e fura a fila", tocados == ["2.wav", "1.wav", "0.wav"]
+             and cortes == ["2.wav"], f"tocados {tocados}, cortados {cortes}")
+        # validade vale igual: frase do pacote que esperou demais não toca
+        v2 = Voz(saida=maria.append, pacote=pasta, tocar=lambda a, c: (tocados.append(a.name), time.sleep(0.5)),
+                 faltou=faltou, validade_s=0.2)
+        tocados.clear()
+        v2.falar("gank provável no top", prioridade=100)
+        time.sleep(0.05)
+        v2.falar("mid sumiu", prioridade=60)
+        v2.esperar(5)
+        v.parar()
+        v2.parar()
+        caso("pacote: validade vale para o .wav (esperou demais, não toca)", tocados == ["1.wav"], f"tocados {tocados}")
+        sem = Pacote.abrir("nao-existe", raiz=d / "pacotes")
+        seco = Voz(saida=maria.append)
+        caso("pacote: pasta ausente = Maria; teste seco não abre o pacote padrão",
+             sem is None and seco.pacote is None and Pacote.abrir("falso", raiz=d / "pacotes").nome == "falso")
+        # revisão 13/10: fala `suspeita` (Whisper ouviu outra coisa) não toca do pacote; .wav que falha ao tocar
+        # cai na Maria (a fala não se perde) e não conta como falta
+        pasta2 = d / "pacotes" / "suspeito"
+        pasta2.mkdir(parents=True)
+        _wav(pasta2 / "a.wav")
+        _wav(pasta2 / "b.wav")
+        (pasta2 / "indice.json").write_text(json.dumps({"voz": "suspeito", "frases": {
+            "mid sumiu": {"arquivo": "a.wav", "suspeita": True}, "gank provável no top": {"arquivo": "b.wav"}}},
+            ensure_ascii=False), encoding="utf-8")
+        p2 = Pacote(pasta2)
+        maria.clear()
+        faltou2 = d / "faltou2.jsonl"
+
+        def quebrado(arq, corte):
+            raise RuntimeError("Failed to play sound")
+        v3 = Voz(saida=maria.append, pacote=p2, tocar=quebrado, faltou=faltou2)
+        v3.falar("gank provável no top", prioridade=100)
+        v3.esperar(5)
+        v3.parar()
+        caso("pacote: suspeita fica fora (Maria); .wav que não toca cai na Maria sem virar falta",
+             p2.arquivo("mid sumiu") is None and p2.suspeitas == 1 and p2.arquivo("gank provável no top") is not None
+             and maria == ["gank provável no top"] and v3.fontes == [("gank provável no top", "maria")]
+             and not faltou2.exists(), f"maria {maria}, fontes {v3.fontes}")
 
 
 def caso_relogio():
@@ -203,6 +330,9 @@ def caso_replay(caminho):
         print(f"       {int(t) // 60:02d}:{int(t) % 60:02d}  [{a.tipo}] {a.fala}")
     caso("replay: falas a ≥ 20 s uma da outra e nenhuma chave repetida", all(x >= 20 for x in gaps) and sem_repeticao(m, 60),
          f"menor intervalo {min(gaps):.1f} s" if gaps else "")
+    cat = set(catalogo(TEXTOS))
+    fora = [a.fala for _, a in f if a.fala not in cat]
+    caso("replay: toda fala está no catálogo do pacote de voz", f and not fora, f"fora {fora}")
     caso("replay: aviso de dragão 60 s antes de cada nascimento (gabarito = DragonKill gravados)",
          len(obj_drag) == len(esperado_dragao) and all(abs(o - e) <= 1 for o, e in zip(obj_drag, esperado_dragao)),
          f"esperado ~{esperado_dragao}, obtido {obj_drag}")
@@ -324,7 +454,9 @@ def principal():
     caso_validade()
     caso_tom()
     caso_textos_md()
+    caso_catalogo()
     caso_fila_voz()
+    caso_pacote_voz()
     caso_relogio()
     caso_cache_estatico()
     caso_replay(a.live)

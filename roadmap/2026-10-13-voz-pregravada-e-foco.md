@@ -131,7 +131,7 @@
 
 ### Fase B: voz pré-gravada
 
-3. [ ] **Catálogo genérico** (`coletor/avisos.py`): moldes de fala por rota (`{rota}` = "o top", "o
+3. [x] **Feito em 13/10/2026** (relatório abaixo). **Catálogo genérico** (`coletor/avisos.py`): moldes de fala por rota (`{rota}` = "o top", "o
    jungler", "o mid", "o atirador", "o suporte") no lugar de `{campeao}`; rótulo da tela mantém
    `{campeao}`. Número de ouro sai da fala ("ouro guardado, hora de voltar"). `feitico_voltou`: "flash
    do mid voltou", "mid sem flash" (9 feitiços × 5 rotas). `pico_nivel`/`pico_item` e regras do
@@ -139,13 +139,15 @@
    de `{zona}`, `{n}` 2–5, `{objetivo}`, `{rota}`, `{feitico}`).
    **prova:** o ensaio da partida gravada (`tools/ensaio-coach.py`) produz falas 100% dentro do
    `catalogo()`, exceto as regras de texto livre, listadas.
-3b. [ ] **Tamanho do catálogo:** contar as frases (zonas de `analise.regiao` e das falas de `avisos.py:603`,
+3b. [x] **452 falas** (226 por tom; 13/10/2026, versão `b7043050b0b7`): pacote completo na Aoede (ver
+   relatório). **Tamanho do catálogo:** contar as frases (zonas de `analise.regiao` e das falas de `avisos.py:603`,
    faixa real de `{n}` em `janela_objetivo`/`intruso_grupo`/`mortes_cedo`, 9 feitiços × 5 rotas, × 2 tons).
    Estimativa de 13/10: ~500 frases. Com o tempo por frase da bancada, decide: pacote completo na voz
    escolhida, ou só os tipos urgentes nela e o resto numa voz rápida. **prova:** contagem impressa por
    `python -c "from coletor.avisos import catalogo; print(len(catalogo()))"`.
-4a. [ ] **14/10/2026 (pedido do Gabriel: "pode completar o gemini amanhã, não esquece"):** cota grátis do
-   Gemini esgotou em 13/10; rodar `python tools/bancada-vozes.py --motores gemini` (Puck 4 de 6, Orus 6 de 6) e
+4a. [ ] **Opcional desde a escolha da Aoede (13/10, noite).** O que importa em 14/10 é **terminar o pacote** (passo 6):
+   a cota do dia vai primeiro para ele; só a sobra para a bancada. Pedido original do Gabriel ("pode completar o
+   gemini amanhã, não esquece"): rodar `python tools/bancada-vozes.py --motores gemini` (Puck 4 de 6, Orus 6 de 6) e
    regerar o HTML. Bark: modelo de 13 GB **apagado em 13/10** com autorização do Gabriel (clipes das frases 1 e 6
    ficam no HTML; não serve ao pacote: RTF 32,5 e inventa áudio) — não retomar `--motores bark`.
 4. [x] **Bancada de vozes** (`tools/bancada-vozes.py`, venv isolado em
@@ -171,12 +173,24 @@
    `grep -c "https\?://"` = 0; Edge headless em `file://` monta os 97 cartões; no navegador, 4 clipes de 4 motores
    carregam (`loadedmetadata`) e tocam, "tocar as 6", estrela, filtro e "copiar favoritas" conferidos. Escolha
    da voz: passo 5 (Gabriel).
-5. [ ] **Escolha (dono: Gabriel):** voz e tom, ouvindo o HTML.
-6. [ ] **Gerador do pacote** (`tools/gerar-pacote-voz.py --voz <id> [--tom serio|descontraido|ambos]`):
+5. [x] **Escolha (dono: Gabriel):** voz e tom, ouvindo o HTML. **13/10/2026:** "quero a aoede do gemini
+   (coincidentemente a mesma que eu também gostei pro jarvis na central rs)". Tom: o da config (`tomVoz`
+   "serio" hoje); o pacote grava os dois, o tom em uso primeiro.
+6. [ ] **Parcial (13/10/2026, 21:00): 19 de 226 falas do tom sério no pacote, faltam 207** (+ 226 do descontraído);
+   a cota grátis de todos os modelos de TTS acabou. Retomar depois das ~04:00 de 14/10 (meia-noite do Pacífico),
+   com o jogo fechado: `%LOCALAPPDATA%\lol-client\voz\venv\Scripts\python.exe tools\gerar-pacote-voz.py --voz aoede
+   --tom serio` (~26 pedidos de 8; depois `--tom descontraido`). Prova até aqui: `teste-pacote-voz.py` 19/19; os 3
+   lotes reais recusados pelo corte antigo alinharam 3/3 pelo corte guiado pela transcrição (detalhe no relatório).
+   **Gerador do pacote** (`tools/gerar-pacote-voz.py --voz <id> [--tom serio|descontraido|ambos]`):
    gera o catálogo inteiro, retomável (pula o que já existe), normaliza volume (`ffmpeg loudnorm`),
    grava `indice.json` com a versão do catálogo. Recusa rodar com o jogo aberto.
    **prova:** contagem de arquivos = tamanho do catálogo; tempo total e tamanho em disco no relatório.
-7. [ ] **Tocador** (`coletor/voz.py`): frase no pacote → toca o arquivo na mesma fila com prioridade
+7. [x] **Feito e provado em 13/10/2026** (`teste-coach.py` 26/26 com pacote falso: toca do pacote, cai na Maria,
+   registra a falta, urgente corta e fura, validade, `suspeita` fica na Maria, `.wav` que falha cai na Maria;
+   `ensaio-coach.py` a 20x: 0 falhas, 26 de 26 falas no catálogo). Pendente fora do passo: reiniciar o coletor fora
+   de partida (o de pé roda o código antigo); a escolha pelo plugin (`coach.vozPacote`) ficou para depois
+   (plugin e `servidor_local` estavam com outra frente):
+   hoje o pacote ativo é `voz.PACOTE_PADRAO` = `aoede` (`LOL_VOZ_PACOTE` troca). **Tocador** (`coletor/voz.py`): frase no pacote → toca o arquivo na mesma fila com prioridade
    (urgente fura, validade vale igual); fora do pacote → Maria ao vivo + `dados/voz-faltou.jsonl`.
    Configuração `coach.vozPacote` (lista os pacotes instalados pelo `servidor_local`; "Maria ao vivo"
    sempre disponível). **prova:** `tools/teste-coach.py` com pacote falso (3 wav) cobre: toca do
@@ -256,3 +270,59 @@
     renovada) ou `--motores bark` (mais 90 min); clipe existente não é refeito.
   - Modelos em disco (fora do repo): `%LOCALAPPDATA%\tts` 15 GB (Bark 13 GB, XTTS ~2 GB), cache do Hugging Face
     (Pocket), `%LOCALAPPDATA%\lol-client\voz\` (venv, Piper, presets do Bark). Limpeza: decisão do Gabriel.
+- **Fase B, passos 3, 3b, 6 e 7 (13/10/2026, noite; sem gerar o pacote, sem reiniciar o coletor):**
+  - **Catálogo** (`avisos.py`): fala genérica (`{rota}` de `ROTA_FALA` + "inimigo", sem `{campeao}` nem `{ouro}`);
+    rótulo mantém o nome. Moldes novos `feitico_voltou`, `pico_nivel`, `pico_nivel_visto`, `pico_item`
+    (feiticos/sugestoes mandam `dados` + `molde`; `coach_vivo` publica por `avisos.aviso_de`). `ROTA_FALA` mudou de
+    dono para o `avisos.py`. `docs/LICOES.md` § Avisos ao vivo reescrita junto (ela vence o `TEXTOS`).
+    `catalogo()` = **452 falas** (226 por tom): gank 6, intruso_grupo 24, intruso 36, jungler_apareceu 22,
+    mid_indo 18, mid_sumiu 2, janela_objetivo 48, objetivo_60s 10, mortes_cedo 2, adversario_voltou 8,
+    inimigo_fed 10, ouro_guardado 2, feitico_marcado 96, feitico_desfeito 2, feitico_voltou 96, pico_nivel 30,
+    pico_nivel_visto 30, pico_item 10. Feitiços com cronômetro são **8** (não 9: Golpear não tem cronômetro).
+    Texto livre: `avisos.LIVRES = ("regra",)`; nenhuma regra do coach.py chega ao motor hoje.
+  - **Decisões (agente, técnicas):** "talvez" do Flash incerto saiu da fala (dobraria 96 → 192; o ± segue no painel);
+    pico fala o nível cruzado (6/11/16), não o real; `{n}` em algarismo (o TTS lê, a conferência normaliza);
+    3b: pacote completo na Aoede (~57 pedidos de 8 frases; o tom em uso e os tipos urgentes primeiro, se a cota
+    acabar no meio). Reverter: voltar a fala no `TEXTOS` + `LICOES.md` (fica fora do pacote, cai na Maria).
+  - **Gerador** (`tools/gerar-pacote-voz.py`, venv do TTS): lotes de frases por parágrafo (sem número nem
+    instrução), corte pelo `silencedetect` nas n-1 maiores pausas (≥ 0,45 s e ≥ 1,3× a maior de dentro), duração
+    0,5–2× da esperada (calibrada nos clipes da Aoede: 0,35 + 0,075 s/caractere), senão divide ao meio; frase
+    sozinha absurda vai para `falhas`. `loudnorm` 2 passadas → PCM 24 kHz. Conferência pelo Whisper do Reco
+    (`tools/conferir-trechos.py`, `py -3.14` com `openvino_genai` já instalado, modelo local small int8, CPU, ~2,3 s
+    por trecho; nos 5 clipes da bancada notas 0,96–1,0): nota < 0,6 refaz sozinha 1 vez, depois `suspeita`.
+    Retomável, índice atômico por lote, para limpo na cota diária (rc 2) e com o jogo aberto (rc 3).
+    **14/10: calibrar antes** com `--lote 3 --max-pedidos 1` (o comportamento de pausa do Gemini entre parágrafos
+    não foi medido: cota zerada), depois `--lote 8`.
+  - **Tocador** (`voz.py`): `Pacote` + `.wav` por `winsound` na mesma fila; corte por `Event` (urgente,
+    desligar, parar); fora do pacote → Maria + `dados/voz-faltou.jsonl` (1 vez por frase por processo). Teste seco
+    nunca abre o pacote padrão. Conferido à mão: `.wav` de silêncio real, corte em 0,31 s e inteiro em 2,05 s.
+  - **Provas:** `teste-coach.py` 25/25 (catálogo, zonas, fontes, molde com `{campeao}` fica fora, pacote falso
+    com 3 wav: toca do pacote, cai na Maria, registra a falta, urgente corta e fura, validade); `teste-pacote-voz.py`
+    12/12 (novo, no `rodar-testes.py`); `teste-alertas.py --sem-janela` 33/33; `teste-feiticos.py` e
+    `teste-sugestoes.py` ok; `ensaio-coach.py` a 20x: 0 falhas, **25 de 25 falas dentro do catálogo**, texto livre
+    nenhum. ⚠️ O ensaio rodou com `League of Legends.exe` aberto (o Gabriel entrou em partida durante a sessão; a
+    conferência do processo saiu na mesma linha e não barrou): ~2 min de processador durante o jogo dele.
+  - Pendente: gerar o pacote (14/10), reiniciar o coletor fora de partida (o de pé roda o código antigo),
+    `rodar-testes.py` inteiro com o jogo fechado, escolha do pacote pelo plugin (`coach.vozPacote`).
+- **Revisão do pacote de voz e 1ª geração real (13/10/2026, 20:30–21:00, jogo fechado):**
+  - **Achados corrigidos (revisão adversarial):** (1) corte deslocado passava pela nota do Whisper (vizinhas do mesmo
+    molde: 0,82–0,85) → o trecho tem de soar mais como a própria frase do que como qualquer vizinha, senão o lote
+    inteiro sai; texto 1,4× maior = frases grudadas; lotes em rodízio de moldes; `DUR_MAX` 2 → 1,5. (2) `suspeita`
+    tocava no jogo → `voz.Pacote` pula (Maria); não volta à fila sozinha (`--refazer-suspeitas`). (3) Whisper morto ou
+    resposta curta deixava lotes sem conferência → `ConferenciaFalhou` para a rodada sem gravar (saída 1). (4)
+    divisão ao meio gastava a cota → ver abaixo. (5) `.wav` que falha ao tocar perdia a fala e deixava o PowerShell
+    órfão → cai na Maria; o processo é morto antes de reabrir.
+  - **Medido na 1ª rodada real:** calibração `--lote 3 --max-pedidos 1` aceita (notas 0,95–1,0); com `--lote 8`, 3 de
+    6 pedidos recusados por "pausas ambíguas": pausa entre frases 0,41–0,88 s, de vírgula/dois-pontos 0,39–0,53 s
+    (trocar dois-pontos por vírgula não muda), e um pedaço solto "E aí" no fim de todo lote. **Decisão (agente,
+    técnica, confiança alta):** corte guiado pela transcrição (`cortar_por_transcricao` + `alinhar`): o silêncio só
+    separa pedaços, o Whisper transcreve cada um e o alinhamento junta pedaços por frase, largando até 2 soltos nas
+    pontas. Os 3 lotes recusados alinharam 3/3 sem gastar cota; o lote de 8 recusado já pago entrou no pacote assim.
+    Reverter: `--sem-conferir` volta ao corte só pelo silêncio.
+  - **Pacote:** 19 de 226 falas do tom sério (1,8 MB), faltam 207; 0 suspeitas; notas 0,74–1,0 (a menor: "mid
+    sumiu" ouvido "Me desumiu"). A cota grátis acabou em 5 modelos (3.8-flash, 3.1-flash-preview, 2.5-flash-preview,
+    3.8-flash-lite, 2.5-pro-preview): **o pacote mistura modelos** da mesma voz Aoede; se o Gabriel ouvir diferença,
+    regerar as falas de um modelo (o `indice.json` grava o modelo de cada uma).
+  - **Provas:** `teste-pacote-voz.py` 19/19, `teste-coach.py` 26/26, `rodar-testes.py` 36/37 com o jogo fechado (a
+    falha é `teste-compacto.mjs` 82/83, da frente do client compacto, fora desta); `ensaio-coach.py` a 20x: 0 falhas,
+    26 de 26 falas no catálogo. Catálogo inalterado: 452 falas, versão `b7043050b0b7`.

@@ -440,6 +440,17 @@ async def ensaio(a):
         rel["falas_por_tipo"] = tipos
         rel["faixa_do_painel"] = len(avisos_painel)
         rel["falas"] = [(round(t), av.tipo, av.fala) for t, av in voz]
+        # voz pré-gravada (plano voz pré-gravada, passo 3): toda fala sai do catálogo do pacote, fora o texto
+        # livre (avisos.LIVRES: regra do coach.py, hoje nenhuma ao vivo); o catálogo é o que o motor leu
+        import avisos as A
+        cat = set(A.catalogo(p.motor.textos))
+        tipo_cfg = lambda t: t if t in A.TIPOS_LIGAVEIS else "regra"  # noqa: E731
+        fora = [(round(t), av.tipo, av.fala) for t, av in voz if av.fala not in cat and tipo_cfg(av.tipo) not in A.LIVRES]
+        livres = [(round(t), av.tipo, av.fala) for t, av in voz if tipo_cfg(av.tipo) in A.LIVRES]
+        rel["falas_fora_do_catalogo"], rel["falas_livres"] = fora, livres
+        conferir(bool(voz) and not fora, f"voz: {len(voz) - len(livres)} de {len(voz)} falas dentro do catálogo "
+                 f"({len(cat)} falas, versão {A.versao_catalogo(sorted(cat))}); texto livre listado: {livres}"
+                 + (f"; FORA: {fora[:5]}" if fora else ""))
         conferir(len(falas) == len(voz) or len(falas) >= len(voz) - 3,
                  f"Voz (fila real, sem som) disse {len(falas)} de {len(voz)} falas emitidas (descartadas por validade: "
                  f"{len(voz) - len(falas)})")

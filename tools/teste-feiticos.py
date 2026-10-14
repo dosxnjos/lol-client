@@ -76,6 +76,15 @@ def main():
     v = f.voltaram(631)
     confere("voz: Seraphine com Exaustão aos 10:31 (e só uma vez)", [x["texto"] for x in v] == ["Seraphine com Exaustão"]
             and f.voltaram(632) == [])
+    import avisos as A   # a fala sai do molde genérico (pacote de voz): rota, não campeão; o rótulo mantém o nome
+    m = A.MotorAvisos(textos=A.TEXTOS)
+    m.publicar(A.aviso_de(v[0]), 0.0)
+    av = next(x for _, d, x in m.emitidos if d == "voz")
+    confere("voz genérica: 'exaustão do suporte voltou', rótulo 'Seraphine com Exaustão', fala no catálogo",
+            av.fala == "exaustão do suporte voltou" and av.rotulo == "Seraphine com Exaustão"
+            and av.fala in A.catalogo(A.TEXTOS), f"{av.fala!r} / {av.rotulo!r}")
+    confere("feitiços com cronômetro = os da fala do catálogo",
+            {k.split()[0].lower() for k in F.RECARGA_BASE} == set(A.FEITICOS_FALA), str(sorted(F.RECARGA_BASE)))
 
     # 3. leitura das linhas (formato real + ruído de OCR medido nas telas)
     nomes = ["Riven", "Ekko", "Yasuo", "Tristana", "Seraphine"]

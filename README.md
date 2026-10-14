@@ -92,6 +92,17 @@ por ti: recompensa "escolha 1 de 3" vira aviso. Plano: [coleta](roadmap/2026-10-
 
 Textos da voz e das lições: `pengu\posjogo\licoes.md` (lições) e `docs\LICOES.md` § Avisos ao vivo
 (falas e rótulos, dois tons); editar o texto muda o coach sem mexer no código.
+**Voz pré-gravada (Aoede, do Gemini):** a fala diz a rota ("o jungler", "flash do mid voltou"), nunca o campeão,
+e cada fala possível (452, `avisos.catalogo()`) é gravada uma vez em `%LOCALAPPDATA%\lol-client\voz\pacotes\aoede\`;
+o coach toca o arquivo e cai na Maria só no que faltar (anotado em `dados\voz-faltou.jsonl`). Gerar ou completar
+o pacote, **com o jogo fechado**: `%LOCALAPPDATA%\lol-client\voz\venv\Scripts\python.exe tools\gerar-pacote-voz.py
+--voz aoede --tom serio` (retoma de onde parou; a cota grátis do Gemini acaba no dia, ele para dizendo quantas
+faltam e renova às ~04:00, meia-noite do Pacífico; `--seco` só conta). Fala editada no `docs\LICOES.md` só vira
+áudio depois de rodar o gerador de novo. Fala que o Whisper ouviu errado fica `suspeita` e toca na Maria:
+`--refazer-suspeitas` pede de novo. **Regerar** do zero: apagar a pasta `pacotes\aoede\` e rodar de novo.
+**Trocar de voz:** outra voz do Gemini entra em `VOZES_GEMINI` (`tools\gerar-pacote-voz.py`), gera com `--voz <id>`
+e o coletor usa com `LOL_VOZ_PACOTE=<id>` (reiniciar o coletor fora de partida). Voltar à Maria: apagar a pasta do
+pacote ou `LOL_VOZ_PACOTE=` vazio no ambiente do coletor.
 Desligar tudo agora: `schtasks /end /tn lol-client-coletor` (volta no próximo client aberto). Rodar o
 coletor sem coach: flag `--sem-coach`.
 

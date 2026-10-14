@@ -320,12 +320,28 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   Na minha rota, intruso vence "mid indo".
 - **Textos** (dois tons, `sério`/`descontraído`): padrão em `avisos.TEXTOS`; editáveis na seção
   `## Avisos ao vivo` do arquivo de lições (`pengu\posjogo\licoes.md`, senão `docs\LICOES.md`, onde ela
-  mora hoje com os 12 tipos), uma
+  mora hoje com 16 moldes), uma
   linha por tipo: `` - `tipo` | sério: fala / rótulo | descontraído: fala / rótulo `` (rótulo ≤ 3
-  palavras; placeholders `{campeao}`, `{zona}`, `{zc}`, `{zt}`, `{objetivo}`, `{n}`, `{ouro}`).
-- **Voz** (`coletor\voz.py`): um PowerShell persistente (System.Speech, "Microsoft Maria Desktop",
-  sem janela, prioridade abaixo do normal), frase em base64 pelo stdin, fila por prioridade.
-  `voz.prioridade_do_processo(True)` põe o coletor abaixo do normal na partida.
+  palavras; placeholders em [LICOES](LICOES.md)). **A fala é genérica** (rota, nunca campeão; sem ouro nem
+  nível real) e o rótulo pode ter o nome: `feiticos.voltaram` e `sugestoes.PicosDeForca` mandam `dados`
+  (+ `molde`) e o motor monta a fala pelo molde (`avisos.aviso_de`).
+- **Catálogo** (`avisos.catalogo()`, plano [voz pré-gravada](../roadmap/2026-10-13-voz-pregravada-e-foco.md)
+  passos 3/3b): toda fala possível = molde × tom × valores finitos (`avisos.valores_catalogo()`: zonas de
+  `zona()`, `{rota}` de `ROTA_FALA` + "inimigo", `{n}` 2–5, objetivos, 8 feitiços com cronômetro, picos
+  6/11/16). **452 falas** (226 por tom) em 13/10/2026, versão `avisos.versao_catalogo()`. Texto livre
+  (`avisos.LIVRES`: regra do coach.py, hoje nenhuma ao vivo) fica fora; molde com placeholder sem valores
+  finitos é listado por `moldes_fora_do_catalogo()`. Provas: `teste-coach.py` (catálogo, replay) e o ensaio
+  (toda fala dentro).
+- **Voz** (`coletor\voz.py`): fala que está no **pacote** ativo (`voz.PACOTE_PADRAO` = `aoede`, troca por
+  `LOL_VOZ_PACOTE`; pasta `%LOCALAPPDATA%\lol-client\voz\pacotes\<nome>\` com `indice.json`) toca o `.wav`
+  (`winsound` assíncrono) na mesma fila: prioridade, urgente corta, validade igual. Fora do pacote, ou sem
+  a pasta: um PowerShell persistente (System.Speech, "Microsoft Maria Desktop", sem janela, prioridade
+  abaixo do normal), frase em base64 pelo stdin; com pacote, a frase que faltou vai 1 vez por processo para
+  `dados\voz-faltou.jsonl`; fala `suspeita` no índice e `.wav` que falha ao tocar também vão para a Maria.
+  Pacote gerado por `tools/gerar-pacote-voz.py` (lotes em rodízio de moldes no Gemini; corte guiado pela
+  transcrição: o silêncio separa pedaços, o Whisper do Reco em `tools/conferir-trechos.py` diz de qual frase é
+  cada um, e o trecho tem de soar mais como a própria frase do que como as vizinhas do lote; `loudnorm`; prova
+  offline `tools/teste-pacote-voz.py`). `voz.prioridade_do_processo(True)` põe o coletor abaixo do normal na partida.
 - **Moldura** (`coletor\moldura.py`): janela própria de tela inteira, click-through
   (`WS_EX_LAYERED|TRANSPARENT|TOPMOST|TOOLWINDOW|NOACTIVATE`), borda pulsando + rótulo no canto por
   2 s, só com "League of Legends (TM) Client" em primeiro plano, e **fora do print**

@@ -507,6 +507,28 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   `harness/dev`, não no `pessoal`.
 - **XTTS no processador**: 13 s por frase, RTF 3,6 (58 locutores × 6 frases = 89 min). Gênero pelo nome
   erra: Andrew Chipper e Badr Odhiambo medem ~230 Hz (o HTML marca "?").
+- **Mudar a fala no `avisos.TEXTOS` não muda o que o coach diz** → a seção `## Avisos ao vivo` do `docs/LICOES.md`
+  vence o padrão do código (`carregar_textos`); ela ainda dizia `{campeao}` e o catálogo do pacote não batia. Fala
+  nova vai nos dois lugares; o `catalogo()` sem argumento lê como o motor lê (13/10/2026).
+- **Fala com `{campeao}` ou `{ouro}` não cabe no pacote** (valores infinitos) → `avisos.moldes_fora_do_catalogo()`
+  lista; essa fala vai sempre pela Maria ao vivo. Nome e número só no rótulo da tela.
+- **Lote do Gemini cortado no lugar errado** → a pausa de vírgula dentro da frase chega a 0,38 s (bancada). O
+  gerador corta nas n-1 maiores pausas e só aceita se a menor delas tiver ≥ 0,45 s e ≥ 1,3× a maior que ficou
+  dentro de um trecho, com a duração de cada trecho entre 0,5× e 1,5× da esperada; senão divide o lote ao meio.
+- **Corte deslocado passa pela nota do Whisper** → frases do mesmo molde diferem numa palavra ("gank provável no
+  top"/"no mid": semelhança 0,82–0,85, acima do mínimo 0,6). O trecho tem de soar mais como a própria frase do que
+  como qualquer vizinha do lote (senão o lote inteiro sai) e os lotes vão em rodízio de moldes (revisão 13/10/2026).
+- **Corte só pelo silêncio gasta a cota** → nos lotes reais da Aoede (13/10/2026) a pausa entre frases (0,41–0,88 s)
+  e a de vírgula/dois-pontos (0,39–0,53 s) se sobrepõem, e o modelo põe um pedaço solto no fim ("E aí"): 3 de 6
+  pedidos recusados por "pausas ambíguas". Trocar dois-pontos por vírgula (`texto_falado`) não resolve. O corte
+  padrão é guiado pela transcrição (`cortar_por_transcricao`: o silêncio só separa pedaços, o Whisper diz qual
+  pedaço é de qual frase); `--sem-conferir` volta ao corte só pelo silêncio. Os 3 lotes recusados alinharam 3/3.
+- **Cota grátis renova à meia-noite do Pacífico (~04:00 em Brasília)** e cada modelo de TTS tem a sua; o gerador
+  passa de um para o outro, então o pacote mistura modelos (o `indice.json` grava o modelo de cada fala).
+- **Fala `suspeita` no pacote tocando errado** → o tocador pula `suspeita` (Maria ao vivo) e o gerador não a refaz
+  sozinho (gastaria cota toda rodada): `--refazer-suspeitas`. Conferência que morre para a rodada sem gravar.
+- **Teste seco tocando som de verdade** → `Voz(saida=...)` não abre o pacote padrão; com pacote explícito e sem
+  `tocar`, o .wav também vai para a `saida`. Nunca rodar teste que toque `winsound` com o Gabriel jogando.
 
 ## Riot API (servidores da Riot, não a LCU)
 

@@ -121,7 +121,9 @@ def extra_jungler_na_rota():
         return [("Riven", TOP_ROTA_2)] + ([("Ekko", TOP_FUNDO)] if t >= 5 else [])
     m, mol, s = rodar("Illaoi", r, 12)
     a = s[0][1] if s else None
-    ok = len(s) == 1 and a.tipo == "intruso" and a.cor == "vermelho" and a.urgente and "Ekko" in a.fala
+    # fala genérica (pacote de voz): diz "o jungler", nunca o campeão
+    ok = (len(s) == 1 and a.tipo == "intruso" and a.cor == "vermelho" and a.urgente
+          and a.fala == "o jungler chegando no top" and "Ekko" not in a.fala)
     caso("extra: jungler na minha rota → vermelho e urgente", ok, f"{resumo(s)}; fala {a and a.fala!r}")
 
 

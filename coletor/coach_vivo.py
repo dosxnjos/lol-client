@@ -454,13 +454,13 @@ class _Partida:
                     extra["feiticos"] = self.f.estado(gt)
                     voltaram = self.f.voltaram(gt)
                 for a in voltaram:
-                    self.motor.publicar(avisos.Aviso(a["tipo"], chave=a["chave"], textos=a["textos"]))
+                    self.motor.publicar(avisos.aviso_de(a))
             except Exception as e:
                 av("feitiços", e)
         if self.picos is not None:
             try:
                 for a in self.picos.atualizar(limpo):
-                    self.motor.publicar(avisos.Aviso(a["tipo"], chave=a["chave"], textos=a["textos"]))
+                    self.motor.publicar(avisos.aviso_de(a))
             except Exception as e:
                 av("picos de força", e)
 

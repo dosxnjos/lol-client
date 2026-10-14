@@ -60,34 +60,51 @@ def normalizar_desligados(v):
         return {d: tipos(v.get(d)) for d in DESTINOS_CONFIG}
     return {d: tipos(v) for d in DESTINOS_CONFIG}
 
-# textos padrão: tipo -> tom -> (fala, rótulo ≤ 3 palavras). Placeholders: {campeao}, {zona}
-# (fala: "no rio top"), {zc} (rótulo: "rio top"), {zt} (1 palavra: "rio"), {objetivo}, {n}, {ouro}.
-# A versão editável mora no arquivo de lições (seção "Avisos ao vivo", formato em carregar_textos).
+# textos padrão: tipo -> tom -> (fala, rótulo ≤ 3 palavras). A FALA é genérica (plano voz pré-gravada,
+# passo 3): diz a rota ("o jungler", "o mid"), nunca o campeão, e nenhum número aberto (ouro, nível real),
+# para o conjunto de falas ser finito e caber num pacote gravado (catalogo()). O RÓTULO (painel e moldura)
+# pode ter o nome: texto na tela não precisa ser gravado. Placeholders da fala: {zona} ("no rio top"),
+# {rota} (ROTA_FALA: "top", "jungler", "mid", "atirador", "suporte"; "inimigo" sem posição), {objetivo},
+# {n}, {feitico} ("flash", minúsculo), {pico} (6/11/16). Só do rótulo: {campeao}, {zc} ("rio top"),
+# {zt} ("rio"), {nivel}, {feitico_nome}, {ouro}. A versão editável mora no arquivo de lições (seção
+# "Avisos ao vivo", formato em carregar_textos); fala com placeholder fora de VALORES sai do pacote
+# (moldes_fora_do_catalogo) e cai na Maria ao vivo.
 TEXTOS = {
     "gank": {"serio": ("gank provável {zona}", "gank {zc}"),
              "descontraido": ("olha o gank {zona}, sai daí", "gank {zc}")},
     "intruso_grupo": {"serio": ("{n} inimigos {zona}", "{n} inimigos {zt}"),
                       "descontraido": ("{n} vindo {zona}, recua", "{n} inimigos {zt}")},
-    "intruso": {"serio": ("{campeao} chegando {zona}", "intruso {zc}"),
-                "descontraido": ("visita: {campeao} {zona}", "visita {zc}")},
+    "intruso": {"serio": ("o {rota} chegando {zona}", "intruso {zc}"),
+                "descontraido": ("visita: o {rota} {zona}", "visita {zc}")},
     "jungler_apareceu": {"serio": ("jungler {zona}", "jungler {zc}"),
-                         "descontraido": ("achei o {campeao}: {zona}", "jungler {zc}")},
-    "mid_indo": {"serio": ("mid saiu da rota: {campeao} {zona}", "mid indo {zt}"),
-                 "descontraido": ("{campeao} largou o mid, tá {zona}", "mid indo {zt}")},
+                         "descontraido": ("achei o jungler: {zona}", "jungler {zc}")},
+    "mid_indo": {"serio": ("o mid saiu da rota: {zona}", "mid indo {zt}"),
+                 "descontraido": ("o mid largou a rota, tá {zona}", "mid indo {zt}")},
     "mid_sumiu": {"serio": ("mid sumiu", "mid sumiu"),
-                  "descontraido": ("cadê o {campeao}? mid sumiu", "mid sumiu")},
+                  "descontraido": ("cadê o mid? sumiu", "mid sumiu")},
     "janela_objetivo": {"serio": ("{n} inimigos mortos: {objetivo}", "janela {objetivo}"),
                         "descontraido": ("{n} mortos, bora {objetivo}", "bora {objetivo}")},
     "objetivo_60s": {"serio": ("{objetivo} em um minuto", "{objetivo} 1 min"),
                      "descontraido": ("{objetivo} nasce em um minuto, se prepara", "{objetivo} 1 min")},
     "mortes_cedo": {"serio": ("duas mortes antes dos dez, joga seguro", "joga seguro"),
                     "descontraido": ("tu tá duas mortes antes dos dez, segura a onda", "segura a onda")},
-    "adversario_voltou": {"serio": ("{campeao} voltou pra rota", "{campeao} voltou"),
-                          "descontraido": ("{campeao} voltou, cuidado", "{campeao} voltou")},
-    "inimigo_fed": {"serio": ("{campeao} forte, evita o um contra um", "evita 1x1"),
-                    "descontraido": ("{campeao} tá fed, nada de um contra um", "evita 1x1")},
-    "ouro_guardado": {"serio": ("{ouro} de ouro guardado, hora de voltar?", "hora de voltar"),
-                      "descontraido": ("tá rico: {ouro} de ouro, volta e gasta", "hora de voltar")},
+    "adversario_voltou": {"serio": ("o {rota} voltou pra rota", "{campeao} voltou"),
+                          "descontraido": ("o {rota} voltou, cuidado", "{campeao} voltou")},
+    "inimigo_fed": {"serio": ("o {rota} tá forte, evita o um contra um", "evita 1x1"),
+                    "descontraido": ("o {rota} tá fed, nada de um contra um", "evita 1x1")},
+    "ouro_guardado": {"serio": ("ouro guardado, hora de voltar?", "hora de voltar"),
+                      "descontraido": ("tá rico, volta e gasta", "hora de voltar")},
+    # feitiço do inimigo que voltou (feiticos.Feiticos.voltaram): "flash do mid voltou"; o "talvez" (horário
+    # incerto) fica só no painel (±), para não dobrar o pacote
+    "feitico_voltou": {"serio": ("{feitico} do {rota} voltou", "{campeao} com {feitico_nome}"),
+                       "descontraido": ("{feitico} do {rota} voltou, cuidado", "{campeao} com {feitico_nome}")},
+    # picos de força (sugestoes.PicosDeForca): a fala diz o pico cruzado (6/11/16), o rótulo o nível real
+    "pico_nivel": {"serio": ("o {rota} chegou no nível {pico}", "{campeao} nível {nivel}"),
+                   "descontraido": ("o {rota} chegou no nível {pico}, respeita", "{campeao} nível {nivel}")},
+    "pico_nivel_visto": {"serio": ("o {rota} já passou do nível {pico}", "{campeao} nível {nivel}"),
+                         "descontraido": ("o {rota} já passou do nível {pico}, respeita", "{campeao} nível {nivel}")},
+    "pico_item": {"serio": ("o {rota} fechou item", "{campeao} fechou item"),
+                  "descontraido": ("o {rota} fechou item, ficou forte", "{campeao} fechou item")},
     # retorno do F9 (tipo feitico_marcado; molde por evento, ver aviso_atalho). {rota} = top, jungler,
     # mid, atirador, suporte (frase genérica, sem nome de campeão); {feitico} = "flash" (minúsculo)
     "feitico_marcado": {"serio": ("{feitico} do {rota} marcado", "{rota} sem {feitico}"),
@@ -150,6 +167,116 @@ def _formatar(molde, dados):
 
 def _curto(rotulo, n=3):
     return " ".join(rotulo.split()[:n])
+
+
+def normalizar_fala(texto):
+    """a mesma regra do voz.Voz.falar: espaços colapsados. Chave do pacote de voz e do catálogo."""
+    return " ".join(str(texto).split())
+
+
+# --------------------------------------------------------------------------------------------
+# catálogo da voz pré-gravada (plano voz pré-gravada, passos 3 e 3b): todas as falas possíveis =
+# molde de fala × tom × valores finitos de cada placeholder. O gerador de pacote (tools/gerar-pacote-voz.py)
+# grava uma por uma; o voz.Voz toca o arquivo quando a fala está no pacote e cai na Maria quando não está.
+
+# posição da Live Client -> como a rota sai na fala (dona desta tabela; feiticos.py e sugestoes.py importam)
+ROTA_FALA = {"TOP": "top", "JUNGLE": "jungler", "MIDDLE": "mid", "BOTTOM": "atirador", "UTILITY": "suporte"}
+ROTA_SEM_POSICAO = "inimigo"         # blind, ARAM, personalizada: a Live Client não dá a posição
+ROTAS_FALA = tuple(ROTA_FALA.values()) + (ROTA_SEM_POSICAO,)
+ROTAS_COM_POSICAO = tuple(ROTA_FALA.values())
+ROTAS_DE_ROTA = ("top", "mid", "atirador", "suporte")   # quem "mora" numa rota (adversário que voltou)
+# feitiços com cronômetro (feiticos.RECARGA_BASE, 1ª palavra minúscula; Golpear não tem cronômetro)
+FEITICOS_FALA = ("flash", "teleporte", "incendiar", "barreira", "exaustão", "curar", "fantasma", "purificar")
+OBJETIVOS_FALA = ("dragão", "ancião", "vastilarvas", "arauto", "barão")   # ao_vivo._OBJ_AVISOS + OBJETIVOS
+PICOS = (6, 11, 16)                                                       # sugestoes.NIVEIS_PICO
+N_INIMIGOS = (2, 3, 4, 5)   # intruso_grupo e janela_objetivo só disparam com 2+; o time inimigo tem 5
+REGIOES = ("rota_top", "rota_meio", "rota_bot", "rio", "selva_aliada", "selva_inimiga", "base_aliada", "base_inimiga")
+
+
+def rota_fala(posicao):
+    """'MIDDLE' -> 'mid'; sem posição (ou desconhecida) -> 'inimigo'."""
+    return ROTA_FALA.get(str(posicao or "").upper(), ROTA_SEM_POSICAO)
+
+
+def zonas_fala(regioes=REGIOES):
+    """as falas de {zona} que zona() pode devolver nessas regiões ("no top", "no rio bot"...)."""
+    return tuple(sorted({_zona_textos(r, m)[2] for r in regioes for m in ("top", "bot")}))
+
+
+def valores_catalogo():
+    """molde de fala -> {placeholder: valores possíveis}. Molde fora daqui não é falado (só moldura)."""
+    rotas = zonas_fala(("rota_top", "rota_meio", "rota_bot"))   # gank (coach_vivo) e intruso (centro da rota)
+    return {
+        "gank": {"zona": rotas},
+        "intruso_grupo": {"zona": rotas, "n": N_INIMIGOS},
+        "intruso": {"zona": rotas, "rota": ROTAS_FALA},
+        "jungler_apareceu": {"zona": zonas_fala()},
+        "mid_indo": {"zona": zonas_fala(tuple(r for r in REGIOES if r not in ("rota_meio", "base_inimiga")))},
+        "mid_sumiu": {},
+        "janela_objetivo": {"n": N_INIMIGOS, "objetivo": OBJETIVOS_FALA + ("torre",)},
+        "objetivo_60s": {"objetivo": OBJETIVOS_FALA},
+        "mortes_cedo": {},
+        "adversario_voltou": {"rota": ROTAS_DE_ROTA},
+        "inimigo_fed": {"rota": ROTAS_COM_POSICAO},
+        "ouro_guardado": {},
+        "feitico_marcado": {"rota": ROTAS_FALA, "feitico": FEITICOS_FALA},
+        "feitico_desfeito": {},
+        "feitico_voltou": {"rota": ROTAS_FALA, "feitico": FEITICOS_FALA},
+        "pico_nivel": {"rota": ROTAS_COM_POSICAO, "pico": PICOS},
+        "pico_nivel_visto": {"rota": ROTAS_COM_POSICAO, "pico": PICOS},
+        "pico_item": {"rota": ROTAS_COM_POSICAO},
+    }
+
+
+# tipos cuja fala é texto livre (não entram no pacote, caem na Maria): regra do coach.py publicada ao vivo
+# (hoje nenhuma: `uso` além de posjogo não está ligado ao motor)
+LIVRES = ("regra",)
+_CAMPO = re.compile(r"\{([a-z_]+)[^}]*\}")
+
+
+def moldes_fora_do_catalogo(textos=None):
+    """[(molde, tom, placeholder)] de falas faladas cujo placeholder não tem valores finitos (ex.: alguém pôs
+    {campeao} na fala no docs/LICOES.md): essas falas não entram no pacote."""
+    textos = carregar_textos()[0] if textos is None else textos
+    valores = valores_catalogo()
+    out = []
+    for molde in valores:
+        for tom in TONS:
+            fala = (textos.get(molde) or {}).get(tom, (None,))[0]
+            for campo in _CAMPO.findall(fala or ""):
+                if campo not in valores[molde]:
+                    out.append((molde, tom, campo))
+    return out
+
+
+def catalogo(textos=None, tons=TONS, por_molde=False):
+    """todas as falas que a voz pode dizer (tipos com destino voz × tom × valores finitos), normalizadas
+    e sem repetição, em ordem. textos=None lê como o motor lê (carregar_textos: docs/LICOES.md vence o
+    padrão). por_molde=True -> {molde: [falas]} (para contar por tipo)."""
+    import itertools
+    textos = carregar_textos()[0] if textos is None else textos
+    fora = {(m, t) for m, t, _ in moldes_fora_do_catalogo(textos)}
+    grupos = {}
+    for molde, campos in valores_catalogo().items():
+        nomes = sorted(campos)
+        falas = set()
+        for tom in tons:
+            fala = (textos.get(molde) or {}).get(tom, (None,))[0]
+            if not fala or (molde, tom) in fora:
+                continue
+            for combo in itertools.product(*(campos[n] for n in nomes)):
+                falas.add(normalizar_fala(_formatar(fala, dict(zip(nomes, combo)))))
+        grupos[molde] = sorted(falas)
+    if por_molde:
+        return grupos
+    return sorted({f for fs in grupos.values() for f in fs})
+
+
+def versao_catalogo(frases=None):
+    """impressão digital do catálogo (12 hex): muda quando qualquer fala muda."""
+    import hashlib
+    frases = catalogo() if frases is None else frases
+    return hashlib.sha1("\n".join(sorted(frases)).encode("utf-8")).hexdigest()[:12]
 
 
 @dataclass
@@ -361,6 +488,13 @@ class MotorAvisos:
                 "desligados": {d: sorted(s) for d, s in self.desligados.items()}}
 
 
+def aviso_de(d):
+    """dict de feiticos.voltaram / sugestoes.PicosDeForca -> Aviso. Com `dados`, a fala sai do molde do
+    TEXTOS (`molde` ou o tipo: genérica, no pacote de voz); `textos` prontos só sem `dados` (texto livre)."""
+    return Aviso(d["tipo"], dict(d.get("dados") or {}), chave=d["chave"], molde=d.get("molde") or "",
+                 textos=None if d.get("dados") else d.get("textos"))
+
+
 _RETORNO_F9 = {   # evento do F9 -> (molde em TEXTOS, destinos, cor)
     "armado": ("feitico_armado", "m", "azul"),
     "marcado": ("feitico_marcado", "vm", "verde"),
@@ -374,7 +508,7 @@ def aviso_atalho(evento, chave, rota=None, feitico=None, estado=None):
     """retorno ao jogador de um atalho que ELE apertou -> Aviso para o MotorAvisos.
     evento do F9: "armado" (rótulo "flash: 1-5"), "marcado" (voz "flash do <rota> marcado" + rótulo
     "<rota> sem flash"), "desfeito" (voz "marcação desfeita"), "sem_inimigo", "sem_feitico" (feiticos.
-    Feiticos.marcar); "overlay" = F8 (estado "ligado"/"desligado"). rota = feiticos.ROTA_FALA (top,
+    Feiticos.marcar); "overlay" = F8 (estado "ligado"/"desligado"). rota = ROTA_FALA (top,
     jungler, mid, atirador, suporte; "inimigo" quando a Live Client não deu a posição dele). chave única
     por aperto (repetir do tipo = 1 s). Cor: azul ou verde."""
     if evento == "overlay":
@@ -396,8 +530,12 @@ def time_num(t):
 
 def zona(x, y, meu_time):
     reg = analise.regiao(x, y, meu_time)
-    m = "top" if y > x else "bot"
-    return reg, {
+    return reg, _zona_textos(reg, "top" if y > x else "bot")
+
+
+def _zona_textos(reg, m):
+    """(rótulo, 1 palavra, fala) da região; m = metade do mapa ("top"/"bot") pela diagonal do meio"""
+    return {
         "rota_top": ("top", "top", "no top"),
         "rota_meio": ("mid", "mid", "no mid"),
         "rota_bot": ("bot", "bot", "no bot"),
@@ -556,7 +694,8 @@ class GatilhosLive:
                 k, d = int(s.get("kills") or 0), int(s.get("deaths") or 0)
                 if k >= self.FED_KILLS and k - d >= self.FED_SALDO and k >= self._fed.get(nome, -99) + 2:
                     self._fed[nome] = k
-                    avisos.append(Aviso("inimigo_fed", {"campeao": jog[nome]["campeao"]}, f"{nome}:{k}"))
+                    avisos.append(Aviso("inimigo_fed", {"campeao": jog[nome]["campeao"],
+                                                        "rota": rota_fala(jog[nome]["posicao"])}, f"{nome}:{k}"))
 
         return [a for a in avisos if self.motor.publicar(a, agora)]
 
@@ -689,7 +828,10 @@ class AlertasPosicao:
             if quieto:
                 continue
             camp = self.jog[n].get("campeao", n)
-            dados = {"campeao": camp, "zona": zf, "zc": zc, "zt": zt}
+            # rota = como a fala chama este inimigo ("o jungler"); o jungler achado pelo Golpear sem posição
+            # também é "jungler"
+            rota = "jungler" if n == self.jungler else rota_fala(self.jog[n].get("posicao"))
+            dados = {"campeao": camp, "rota": rota, "zona": zf, "zc": zc, "zt": zt}
             if chegou and n in self.ocupantes.get(perto[0], ()):
                 # morador da rota: só o adversário da MINHA rota (champ select) "voltou"; na rota em que
                 # eu só estou de passagem (gank, rotação) ele não é aviso
