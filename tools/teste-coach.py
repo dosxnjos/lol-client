@@ -225,6 +225,20 @@ def caso_textos_md():
          and textos["mid_sumiu"]["descontraido"][0].startswith("cadê"), f"fonte {Path(fonte).name}, fala {a.fala!r}")
 
 
+def caso_ouro_rota():
+    # 14/10/2026: começo da partida mostrava "+500" (item inicial do Gabriel contra o inventário vazio do adversário,
+    # que só chega quando ele é visto). Itens dele não vistos = ouro desconhecido, sem cor
+    import ao_vivo
+    eu = {"nome": "eu", "campeao": "Renekton", "rota": "TOP", "nivel": 1, "cs": 0, "ouroEstimado": 500, "itens": [1055, 2003]}
+    adv = {"nome": "ele", "campeao": "Jax", "nivel": 1, "cs": 0, "ouroEstimado": 0, "vistoHaS": None, "atual": False,
+           "vistoGt": None, "itens": []}
+    r = ao_vivo.EstadoPartida._rota(eu, adv, 0)
+    visto = dict(adv, vistoGt=95.0, vistoHaS=1, atual=True, itens=[1054], ouroEstimado=450)
+    r2 = ao_vivo.EstadoPartida._rota(eu, visto, 0)
+    caso("rota: adversário ainda não visto/sem item = ouro desconhecido (nada de +500 na largada)",
+         r["diff"]["ouro"] is None and r["cor"]["ouro"] == "velho" and r2["diff"]["ouro"] == 50
+         and r2["cor"]["ouro"] == "neutro", f"{r['diff']} {r['cor']} | {r2['diff']} {r2['cor']}")
+
 def caso_catalogo():
     # plano voz pré-gravada, passos 3 e 3b: fala genérica e finita; o catálogo cobre todo molde falado
     import ao_vivo
@@ -612,6 +626,7 @@ def principal():
     caso_repetidos()
     caso_tom()
     caso_textos_md()
+    caso_ouro_rota()
     caso_catalogo()
     caso_fila_voz()
     caso_pacote_voz()

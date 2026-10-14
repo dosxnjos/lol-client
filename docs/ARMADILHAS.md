@@ -337,6 +337,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 
 Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 1.
 
+- **Painel dizia "+500 de ouro" na largada (14/10/2026)** → os itens do inimigo só chegam quando ele é visto; antes
+  disso o inventário dele vem vazio e a conta "ouro em itens" dava o item inicial do Gabriel inteiro. Adversário nunca
+  visto ou sem item = ouro desconhecido ("—", cor `velho`) em `ao_vivo.EstadoPartida._rota` (`teste-coach.py`).
 - **Recusa a conexão fora da partida, mas responde 200 na tela de carregamento** → ~7 s depois de
   `InProgress` já vem `allPlayers` completo (campeão, time, rota, feitiços, keystone), com
   `gameData.gameTime` parado em ~0,025 e `events` vazio por ~99 s. Quem usa "resposta ok" ou

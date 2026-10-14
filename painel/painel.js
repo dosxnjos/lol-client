@@ -62,7 +62,9 @@ function desenharRota(e) {
   // dado do adversário parado na fog: números em cinza (cor "velho") e o rodapé diz há quanto tempo
   const d = r.diff, c = r.cor, velho = !adv.atual;
   trio.append(
-    metrica('ouro em itens', sinal(d.ouro), `${milhar(eu.ouroEstimado)} x ${milhar(adv.ouroEstimado)}`, c.ouro),
+    d.ouro == null // itens dele ainda não vistos: sem conta (antes dava +500 no começo da partida)
+      ? metrica('ouro em itens', '—', `${milhar(eu.ouroEstimado)} x ? (itens dele não vistos)`, c.ouro)
+      : metrica('ouro em itens', sinal(d.ouro), `${milhar(eu.ouroEstimado)} x ${milhar(adv.ouroEstimado)}`, c.ouro),
     metrica('farm', sinal(d.cs), `${eu.cs} x ${adv.cs}`, c.cs),
     metrica('nível', sinal(d.nivel), `${eu.nivel} x ${adv.nivel}`, c.nivel));
   const rod = [`bolso ${milhar(r.bolso)}`];

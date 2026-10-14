@@ -348,13 +348,18 @@ class EstadoPartida:
                "bolso": bolso, "adv": None, "diff": None, "cor": {}}
         if adv:
             out["adv"] = {k: adv[k] for k in ("nome", "campeao", "nivel", "cs", "ouroEstimado", "vistoHaS", "atual")}
-            d = {"ouro": eu["ouroEstimado"] - adv["ouroEstimado"], "cs": eu["cs"] - adv["cs"],
+            # itens do adversário só chegam quando ele é visto: nunca visto ou sem item = ouro dele desconhecido (no começo
+            # da partida a conta dava "+500", o item inicial do Gabriel contra o inventário vazio; 14/10/2026)
+            ouro_ok = adv.get("vistoGt") is not None and bool(adv.get("itens"))
+            d = {"ouro": eu["ouroEstimado"] - adv["ouroEstimado"] if ouro_ok else None, "cs": eu["cs"] - adv["cs"],
                  "nivel": (eu["nivel"] or 0) - (adv["nivel"] or 0)}
             out["diff"] = d
             # limiar do ouro aos 10 do histórico (+500 -> 70%, -500 -> 41%); farm anda de 10 em 10
             lim = {"ouro": 500, "cs": 20, "nivel": 1}
             for k, v in d.items():
-                if not adv["atual"]:
+                if v is None:
+                    out["cor"][k] = "velho"
+                elif not adv["atual"]:
                     out["cor"][k] = "velho"  # dado do adversário parado na fog: não é comparação atual
                 else:
                     out["cor"][k] = "verde" if v >= lim[k] else "vermelho" if v <= -lim[k] else "neutro"
