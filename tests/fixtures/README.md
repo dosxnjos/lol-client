@@ -29,6 +29,15 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
   seleção desfeita por dodge, troca de ordem de pick e ban não feito (`championId` -1). Esperado
   conferido contra a partida e `/lol-perks/v1/pages`. Detalhe: [MEDICAO-2026-10-13](../../docs/MEDICAO-2026-10-13.md).
 
+## Seleção do compacto (`tools/teste-compacto-selecao.mjs`)
+
+- `selecao-ranqueada-20261014.json`: **real**, ranqueada solo (420) de 14/10/2026 10:12-10:15, a 1ª no client
+  compacto, remontada dos 30 `sessao_cs` + `trocas` do medidor (`dados/medicao-compacto-2026-10-13.jsonl`, só sinais:
+  sem nome nem puuid). O medidor não grava hover, então ação aberta vem com `championId` 0; `isAllyAction` sai do
+  cellId, o `id` da sessão é falso. **Suposição, não medido:** `hasSimultaneousBans: true` e
+  `disallowBanningTeammateHoveredChampions: true` (o padrão da solo/duo; o medidor só passou a gravar as duas bandeiras
+  depois desta partida). Fora do glob `champselect-*.json` do `teste-champselect.py` de propósito.
+
 ## Minimapa (passos 13, 14, 15b e 15d)
 
 - `minimapa/*.png` + `*.json`: 14 recortes **reais** (497×497, mapa em (134,133) com 347 px) da

@@ -14,7 +14,10 @@
 // Rotas (todas [H] no /help de 13/10/2026; o que é [S] está marcado):
 //   GET  /lol-champ-select/v1/session (+ evento), pickable-champion-ids, bannable-champion-ids, skin-carousel-skins,
 //        summoners/{slotId} (só os botões show*: enriquecimento opcional [S], falha calada)
-//   PATCH session/actions/{id} {championId} = hover/intenção [S]; POST session/actions/{id}/complete = banir/travar
+//   PATCH session/actions/{id} {completed:false, championId} = hover/intenção; {completed:true, championId} = banir/travar
+//        (os corpos do client da Riot, rcp-fe-lol-champ-select; medido na ranqueada de 14/10/2026). NUNCA o
+//        POST session/actions/{id}/complete: sem corpo a LCU manda "lockIn championId: 0", devolve 204 e não trava nada
+//        (LeagueClient.log, ARMADILHAS § LCU)
 //   PATCH session/my-selection {selectedSkinId} | {spell1Id, spell2Id}
 //   POST session/position-swaps|pick-order-swaps|champion-swaps/{id}/request|cancel|accept|decline
 //        (a troca de campeão é o campo `trades` da sessão, mas a rota é champion-swaps)
@@ -44,6 +47,17 @@ const MOTIVO = {
 };
 export const RESULTADO_MS = 6000; // quanto tempo "recusou/desistiu/aceitou" fica na linha do aliado
 export const SILENCIO_MS = 3000, RELER_MS = 2000; // sem evento da sessão há SILENCIO_MS: relê por GET (a cada RELER_MS)
+// banir/travar: CONFERIR_MS depois do clique (e da resposta 2xx) a ação ainda aberta = o client não aceitou (aviso com a
+// saída; nunca repete sozinho)
+export const CONFERIR_MS = 3000;
+// botão BANIR/TRAVAR nasce cinza por ARMAR_MS a cada ação nova (tipo ou id): o clique que ia para a grade ou para o
+// BANIR anterior não cai num TRAVAR que acabou de surgir no mesmo lugar
+export const ARMAR_MS = 700;
+// escrita desta tela sem resposta no prazo = falhou (status 0, aviso com a saída): o fetch do CEF não tem prazo e o
+// engasgo da LCU existe (ARMADILHAS § LCU); o hover tem prazo menor porque o travar pendente espera por ele
+export const PRAZO_MS = 4000, PRAZO_HOVER_MS = 2000;
+// hover igual ao último enviado só se repete depois disso (o 204 que não muda nada existe: o 2º clique tem de valer)
+export const REENVIO_MS = 1500;
 
 const num = v => { const n = Number(v); return Number.isFinite(n) ? n : 0; };
 const posDe = p => String(p || '').toUpperCase();
@@ -381,6 +395,9 @@ export async function montar(raiz, ctx) {
     sessao: null, l: null, mem: novaMemoria(), cat: new Map(), pickable: null, bannable: null, chaveListas: '',
     escolhido: 0, busca: '', inimigosAbertos: true, spAberto: null, ocupado: new Set(), slots: new Map(), slotsEm: 0, slotsVoo: false,
     skins: null, feiticos: null, runa: null, fim: 0, chaveSel: '', chaveGrade: '', modoSel: null, saiu: false,
+    // hover: clique guardado | hoverVoo: id em voo | hoverEnviado: {acao, id, em} | fechando: banir/travar clicado
+    // {acao, id, verbo, nome, enviado} até a sessão mostrar a ação fechada | armando: botão de ação ainda cinza
+    hover: null, hoverVoo: null, hoverEnviado: null, fechando: null, armando: false, chaveArmar: null, genArmar: 0,
   };
   atual = st;
   st.ultimoEvento = Date.now();
@@ -461,6 +478,12 @@ function aoSessao(st, s) {
   // escolha local vale só para a ação em que foi feita (intenção 18 -> ban 4 -> pick 18): nunca carrega para o ban
   if ((l.modo.acao?.id ?? null) !== st.acaoId) { st.acaoId = l.modo.acao?.id ?? null; st.escolhido = 0; }
   st.sessao = s; st.l = l;
+  // hover enviado vale até a sessão mostrar ele (ou a ação mudar, ou REENVIO_MS): evento velho não faz reenviar o mesmo
+  const he = st.hoverEnviado;
+  if (he && (l.modo.acao?.id !== he.acao || noClient(l) === he.id || Date.now() - he.em > REENVIO_MS)) st.hoverEnviado = null;
+  // banir/travar clicado: a ação fechou ou mudou na sessão = acabou (o resto, a conferência decide)
+  if (st.fechando && l.modo.acao?.id !== st.fechando.acao) st.fechando = null;
+  armar(st);
   st.fim = Date.now() + l.timer.restante;
   for (const r of acompanharPedidos(st.mem, s)) {
     if (r.resultado === 'morreu' || r.resultado === 'sumiu') ctx.avisar(textoResultado(r, rotuloDe(l, r.cellId)));
@@ -488,7 +511,11 @@ function lerListas(st) {
   const rota = l.modo.tipo === 'banir' ? 'bannable-champion-ids' : 'pickable-champion-ids';
   ctx.lcu('GET', `${CS}/${rota}`).then(ctx.seguro(r => {
     if (st.chaveListas !== chave) return;
-    if (rota === 'bannable-champion-ids') st.bannable = ids(r); else st.pickable = ids(r);
+    const lista = ids(r);
+    if (rota === 'bannable-champion-ids') st.bannable = lista; else st.pickable = lista;
+    // só tamanhos, nunca nome: o console do Pengu cai no LeagueClientUx.log (prova da grade vazia de 14/10/2026)
+    const noCat = lista && st.cat.size ? [...lista].filter(x => st.cat.has(x)).length : -1;
+    (ctx.log || console.log)(`[lol-client] compacto: ${rota} ${l.fase}/${l.modo.tipo} status=${r.status} n=${lista ? lista.size : 'sem lista'} noCatalogo=${noCat}`);
     st.chaveSel = ''; pintar(st);
   }));
 }
@@ -581,7 +608,7 @@ function escrever(st, chave, passos, ok, depois) {
   pintar(st);
   (async () => {
     for (const [metodo, url, corpo, erro] of passos) {
-      const r = await ctx.lcu(metodo, url, corpo);
+      const r = await lcuComPrazo(st, metodo, url, corpo);
       if (!ctx.vivo()) return;
       if (!r.ok) { ctx.avisar(`${erro} (${r.status || 'sem resposta'})`, true); return; }
     }
@@ -590,28 +617,150 @@ function escrever(st, chave, passos, ok, depois) {
   })().catch(e => ctx.falhou(e)).finally(() => { st.ocupado.delete(chave); if (ctx.vivo()) { st.chaveSel = ''; pintar(st); } });
 }
 
+// o campeão que o client já tem na ação que a tela usa (intenção: o hover do myTeam; vez dele: a ação)
+const noClient = l => (l.modo.tipo === 'intencao' || l.modo.tipo === 'esperar' ? (l.eu?.hover || l.modo.acao?.championId || 0) : (l.modo.acao?.championId || 0));
+
+// botão BANIR/TRAVAR: a cada ação nova (tipo + id, inclusive a 1ª pintura) fica cinza por ARMAR_MS. Geração: duas viradas
+// dentro do prazo não armam cedo (não há como cancelar o timer)
+function armar(st) {
+  const { l, ctx } = st;
+  const chave = `${l.modo.tipo}|${l.modo.acao?.id ?? ''}`;
+  if (chave === st.chaveArmar) return;
+  st.chaveArmar = chave;
+  if (l.modo.tipo !== 'banir' && l.modo.tipo !== 'escolher') { st.armando = false; return; }
+  st.armando = true;
+  const g = ++st.genArmar;
+  ctx.tempo(() => { if (st.genArmar !== g) return; st.armando = false; st.chaveSel = ''; pintar(st); }, ARMAR_MS);
+}
+
+// LCU com prazo: resolve uma vez só, com a resposta ou com {ok:false, status:0} no fim do prazo (a resposta atrasada
+// depois disso é ignorada: nada roda duas vezes)
+function lcuComPrazo(st, metodo, url, corpo, ms = PRAZO_MS) {
+  const { ctx } = st;
+  return new Promise(res => {
+    let feito = false;
+    const fim = r => { if (!feito) { feito = true; res(r); } };
+    ctx.tempo(() => fim({ ok: false, status: 0, json: null, erro: 'sem resposta' }), ms);
+    Promise.resolve(ctx.lcu(metodo, url, corpo)).then(fim, e => fim({ ok: false, status: 0, json: null, erro: e?.message || String(e) }));
+  });
+}
+
+const VERBO = { banir: { rot: 'BANIR', ger: 'BANINDO', fez: 'baniu' }, travar: { rot: 'TRAVAR', ger: 'TRAVANDO', fez: 'travou' } };
+
+// clique num campeão = hover na ação dele (como o client: o time vê). Na intenção (PLANNING ou vez de outro) isso JÁ é
+// declarar: 1 clique, sem confirmar (pedido do Gabriel, 14/10/2026). Banir e travar seguem só no botão de baixo.
 function clicarCampeao(st, id) {
-  const { l } = st;
+  const { l, ctx } = st;
+  const f = st.fechando;
+  if (f) {
+    // banir/travar já saiu: o clique na grade espera o client (um {completed:false} agora iria contra a ação fechando)
+    if (f.enviado) return;
+    // banir/travar esperando o hover em voo: o clique novo é ele mudando de ideia (nunca trava o campeão de antes)
+    st.fechando = null;
+    ctx.avisar(`${f.verbo === 'banir' ? 'ban' : 'travamento'} de ${f.nome} cancelado: clica ${VERBO[f.verbo].rot} de novo`);
+  }
   st.escolhido = id;
-  // na vez dele o clique é hover (como o client: o time vê); a decisão é o botão de baixo
   const a = l.modo.acao;
-  if (a && (l.modo.tipo === 'banir' || l.modo.tipo === 'escolher') && a.championId !== id)
-    escrever(st, 'hover', [['PATCH', `${CS}/session/actions/${a.id}`, { championId: id }, 'não consegui marcar o campeão']]);
+  // o que vai ficar no client depois do que já saiu (o enviado vale até a sessão mostrar ele, ou REENVIO_MS)
+  const he = st.hoverEnviado;
+  const enviado = he?.acao === a?.id && Date.now() - he.em <= REENVIO_MS ? he.id : undefined;
+  const ultimo = st.hover?.id ?? st.hoverVoo ?? enviado ?? noClient(l);
+  if (a && ['banir', 'escolher', 'intencao', 'esperar'].includes(l.modo.tipo) && ultimo !== id) {
+    st.hover = { acao: a.id, id, intencao: l.modo.tipo === 'intencao' || l.modo.tipo === 'esperar' };
+    enviarHover(st);
+  }
   st.chaveSel = ''; pintar(st);
+}
+
+// uma escrita de hover por vez; clique novo durante o voo fica guardado e o último vence (Zac e logo Renekton = Renekton)
+function enviarHover(st) {
+  const { ctx } = st;
+  const q = st.hover;
+  if (!q || st.ocupado.has('hover')) return;
+  if (st.l?.modo.acao?.id !== q.acao) { st.hover = null; return; } // a ação mudou (virou o ban, travou): o clique morreu
+  st.hover = null;
+  st.ocupado.add('hover'); st.hoverVoo = q.id;
+  const erro = q.intencao ? 'não consegui declarar a intenção' : 'não consegui marcar o campeão';
+  lcuComPrazo(st, 'PATCH', `${CS}/session/actions/${q.acao}`, { completed: false, championId: q.id }, PRAZO_HOVER_MS).then(ctx.seguro(r => {
+    st.ocupado.delete('hover'); st.hoverVoo = null;
+    st.hoverEnviado = r.ok ? { acao: q.acao, id: q.id, em: Date.now() } : null;
+    const f = st.fechando;
+    if (f && !f.enviado) {
+      // BANIR/TRAVAR clicado com este hover em voo. Sem resposta: o hover ainda pode chegar depois do travamento (ordem
+      // incerta), então não manda; avisa e devolve o botão. Com resposta (mesmo erro): manda o que ele clicou
+      st.hover = null;
+      if (!r.ok && !r.status) {
+        st.fechando = null;
+        ctx.avisar(`o client não respondeu ao campeão marcado: clica ${VERBO[f.verbo].rot} de novo ou ⤢ expandir`, true);
+        if (ctx.vivo()) { st.chaveSel = ''; pintar(st); }
+        return;
+      }
+      if (!r.ok) ctx.avisar(`${erro} (${r.status})`, true);
+      return enviarAcao(st);
+    }
+    if (!r.ok) ctx.avisar(`${erro} (${r.status || 'sem resposta'})`, true);
+    if (st.hover) enviarHover(st);
+    else if (ctx.vivo()) { st.chaveSel = ''; pintar(st); }
+  }));
 }
 
 function confirmarAcao(st) {
   const { l } = st;
   const a = l.modo.acao, id = alvoPadrao(st);
-  if (!a || !id) return;
-  const nome = nomeDe(st, id);
-  if (l.modo.tipo === 'intencao' || l.modo.tipo === 'esperar')
-    return escrever(st, 'acao', [['PATCH', `${CS}/session/actions/${a.id}`, { championId: id }, 'não consegui declarar a intenção']], `intenção: ${nome}`);
-  const verbo = l.modo.tipo === 'banir' ? 'banir' : 'travar';
-  escrever(st, 'acao', [
-    ['PATCH', `${CS}/session/actions/${a.id}`, { championId: id }, `não consegui ${verbo} ${nome}`],
-    ['POST', `${CS}/session/actions/${a.id}/complete`, undefined, `não consegui ${verbo} ${nome}`],
-  ]);
+  if (!a || !id || (l.modo.tipo !== 'banir' && l.modo.tipo !== 'escolher')) return;
+  // 2º clique (clique duplo, ou o evento da sessão ainda não chegou), botão ainda armando ou campeão que não vale
+  if (st.fechando || st.ocupado.has('acao') || st.armando || !dadosEscolha(st).pode(id)) return;
+  st.hover = null; // hover guardado não passa por cima do travamento
+  st.fechando = { acao: a.id, id, verbo: l.modo.tipo === 'banir' ? 'banir' : 'travar', nome: nomeDe(st, id), enviado: false };
+  // um hover ainda em voo chegaria DEPOIS do travamento (ordem não garantida): espera ele voltar (enviarHover manda)
+  if (st.ocupado.has('hover')) { st.chaveSel = ''; pintar(st); return; }
+  enviarAcao(st);
+}
+
+// o corpo do botão da Riot: 1 PATCH com completed e o campeão juntos (o POST .../complete trava o campeão 0)
+function enviarAcao(st) {
+  const { ctx } = st;
+  const f = st.fechando;
+  if (!f || f.enviado) return;
+  const repintar = () => { if (ctx.vivo()) { st.chaveSel = ''; pintar(st); } };
+  // o pendente esperou o hover: refaz as checagens do botão (a ação pode ter mudado, o campeão pode ter sido pego)
+  if (st.l?.modo.acao?.id !== f.acao) { st.fechando = null; return repintar(); }
+  if (!dadosEscolha(st).pode(f.id)) {
+    st.fechando = null;
+    ctx.avisar(`${f.nome} não está mais disponível: clica outro`, true);
+    return repintar();
+  }
+  f.enviado = true;
+  st.ocupado.add('acao');
+  // a conferência conta do clique: roda em CONFERIR_MS ou na resposta 2xx, o que vier por último
+  let prazo = false, ok = false;
+  ctx.tempo(() => { prazo = true; if (ok) conferirAcao(st, f); }, CONFERIR_MS);
+  repintar();
+  lcuComPrazo(st, 'PATCH', `${CS}/session/actions/${f.acao}`, { completed: true, championId: f.id }).then(ctx.seguro(r => {
+    st.ocupado.delete('acao');
+    if (!r.ok) {
+      if (st.fechando === f) st.fechando = null;
+      ctx.avisar(`não consegui ${f.verbo} ${f.nome} (${r.status || 'sem resposta'}): tenta de novo ou ⤢ expandir`, true);
+    } else { ok = true; if (prazo) conferirAcao(st, f); }
+    repintar();
+  }));
+}
+
+// 2xx não prova que travou (14/10/2026: 204 e nada): relê a sessão (o evento pode estar atrasado: socket mudo) e, com a
+// ação ainda aberta, avisa com a saída e devolve o botão. Nunca tenta de novo sozinho.
+function conferirAcao(st, f) {
+  const { ctx } = st;
+  lcuComPrazo(st, 'GET', `${CS}/session`).then(ctx.seguro(r => {
+    const s = r.ok && r.json && typeof r.json === 'object' ? r.json : st.sessao;
+    const a = acoes(s).find(x => x.id === f.acao);
+    const aberta = a && !a.completed && a.isInProgress;
+    if (st.fechando === f) st.fechando = null;
+    if (aberta) ctx.avisar(`o client não ${VERBO[f.verbo].fez} ${f.nome}: tenta de novo ou ⤢ expandir`, true);
+    // fechou no client e o evento não veio (socket mudo): a tela passa a valer a sessão relida (sem isso o botão voltaria
+    // ligado para uma ação já fechada)
+    else if (r.ok && Array.isArray(r.json?.myTeam) && st.l?.modo.acao?.id === f.acao) return aoSessao(st, r.json);
+    if (ctx.vivo()) { st.chaveSel = ''; pintar(st); }
+  }));
 }
 
 function troca(st, tr, id, verbo, cellId) {
@@ -756,8 +905,28 @@ function estatFav(st, id) {
 
 const favoritos = st => (Array.isArray(st.ctx.cfg?.compacto?.favoritos) ? st.ctx.cfg.compacto.favoritos : []).map(Number).filter(n => n > 0 && n < 10000);
 function dadosEscolha(st) {
-  const { fora, permitidos } = indisponiveis(st.l, st.sessao, { pickable: st.pickable, bannable: st.bannable });
-  return { fav: favoritos(st), fora, permitidos, id: alvoPadrao(st), pode: x => !fora.has(x) && (!permitidos || permitidos.has(x)) };
+  const { fora, permitidos: lista } = indisponiveis(st.l, st.sessao, { pickable: st.pickable, bannable: st.bannable });
+  // lista do client vazia ou sem nenhum id do catálogo (a grade do ban veio vazia na ranqueada de 14/10/2026, conteúdo
+  // não capturado). No BAN não filtra por ela e avisa: banir não depende de ter o campeão e quem recusa o inválido é o
+  // client, no clique dele. Na ESCOLHA (e na intenção) segue filtrando (só favoritos, cinza) com a nota e o ⤢: mostrar
+  // campeão que ele não tem seria deixar de checar justo o que o client garante
+  const semLista = !!lista && (lista.size === 0 || (st.cat.size > 0 && ![...lista].some(x => st.cat.has(x))));
+  const permitidos = semLista && st.l.modo.tipo === 'banir' ? null : lista;
+  return { fav: favoritos(st), fora, permitidos, semLista, id: alvoPadrao(st), pode: x => !fora.has(x) && (!permitidos || permitidos.has(x)) };
+}
+
+// por que o campeão do botão não vale (o botão fica cinza; CLAUDE.md: cinza sempre com motivo)
+function motivoFora(st, d, id) {
+  const { l } = st;
+  const nome = nomeDe(st, id);
+  if (l.banidosConhecidos.has(id)) return `${nome} foi banido: clica outro.`;
+  if (l.travados.has(id)) return `${nome} já foi escolhido: clica outro.`;
+  if (l.modo.tipo === 'banir') {
+    const al = l.time.find(t => !t.eu && t.hover === id);
+    if (al && d.fora.has(id)) return `${al.rotulo} quer jogar ${nome}: não dá para banir, clica outro.`;
+    return `${nome} não está na lista de bans do client: clica outro.`;
+  }
+  return `${nome} não está entre os teus campeões liberados: clica outro ou ⤢ expandir.`;
 }
 // campeão do botão: o clicado agora, senão o que o client já tem nesta ação. No ban, NUNCA a intenção de pick dele
 // (a intenção declarada no PLANNING viraria "BANIR <o campeão dele>" a um clique)
@@ -781,11 +950,13 @@ function pintarEscolha(st) {
     p.sel.replaceChildren(p.notas, el('div', { class: 'lc-cp-sel-busca' }, p.busca), p.favs, p.grade, p.acao, p.fim);
   }
   const d = dadosEscolha(st);
-  const { fav, fora, permitidos, id, pode } = d;
+  const { fav, fora, permitidos, semLista, id, pode } = d;
   const tipo = l.modo.tipo;
   const ocupado = st.ocupado.has('acao');
   const stats = fav.map(x => estatFav(st, x));
-  const chave = JSON.stringify([tipo, l.modo.acao?.id, id, [...fora].sort(), permitidos ? permitidos.size : -1, st.cat.size, fav, stats, ocupado, l.meuBan, l.revelado, l.fase]);
+  const f = st.fechando;
+  const chave = JSON.stringify([tipo, l.modo.acao?.id, id, [...fora].sort(), permitidos ? permitidos.size : -1, semLista, st.cat.size, fav, stats, ocupado,
+    l.meuBan, l.revelado, l.fase, st.armando, f && [f.acao, f.id, f.enviado], l.time.map(t => t.hover)]);
   pintarGrade(st, d);
   if (chave === st.chaveSel) return;
   st.chaveSel = chave;
@@ -793,18 +964,34 @@ function pintarEscolha(st) {
     class: 'lc-cp-sel-fav' + (x === id ? ' lc-cp-sel-on' : ''), disabled: !pode(x), dataset: { a: 'campeao', id: x },
     on: { click: ctx.seguro(() => clicarCampeao(st, x)) },
   }, foto(st, x, 28), el('span', {}, `★ ${nomeDe(st, x)}`, el('small', {}, stats[i])))));
-  const rot = { intencao: 'DECLARAR INTENÇÃO', esperar: 'DECLARAR INTENÇÃO', banir: 'BANIR', escolher: 'TRAVAR' }[tipo];
-  const botao = el('button', {
-    class: 'lc-cp-btn ' + (tipo === 'banir' ? 'lc-cp-verm' : 'lc-cp-prim'), dataset: { a: 'acao' },
-    disabled: !l.modo.acao || !id || !pode(id) || ocupado, on: { click: ctx.seguro(() => confirmarAcao(st)) },
-  }, id ? `${rot} ${nomeDe(st, id)}` : rot);
-  p.acao.replaceChildren(botao);
+  // banir e travar: botão de baixo, só com o clique dele. Intenção: o clique na grade já declara, e no lugar do botão fica
+  // um marcador cinza do mesmo tamanho (sem ele, o TRAVAR que surge na vez dele empurraria a grade e um clique na última
+  // fileira cairia no botão: revisão de 14/10/2026)
+  if (tipo === 'banir' || tipo === 'escolher') {
+    const v = VERBO[tipo === 'banir' ? 'banir' : 'travar'];
+    const txt = f && f.acao === l.modo.acao?.id ? `${v.ger} ${f.nome}…` : id ? `${v.rot} ${nomeDe(st, id)}` : v.rot;
+    p.acao.replaceChildren(el('button', {
+      class: 'lc-cp-btn ' + (tipo === 'banir' ? 'lc-cp-verm' : 'lc-cp-prim'), dataset: { a: 'acao' },
+      disabled: !l.modo.acao || !id || !pode(id) || ocupado || !!f || st.armando, on: { click: ctx.seguro(() => confirmarAcao(st)) },
+    }, txt));
+  } else {
+    p.acao.replaceChildren(el('button', { class: 'lc-cp-btn', disabled: true, dataset: { a: 'acao-marcador' } },
+      l.modo.acao ? '1 clique na grade declara' : 'tua vez ainda não chegou'));
+  }
   const notas = [];
+  // sem lista na escolha a nota do sem-lista já explica o cinza
+  if ((tipo === 'banir' || tipo === 'escolher') && id && !pode(id) && !(semLista && tipo !== 'banir') && !f)
+    notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'motivo' } }, motivoFora(st, d, id)));
   if (l.meuBan !== null && !l.revelado && l.fase === 'BAN_PICK' && tipo !== 'banir')
     notas.push(el('div', { class: 'lc-cp-nota' }, l.meuBan > 0 ? `tu baniu ${nomeDe(st, l.meuBan)}. Os bans dos 10 aparecem juntos quando todos terminarem.` : 'tu não baniu ninguém.'));
-  if (tipo === 'esperar') notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'tua vez de escolher ainda não chegou: aqui só muda a intenção.' : 'tua vez ainda não chegou.'));
+  if (tipo === 'esperar') notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'tua vez de escolher ainda não chegou: 1 clique muda a intenção.' : 'tua vez ainda não chegou.'));
+  // a nota da intenção fica no topo, com as outras: o que fica embaixo da grade tem altura fixa entre as fases
+  if (tipo === 'intencao') notas.push(el('div', { class: 'lc-cp-nota' }, '1 clique declara a intenção (só o teu time vê); escolher de verdade é na tua vez.'));
+  if (semLista) notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'sem-lista' } }, tipo === 'banir'
+    ? 'o client não mandou a lista de bans: mostrando todos (se não valer, o client recusa e avisa).'
+    : 'o client não mandou a lista dos teus campeões: só os favoritos, cinza. ⤢ expandir para escolher na tela da Riot.'));
   p.notas.replaceChildren(...notas);
-  p.fim.replaceChildren(...(tipo === 'intencao' ? [el('div', { class: 'lc-cp-nota' }, 'a intenção só mostra ao teu time; escolher de verdade é na tua vez.')] : []));
+  p.fim.replaceChildren();
 }
 
 // a grade se repinta à parte (busca digitada não refaz o resto nem perde o foco do campo)

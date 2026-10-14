@@ -90,8 +90,9 @@ chat dentro da partida (só existe na tela do jogo, ver Descartado).
 - sessão [H]: `timer`, `myTeam[]`, `theirTeam[]`, `localPlayerCellId`, `actions` (lista de listas), `trades[]`,
   `pickOrderSwaps[]`, `positionSwaps[]` (`ChampSelectSwapContract`), `allowSkinSelection`, `benchEnabled`/
   `benchChampions` (ARAM), `allowRerolling`/`rerollsRemaining`. Evento `OnJsonApiEvent_lol-champ-select_v1_session`.
-- escolher/banir [H]: `PATCH session/actions/{id}` (corpo `ChampSelectAction`) + `POST .../{id}/complete`.
-  [S] corpo parcial `{championId}` = hover; `complete` trava.
+- escolher/banir [H]: `PATCH session/actions/{id}` (corpo `ChampSelectAction`). **Medido 14/10/2026** (ranqueada,
+  `LeagueClient.log`): `{completed: false, championId}` = hover/intenção, `{completed: true, championId}` = trava/bane
+  (o corpo da própria Riot); `POST .../{id}/complete` sem corpo trava o campeão 0 (204, nada acontece): **não usar**.
 - campeões [H]: `pickable-champion-ids`, `bannable-champion-ids`, `all-grid-champions` (`owned`, `disabled`,
   `positionsFavorited`), `POST toggle-favorite/{championId}/{position}` (favorito nativo da Riot).
 - troca de posição [H]: `session/position-swaps/{id}/request|accept|decline|cancel`, `GET ongoing-position-swap`
@@ -344,6 +345,22 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
    **reprova se:** zero linhas.
 9. [ ] **Prova no client com ele:** uma ranqueada inteira no compacto (lobby → fila → champ select com 1 troca →
    pós-jogo → jogar de novo). Verificação manual (precisa de partida real e de outro jogador para a troca).
+   **1ª ranqueada no compacto (14/10/2026 10:12-10:15, solo/duo; ele travou pelo client normal e jogou):** 3 defeitos
+   na tela 3, causas e correção em ARMADILHAS § LCU; prova offline `node tools/teste-compacto-selecao.mjs` 128/128
+   (fixture `selecao-ranqueada-20261014.json`, remontada do medidor).
+   - TRAVAR não travou: o `POST .../complete` sem corpo trava o campeão 0 (`LeagueClient.log`, 4 tentativas com 204).
+     **Provado.** Agora 1 `PATCH {completed:true, championId}` (o corpo da Riot), conferido na sessão depois.
+   - Declarar pedia 2 cliques: nenhum PATCH no PLANNING. **Provado.** Agora o clique na grade já declara.
+   - Grade do ban vazia: as 5 leituras de `bannable-champion-ids` voltaram 200, conteúdo não gravado. **Dedução**
+     (lista vazia ou sem id do catálogo); no ban essa lista não filtra mais e o tamanho vai para o log.
+   - Revisão antes do commit (10 achados, todos com caso de teste): botão que nasce no lugar da grade (marcador fixo e
+     `ARMAR_MS`), travar pendente que trocava de campeão, escrita sem prazo, clique na grade durante o travar, escolha
+     sem lista mostrando campeão que ele não tem, cinza sem motivo, clique duplo, reenvio de hover, fixture com 2
+     bandeiras supostas (o medidor passou a gravar), diff do ARMADILHAS misturado.
+   - **Falta provar na próxima seleção dele** (com a interface recarregada em `None`/`Lobby`, que leva o plugin novo):
+     declarar com 1 clique no PLANNING, banir pela grade, travar pelo TRAVAR, e a linha
+     `[lol-client] compacto: bannable-champion-ids … n=` no `LeagueClientUx.log` (n = 0 confirma a causa da grade
+     vazia; n grande com `noCatalogo` > 0 derruba a dedução e a causa volta a ser procurada).
 
 ## Revisão da construção (13/10/2026)
 

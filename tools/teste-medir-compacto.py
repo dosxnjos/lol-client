@@ -119,6 +119,8 @@ ROTAS = {
                                                                 "responderPosition": "JUNGLE", "requestorIndex": 0, "responderIndex": 1}
                                                                if TROCA["estado"] == "SENT" else None),
         "/lol-champ-select/v1/ongoing-champion-swap": {"id": 13, "requesterChampionName": "Renekton", "responderChampionName": "Lee Sin", "responderIndex": 1},
+        "/lol-champ-select/v1/pickable-champion-ids": [58, 64, 122],
+        "/lol-champ-select/v1/bannable-champion-ids": [],
         "/lol-champ-select/v1/skin-carousel-skins": [{"id": 58000, "name": "Renekton", "unlocked": True, "childSkins": []},
                                                      {"id": 58001, "name": "Renekton Galático", "unlocked": True, "childSkins": [{"id": 58010}, {"id": 58011}]},
                                                      {"id": 58002, "name": "Renekton Fora da Lei", "unlocked": False, "disabled": True}],
@@ -234,12 +236,17 @@ def principal():
     sk = dados("skins")
     caso("skin-carousel dentro da seleção: contagens (3, 2 desbloqueadas, 2 chromas, 1 desabilitada)", sk.get("n") == 3 and sk.get("desbloqueadas") == 2
          and sk.get("chromas") == 2 and sk.get("desabilitadas") == 1 and "name" not in sk.get("campos", []), sk)
+    li = dados("listas")
+    caso("listas de pick e ban: só o tamanho por fase do timer (a grade de ban do compacto veio vazia em 14/10/2026)",
+         li == {"timerPhase": "BAN_PICK", "pickable": 3, "bannable": 0} and len(evs.get("listas", [])) == 1, li)
     se = dados("sessao_cs")
     caso("sessão: inimigo sem hover (championPickIntent) e ação dele sem campeão antes de completar",
          se and "championPickIntent" not in se["inimigos"][0] and all(a["championId"] is None for a in se["acoes"]), se.get("inimigos"))
     caso("sessão: nameVisibilityType e temNome por jogador do meu time", se and [p["nameVisibilityType"] for p in se["meuTime"]] == ["UNHIDDEN", "HIDDEN"]
          and all(p["temNome"] for p in se["meuTime"]))
     caso("sessão: o timer que anda não gera linha nova (só as 3 mudanças de troca)", len(evs.get("sessao_cs", [])) == 3, len(evs.get("sessao_cs", [])))
+    caso("sessão: as 2 bandeiras do ban (hasSimultaneousBans, disallowBanningTeammateHoveredChampions) entram no registro",
+         se and "hasSimultaneousBans" in se and "disallowBanningTeammateHoveredChampions" in se, sorted(se or {}))
     gf = [ln["dados"] for ln in evs.get("gameflow", [])]
     caso("gameflow: fila, mapa e personalizada", gf and gf[0] == {"queueId": 420, "mapId": 11, "isCustomGame": False, "gameMode": "CLASSIC"}, gf)
     marcos = [p[0].rsplit("-", 1)[1] for p in prints]

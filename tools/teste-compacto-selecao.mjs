@@ -3,7 +3,9 @@
 // tests/fixtures/champselect-real.json (normal draft, 61 eventos, duas seleções com localPlayerCellId 5 e depois 4).
 // Prova do passo 5 do plano roadmap/2026-10-13-client-compacto.md: inimigo só com pick completo, bans só depois da
 // revelação, nenhum nome, nenhuma escrita sem clique, cada clique = a rota certa (trade = champion-swaps), pedido de
-// troca recusado/desistido/morto na virada visível, erro = client normal. uso: node tools/teste-compacto-selecao.mjs
+// troca recusado/desistido/morto na virada visível, erro = client normal. Seção 7b: a ranqueada real de 14/10/2026
+// (tests/fixtures/selecao-ranqueada-20261014.json) com os 3 defeitos relatados (grade de ban vazia, intenção em 2
+// cliques, TRAVAR pelo POST .../complete que a LCU trava como campeão 0). uso: node tools/teste-compacto-selecao.mjs
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
@@ -121,8 +123,10 @@ async function montarTela({ rotas = {}, cfg = CFG, servicos = {}, inicial = null
   raiz.className = 'lc-cp-corpo';
   camada.append(titulo, extras, raiz); doc.body.append(camada);
   // escrita sem rota própria = 204 (como o client); GET sem rota = 404
+  // GET da sessão = o estado atual do "client" (a inicial e depois o último evento emitido), como a LCU de verdade
+  let ultima = inicial;
   const tabela = {
-    'GET /lol-champ-select/v1/session': inicial ?? { status: 404, json: { message: 'No active delegate' } },
+    'GET /lol-champ-select/v1/session': () => (ultima ? clonar(ultima) : { status: 404, json: { message: 'No active delegate' } }),
     'GET /lol-game-data/assets/v1/champion-summary.json': CATALOGO,
     'GET /lol-champ-select/v1/pickable-champion-ids': TODOS,
     'GET /lol-champ-select/v1/bannable-champion-ids': TODOS,
@@ -134,7 +138,7 @@ async function montarTela({ rotas = {}, cfg = CFG, servicos = {}, inicial = null
   const f = lcuFalsa(new Proxy(tabela, { get: (o, k) => (k in o ? o[k] : typeof k === 'string' && !k.startsWith('GET ') ? { status: 204 } : undefined) }));
   globalThis.fetch = f.fetch;
   _zerarCatalogo();
-  const t = { doc, raiz, titulo, extras, lcu: f, falhas: [], avisos: [], expandiu: 0, timers: [], intervalos: [], subs: new Map(), vivo: true };
+  const t = { doc, raiz, titulo, extras, lcu: f, falhas: [], avisos: [], logs: [], expandiu: 0, timers: [], intervalos: [], subs: new Map(), vivo: true };
   const seguro = fn => (...a) => {
     if (!t.vivo) return undefined;
     try { const r = fn(...a); if (r && typeof r.then === 'function') r.catch(e => t.falhas.push(e)); return r; } catch (e) { t.falhas.push(e); return undefined; }
@@ -146,9 +150,10 @@ async function montarTela({ rotas = {}, cfg = CFG, servicos = {}, inicial = null
     tempo: (fn, ms) => { t.timers.push({ fn: seguro(fn), ms }); return t.timers.length; },
     intervalo: (fn, ms) => { t.intervalos.push({ fn: seguro(fn), ms }); return t.intervalos.length; },
     falhou: e => t.falhas.push(e), expandir: () => { t.expandiu++; }, avisar: (m, e) => t.avisos.push([String(m), !!e]),
-    dormir: () => Promise.resolve(),
+    dormir: () => Promise.resolve(), log: m => t.logs.push(String(m)),
   };
-  t.emitir = async (s, eventType = 'Update') => { t.subs.get('/lol-champ-select/v1/session')?.({ eventType, data: s, uri: '/lol-champ-select/v1/session' }); await tick(); };
+  t.emitir = async (s, eventType = 'Update') => { ultima = s; t.subs.get('/lol-champ-select/v1/session')?.({ eventType, data: s, uri: '/lol-champ-select/v1/session' }); await tick(); };
+  t.mudarSemEvento = s => { ultima = s; }; // o client mudou e o evento não veio (socket mudo)
   t.achar = sel => raiz.querySelector(sel);
   t.todos = sel => raiz.querySelectorAll(sel);
   t.escritas = () => f.escritas().map(c => `${c.metodo} ${c.url}${c.corpo === undefined ? '' : ' ' + JSON.stringify(c.corpo)}`);
@@ -257,9 +262,19 @@ const todasEscritas = [];
     && t.extras.children[0]?.classList.contains('lc-cp-sel-t') && t.extras.children[1] === bt && t.subs.has('/lol-chat/v1/conversations'));
   caso('banir: botão BANIR desligado sem campeão escolhido', t.achar('button[data-a="acao"]')?.disabled && /BANIR/.test(t.achar('button[data-a="acao"]').textContent));
   t.achar('button.lc-cp-sel-gc[data-id="58"]').click(); await tick();
-  caso('banir: clique na grade = hover (PATCH da ação 4), sem travar', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/4 {"championId":58}']), t.escritas().join('; '));
+  // corpos iguais aos do client da Riot (rcp-fe-lol-champ-select: selectChampion e o botão de travar/banir)
+  caso('banir: clique na grade = hover (PATCH da ação 4, completed false), sem travar', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/4 {"completed":false,"championId":58}']), t.escritas().join('; '));
+  t.rodarTimers(tela.ARMAR_MS);
   t.achar('button[data-a="acao"]').click(); await tick();
-  caso('banir: BANIR = PATCH + POST complete da ação 4', igual(t.escritas().slice(1), ['PATCH /lol-champ-select/v1/session/actions/4 {"championId":58}', 'POST /lol-champ-select/v1/session/actions/4/complete']), t.escritas().join('; '));
+  // 14/10/2026: POST .../complete sem corpo = "lockIn championId: 0" no LeagueClient.log, 204 e nada travado
+  caso('banir: BANIR = 1 PATCH {completed:true, championId} da ação 4 (nunca POST .../complete)', igual(t.escritas().slice(1), ['PATCH /lol-champ-select/v1/session/actions/4 {"completed":true,"championId":58}']), t.escritas().join('; '));
+  // clique duplo: o 204 voltou e o evento da sessão ainda não; o 2º clique não manda outro ban (revisão nº 7)
+  const bb = t.achar('button[data-a="acao"]');
+  bb.click(); await tick();
+  caso('banir: depois do 204 e antes do evento, BANIR fica "BANINDO Renekton…" cinza e o 2º clique não escreve',
+    bb.disabled && /BANINDO Renekton/.test(bb.textContent) && t.escritas().length === 2, `${bb.textContent} | ${t.escritas().join('; ')}`);
+  t.achar('button.lc-cp-sel-gc[data-id="154"]').click(); await tick();
+  caso('banir: clique na grade com o ban saindo é ignorado (nada de {completed:false} contra a ação fechando)', t.escritas().length === 2, t.escritas().join('; '));
   caso('banir: ban de aliado já feito (51) e hover de aliado fica cinza', t.achar('button.lc-cp-sel-gc[data-id="51"]')?.disabled);
   todasEscritas.push(...t.escritas());
   tela.desmontar(t.raiz, t.ctx); t.vivo = false;
@@ -269,10 +284,12 @@ const todasEscritas = [];
   const t = await montarTela({ inicial: S(28), servicos: { champ: { partidas: () => [], estatisticas: id => ({ geral: id === 58 ? { n: 87, winrate: 48 } : { n: 0 } }) } } });
   const favs = t.todos('button.lc-cp-sel-fav');
   caso('intenção: favoritos Renekton e Zac com o winrate do histórico', favs.length === 2 && /Renekton/.test(favs[0].textContent) && /87 partidas · 48%/.test(favs[0].textContent) && /sem partidas/.test(favs[1].textContent));
+  caso('intenção: sem botão de confirmar (declarar é 1 clique, pedido do Gabriel 14/10/2026)', !t.achar('button[data-a="acao"]') && /1 clique/.test(t.raiz.textContent));
   favs[1].click(); await tick();
-  caso('intenção: clicar no favorito só marca (nada escrito)', t.escritas().length === 0 && /DECLARAR INTENÇÃO Zac/.test(t.achar('button[data-a="acao"]').textContent));
-  t.achar('button[data-a="acao"]').click(); await tick();
-  caso('intenção: DECLARAR = PATCH da minha ação de pick, sem complete', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"championId":154}']), t.escritas().join('; '));
+  caso('intenção: clicar no favorito já declara (PATCH da minha ação de pick, completed false, sem travar)',
+    igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"completed":false,"championId":154}']) && t.todos('button.lc-cp-sel-fav')[1].classList.contains('lc-cp-sel-on'), t.escritas().join('; '));
+  t.todos('button.lc-cp-sel-fav')[1].click(); await tick();
+  caso('intenção: clicar de novo no mesmo campeão não escreve outra vez', t.escritas().length === 1, t.escritas().join('; '));
   // a intenção (Zac) não pode virar o alvo do ban na fase seguinte
   await t.emitir(S(34));
   const ban = t.achar('button[data-a="acao"]');
@@ -298,18 +315,86 @@ const todasEscritas = [];
 }
 {
   const t = await montarTela({ inicial: S(53), servicos: { champ: { partidas: () => null, estatisticas: () => ({ geral: { n: 1 } }) } } });
+  caso('escolher: TRAVAR nasce cinza por ARMAR_MS (clique que ia para outro lugar não trava)', /TRAVAR Zac/.test(t.achar('button[data-a="acao"]').textContent) && t.achar('button[data-a="acao"]').disabled);
+  t.rodarTimers(tela.ARMAR_MS);
   caso('escolher: TRAVAR com o hover do client (Zac)', /TRAVAR Zac/.test(t.achar('button[data-a="acao"]').textContent) && !t.achar('button[data-a="acao"]').disabled);
   caso('escolher: campeão travado por outro (895) e banido (51) cinza', t.achar('button.lc-cp-sel-gc[data-id="895"]')?.disabled && t.achar('button.lc-cp-sel-gc[data-id="51"]')?.disabled);
   caso('escolher: histórico ainda lendo vira "histórico carregando"', /histórico carregando/.test(t.achar('button.lc-cp-sel-fav').textContent));
   t.achar('button[data-a="acao"]').click(); await tick();
-  caso('escolher: TRAVAR = PATCH + POST complete da ação 18', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"championId":154}', 'POST /lol-champ-select/v1/session/actions/18/complete']), t.escritas().join('; '));
+  caso('escolher: TRAVAR = 1 PATCH {completed:true, championId} da ação 18 (o corpo do botão da Riot)', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"completed":true,"championId":154}']), t.escritas().join('; '));
   todasEscritas.push(...t.escritas());
 }
 {
   // erro do client ao travar: aviso, a tela segue (dá para tentar de novo)
-  const t = await montarTela({ inicial: S(53), rotas: { 'POST /lol-champ-select/v1/session/actions/18/complete': { status: 500, json: {} } } });
+  const t = await montarTela({ inicial: S(53), rotas: { 'PATCH /lol-champ-select/v1/session/actions/18': { status: 500, json: {} } } });
+  t.rodarTimers(tela.ARMAR_MS);
   t.achar('button[data-a="acao"]').click(); await tick();
-  caso('escolher: POST complete com 500 vira aviso de erro, sem derrubar a tela', t.avisos.some(([m, e]) => e && /não consegui travar Zac \(500\)/.test(m)) && t.falhas.length === 0 && !t.achar('button[data-a="acao"]').disabled);
+  caso('escolher: PATCH de travar com 500 vira aviso de erro, sem derrubar a tela', t.avisos.some(([m, e]) => e && /não consegui travar Zac \(500\)/.test(m)) && t.falhas.length === 0 && !t.achar('button[data-a="acao"]').disabled);
+}
+{
+  // 204 que não trava (foi o que a LCU fez com o POST .../complete em 14/10/2026): a sessão segue com a ação aberta
+  // depois do prazo -> aviso de erro com a saída (tentar de novo ou expandir); nunca tenta de novo sozinho
+  const t = await montarTela({ inicial: S(53) });
+  t.rodarTimers(tela.ARMAR_MS);
+  t.achar('button[data-a="acao"]').click(); await tick();
+  const n = t.escritas().length;
+  await t.emitir(S(53));
+  t.rodarTimers(tela.CONFERIR_MS); await tick();
+  caso('escolher: 204 sem a ação completar em CONFERIR_MS (relida por GET) vira aviso "não travou" com ⤢, sem 2ª escrita',
+    t.avisos.some(([m, e]) => e && /não travou Zac/.test(m) && /expandir/.test(m)) && t.escritas().length === n && n === 1, JSON.stringify(t.avisos));
+  caso('escolher: depois do "não travou" o botão TRAVAR volta ligado (tentar de novo é clique dele)',
+    !t.achar('button[data-a="acao"]').disabled && /^TRAVAR Zac$/.test(t.achar('button[data-a="acao"]').textContent), t.achar('button[data-a="acao"]').textContent);
+  const t2 = await montarTela({ inicial: S(53) });
+  t2.rodarTimers(tela.ARMAR_MS);
+  t2.achar('button[data-a="acao"]').click(); await tick();
+  await t2.emitir(S(54)); // a ação 18 completou
+  t2.rodarTimers(tela.CONFERIR_MS); await tick();
+  caso('escolher: travou de verdade (ação completa) = nenhum aviso de erro', !t2.avisos.some(([, e]) => e), JSON.stringify(t2.avisos));
+  // socket mudo: travou no client, o evento não chegou (a tela ainda vê S(53)); a releitura por GET evita o alarme falso
+  const t3 = await montarTela({ inicial: S(53) });
+  t3.rodarTimers(tela.ARMAR_MS);
+  t3.achar('button[data-a="acao"]').click(); await tick();
+  t3.mudarSemEvento(S(54));
+  t3.rodarTimers(tela.CONFERIR_MS); await tick();
+  caso('escolher: travou mas o evento não veio (socket mudo) = nenhum aviso falso (confere por GET)', !t3.avisos.some(([, e]) => e), JSON.stringify(t3.avisos));
+}
+{
+  // TRAVAR com o hover ainda em voo: o travamento espera o hover voltar (senão o hover chega depois e a ordem é incerta)
+  let soltar;
+  const presa = new Promise(r => { soltar = r; });
+  const rotas = { 'PATCH /lol-champ-select/v1/session/actions/18': async c => { if (c?.completed === false) await presa; return { status: 204 }; } };
+  const t = await montarTela({ inicial: S(53), rotas });
+  t.rodarTimers(tela.ARMAR_MS);
+  t.achar('button.lc-cp-sel-gc[data-id="58"]').click(); await tick();
+  t.achar('button[data-a="acao"]').click(); await tick();
+  const antes = t.escritas();
+  caso('escolher: TRAVAR pendente (hover em voo) aparece como "TRAVANDO Renekton…" cinza (revisão nº 2)',
+    /TRAVANDO Renekton/.test(t.achar('button[data-a="acao"]').textContent) && t.achar('button[data-a="acao"]').disabled, t.achar('button[data-a="acao"]').textContent);
+  soltar(); await tick(12);
+  caso('escolher: TRAVAR durante o hover em voo = só o hover sai; o travamento (do clique dele) sai quando o hover volta, com o campeão clicado',
+    igual(antes, ['PATCH /lol-champ-select/v1/session/actions/18 {"completed":false,"championId":58}'])
+    && igual(t.escritas(), [...antes, 'PATCH /lol-champ-select/v1/session/actions/18 {"completed":true,"championId":58}']), JSON.stringify({ antes, depois: t.escritas() }));
+  todasEscritas.push(...t.escritas());
+}
+{
+  // fase 'esperar' (vez de outro, minha ação de pick aberta): clique = intenção na hora, sem confirmar
+  const t = await montarTela({ inicial: S(45) });
+  caso('esperar: sem botão de ação (só intenção, 1 clique)', !t.achar('button[data-a="acao"]'));
+  t.achar('button.lc-cp-sel-gc[data-id="154"]').click(); await tick();
+  caso('esperar: clique na grade = PATCH da minha ação de pick (18) com completed false',
+    igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"completed":false,"championId":154}']), t.escritas().join('; '));
+  todasEscritas.push(...t.escritas());
+}
+{
+  // cliques rápidos (Zac e logo Renekton): o último vence, mesmo com a 1ª escrita ainda em voo
+  let soltar;
+  const presa = new Promise(r => { soltar = r; });
+  const t = await montarTela({ inicial: S(28), rotas: { 'PATCH /lol-champ-select/v1/session/actions/18': async () => { await presa; return { status: 204 }; } } });
+  t.achar('button.lc-cp-sel-gc[data-id="154"]').click(); await tick();
+  t.achar('button.lc-cp-sel-gc[data-id="58"]').click(); await tick();
+  soltar(); await tick(12);
+  caso('intenção: 2 cliques rápidos = 2 PATCHes na ordem, o último (Renekton) por último',
+    igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"completed":false,"championId":154}', 'PATCH /lol-champ-select/v1/session/actions/18 {"completed":false,"championId":58}']), t.escritas().join('; '));
 }
 
 // ---------- 4. trocas ----------
@@ -534,8 +619,199 @@ const todasEscritas = [];
   caso('roteador: nenhuma escrita na LCU nesse caminho', f.escritas().length === 0);
 }
 
+// ---------- 7b. a ranqueada real de 14/10/2026 (1ª no compacto): os 3 defeitos que o Gabriel relatou ----------
+// tests/fixtures/selecao-ranqueada-20261014.json (do medidor, só sinais): eu no cell 1, ban 1, pick 13.
+// ev 0 = PLANNING, ev 1 = BAN_PICK com o meu ban aberto, ev 10 = vez do cell 0 com a minha intenção 58, ev 14 = minha vez.
+{
+  const R = JSON.parse(readFileSync(RAIZ + 'tests/fixtures/selecao-ranqueada-20261014.json', 'utf8')).eventos;
+  const SR = i => clonar(R[i].session);
+  const grade = t => t.todos('button.lc-cp-sel-gc');
+  const ligados = t => grade(t).filter(b => !b.disabled).map(b => Number(b.dataset.id));
+
+  // defeito 2: declarar no PLANNING é 1 clique
+  {
+    const t = await montarTela({ inicial: SR(0) });
+    caso('ranqueada ev 0 (PLANNING): modo intenção na minha ação de pick 13, sem botão de confirmar',
+      lerSessao(SR(0)).modo.tipo === 'intencao' && lerSessao(SR(0)).modo.acao?.id === 13 && !t.achar('button[data-a="acao"]'));
+    t.achar('button.lc-cp-sel-fav[data-id="58"]')?.click(); await tick();
+    caso('ranqueada ev 0: clique no favorito Renekton = PATCH actions/13 {completed:false, championId:58} na hora',
+      igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/13 {"completed":false,"championId":58}']), t.escritas().join('; '));
+    todasEscritas.push(...t.escritas());
+  }
+
+  // defeito 1: grade do ban vazia quando a lista de banidos do client vem vazia ou sem nenhum id do catálogo
+  for (const [nome, lista] of [['vazia ([])', []], ['sem id do catálogo ([99999])', [99999]]]) {
+    const t = await montarTela({ inicial: SR(0), rotas: { 'GET /lol-champ-select/v1/bannable-champion-ids': lista } });
+    await t.emitir(SR(1));
+    const l1 = lerSessao(SR(1));
+    caso(`ranqueada ev 1 (BAN_PICK), bannable ${nome}: modo banir na ação 1 e a grade mostra os campeões, ligados, com a nota`,
+      l1.modo.tipo === 'banir' && l1.modo.acao?.id === 1 && ligados(t).length >= TODOS.length - 1 && /lista de bans/.test(t.raiz.textContent),
+      JSON.stringify({ ligados: ligados(t).length, nota: /lista de bans/.test(t.raiz.textContent) }));
+    caso(`ranqueada ev 1, bannable ${nome}: BANIR desligado até o clique dele`, t.achar('button[data-a="acao"]')?.disabled && /^BANIR$/.test(t.achar('button[data-a="acao"]').textContent));
+    caso(`ranqueada ev 1, bannable ${nome}: o tamanho da lista vai para o log (só números, para o LeagueClientUx.log)`,
+      t.logs.some(m => new RegExp(`bannable-champion-ids BAN_PICK/banir status=200 n=${lista.length} noCatalogo=0`).test(m)), JSON.stringify(t.logs));
+    t.achar('button.lc-cp-sel-gc[data-id="157"]')?.click(); await tick();
+    t.rodarTimers(tela.ARMAR_MS);
+    t.achar('button[data-a="acao"]')?.click(); await tick();
+    caso(`ranqueada ev 1, bannable ${nome}: clique = hover, BANIR = 1 PATCH completed true da ação 1`,
+      igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/1 {"completed":false,"championId":157}', 'PATCH /lol-champ-select/v1/session/actions/1 {"completed":true,"championId":157}']), t.escritas().join('; '));
+    todasEscritas.push(...t.escritas());
+  }
+  {
+    // lista boa: filtra como antes (o client manda só o que dá para banir)
+    const t = await montarTela({ inicial: SR(1), rotas: { 'GET /lol-champ-select/v1/bannable-champion-ids': [58, 157, 245] } });
+    caso('ranqueada ev 1, bannable com ids: a grade é a lista do client (+ favoritos cinza), sem a nota',
+      igual(ligados(t).sort((a, b) => a - b), [58, 157, 245]) && !/lista de bans/.test(t.raiz.textContent), JSON.stringify(ligados(t)));
+  }
+
+  // defeito 3: TRAVAR na minha vez (intenção 58 vira o alvo)
+  {
+    const t = await montarTela({ inicial: SR(14) });
+    t.rodarTimers(tela.ARMAR_MS);
+    const b = t.achar('button[data-a="acao"]');
+    caso('ranqueada ev 14 (minha vez): TRAVAR Renekton ligado (a intenção 58 é o alvo)', /TRAVAR Renekton/.test(b?.textContent || '') && !b?.disabled, b?.textContent);
+    b?.click(); await tick();
+    caso('ranqueada ev 14: TRAVAR = PATCH actions/13 {completed:true, championId:58}, nenhum /complete',
+      igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/13 {"completed":true,"championId":58}']), t.escritas().join('; '));
+    await t.emitir(SR(19)); // 10:14:00: pick 13 completo com 58
+    t.rodarTimers(tela.CONFERIR_MS); await tick();
+    caso('ranqueada ev 19: travado = finalização, sem aviso de erro', lerSessao(SR(19)).modo.tipo === 'finalizar' && !t.avisos.some(([, e]) => e), JSON.stringify(t.avisos));
+    todasEscritas.push(...t.escritas());
+  }
+
+  // revisão de 14/10/2026 (antes do commit): os buracos que o mecanismo novo de travar abria
+  const P13 = 'PATCH /lol-champ-select/v1/session/actions/13';
+  const presa = () => { let soltar; const p = new Promise(r => { soltar = r; }); return [p, () => soltar()]; };
+  {
+    // nº 1: o botão de ação ocupa o mesmo lugar na espera e na vez dele, e o TRAVAR que surge nasce cinza por ARMAR_MS
+    const t = await montarTela({ inicial: SR(10) });
+    const caixa = () => t.achar('.lc-cp-sel-acao');
+    const antes = caixa()?.children.map(b => b.className);
+    caso('posição: na espera (ev 10) o lugar do botão tem 1 marcador cinza do mesmo tamanho (lc-cp-btn), sem botão de ação',
+      igual(antes, ['lc-cp-btn']) && caixa().children[0].disabled && !t.achar('button[data-a="acao"]'), JSON.stringify(antes));
+    await t.emitir(SR(14));
+    const b = t.achar('button[data-a="acao"]');
+    caso('posição: na vez dele (ev 14) o TRAVAR entra no MESMO lugar (1 botão lc-cp-btn na mesma caixa), cinza nos primeiros ms',
+      caixa()?.children.length === 1 && caixa().children[0] === b && /lc-cp-btn/.test(b.className) && b.disabled && /TRAVAR Renekton/.test(b.textContent), b?.textContent);
+    b.click(); await tick();
+    caso('posição: clique no TRAVAR recém-surgido (ainda armando) não escreve nada', t.escritas().length === 0, t.escritas().join('; '));
+    t.rodarTimers(tela.ARMAR_MS);
+    caso('posição: depois de ARMAR_MS o TRAVAR liga', !t.achar('button[data-a="acao"]').disabled);
+  }
+  {
+    // nº 1 (ban → escolha) e geração: duas viradas dentro do prazo não armam cedo
+    const t = await montarTela({ inicial: SR(1) });
+    const primeiro = t.timers.find(x => x.ms === tela.ARMAR_MS);
+    await t.emitir(SR(14));
+    primeiro?.fn(); await tick();
+    caso('armar: o timer do BANIR (virada anterior) não liga o TRAVAR que surgiu depois', !!primeiro && t.achar('button[data-a="acao"]').disabled);
+    t.rodarTimers(tela.ARMAR_MS);
+    caso('armar: o timer do próprio TRAVAR liga', !t.achar('button[data-a="acao"]').disabled);
+  }
+  {
+    // nº 2: TRAVAR pendente (hover A em voo) + clique em B = cancela, nunca trava B nem A sem novo clique
+    const [p, soltar] = presa();
+    const t = await montarTela({ inicial: SR(14), rotas: { [P13]: async c => { if (c?.completed === false) await p; return { status: 204 }; } } });
+    t.rodarTimers(tela.ARMAR_MS);
+    t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
+    t.achar('button[data-a="acao"]').click(); await tick();
+    t.achar('button.lc-cp-sel-gc[data-id="245"]').click(); await tick();
+    caso('pendente + clique em outro: aviso "travamento de Yasuo cancelado"', t.avisos.some(([m]) => /travamento de Yasuo cancelado/.test(m) && /TRAVAR de novo/.test(m)), JSON.stringify(t.avisos));
+    soltar(); await tick(12);
+    caso('pendente + clique em outro: sai só o hover novo (Ekko), nenhum completed true',
+      igual(t.escritas(), [`${P13} {"completed":false,"championId":157}`, `${P13} {"completed":false,"championId":245}`]), t.escritas().join('; '));
+    caso('pendente + clique em outro: o botão volta "TRAVAR Ekko" ligado', /^TRAVAR Ekko$/.test(t.achar('button[data-a="acao"]').textContent) && !t.achar('button[data-a="acao"]').disabled,
+      t.achar('button[data-a="acao"]').textContent);
+  }
+  {
+    // nº 2: o pendente refaz o pode(id): um aliado travou o campeão enquanto o hover voava
+    const [p, soltar] = presa();
+    const t = await montarTela({ inicial: SR(14), rotas: { [P13]: async c => { if (c?.completed === false) await p; return { status: 204 }; } } });
+    t.rodarTimers(tela.ARMAR_MS);
+    t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
+    t.achar('button[data-a="acao"]').click(); await tick();
+    const s = SR(14); s.myTeam.find(c => c.cellId !== 1).championId = 157;
+    await t.emitir(s);
+    soltar(); await tick(12);
+    caso('pendente: campeão pego por aliado no meio do voo = não trava, aviso "não está mais disponível"',
+      !t.escritas().some(e => /"completed":true/.test(e)) && t.avisos.some(([m, e]) => e && /Yasuo não está mais disponível/.test(m)), JSON.stringify({ e: t.escritas(), a: t.avisos }));
+  }
+  {
+    // nº 3: hover que nunca volta + TRAVAR: no prazo do hover, aviso e o botão volta; o 2º clique trava
+    const [p] = presa();
+    const t = await montarTela({ inicial: SR(14), rotas: { [P13]: async c => { if (c?.completed === false) await p; return { status: 204 }; } } });
+    t.rodarTimers(tela.ARMAR_MS);
+    t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
+    t.achar('button[data-a="acao"]').click(); await tick();
+    t.rodarTimers(tela.PRAZO_HOVER_MS); await tick(6);
+    caso('hover mudo + TRAVAR: no PRAZO_HOVER_MS aviso "não respondeu" com ⤢ e nenhum travamento às cegas',
+      t.avisos.some(([m, e]) => e && /não respondeu/.test(m) && /expandir/.test(m)) && !t.escritas().some(e => /"completed":true/.test(e)), JSON.stringify(t.avisos));
+    const b = t.achar('button[data-a="acao"]');
+    caso('hover mudo + TRAVAR: o botão volta "TRAVAR Yasuo" ligado', /^TRAVAR Yasuo$/.test(b.textContent) && !b.disabled, b.textContent);
+    b.click(); await tick();
+    caso('hover mudo + TRAVAR: o 2º clique dele trava (1 PATCH completed true)', t.escritas().filter(e => /"completed":true,"championId":157/.test(e)).length === 1, t.escritas().join('; '));
+  }
+  {
+    // nº 3: o PATCH de travar que nunca volta: no PRAZO_MS vira "não consegui travar (sem resposta)" e o botão volta
+    const [p] = presa();
+    const t = await montarTela({ inicial: SR(14), rotas: { [P13]: async c => { if (c?.completed === true) await p; return { status: 204 }; } } });
+    t.rodarTimers(tela.ARMAR_MS);
+    t.achar('button[data-a="acao"]').click(); await tick();
+    caso('travar mudo: enquanto voa, "TRAVANDO Renekton…" cinza', /TRAVANDO Renekton/.test(t.achar('button[data-a="acao"]').textContent) && t.achar('button[data-a="acao"]').disabled);
+    // nº 4: clique na grade com o travar em voo não manda {completed:false} contra a ação fechando
+    t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
+    caso('travar em voo: clique na grade ignorado (só o PATCH de travar saiu)', igual(t.escritas(), [`${P13} {"completed":true,"championId":58}`]), t.escritas().join('; '));
+    t.rodarTimers(tela.PRAZO_MS); await tick(6);
+    caso('travar mudo: no PRAZO_MS aviso "não consegui travar Renekton (sem resposta)" com ⤢, botão de volta e nenhuma 2ª escrita',
+      t.avisos.some(([m, e]) => e && /não consegui travar Renekton \(sem resposta\)/.test(m) && /expandir/.test(m)) && !t.achar('button[data-a="acao"]').disabled
+      && t.escritas().length === 1, JSON.stringify(t.avisos));
+  }
+  {
+    // nº 6: botão cinza sempre com motivo (a intenção dele foi banida por um aliado)
+    const s = SR(14);
+    const banAliado = tela.acoes(s).find(a => a.type === 'ban' && a.actorCellId !== 1 && s.myTeam.some(c => c.cellId === a.actorCellId));
+    banAliado.championId = 58; banAliado.completed = true;
+    const t = await montarTela({ inicial: s });
+    t.rodarTimers(tela.ARMAR_MS);
+    const b = t.achar('button[data-a="acao"]');
+    caso('motivo: TRAVAR Renekton cinza com a nota "Renekton foi banido: clica outro"', b.disabled && /TRAVAR Renekton/.test(b.textContent)
+      && /Renekton foi banido: clica outro/.test(t.achar('[data-a="motivo"]')?.textContent || ''), t.achar('[data-a="motivo"]')?.textContent);
+  }
+  {
+    // nº 5: na ESCOLHA, lista de picks vazia segue filtrando (só favoritos, cinza) com a nota e o ⤢
+    const t = await montarTela({ inicial: SR(14), rotas: { 'GET /lol-champ-select/v1/pickable-champion-ids': [] } });
+    t.rodarTimers(tela.ARMAR_MS);
+    const nota = t.achar('[data-a="sem-lista"]')?.textContent || '';
+    caso('escolha sem lista de picks: grade = só os favoritos, cinza; TRAVAR cinza; nota com ⤢ (nunca mostra campeão que ele não tem)',
+      igual(grade(t).map(x => Number(x.dataset.id)).sort((a, b) => a - b), [58, 154]) && ligados(t).length === 0 && t.achar('button[data-a="acao"]').disabled
+      && /expandir/.test(nota), JSON.stringify({ g: grade(t).map(x => x.dataset.id), nota }));
+  }
+  {
+    // nº 8: o mesmo campeão não reenvia na hora, mas reenvia depois de REENVIO_MS (o 204 que não muda nada existe)
+    const t = await montarTela({ inicial: SR(0) });
+    t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
+    await t.emitir(SR(0)); // evento velho (o hover ainda não aparece nele)
+    t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
+    const n1 = t.escritas().length;
+    const agora = Date.now;
+    Date.now = () => agora() + tela.REENVIO_MS + 50;
+    try { t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick(); } finally { Date.now = agora; }
+    caso('reenvio: evento velho não faz reenviar o mesmo campeão; depois de REENVIO_MS o 2º clique reenvia', n1 === 1 && t.escritas().length === 2, `${n1} ${t.escritas().length}`);
+  }
+
+  // a seleção inteira, sem clique: nada escrito, nenhum erro
+  {
+    const t = await montarTela({ inicial: SR(0) });
+    for (let i = 1; i < R.length; i++) await t.emitir(SR(i));
+    caso('ranqueada inteira (30 eventos): nenhuma escrita sem clique e nenhum erro', t.escritas().length === 0 && t.falhas.length === 0,
+      t.escritas().join('; ') + t.falhas.map(e => e.message).join('; '));
+  }
+}
+
 // ---------- 8. linha que não se cruza, somada ----------
 caso('nenhum clique escreveu em matchmaking, quit, gameflow ou RiotClient', todasEscritas.length > 10 && !todasEscritas.some(e => /matchmaking|quit|gameflow|riotclient|lobby/i.test(e)), todasEscritas.length);
+caso('nenhum clique usou POST .../complete (sem corpo a LCU trava o campeão 0: LeagueClient.log 14/10/2026)', !todasEscritas.some(e => /\/complete/.test(e)), todasEscritas.filter(e => /\/complete/.test(e)).join('; '));
+caso('travar/banir sempre leva o championId junto do completed true', todasEscritas.filter(e => /"completed":true/.test(e)).every(e => /"completed":true,"championId":[1-9]\d*/.test(e)));
 
 // o roteador carrega esta tela (sem isso a seleção fica sempre no client normal)
 caso('roteador: TELAS.champselect aponta para a tela 3', TELAS.champselect === './tela-champselect.js', TELAS.champselect);

@@ -253,6 +253,31 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **No PLANNING a "minha ação em andamento" é um ban** → todas as ações `ban` já vêm `isInProgress: true` na fase
   de planejamento (fixture `champselect-real.json`); quem procura a ação em andamento para marcar a intenção pega o ban.
   A intenção vai sempre na ação de `pick` (`compacto/tela-champselect.js`), e ela nunca vira o alvo padrão do ban.
+- **`POST /lol-champ-select/v1/session/actions/{id}/complete` sem corpo devolve 204 e não trava nada** (ranqueada de
+  14/10/2026, TRAVAR do compacto 4×): o `LeagueClient.log` mostra `updateActionV1 requesting to lockIn championId: 0`
+  logo depois do `select championId: 58`. Travar/banir = o corpo do botão da Riot (`rcp-fe-lol-champ-select`, lido no
+  `assets.wad`): 1 `PATCH session/actions/{id}` `{completed: true, championId}` → `lockIn championId: 58`. Hover e
+  intenção = o mesmo PATCH com `completed: false` (vale também fora da vez, na ação de pick). 2xx não prova o
+  travamento: a tela 3 confere a ação na sessão `CONFERIR_MS` depois do clique e, aberta, avisa e devolve o botão.
+- **Declarar a intenção pedia 2 cliques no compacto** (mesma ranqueada) → nenhum `updateActionV1` no PLANNING inteiro:
+  o clique na grade só marcava e o PATCH saía no botão DECLARAR. O client da Riot declara no clique da grade
+  (`{completed:false, championId}`); a tela 3 também, desde 14/10/2026 (sem botão; marcador cinza no lugar dele).
+- **Botão que surge no lugar onde ele ia clicar trava sem querer** → o TRAVAR da vez dele entra embaixo da grade; um
+  clique mirado na grade ou no BANIR anterior cai nele. Botão de ação nasce cinza por `ARMAR_MS` a cada ação nova,
+  ocupa sempre o mesmo lugar e fica "TRAVANDO…" (clique duplo e clique na grade ignorados) até a sessão fechar a ação.
+- **`fetch` do CEF não tem prazo** → hover que nunca volta deixava o TRAVAR esperando para sempre (o travar espera o
+  hover em voo: a ordem de chegada na LCU não é garantida). Escrita da tela 3 tem prazo (`PRAZO_MS`, hover
+  `PRAZO_HOVER_MS`): sem resposta = aviso com ⤢ e o botão volta; o travamento pendente nunca sai às cegas.
+- **Grade do ban vazia no compacto** (mesma ranqueada) → os 5 `GET bannable-champion-ids` da tela voltaram 200 e ele
+  não achou campeão para banir (ban -1); o corpo não foi capturado (o tracing do client só guarda status): causa
+  deduzida (lista vazia ou sem id do catálogo deixa só os favoritos, cinza), a provar na próxima seleção. No ban, lista
+  assim não filtra mais a grade (nota "o client não mandou a lista"); na escolha segue filtrando (só favoritos, cinza,
+  com ⤢). O tamanho vai para o `LeagueClientUx.log` (`[lol-client] compacto: bannable-champion-ids … n=`) e para o
+  medidor (evento `listas`).
+- **Requisição do compacto × da Riot no `LeagueClient-tracing.json`** → registro `br1` (`me` 2 GET, 5 PATCH, 6 POST,
+  `ur`, `hc` = nº de cabeçalhos, `bl` = 1 com corpo) e a resposta em `rb1` (mesmo `ri`, `rc` = status). O `fetch` do
+  Pengu manda 1 cabeçalho a menos que o ajax da Riot (PATCH 21 × 22 em 14/10/2026; GET do compacto = 18): é assim que
+  se separa quem pediu. O corpo não fica no tracing; o `LeagueClient.log` loga o `updateActionV1` de cada PATCH de ação.
 - **Popup de runas some atrás da camada compacta** → com `html.lc-modo-compacto` o `runas.js` não abre o `#lc-runas`
   (devolve `acao: 'compacto'`): a escolha de 2+ páginas é da tela 3. Se a tela 3 cair para o client normal depois do
   travamento, a runa daquela seleção fica na mão (página atual ou tela da Riot).

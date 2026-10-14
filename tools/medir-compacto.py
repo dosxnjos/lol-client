@@ -101,6 +101,9 @@ def sessao_cs(s):
         "localPlayerCellId": s.get("localPlayerCellId"), "isCustomGame": s.get("isCustomGame"),
         "allowSkinSelection": s.get("allowSkinSelection"), "benchEnabled": s.get("benchEnabled"),
         "allowRerolling": s.get("allowRerolling"), "rerollsRemaining": s.get("rerollsRemaining"),
+        # as 2 bandeiras que a tela 3 lê no ban (fixture de 14/10/2026 teve de supor as duas)
+        "hasSimultaneousBans": s.get("hasSimultaneousBans"),
+        "disallowBanningTeammateHoveredChampions": s.get("disallowBanningTeammateHoveredChampions"),
         "trocas": {"posicao": so_sinais(s.get("positionSwaps") or []), "ordem": so_sinais(s.get("pickOrderSwaps") or []),
                    "campeao": so_sinais(s.get("trades") or [])},
         "meuTime": [jogador_cs(p) for p in s.get("myTeam") or []],
@@ -420,6 +423,14 @@ class Medidor:
             for tipo, rota in (("posicao", "ongoing-position-swap"), ("ordem", "ongoing-pick-order-swap"), ("campeao", "ongoing-champion-swap")):
                 o = self.get(f"/lol-champ-select/v1/{rota}", timeout=3)
                 self.gravar_se_mudou(f"troca_em_curso_{tipo}", so_sinais(o) if o else None, tipo=tipo)
+        if self.vez("listas", 2):
+            # só o tamanho das listas de pick e ban, por fase do timer: a grade de ban do compacto veio vazia na
+            # ranqueada de 14/10/2026 e o conteúdo do bannable-champion-ids não foi medido (ARMADILHAS § LCU)
+            li = {"timerPhase": ((s or {}).get("timer") or {}).get("phase")}
+            for nome, rota in (("pickable", "pickable-champion-ids"), ("bannable", "bannable-champion-ids")):
+                lst = self.get(f"/lol-champ-select/v1/{rota}", timeout=3)
+                li[nome] = len(lst) if isinstance(lst, list) else None
+            self.gravar_se_mudou("listas", li)
         if self.vez("skins", 5):
             lst = self.get("/lol-champ-select/v1/skin-carousel-skins", timeout=5)
             self.gravar_se_mudou("skins", skins_sinais(lst) if isinstance(lst, list) else {"semResposta": True})
