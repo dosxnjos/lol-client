@@ -269,7 +269,8 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
      Da revisão: `_lido_no_chat` consome a `ultima_leitura` (o `LeitorChat.passo` volta `[]` sem ler com o jogo fora
      da tela e o "ping sem 'usou'" relogava a cada 3 s; `caso_chat_feitico` chama 2 vezes sem leitura) e a thread que
      observa a tecla loga a própria morte (`teclas.Observador.rodar`).
-     Revisão adversarial (2ª, antes do commit), cada uma com teste vermelho no código anterior: P1/P2 regra da borda
+     Revisão adversarial (2ª, antes do commit), cada uma com teste do caso que o código anterior errava (vermelho por
+     construção; P1/P2 também na simulação do revisor; não rodados contra a versão anterior): P1/P2 regra da borda
      (D28 revista; `teste-alertas` "revisão P1/P2": intruso amarelo 1 s depois do azul sai, 2º perigo vermelho 4 s
      depois sai, 2º gank sai aos 2,5 s, vermelha → amarela não sai, alerta velho cai; a rajada real dá 11 bordas,
      1 troca de cor, subindo); P4/P5 (D32; "revisão P4/P5"); P7 (D33); P9 a troca do `Feiticos` no meio da partida
