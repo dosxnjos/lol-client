@@ -122,7 +122,7 @@ const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(r 
 // lcu: estado mutável do client falso. Rotas não listadas = 404.
 function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus, ranked = null, notificacao = null,
   licoes = [{ status: 404, dados: { erro: 'partida ainda fora do banco', tentarDeNovoS: 5 } }, { status: 200, dados: FX.licoes }],
-  derrotas = 0, lcuQuebrada = false, coletorFora = false, semColetor = false, licoesLocais } = {}) {
+  derrotas = 0, lcuQuebrada = false, coletorFora = false, semColetor = false, licoesLocais, mentor = null, rotasExtras = {} } = {}) {
   const rel = relogio();
   tela._relogio.agora = () => rel.agora;
   tela._relogio.data = () => new Date(2026, 9, 13, 15, 0, 0); // tarde: o freio de madrugada não entra por acaso
@@ -144,14 +144,21 @@ function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus,
     'POST /lol-lobby/v2/lobby': () => { est.lobby = true; return { status: 200 }; },
     'PUT /lol-lobby/v2/lobby/members/localMember/position-preferences': { status: 201 },
     [BUSCA]: { status: 204 },
+    ...rotasExtras,
   };
   const falsa = lcuFalsa(rotas);
   globalThis.fetch = falsa.fetch;
   const pedidos = [];
   const win = { innerWidth: 1280, riotInvoke: arg => { const p = JSON.parse(arg.request); pedidos.push(p); if (p.name === 'Window.ResizeTo') win.innerWidth = p.params[0]; } };
   const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => [win.innerWidth, 720] });
-  const s = { rel, doc, est, falsa, pedidos, avisos: [], subs: new Map(), abertos: [], coletorPedidos: [], locaisPedidos: [] };
-  const coletor = async caminho => {
+  const s = { rel, doc, est, falsa, pedidos, avisos: [], subs: new Map(), abertos: [], coletorPedidos: [], locaisPedidos: [], mentorPedidos: [] };
+  const coletor = async (caminho, opcoes = {}) => {
+    // mentor (passo 12) à parte: coletorPedidos segue contando só as lições
+    if (caminho.startsWith('/mentor')) {
+      s.mentorPedidos.push([caminho, opcoes.metodo || 'GET', opcoes.corpo]);
+      if (coletorFora) return { status: 0, dados: null };
+      return mentor ? mentor(caminho, opcoes) : { status: 404, dados: { erro: 'sem mentor' } };
+    }
     s.coletorPedidos.push(caminho);
     if (coletorFora) return { status: 0, dados: null };
     return licoes.length > 1 ? licoes.shift() : licoes[0];
@@ -234,8 +241,8 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   const f1 = s.foto();
   caso('WaitingForStats: tela posjogo compacta montada (camada, classe, janela 420×640)', f1.efetivo === 'compacto' && f1.tela === 'posjogo' && f1.camada && f1.classe
     && s.pedidos.some(p => p.name === 'Window.ResizeTo' && igual(p.params, [420, 640])), JSON.stringify(f1));
-  caso('WaitingForStats: "CARREGANDO…" com – no lugar dos números e sem jogar de novo', s.texto().includes('CARREGANDO…') && s.texto().includes('– / – / –')
-    && !s.botao('jogar') && !s.botao('analise'), s.texto());
+  caso('WaitingForStats (tela D): "CARREGANDO ESTATÍSTICAS", sem números, sem jogar de novo nem ir para o lobby', s.texto().includes('CARREGANDO ESTATÍSTICAS')
+    && !s.texto().includes('PDL') && !s.botao('jogar') && !s.botao('lobby') && !s.botao('analise'), s.texto());
   caso('topo: o próprio nome e o rank (sem ranque lido = "fim de partida")', s.camada().querySelector('.lc-cp-pj-id')?.textContent.startsWith('Xerekton'));
   caso('topo: 💬 com o contador antes do expandir (protótipo da tela 4: "mais uma?" no fim da partida)',
     !!s.camada().querySelector('.lc-cp-extras')?.querySelector('button[data-a="chat"]'));
@@ -243,9 +250,15 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
     !/#lc-compacto \.lc-cp-(jogar|freio|res|nums|lic|linha-bts)\b/.test(tela.CSS_POSJOGO) && /#lc-compacto \.lc-cp-pj \.lc-cp-jogar \{/.test(tela.CSS_POSJOGO));
   await s.ir('EndOfGame');
   const t = s.texto();
-  caso('EndOfGame: DERROTA, 8 / 9 / 6, farm 6,2, Normal (escolha), Zac, 33:22', ['DERROTA', '8 / 9 / 6', '6,2', 'Normal (escolha)', 'Zac', '33:22'].every(x => t.includes(x)), t);
-  const pdlCel = s.camada().querySelector('.lc-cp-nums')?.children[2];
-  caso('EndOfGame: PDL "–" fora da ranqueada, motivo no title', pdlCel?.textContent === '–PDL' && pdlCel.getAttribute('title') === 'sem PDL nesta fila', pdlCel?.textContent);
+  const faixa = s.camada().querySelector('.lc-cp-faixa')?.textContent || '';
+  caso('EndOfGame (tela B): faixa com DERROTA, Zac, 8/9/6, farm 6,2, Normal, 33:22; JOGAR DE NOVO diz a fila inteira',
+    ['DERROTA', 'Zac', '8/9/6', '6,2', 'Normal', '33:22'].every(x => faixa.includes(x)) && t.includes('Normal (escolha)'), faixa);
+  const pdlCel = s.camada().querySelector('.lc-cp-pdl');
+  caso('EndOfGame: PDL "–" fora da ranqueada, motivo no title', pdlCel?.querySelector('b')?.textContent === '– PDL' && pdlCel.getAttribute('title') === 'sem PDL nesta fila', pdlCel?.textContent);
+  caso('EndOfGame: abas resumo/detalhes, chat da sala acima dos botões, IR PARA O LOBBY e JOGAR DE NOVO lado a lado (ajuste de 14/10 ~20:00)',
+    !!s.botao('aba-resumo') && !!s.botao('aba-detalhes') && s.botao('lobby')?.textContent === 'IR PARA O LOBBY'
+    && s.botao('lobby')?.parentNode === s.botao('jogar')?.parentNode
+    && (() => { const c = s.camada().querySelector('.lc-cp-fp').children; const i = c.findIndex(x => x.classList.contains('lc-cp-dock')); return i > 0 && c[i + 1]?.classList.contains('lc-cp-base'); })());
   caso('lições: coletor ainda sem a partida → "…" e nova tentativa agendada', s.coletorPedidos.length === 1 && s.camada().querySelector('.lc-cp-lic')?.classList.contains('lc-cp-carregando'));
   await s.rel.avancar(5000);
   const lis = s.camada().querySelectorAll('li');
@@ -263,18 +276,23 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   caso('"ver análise completa" não escreve na LCU', s.escritas().length === 0);
 }
 
-// ---------- 3. nome de terceiro nunca aparece ----------
+// ---------- 3. nome de terceiro: só nos detalhes, como o pós-jogo da Riot mostra (pedido de 14/10/2026 ~20:05) ----------
 {
   tela._esquecer();
   const eog = JSON.parse(JSON.stringify(FX.eog));
-  eog.teams[0].players = [{ riotIdGameName: 'AliadoSecreto', summonerName: 'AliadoSecreto', championName: 'Lee Sin' }];
-  eog.teams[1].players = [{ riotIdGameName: 'InimigoSecreto', summonerName: 'InimigoSecreto', championName: 'Darius' }];
-  eog.localPlayer.riotIdGameName = 'NomeDoEog';
+  eog.teams[0].players = [{ riotIdGameName: 'AliadoSecreto', riotIdTagLine: 'BR1', summonerName: 'AliadoSecreto', championName: 'Lee Sin', championId: 64, puuid: 'pa', summonerId: 7, gameId: GID }];
+  eog.teams[1].players = [{ riotIdGameName: 'InimigoSecreto', riotIdTagLine: 'XYZ', summonerName: 'InimigoSecreto', championName: 'Darius', championId: 122, puuid: 'pi', summonerId: 8, gameId: GID }];
   const s = cenario({ eog });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
-  const t = s.texto();
-  caso('eog com nomes dos 10: a tela não mostra nenhum (só o campeão e o nome do próprio current-summoner)',
-    !/Secreto|NomeDoEog|Lee Sin|Darius/.test(t) && t.includes('Zac'), t);
+  caso('resumo: nenhum nome de terceiro (só a faixa, o mentor e as lições)', !/Secreto|Lee Sin|Darius/.test(s.texto()), s.texto());
+  await s.clicar('aba-detalhes');
+  const linhas = s.camada().querySelectorAll('.lc-cp-jg');
+  const t = linhas.map(l => l.textContent).join(' | ');
+  caso('detalhes: cada linha com foto do campeão, nome do jogador e campeão (Riot ID inteiro no title)',
+    linhas.length === 2 && t.includes('AliadoSecreto') && t.includes('Lee Sin') && t.includes('InimigoSecreto') && t.includes('Darius')
+    && linhas.every(l => !!l.querySelector('.lc-cp-foto')) && linhas[1].querySelector('.lc-cp-n')?.getAttribute('title') === 'InimigoSecreto #XYZ · Darius', t);
+  caso('detalhes: "+" e "⚑" por jogador; nada escrito sem clique', linhas.every(l => !!l.querySelector('[data-a="adicionar"]') && !!l.querySelector('[data-a="denunciar"]'))
+    && s.escritas().length === 0, s.escritas().join(', '));
 }
 
 // ---------- 4. ranqueada sintética: PDL pela diferença, sobrevivendo à honra (PreEndOfGame remonta a tela) ----------
@@ -285,27 +303,30 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   await s.ir('WaitingForStats');
   caso('ranqueada: topo com "Esmeralda IV · 14 PDL"', s.camada().querySelector('.lc-cp-pj-id')?.textContent === 'XerektonEsmeralda IV · 14 PDL', s.camada().querySelector('.lc-cp-pj-id')?.textContent);
   await s.ir('PreEndOfGame');
-  caso('PreEndOfGame (honra): client normal, sem camada', s.foto().efetivo === 'expandido' && !s.foto().camada);
+  s.rot.aoSequencia('honor-vote'); await tick(12); // a honra é outra tela (tela-honra.js; aqui ela não carrega: client normal)
+  caso('PreEndOfGame honor-vote: a tela 4 sai (a honra é a tela A)', s.foto().tela !== 'posjogo' && s.rot.estado().destino?.tela === 'honra', JSON.stringify(s.foto()));
   s.est.ranked = rankEsm(35);
   await s.ir('EndOfGame');
   await s.rel.avancar(6000);
-  const pdl = s.camada()?.querySelector('.lc-cp-nums')?.children[2];
-  caso('ranqueada: PDL +21 pela diferença (antes lido no WaitingForStats); notificação de outra partida ignorada',
-    pdl?.textContent === '+21PDL' && pdl.querySelector('b')?.classList.contains('lc-cp-mais') && /diferença/.test(pdl.getAttribute('title') || ''), pdl?.textContent);
+  const pdl = s.camada()?.querySelector('.lc-cp-pdl');
+  caso('ranqueada: PDL +21 pela diferença (antes lido no WaitingForStats, antes da honra); "14 → 35"; notificação de outra partida ignorada',
+    pdl?.querySelector('b')?.textContent === '+21 PDL' && pdl.querySelector('small')?.textContent === '14 → 35' && pdl.querySelector('b')?.classList.contains('lc-cp-mais')
+    && /diferença/.test(pdl.getAttribute('title') || ''), pdl?.textContent);
 }
 {
   tela._esquecer();
   const sessao = { gameData: { gameId: GID, queue: { id: 420, mapId: 11 }, isCustomGame: false }, map: { id: 11 } };
   const s = cenario({ sessao, ranked: rankEsm(14) });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
-  const antes = s.camada().querySelector('.lc-cp-nums')?.children[2]?.textContent;
+  const pdlB = () => s.camada().querySelector('.lc-cp-pdl b')?.textContent;
+  const antes = pdlB();
   s.est.notificacao = { gameId: GID, leaguePointsDelta: -18 };
   await s.rel.avancar(5000);
-  const depois = s.camada().querySelector('.lc-cp-nums')?.children[2]?.textContent;
-  caso('ranqueada: "…" enquanto lê, depois −18 pela notificação desta partida', antes === '…PDL' && depois === '−18PDL', `${antes} -> ${depois}`);
+  const depois = pdlB();
+  caso('ranqueada: "…" enquanto lê, depois −18 pela notificação desta partida', antes === '… PDL' && depois === '−18 PDL', `${antes} -> ${depois}`);
   s.est.notificacao = null;
   await s.rel.avancar(200000);
-  caso('ranqueada: valor lido fica (não volta a "–" no fim dos 3 min)', s.camada().querySelector('.lc-cp-nums')?.children[2]?.textContent === '−18PDL');
+  caso('ranqueada: valor lido fica (não volta a "–" no fim dos 3 min)', pdlB() === '−18 PDL');
 }
 {
   tela._esquecer();
@@ -313,8 +334,8 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   const s = cenario({ sessao, ranked: rankEsm(14) });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   await s.rel.avancar(186000); // 3 min + a última leitura (a cada 5 s)
-  const c = s.camada().querySelector('.lc-cp-nums')?.children[2];
-  caso('ranqueada sem variação em 3 min: "–" com o motivo, sem inventar ±0', c?.textContent === '–PDL' && /3 min/.test(c.getAttribute('title') || ''), c?.textContent);
+  const c = s.camada().querySelector('.lc-cp-pdl');
+  caso('ranqueada sem variação em 3 min: "–" com o motivo, sem inventar ±0', c?.querySelector('b')?.textContent === '– PDL' && /3 min/.test(c.getAttribute('title') || ''), c?.textContent);
 }
 
 // ---------- 5. jogar de novo: só por clique, pelos freios (2 derrotas seguidas) ----------
@@ -385,6 +406,65 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   await s.clicar('fechar-pj');
   caso('fechar: dismiss-stats, nunca busca', igual(s.escritas(), ['POST /lol-end-of-game/v1/state/dismiss-stats']), s.escritas().join(', '));
 }
+// ---------- 6b. passo 12: IR PARA O LOBBY e o mentor no resumo ----------
+{
+  tela._esquecer();
+  const s = cenario({ derrotas: 0 });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.rel.avancar(20000);
+  caso('ir para o lobby: nada escrito sem clique (20 s no EndOfGame)', s.escritas().length === 0, s.escritas().join(', '));
+  await s.clicar('lobby');
+  caso('ir para o lobby: play-again (o client deixa), nunca busca', igual(s.escritas(), ['POST /lol-lobby/v2/play-again']), s.escritas().join(', '));
+}
+{
+  tela._esquecer();
+  const s = cenario({ playerStatus: { lastQueuedLobbyStatus: { queueId: 400, isLeader: true, memberSummonerIds: [111], allowedPlayAgain: false } } });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.clicar('lobby');
+  caso('ir para o lobby sem play-again permitido: sai pelo dismiss-stats, nunca busca', igual(s.escritas(), ['POST /lol-end-of-game/v1/state/dismiss-stats']), s.escritas().join(', '));
+}
+{
+  tela._esquecer();
+  const s = cenario({ playerStatus: { lastQueuedLobbyStatus: { queueId: 400, isLeader: false, memberSummonerIds: [111, 222], allowedPlayAgain: true } } });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  caso('em grupo: um botão só (VOLTAR AO LOBBY), sem o "ir para o lobby" repetido', !s.botao('lobby') && s.botao('jogar')?.textContent.startsWith('VOLTAR AO LOBBY'));
+}
+{
+  tela._esquecer();
+  const TEXTO = 'Veredito: Você ganhou a rota mas entregou o Graves cedo.\n\nO essencial:\n- Duas mortes antes dos 10.\n- Recue quando o Graves aparecer.\n\nMandou bem: farm de 8,2.\n\nPróxima partida: chegar aos 10 sem morrer.';
+  let conversa = [];
+  const s = cenario({ mentor: (caminho, o) => (o.metodo === 'POST' ? { status: 202, dados: { ok: true } }
+    : { status: 200, dados: { status: 'pronto', texto: TEXTO, conversa } }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  const m = s.camada().querySelector('.lc-cp-mentor')?.textContent || '';
+  caso('mentor pronto no resumo: veredito, mandou bem, próxima partida e "o essencial (2)"',
+    m.includes('Você ganhou a rota mas entregou o Graves cedo.') && m.includes('Mandou bem: farm de 8,2.') && m.includes('Próxima partida: chegar aos 10 sem morrer.')
+    && m.includes('o essencial (2)'), m);
+  caso('com o veredito, as lições do coach ficam recolhidas', s.camada().querySelector('.lc-cp-lics')?.open === false);
+  caso('mentor: nenhuma pergunta sem envio dele', s.mentorPedidos.every(([, met]) => met === 'GET'));
+  const input = s.camada().querySelector('[data-a="mentor-pergunta"]');
+  input.value = 'por que perdi a rota?';
+  conversa = [{ uso: 'pergunta', pergunta: 'por que perdi a rota?', status: 'pensando' }];
+  input.disparar('keydown', { key: 'Enter' });
+  await tick(12);
+  const post = s.mentorPedidos.filter(([, met]) => met === 'POST');
+  caso('perguntar: Enter dele manda POST /mentor/<id>/pergunta {pergunta} e mostra "pensando…"',
+    post.length === 1 && post[0][0] === `/mentor/${GID}/pergunta` && igual(post[0][2], { pergunta: 'por que perdi a rota?' })
+    && s.camada().querySelector('.lc-cp-mt-resp')?.textContent.includes('pensando'), JSON.stringify(post));
+  caso('mentor e pergunta não escrevem na LCU', s.escritas().length === 0);
+}
+{
+  tela._esquecer();
+  const s = cenario({ mentor: () => ({ status: 200, dados: { status: 'pensando' } }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await tick(12);
+  caso('mentor pensando: "analisando a partida", jogar de novo e ir para o lobby seguem liberados',
+    s.texto().includes('analisando a partida') && s.botao('jogar')?.disabled === false && s.botao('lobby')?.disabled === false);
+  const n = s.mentorPedidos.length;
+  await s.rel.avancar(3100);
+  caso('mentor pensando: relê a cada 3 s', s.mentorPedidos.length === n + 1, `${n} -> ${s.mentorPedidos.length}`);
+}
 {
   tela._esquecer();
   const sessao = { gameData: { gameId: GID, queue: { id: 450, mapId: 12 }, isCustomGame: false }, map: { id: 12 } };
@@ -398,9 +478,9 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   await s.rel.avancar(63000); // 60 s + a última leitura (a cada 2 s)
   const t = s.texto();
-  caso('LCU toda 404: tela segue compacta, "FIM DE PARTIDA", "–" nos números, lições e PDL com o motivo (sem gameId)',
-    s.foto().efetivo === 'compacto' && t.includes('FIM DE PARTIDA') && t.includes('– / – / –') && t.includes('sem lições: o client não disse qual partida foi')
-    && s.camada().querySelector('.lc-cp-nums')?.children[2]?.textContent === '–PDL', t);
+  caso('LCU toda 404: tela segue compacta, "FIM DE PARTIDA" com o motivo, lições com o motivo (sem gameId), sem PDL inventado',
+    s.foto().efetivo === 'compacto' && t.includes('FIM DE PARTIDA') && t.includes('as estatísticas não chegaram') && t.includes('sem lições: o client não disse qual partida foi')
+    && !s.camada().querySelector('.lc-cp-pdl'), t);
   await s.clicar('jogar');
   caso('LCU quebrada: jogar de novo (fila pela sessão do roteador) recusa sem escrever, com aviso de erro',
     s.falsa.escritas().length === 0 && s.avisos.some(([m, e]) => e && /jogar de novo: não consegui ler a fase/.test(m)), JSON.stringify(s.avisos));
@@ -410,7 +490,7 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   const s = cenario({ coletorFora: true });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   caso('coletor fora: "coletor fora do ar: as lições ficam na análise completa", números da partida seguem',
-    s.texto().includes('coletor fora do ar: as lições ficam na análise completa') && s.texto().includes('8 / 9 / 6'), s.texto());
+    s.texto().includes('coletor fora do ar: as lições ficam na análise completa') && s.texto().includes('8/9/6'), s.texto());
   const n = s.coletorPedidos.length;
   await s.rel.avancar(15000);
   caso('coletor fora: tenta de novo a cada 15 s', s.coletorPedidos.length === n + 1, `${n} -> ${s.coletorPedidos.length}`);
@@ -430,7 +510,7 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     lis.length === 3 && lis.map(l => l.textContent[0]).join('') === '⚠⚠✓' && lis[0].textContent.includes('Morreu 9 vezes')
     && /motor local/.test(lis[0].getAttribute('title') || '') && igual(s.locaisPedidos, [GID]) && !s.texto().includes('coletor fora do ar: as lições'),
     s.texto());
-  caso('b5: rótulo diz que é sem o coletor', /sem o coletor/.test(s.camada().querySelector('.lc-cp-pj .lc-cp-rot')?.textContent || ''), s.camada().querySelector('.lc-cp-pj .lc-cp-rot')?.textContent);
+  caso('b5: rótulo diz que é sem o coletor', /sem o coletor/.test(s.camada().querySelector('.lc-cp-lics summary')?.textContent || ''), s.camada().querySelector('.lc-cp-lics summary')?.textContent);
   await s.rel.avancar(300000);
   lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
   caso('b5: coletor fora por 5 min: as lições locais ficam (sem "sem lições"), pedidas uma vez só',

@@ -127,7 +127,8 @@ function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, alturaInicia
   const janela = criarJanela({ invocar, medir: () => [win.innerWidth, win.innerHeight], agora: rel.agoraMs });
   const doc = novoDoc();
   const avisos = [], logs = [], subs = new Map(), aplicados = [];
-  const ts = telas ?? { lobby: telaFalsa('lobby', { comAtualizar: true }), fila: telaFalsa('fila', { comAtualizar: true }), champselect: telaFalsa('champselect'), posjogo: telaFalsa('posjogo') };
+  const ts = telas ?? { lobby: telaFalsa('lobby', { comAtualizar: true }), fila: telaFalsa('fila', { comAtualizar: true }), champselect: telaFalsa('champselect'),
+    posjogo: telaFalsa('posjogo', { comAtualizar: true }), honra: telaFalsa('honra') };
   const s = { cfg, pedidos, doc, rel, avisos, logs, subs, telas: ts, modal, aplicados, win };
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => janela.minimizar(), aoFechar: () => janela.sair(),
     avisoFechar: () => (s.rot.estado().fase === 'ChampSelect' ? 'fechar agora é dodge' : 'fechar o client?') });
@@ -190,10 +191,17 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const esperado = {
     None: 'tela:lobby', Lobby: 'tela:lobby', Matchmaking: 'tela:fila', ReadyCheck: 'tela:fila', ChampSelect: 'tela:champselect',
     GameStart: 'jogo:', InProgress: 'jogo:', Reconnect: 'expandir:', FailedToLaunch: 'expandir:', TerminatedInError: 'expandir:',
-    WaitingForStats: 'tela:posjogo', PreEndOfGame: 'expandir:', EndOfGame: 'tela:posjogo',
+    // PreEndOfGame sem a etapa lida espera (passo 12: a honra é compacta, as celebrações expandem; ver os casos abaixo)
+    WaitingForStats: 'tela:posjogo', PreEndOfGame: 'esperar:', EndOfGame: 'tela:posjogo',
   };
   const obtido = Object.fromEntries(FASES.map(f => { const d = destinoDaFase(f, info); return [f, `${d.tipo}:${d.tela || ''}`]; }));
   caso('destino: as 13 fases têm destino esperado', FASES.length === 13 && igual(obtido, esperado), JSON.stringify(obtido));
+  const pre = o => { const d = destinoDaFase('PreEndOfGame', { ...info, ...o }); return `${d.tipo}:${d.tela || ''}`; };
+  caso('destino PreEndOfGame (passo 12): honor-vote = tela honra; etapa não lida espera e, esgotada, expande',
+    pre({ seq: 'honor-vote' }) === 'tela:honra' && pre({}) === 'esperar:' && pre({ seqEsgotou: true }) === 'expandir:', [pre({ seq: 'honor-vote' }), pre({}), pre({ seqEsgotou: true })].join(' '));
+  caso('destino PreEndOfGame: celebração só expande depois de firme (vazia passa sem piscar a janela); "" espera, esgotado expande',
+    pre({ seq: 'ranked-celebration' }) === 'esperar:' && pre({ seq: 'ranked-celebration', seqFirme: true }) === 'expandir:' && pre({ seq: '' }) === 'esperar:'
+      && pre({ seq: '', seqEsgotou: true }) === 'expandir:');
   caso('destino: fase desconhecida e null expandem', destinoDaFase('Xyz').tipo === 'expandir' && destinoDaFase(null).tipo === 'expandir');
   caso('destino: ARAM (450, mapa 12) expande', destinoDaFase('ChampSelect', { ...info, fila: 450, mapa: 12 }).tipo === 'expandir');
   caso('destino: personalizada no SR vai para a tela 3', destinoDaFase('ChampSelect', { ...info, fila: 3100, custom: true }).tela === 'champselect');
@@ -257,7 +265,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
     ['None', null, 'compacto', 'lobby'], ['Lobby', null, 'compacto', 'lobby'], ['Matchmaking', null, 'compacto', 'fila'],
     ['ReadyCheck', null, 'compacto', 'fila'], ['ChampSelect', sessao(420), 'compacto', 'champselect'], ['GameStart', null, 'expandido', null],
     ['InProgress', null, 'expandido', null], ['Reconnect', null, 'expandido', null], ['FailedToLaunch', null, 'expandido', null],
-    ['TerminatedInError', null, 'expandido', null], ['WaitingForStats', null, 'compacto', 'posjogo'], ['PreEndOfGame', null, 'expandido', null],
+    ['TerminatedInError', null, 'expandido', null], ['WaitingForStats', null, 'compacto', 'posjogo'], ['PreEndOfGame', null, 'compacto', 'honra'],
     ['EndOfGame', null, 'compacto', 'posjogo'],
   ];
   const erros = [];
@@ -265,6 +273,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   for (const [fase, ses, efetivo, tela] of passos) {
     if (fase === 'ReadyCheck') antesRC = s.pedidos.length;
     await s.ir(fase, ses);
+    if (fase === 'PreEndOfGame') { s.rot.aoSequencia('honor-vote'); await tick(); }
     const f = s.foto();
     const camadaOk = efetivo === 'compacto' ? f.camada && f.classe : !f.camada && !f.classe;
     if (f.efetivo !== efetivo || f.tela !== tela || !camadaOk) erros.push(`${fase}: ${JSON.stringify(f)}`);
@@ -273,10 +282,77 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   }
   caso('roteador: as 13 fases em sequência levam ao destino esperado', !erros.length, erros.join(' | '));
   caso('None -> Lobby (mesma tela) chama atualizar, não remonta', s.telas.lobby.montadas === 1 && s.telas.lobby.atualizadas === 1);
-  caso('WaitingForStats -> PreEndOfGame -> EndOfGame: pós-jogo remonta depois da honra', s.telas.posjogo.montadas === 2);
+  caso('WaitingForStats -> PreEndOfGame (honra) -> EndOfGame: honra monta uma vez, pós-jogo remonta depois dela',
+    s.telas.posjogo.montadas === 2 && s.telas.honra.montadas === 1 && s.telas.honra.desmontadas === 1, JSON.stringify([s.telas.posjogo.montadas, s.telas.honra.montadas]));
   const z = Number(CSS_MODO.match(/#lc-compacto \{[^}]*z-index:(\d+)/)?.[1]);
   caso('camada com z-index 100000, abaixo do #lc-aceite (100002)', z === 100000 && z < 100002);
   caso('CSS: runas, selo e pós-jogo grande somem só com html.lc-modo-compacto', /html\.lc-modo-compacto #lc-runas, html\.lc-modo-compacto #lc-winrate, html\.lc-modo-compacto #lc-posjogo \{ display:none !important; \}/.test(CSS_MODO));
+}
+
+{ // fim de partida (passo 12): honra compacta, celebração firme expande, vazia não pisca, sem etapa lida expande
+  const tamanhos = s => s.pedidos.filter(p => p.name === 'Window.ResizeTo').map(p => p.params.join('x'));
+  const a = cenario(); a.rot.marcarPronto();
+  await a.ir('WaitingForStats');
+  a.rot.aoSequencia('honor-vote'); await tick(); // o evento da etapa pode chegar antes da fase
+  await a.ir('PreEndOfGame');
+  caso('honor-vote antes da fase: PreEndOfGame entra direto na honra compacta, sem expandir no meio',
+    a.foto().tela === 'honra' && a.foto().efetivo === 'compacto' && !tamanhos(a).includes('1280x720'), JSON.stringify([a.foto(), tamanhos(a)]));
+  a.rot.aoSequencia(''); await tick();
+  a.rot.aoSequencia('challenge-level-up'); await tick();
+  a.rel.avancar(300); await tick();
+  a.rot.aoSequencia(''); await tick();
+  a.rel.avancar(2000); await tick();
+  caso('celebração vazia (300 ms) depois da honra: nada pisca (sem ResizeTo 1280)', !tamanhos(a).includes('1280x720') && a.foto().efetivo === 'compacto', JSON.stringify(tamanhos(a)));
+  a.rot.aoSequencia('ranked-celebration'); await tick();
+  a.rel.avancar(700); await tick();
+  caso('celebração que fica (700 ms): expande (tela da Riot, regra de antes)', a.foto().efetivo === 'expandido' && tamanhos(a).at(-1) === '1280x720', JSON.stringify([a.foto(), tamanhos(a)]));
+  await a.ir('EndOfGame');
+  caso('EndOfGame depois da celebração expandida: volta ao compacto no pós-jogo', a.foto().efetivo === 'compacto' && a.foto().tela === 'posjogo', JSON.stringify(a.foto()));
+
+  const b = cenario(); b.rot.marcarPronto();
+  await b.ir('WaitingForStats'); await b.ir('PreEndOfGame');
+  caso('PreEndOfGame sem etapa lida: espera (fica no carregando do pós-jogo)', b.foto().tela === 'posjogo' && b.foto().efetivo === 'compacto');
+  b.rel.avancar(2100); await tick();
+  caso('PreEndOfGame sem etapa em 2 s: expande (o comportamento de antes do passo 12)', b.foto().efetivo === 'expandido' && b.rot.estado().destino?.tipo === 'expandir', JSON.stringify(b.foto()));
+  b.rot.aoSequencia('honor-vote'); await tick();
+  caso('etapa honor-vote chega tarde: a honra compacta monta', b.foto().efetivo === 'compacto' && b.foto().tela === 'honra', JSON.stringify(b.foto()));
+  b.rot.expandir(); await tick();
+  caso('"⤢ expandir" na honra vale até o EndOfGame (outra tela): o pós-jogo volta compacto', b.foto().efetivo === 'expandido');
+  await b.ir('EndOfGame');
+  caso('EndOfGame depois do expandir na honra: pós-jogo compacto', b.foto().efetivo === 'compacto' && b.foto().tela === 'posjogo', JSON.stringify(b.foto()));
+  await b.ir('Lobby');
+  b.rot.aoSequencia('honor-vote'); await tick();
+  caso('etapa fora do fim de partida não mexe (Lobby segue no lobby)', b.foto().tela === 'lobby' && b.rot.estado().fase === 'Lobby');
+
+  // "" parado (revisão de 14/10/2026: sem prazo, a tela ficava presa no PreEndOfGame escondendo o que a Riot abrisse)
+  const c = cenario(); c.rot.marcarPronto();
+  await c.ir('WaitingForStats'); await c.ir('PreEndOfGame');
+  c.rot.aoSequencia(''); await tick(); // a Riot pulou a honra (personalizada sem honra, conta sem ballot)
+  c.rel.avancar(1500); await tick();
+  caso('"" na entrada (sem honra): espera como "não lida" (1,5 s no carregando do pós-jogo)', c.foto().efetivo === 'compacto' && c.foto().tela === 'posjogo', JSON.stringify(c.foto()));
+  c.rel.avancar(600); await tick();
+  caso('"" na entrada parado 2 s: expande (tela da Riot)', c.foto().efetivo === 'expandido' && c.rot.estado().destino?.tipo === 'expandir', JSON.stringify(c.foto()));
+
+  const d = cenario(); d.rot.marcarPronto();
+  await d.ir('WaitingForStats'); await d.ir('PreEndOfGame');
+  d.rot.aoSequencia('honor-vote'); await tick();
+  d.rel.avancar(10000); await tick();
+  d.rot.aoSequencia(''); await tick();
+  d.rel.avancar(3000); await tick();
+  caso('"" depois da honra: 3 s segue na honra (a Riot troca em < 1 s)', d.foto().efetivo === 'compacto' && d.foto().tela === 'honra', JSON.stringify(d.foto()));
+  d.rel.avancar(1100); await tick();
+  caso('"" depois da honra parado 4 s: expande (nada da Riot fica escondido embaixo)', d.foto().efetivo === 'expandido', JSON.stringify(d.foto()));
+  await d.ir('EndOfGame');
+  caso('EndOfGame depois do "" esgotado: pós-jogo compacto', d.foto().efetivo === 'compacto' && d.foto().tela === 'posjogo');
+
+  const e = cenario(); e.rot.marcarPronto();
+  await e.ir('WaitingForStats'); await e.ir('PreEndOfGame');
+  e.rot.aoSequencia('honor-vote'); await tick();
+  e.rot.aoSequencia(''); await tick();
+  e.rel.avancar(800); await tick();
+  await e.ir('EndOfGame');
+  caso('"" depois da honra e EndOfGame em 0,8 s: honra -> pós-jogo sem piscar 1280', e.foto().tela === 'posjogo' && e.foto().efetivo === 'compacto'
+    && !tamanhos(e).includes('1280x720'), JSON.stringify(tamanhos(e)));
 }
 
 { // ReadyCheck cede ao aceite; aceite desligado / manual expandem

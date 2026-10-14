@@ -229,6 +229,22 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Chave nova de texto com lista de valores passa inválida pela mescla** → `mesclar` (`pengu/config.js`) só
   confere o `typeof`: `overlayCor: 'azul'` salvo fica. Lista nova entra em `ESCOLHAS` do `config.js` **e** do
   `servidor_local.py` (o `ler_config` só passou a conferir em 14/10/2026); `teste-alertas.py` confere as três listas.
+- **JS da Riot não sai por `GET /fe/<plugin>/index.js`** (14/10/2026: 404 ou "Failed to fetch" de dentro da página; o
+  `trans.json` sai, ex.: `/fe/lol-social/trans.json` do `chat-posjogo.js`) → para conferir rota e corpo que o front dela
+  usa, ler o `assets.wad` do disco (`C:\Games\Riot Games\League of Legends\Plugins\
+  rcp-fe-lol-*`, WAD 3.x com zstd): `python tools/ler-wad.py <assets.wad> <pasta fora do repo>`; os trans.json de cada
+  idioma vêm junto (`.bin`).
+- **Clique do harness não age nas telas do fim de partida** → os botões que escrevem na LCU (honra, prosseguir, adicionar,
+  denunciar, enviar na sala, JOGAR DE NOVO, fechar) ignoram evento com `isTrusted === false`, e `el.click()` no navegador
+  é sintético. Print que precisa de clique: Playwright `browser_click` (o teste node manda evento sem `isTrusted`, que conta
+  como dele).
+- **`replaceChildren(a, null, b)` escreve "null" na tela** → só `h()` (`compacto/comum.js`) descarta `null` dos filhos;
+  `replaceChildren`/`append` do DOM não. Lista com item opcional passa por `.filter(Boolean)`; o DOM falso de
+  `tools/teste-compacto-fim-de-partida.mjs` quebra no `append(null)` para pegar isso.
+- **Campo de texto ou botão recriado no repintar** (revisão de 14/10/2026) → `<input>` novo a cada mensagem tira o foco
+  no meio da digitação (a tecla seguinte vai para os atalhos da Riot) e botão recriado a cada 500 ms engole o clique que
+  começa num e termina no outro. Campo, botão de envio e botão de baixo nascem uma vez por montagem e só mudam texto e
+  `disabled` (`compacto/chat-sala.js`, `compacto/tela-honra.js`); `replaceChildren` só no que não tem foco nem clique.
 
 ## LCU API
 
@@ -374,6 +390,24 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Sequência de derrotas zerando à meia-noite** → `sessao_hoje()` lia só desde 00:00 e o `_tilt()`
   encadeia por pausa < 2 h: na faixa 00–06h (a pior) o alerta de 3+ derrotas não disparava. Hoje a
   sessão em andamento atravessa a meia-noite (`servidor._sessao`).
+- **Fim de partida: rotas e corpos do front da Riot** (rcp-fe-lol-postgame / -shared-components / -social 16.20, lidos no
+  `assets.wad` em 14/10/2026; nenhum enviado ao client real ainda) → honra: `POST /lol-honor/v1/honor {recipientPuuid,
+  honorType:"HEART"}`, pronto `POST /lol-honor/v1/ballot` sem corpo, `honoredPlayers` = `[{recipientPuuid}]`,
+  `votePool.votes` = total da partida (a Riot desconta os selecionados e envia sozinha quando sobra 0); pular
+  `POST /lol-pre-end-of-game/v1/skip-pre-end-of-game`. Amizade: `POST /lol-chat/v2/friend-requests {direction:"out",
+  puuid}`; 405 = bloqueado (a Riot oferece desbloquear com `DELETE /lol-chat/v1/blocked-players/{id}`: o compacto não
+  faz). Denúncia: `POST /lol-player-report-sender/v1/end-of-game-reports {comment, gameId, categories, offenderSummonerId,
+  offenderPuuid}` (gameId do jogador no eog, até 3 categorias, comentário ≤ 255 e ausente quando vazio), já denunciados em
+  `GET .../reported-players/gameId/{id}`, voz do time em `/lol-client-config/v3/client-config/lol.client_settings.team_voice.enabled`
+  (soma "ABUSO DE COMUNICAÇÃO POR VOZ"); personalizada não denuncia. Sala: mensagem = `{type:"chat", fromId, fromSummonerId,
+  isHistorical:false, timestamp, body}`; `player-mutes[meu puuid].isSystemMuted` = a Riot não envia na sala do pós-jogo.
+- **Etapa do PreEndOfGame** → `GET /lol-pre-end-of-game/v1/currentSequenceEvent` `{name, priority}`: `honor-vote` na
+  honra (sonda de 14/10), `""` com prioridade −1 fora; o nome das celebrações não foi visto (o roteador expande qualquer
+  outra etapa que fique 600 ms). `""` sem prazo prendia a tela compacta no `PreEndOfGame` (o `esperar` não olha a regra 7):
+  hoje 2 s antes da honra e 4 s depois (`ESPERA_POS_HONRA_MS`) e expande.
+- **Sala do pós-jogo da partida anterior segue em `GET /lol-chat/v1/conversations`** (revisão de 14/10/2026) → a 1ª
+  `type:"postGame"` pode ser a velha e a mensagem iria para os 9 de lá. Escolher só id `<gameId>-…` desta partida
+  (`acharSala` de `compacto/chat-sala.js`); sem gameId, nenhuma. O `chat-posjogo.js` (só leitura) ainda pega a 1ª.
 
 ## Live Client Data API (`127.0.0.1:2999`, medido na partida 3292746609, 13/10/2026)
 

@@ -33,6 +33,7 @@ TESTES = [
     ["node", "tools/teste-compacto-lobby.mjs"],
     ["node", "tools/teste-compacto-selecao.mjs"],
     ["node", "tools/teste-compacto-posjogo.mjs"],
+    ["node", "tools/teste-compacto-fim-de-partida.mjs"],
     [PY, "tools/teste-medir-compacto.py"],
     [PY, "tools/teste-chat-janelas.py"],   # sem janela de verdade (o --real abre o Edge: só à mão, jogo fechado)
     [PY, "tools/teste-coach.py"],

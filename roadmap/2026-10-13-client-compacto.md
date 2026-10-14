@@ -582,8 +582,9 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     `temp/` e o parecer dele colado aqui.
     **reprova se:** item d com código de produto antes da aprovação dele; correção feita direto em arquivo de outra
     frente; aviso "runa aplicada" em dobro na tela 3; algum caminho do b2 abre o painel com a camada ainda à vista.
-12. [ ] **Fim de partida compacto (proposta, aguardando aprovação do Gabriel).** ⛔ Nenhum código de produto antes das 4
-    telas aprovadas (mesma regra do passo 0). Pedidos dele (14/10/2026): ~15:30 "Tem como a tela pós-jogo, de honra, de
+12. [ ] **Fim de partida compacto (parecer de 14/10/2026 ~20:00 com 2 ajustes e 3 complementos; construído offline e
+    revisado em 14/10, falta a partida real: blocos "Aprovação e construção" e "Revisão adversarial" no fim deste passo).** A regra do passo 0 valeu até o
+    parecer; o texto abaixo é a proposta de origem. Pedidos dele (14/10/2026): ~15:30 "Tem como a tela pós-jogo, de honra, de
     detalhes do pós-jogo, com o chat, a análise do mentor etc, também funcionarem no modo compacto?" e depois "No modo
     compacto, também quero o chat pós-jogo. Com aquela mesma ideia de botar a foto dos campeões. Pode ficar ali na parte
     de baixo, em cima do botão de jogar de novo."
@@ -611,8 +612,8 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     | D navegação | `gameflow-phase` + `currentSequenceEvent` | nenhuma | `WaitingForStats` 0,7–7 s; honra 10–43 s (teto 40); celebrações (`challenge-level-up`, `missions`, `ranked-celebration`) < 0,1 s quando vazias; voltar ao compacto depois de uma celebração expandida [S] (11.c3) |
 
 
-    **Fica de fora do compacto (expande, regra 7), e por quê:** denunciar, adicionar amigo e silenciar (menu "..." é modal
-    da Riot), aba Progresso, celebrações (subir de elo, desafio, nível de honra) e o chat de dentro da partida (só existe
+    **Fica de fora do compacto (expande, regra 7), e por quê:** ~~denunciar, adicionar amigo~~ (entraram pelo pedido dele de
+    ~20:05/~20:08, ver o bloco da construção) e silenciar (menu "..." é modal da Riot), aba Progresso, celebrações (subir de elo, desafio, nível de honra) e o chat de dentro da partida (só existe
     na tela do jogo). **Única mudança de regra:** a regra 7 (`pengu/compacto/index.js`, ~linha 81: honra expande) passa a
     valer só fora de `honor-vote`; ver § Descartado (linha da honra reaberta). **Termos/Vanguard:** só LCU, nada toca o
     processo do jogo; voto, pronto e pular só por clique dele (nada automático, nem "votar no último").
@@ -637,6 +638,96 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     de construção (rotas [S] medidas antes de depender: 2º `POST ballot`, envio na sala, som da cerimônia).
     **reprova se:** qualquer `ajuste:`/`sem parecer` (ajusta o protótipo e pede de novo) ou código em `pengu/` desta frente
     antes da aprovação.
+
+    **Aprovação e construção (14/10/2026).** Parecer dele (~20:00, colado do protótipo, literal): "tela A honra: ajuste: o
+    botão 'enviar sem votar' pode ser apenas prosseguir. não precisa constar aliado/inimigo 1 a 5 · tela B pós-jogo: sem
+    parecer · tela C chat da sala: ajuste: o botão de jogar de novo deve ser dois: 'ir para o lobby' e 'jogar de novo' que
+    entra na fila · tela D navegação: sem parecer". Complementos: ~20:05 "isso, mostra o nome também do jogador/campeão,
+    opção de adicionar o jogador também caso você não tenha adicionado"; ~20:08 "denunciar também". Leitura do
+    orquestrador (dono técnico): "sem parecer" = sem objeção, constrói como no protótipo; os ajustes entram sem nova rodada
+    de protótipo. Construído (offline, sem POST/PATCH no client real):
+    - roteador (`compacto/index.js`): `PreEndOfGame` lê a etapa (`GET`/evento `/lol-pre-end-of-game/v1/currentSequenceEvent`);
+      `honor-vote` = tela nova `honra`; outra etapa (celebração) expande só depois de 600 ms firme (`SEQ_FIRME_MS`: vazia
+      passa em < 0,1 s e não pisca a janela); etapa não lida em 2 s (`ESPERA_SEQ_MS`) expande, como antes; `''` espera.
+      O evento da etapa é [S] e ela vira `honor-vote` ~0,1 s depois da fase: `iniciarCompacto` relê o GET a cada 1 s (até
+      45 s) enquanto a fase é `PreEndOfGame` e a etapa não é a honra.
+      `EndOfGame` volta ao compacto (a chave muda de `tela:honra`/`expandir:` para `tela:posjogo`).
+    - tela A `compacto/tela-honra.js`: lista do ballot com foto, Riot ID do eog (pelo puuid; sem eog, só o campeão) e
+      campeão · posição, ♡ (`POST /lol-honor/v1/honor {recipientPuuid, honorType:"HEART"}`), "prosseguir" sem voto e
+      "PRONTO · enviar N votos" com voto (`POST /lol-honor/v1/ballot` sem corpo), lista vazia → "pular a espera" depois de 5 s
+      (`POST /lol-pre-end-of-game/v1/skip-pre-end-of-game`), ballot 404 → "sem honra nesta partida"; relógio estimado
+      (`SecondsToVote`) que ao zerar não trava nada; chat da sala recolhido embaixo.
+    - tela B (`tela-posjogo.js` reescrita no visual do protótipo): faixa V/D, abas resumo (mentor do coletor com veredito,
+      mandou bem, próxima partida, o essencial, perguntar; lições recolhidas com veredito) e detalhes (tu × adversário
+      direto + os 10 com "+"/"⚑"); chat da sala aberto acima dos botões; **IR PARA O LOBBY** (`play-again` se
+      `allowedPlayAgain`, senão `dismiss-stats`; nunca busca) ao lado de **JOGAR DE NOVO** (o de sempre, freios); em grupo
+      só o "VOLTAR AO LOBBY"; "análise completa" e "fechar" embaixo. Tela D = o "carregando estatísticas".
+    - tela C `compacto/chat-sala.js`: só a conversa `type:"postGame"` (da conversa ficam só `id`/`type`), mensagens a cada
+      1,5 s, "entrou/saiu" some, contador de quem está, foto do campeão e nome pelo `cfg.chatPosjogo.nomes`, envio só por
+      Enter/clique com o corpo do client (`sendMessage` do rcp-fe-lol-social), `isSystemMuted` → campo cinza; clique no
+      nome abre o cartão do jogador.
+    - `compacto/jogador-acoes.js`: "+" = `POST /lol-chat/v2/friend-requests {direction:"out", puuid}` (só para quem não é
+      amigo nem tem pedido em `v2/friend-requests`); "⚑" abre o formulário da Riot (mesmas 3 seções, 7 categorias, 8 com a
+      voz do time em `lol.client_settings.team_voice.enabled`, até 3, comentário até 255, textos pt-BR do trans.json) e só
+      o clique em DENUNCIAR JOGADOR manda `POST /lol-player-report-sender/v1/end-of-game-reports {comment, gameId,
+      categories, offenderSummonerId, offenderPuuid}`; desligado em personalizada e para quem está em `reported-players`.
+      Rotas e corpos lidos no JS da Riot (16.20, `tools/ler-wad.py`), nunca enviados ao client real.
+    **Decisões técnicas (opus, 14/10/2026; opção mais reversível):** (i) celebração só expande firme (600 ms): confiança
+    média, reverte se uma celebração de verdade ficar embaixo da camada (aí `SEQ_FIRME_MS` cai ou a lista de etapas entra);
+    (ii) 405 no pedido de amizade (jogador bloqueado) **não** repete o "desbloquear e adicionar" da Riot (`DELETE
+    blocked-players` é outra decisão dele): avisa e o client normal resolve; alta; (iii) gameId da denúncia = o do próprio
+    jogador no eog (`reportedPlayer.gameId` da Riot), não o `reportGameId` do topo; alta; (iv) erro de envio (adicionar ou
+    denunciar) = motivo + "abrir no client normal", sem 2ª tentativa sozinha; alta; (v) "fechar" (dismiss-stats) fica ao
+    lado da análise além do "ir para o lobby" (play-again): são saídas diferentes na Riot; média, reverte se ele achar
+    repetido; (vi) "⤢ expandir" na honra vale até o `EndOfGame` (outra tela); média.
+    **O que o pedido não dizia (completei):** chat do champ select e a sala do lobby nunca lidos; cartão do jogador ao
+    clicar no nome no chat; `tools/ler-wad.py` (leitor do assets.wad, só leitura) para a próxima conferência de rota.
+    — **prova (14/10/2026):** `node tools/teste-compacto-fim-de-partida.mjs` 65/65 (novo, vermelho antes: os módulos não
+    existiam), `teste-compacto.mjs` 139/139 (PreEndOfGame: casos novos quebram contra o HEAD com `aoSequencia is not a
+    function`), `teste-compacto-posjogo.mjs` 118/118 (casos de ir para o lobby, mentor e nomes nos detalhes novos), sem mudança
+    e verdes: `teste-compacto-lobby` 136, `teste-compacto-selecao` 157, `teste-aceite` 43, `teste-chat-posjogo` 45,
+    `teste-jogar-de-novo` 96, `teste-posjogo` 11, `teste-config` 50. Prints do harness (`temp/compacto-harness/
+    fim-de-partida.html`, `servir-fim.mjs` na 8823): `2026-10-14-fim-{A-honra,A-denuncia,A-vazia,B-resumo,B-detalhes,
+    C-sala,D-carregando}.png`. **Falta (só a partida prova):** a honra embaixo da camada de verdade (a cerimônia e o som da
+    Riot seguem embaixo [S]), o 2º `POST ballot` (o nosso + o envio automático dela) [S], se a honor-vote põe algo no
+    layer-manager (regra 7 a expandiria; `modais()` desta sessão sem histórico), o nome da etapa das celebrações, o envio na
+    sala, pedido de amizade e denúncia contra o client real, `reported-players` e o `team_voice` lidos de verdade, o evento
+    de mensagem nova (hoje 1,5 s de leitura).
+
+    **Revisão adversarial e correções (14/10/2026, antes do commit).** 15 achados; corrigidos com teste (cada caso novo
+    falha contra o código de antes; mutação conferida em cópia no scratchpad):
+    - (1, alta) `''` no `currentSequenceEvent` não tinha prazo e prendia o `PreEndOfGame` na tela compacta (o `esperar` não
+      olha a regra 7: o que a Riot abrisse ficava embaixo). Hoje `''` antes da honra conta como "não lida" (2 s e expande);
+      depois da honra, `ESPERA_POS_HONRA_MS` = 4 s e expande; o `EndOfGame` dentro do prazo não pisca a janela.
+    - (2, alta) a sala do pós-jogo anterior na lista recebia a mensagem: `acharSala(conversas, gameId)` aceita só id
+      `<gameId>-…`; sem gameId, nenhuma sala ("esperando saber qual é a partida…", campo cinza).
+    - (3) "prosseguir" com voto em voo ou depois da etapa: botão cinza ("enviando o voto…" / "a Riot já fechou a honra"); a
+      honra lê a etapa do roteador (`ctx.seq`), que agora relê o GET a cada 1 s também durante a honra, por até 60 s.
+    - (4, 11) campo da sala recriado a cada mensagem (perdia o foco, Enter ia para a Riot, 2º envio duplicado): campo e
+      botão nascem uma vez por montagem; repinta pelo id da última mensagem (com 100 parava).
+    - (6) aviso de amizade só com o campeão (sem camada nem Toast, o `avisar` cai no `console.log`).
+    - (7) "pular a espera" recriado a cada 500 ms engolia clique: o botão de baixo da honra é um só, muda o texto.
+    - (8) "ir para o lobby" sem `play-again`: `dismiss-stats` só sozinho (`grupo === false`) e com o aviso "fui para o
+      início"; em grupo ou sem saber, avisa e abre o client normal.
+    - (9) evento do ballot sem dados virava "sem honra" e erro ≠ 404 deixava "lendo" para sempre: relê (GET, 2 s).
+    - (10) sessão que falha não apaga o gameId; sem gameId da sessão vale o do ballot; eog só com gameId igual.
+    - (13) JOGAR DE NOVO e "fechar" ignoram clique sintético (`isTrusted === false`), como os outros botões que escrevem.
+    - (14) formulário de denúncia guarda categorias e comentário por partida e jogador (a troca de fase desmontava e o
+      texto sumia); FECHAR descarta.
+    Fechado por leitura: (15) `votePool.votes` é o total (a Riot faz `votesRemaining = votes − selecionados`,
+    `setInitialVotesRemaining` do rcp-fe-lol-postgame 16.20), igual à conta daqui. **Decisões (opus, 14/10/2026):** (vii)
+    "+" e "⚑" ficam também na honra (pedido explícito dele, ~20:05/~20:08), sem prova de que `end-of-game-reports` e
+    `friend-requests` aceitam antes do `EndOfGame`; erro mostra o motivo e "abrir no client normal", que na honra cai na
+    tela da Riot sem esses botões: média, reverte para "no pós-jogo" se a 1ª honra real recusar; (viii) 4 s para o `''`
+    depois da honra: média, reverte se a celebração da Riot demorar mais que isso a começar; (ix) item 12 (vigia da etapa
+    com `setInterval`/`Date.now()` crus) aceito como o resto do `iniciarCompacto` (sem teste de relógio falso); (x) o mesmo
+    filtro de gameId no `pengu/chat-posjogo.js` (produção, só leitura: no pior caso lê nomes da sala errada) fica
+    **adiado** para não mexer fora do compacto nesta frente. **Falta, além da lista acima:** a cerimônia da Riot envia
+    sozinha quando os votos dela acabam (`votesRemaining === 0`): com o voto dado aqui, ver se ela manda o ballot antes do
+    clique dele. — **prova (14/10/2026, depois das correções):** `teste-compacto-fim-de-partida.mjs` 89/89,
+    `teste-compacto.mjs` 145/145, `teste-compacto-posjogo.mjs` 118/118; sem mudança e verdes: `teste-compacto-lobby` 136,
+    `teste-compacto-selecao` 157, `teste-aceite` 43, `teste-chat-posjogo` 45, `teste-jogar-de-novo` 96 (freios),
+    `teste-posjogo` 11, `teste-config` 50. Nenhum POST/PATCH contra o client real; `coletor/` intocado.
 13. [ ] **Chat lateral e grupo 2 da paridade (proposta, aguardando aprovação do Gabriel).** ⛔ Nenhum código de produto
     antes das 5 telas aprovadas (regra do passo 0). Pedido dele (14/10/2026 ~17:00): "O chat que hoje abre uma janela
     nova, eu queria que na verdade fosse o próprio modo compacto ganhando espaço para a direita, mostrando a lista. E se
@@ -725,6 +816,17 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     então vira plano de construção, com os [S] acima medidos antes de depender deles.
     **reprova se:** qualquer `ajuste:`/`sem parecer` (ajusta o protótipo e pede de novo); código em `pengu/` ou `coletor/`
     desta frente antes da aprovação; algo que abre sozinho na seleção ou move a janela embaixo do mouse sem a decisão 1.
+
+    **Parecer (14/10/2026 ~20:00, literal):** "tela A1 chat lateral (lista e conversa): sem parecer · tela A2 chat lateral
+    nas outras fases: sem parecer · tela B1 configurações dentro do compacto: ajuste: configurações pode expandir para a
+    esquerda. não esqueça de garantir que as janelas não se percam entre si ao serem abertas ou fechadas. · tela B2 selo
+    completo na seleção: sem parecer · tela B3 reabrir análise no lobby: sem parecer · decisão 1 mensagem nova abre a
+    conversa sozinha: sem escolha · decisão 2 lateral depois da partida: sem escolha · decisão 3 onde abrem as
+    configurações: sem escolha"; e "chat do time entra sim" (chat do time na seleção). Leitura do orquestrador: "sem
+    parecer" = constrói como no protótipo; decisões sem escolha = as recomendações: (1) abre sozinha só se couber sem
+    mover a janela e nunca na seleção; (2) a lateral volta depois da partida; (3) painel, que pelo ajuste B1 cresce para a
+    **esquerda** (chat para a direita, coluna compacta parada no lugar). Registrado pela frente do fim de partida (passo
+    12); a construção deste passo é da outra frente.
 
 ## Revisão da construção (13/10/2026)
 

@@ -12,6 +12,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - Client compacto (`pengu/compacto/`): erro, campo ausente ou modal desconhecido → expandir ou botão cinza com motivo,
   nunca decidir pelo jogador; rota [S] ainda sem medição nunca é premissa ([plano](roadmap/2026-10-13-client-compacto.md) passo 1).
   Travar/banir = `PATCH session/actions/{id} {completed:true, championId}`; nunca `POST .../complete` (ARMADILHAS § LCU).
+  Fim de partida (voto, prosseguir, adicionar, denunciar, sala): só clique dele, rota e corpo do front da Riot (ARMADILHAS § LCU).
 - Resposta falsa (avisos calados) só GET das `ROTAS` de `pengu/sem-popups.js`; nunca a sessão do champ select
   (o coletor lê `isAutofilled`). Plano: [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,

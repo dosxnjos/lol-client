@@ -32,7 +32,17 @@ export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect
   'FailedToLaunch', 'TerminatedInError', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
 export const FILAS_CHAMPSELECT = [420, 440, 400]; // seleção do SR com ban e posição (ARAM 450 expande: decisão do plano)
 export const MAPA_SR = 11;
-export const TELAS = { lobby: './tela-lobby.js', fila: './tela-fila.js', champselect: './tela-champselect.js', posjogo: './tela-posjogo.js' };
+export const TELAS = { lobby: './tela-lobby.js', fila: './tela-fila.js', champselect: './tela-champselect.js', posjogo: './tela-posjogo.js',
+  honra: './tela-honra.js' };
+// PreEndOfGame (passo 12): a etapa vem do GET/evento /lol-pre-end-of-game/v1/currentSequenceEvent ({name}). Só honor-vote tem
+// tela compacta; celebração (subir de elo, desafio, missões) expande, mas só depois de ficar SEQ_FIRME_MS (vazias passam em
+// < 0,1 s e expandir nelas faria a janela piscar 420 -> 1280 -> 420 toda partida). Etapa não lida em ESPERA_SEQ_MS: expande.
+export const SEQ_HONRA = 'honor-vote';
+export const SEQ_FIRME_MS = 600;
+export const ESPERA_SEQ_MS = 2000;
+// '' (nenhuma etapa) depois da honra: a Riot troca de etapa ou de fase em < 1 s; parado mais que isso, expande (revisão de
+// 14/10/2026: sem prazo, a tela ficava presa no PreEndOfGame e escondia o que a Riot abrisse por baixo)
+export const ESPERA_POS_HONRA_MS = 4000;
 export const CLASSE = 'lc-modo-compacto'; // no <html> enquanto a camada está à vista (lc-compacto é a chave ligada)
 export const ESPERA_SESSAO_MS = 2000; // champ select sem a sessão do gameflow lida: espera isso e expande
 export const CONTAGEM_MS = 1500; // ready check sem o #lc-aceite visto até aqui: expande (o popup da Riot fica embaixo da camada)
@@ -79,7 +89,18 @@ export function destinoDaFase(fase, info = {}) {
     case 'Reconnect': return { tipo: 'expandir', motivo: 'reconectar é no botão da Riot' };
     case 'FailedToLaunch': case 'TerminatedInError': return { tipo: 'expandir', motivo: 'o jogo não abriu ou caiu: tela da Riot' };
     case 'WaitingForStats': return { tipo: 'tela', tela: 'posjogo' };
-    case 'PreEndOfGame': return { tipo: 'expandir', motivo: 'honra e telas do fim de partida são da Riot' };
+    case 'PreEndOfGame': {
+      // info.seq: nome da etapa (undefined = ainda não lida); seqFirme: a etapa ficou SEQ_FIRME_MS; seqEsgotou: sem etapa
+      // (não lida ou '') por tempo demais (o roteador conta: ESPERA_SEQ_MS antes da honra, ESPERA_POS_HONRA_MS depois)
+      if (info.seq === SEQ_HONRA) return { tipo: 'tela', tela: 'honra' };
+      if (typeof info.seq !== 'string') return info.seqEsgotou ? { tipo: 'expandir', motivo: 'não li a etapa do fim de partida: tela da Riot' }
+        : { tipo: 'esperar', motivo: 'lendo a etapa do fim de partida' };
+      // '' = nenhuma etapa: na entrada (a honra vem ~0,1 s depois) ou no fim da honra (a Riot já vai trocar); parado, expande
+      if (!info.seq) return info.seqEsgotou ? { tipo: 'expandir', motivo: 'fim de partida sem etapa da Riot: tela da Riot' }
+        : { tipo: 'esperar', motivo: 'entre duas etapas do fim de partida' };
+      return info.seqFirme ? { tipo: 'expandir', motivo: `etapa do fim de partida da Riot (${info.seq}): celebração e telas novas expandem` }
+        : { tipo: 'esperar', motivo: `etapa ${info.seq}: esperando ver se fica` };
+    }
     case 'EndOfGame': return { tipo: 'tela', tela: 'posjogo' };
     default: return { tipo: 'expandir', motivo: `fase desconhecida (${fase ?? 'sem leitura'})` };
   }
@@ -189,7 +210,7 @@ export function criarRoteador({
     efetivo: 'expandido', motivo: 'início', tela: null, pronto: false };
   const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
   const assinadas = new Set();
-  let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null, timerContagem = null, timerModalRc = null;
+  let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null, timerContagem = null, timerModalRc = null, timerSeq = null;
 
   const carregar = nome => {
     let m = modulos.get(nome);
@@ -208,7 +229,8 @@ export function criarRoteador({
     if (!c.ligado) return { modo: 'expandido', motivo: 'client compacto desligado' };
     // sem DOM ou sem a 1ª leitura da fase: não mexe em nada (recarga com a janela pequena não pisca)
     if (!est.pronto || !est.faseLida) return { modo: 'nada' };
-    const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual(), semContagem: semContagem() });
+    const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual(), semContagem: semContagem(),
+      ...infoSequencia() });
     const chave = d.tipo === 'esperar' ? est.chave : `${d.tipo}:${d.tela || ''}`;
     // virou de destino: a escolha manual e a regra 7 valem só até aqui ("lembrar o modo por fase", plano)
     if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; }
@@ -231,6 +253,23 @@ export function criarRoteador({
     return { modo: 'compacto', tela: d.tela, mod: m.mod };
   }
 
+  // etapa do PreEndOfGame para o destinoDaFase (est.seq = {nome, desde} | null; est.seqDesde = entrada no PreEndOfGame;
+  // est.honraVista = honor-vote visto neste fim de partida)
+  function infoSequencia() {
+    if (est.fase !== 'PreEndOfGame') return {};
+    return { seq: est.seq ? est.seq.nome : undefined, seqFirme: !!est.seq && agora() - est.seq.desde >= SEQ_FIRME_MS,
+      seqEsgotou: prazoSemEtapa() === 0 };
+  }
+
+  // sem etapa (não lida ou ''): ms até expandir (0 = esgotou); null = há etapa com nome. '' antes da honra conta como
+  // "não lida" (prazo da entrada na fase); '' depois dela, ESPERA_POS_HONRA_MS desde que virou ''
+  function prazoSemEtapa() {
+    if (est.fase !== 'PreEndOfGame' || (est.seq && est.seq.nome)) return null;
+    const fim = est.seq && est.honraVista ? est.seq.desde + ESPERA_POS_HONRA_MS
+      : typeof est.seqDesde === 'number' ? est.seqDesde + ESPERA_SEQ_MS : null;
+    return fim === null ? null : Math.max(0, fim - agora());
+  }
+
   // ready check: a contagem foi vista alguma vez? (some sozinha depois do aceite, esperando os outros: não conta)
   function semContagem() {
     if (est.fase !== 'ReadyCheck' || !est.rc) return false;
@@ -241,6 +280,11 @@ export function criarRoteador({
     // janela embaixo do cursor dele, indo clicar no popup da Riot: revisão de 14/10/2026)
     if (!est.rc.vista && v === false && agora() - est.rc.desde >= CONTAGEM_MS) est.rc.expandiu = true;
     return !!est.rc.expandiu;
+  }
+
+  function agendarSeq(ms) {
+    if (timerSeq) limpar(timerSeq);
+    timerSeq = agendar(() => { timerSeq = null; if (est.fase === 'PreEndOfGame') resolver(); }, ms);
   }
 
   function resolver() {
@@ -352,6 +396,8 @@ export function criarRoteador({
       cfg, servicos, tela: nome,
       get fase() { return est.fase; },
       get info() { return { ...est.info }; },
+      // etapa do PreEndOfGame que o roteador leu (GET a cada 1 s + evento): a honra confere se ainda é honor-vote
+      get seq() { return est.fase === 'PreEndOfGame' && est.seq ? est.seq.nome : null; },
       raiz: partes.raiz, titulo: partes.titulo, extras: partes.extras,
       lcu: (metodo, url, corpo) => lcu(metodo, url, corpo),
       vivo, seguro,
@@ -444,7 +490,7 @@ export function criarRoteador({
   }
 
   function estado() {
-    return { fase: est.fase, info: { ...est.info }, destino: est.destino, efetivo: est.efetivo, motivo: est.motivo, tela: est.tela,
+    return { fase: est.fase, info: { ...est.info }, seq: est.seq?.nome ?? null, destino: est.destino, efetivo: est.efetivo, motivo: est.motivo, tela: est.tela,
       override: est.override, forcado: est.forcado, janelaCompacta: janela.ehCompacta(), camada: !!camada.existe?.(),
       telas: Object.fromEntries([...modulos].map(([k, v]) => [k, v.estado])) };
   }
@@ -463,6 +509,21 @@ export function criarRoteador({
       if (timerContagem) { limpar(timerContagem); timerContagem = null; }
       est.rc = fase === 'ReadyCheck' ? { desde: agora(), vista: false } : null;
       if (est.rc) timerContagem = agendar(() => { timerContagem = null; resolver(); }, CONTAGEM_MS + 50);
+      // etapa do fim de partida: a do evento pode chegar antes da fase (WaitingForStats -> PreEndOfGame guarda); fora do fim de
+      // partida ela não vale mais. Sem etapa lida em ESPERA_SEQ_MS, o destino expande (o de antes do passo 12)
+      if (fase !== 'WaitingForStats' && fase !== 'PreEndOfGame') { est.seq = null; est.honraVista = false; }
+      est.seqDesde = fase === 'PreEndOfGame' ? agora() : null;
+      if (fase === 'PreEndOfGame') agendarSeq((prazoSemEtapa() ?? ESPERA_SEQ_MS) + 50);
+      resolver();
+    },
+    // /lol-pre-end-of-game/v1/currentSequenceEvent: name ('' = nenhuma etapa); Delete = ''
+    aoSequencia(nome) {
+      const n = typeof nome === 'string' ? nome : '';
+      if (est.seq && est.seq.nome === n) return;
+      est.seq = { nome: n, desde: agora() };
+      if (n === SEQ_HONRA) est.honraVista = true;
+      else if (n) agendarSeq(SEQ_FIRME_MS + 50);
+      else { const p = prazoSemEtapa(); if (p !== null) agendarSeq(p + 50); } // '' também tem prazo (sem ele, ficava preso)
       resolver();
     },
     aoSessao(s) {
@@ -553,17 +614,37 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   });
 
   const lerSessao = () => lcuPadrao('GET', '/lol-gameflow/v1/session').then(r => { if (r.ok && r.json) rot.aoSessao(r.json); });
+  // etapa do fim de partida (honra x celebrações, passo 12): evento + leitura ao entrar no PreEndOfGame
+  const lerSequencia = () => lcuPadrao('GET', '/lol-pre-end-of-game/v1/currentSequenceEvent')
+    .then(r => { if (r.ok && r.json && typeof r.json === 'object') rot.aoSequencia(String(r.json.name ?? '')); });
+  context.socket.observe('/lol-pre-end-of-game/v1/currentSequenceEvent', msg => {
+    rot.aoSequencia(msg?.eventType === 'Delete' ? '' : String(msg?.data?.name ?? ''));
+  });
+  // o evento da etapa é [S] e a etapa vira honor-vote ~0,1 s DEPOIS da fase (sonda de 14/10): uma leitura só, na entrada,
+  // podia pegar "" e deixar a honra compacta sem montar. Relê a cada 1 s enquanto a fase é PreEndOfGame, por até 60 s (o
+  // teto da honra da Riot é 40 s), também durante a honra: o fim dela ('') trava o "prosseguir" e dá o prazo para expandir
+  // se a Riot não sair da fase (revisão de 14/10/2026). Só GET. Relógio cru como o resto do iniciarCompacto (sem teste).
+  let releSeq = null;
+  const vigiarSequencia = () => {
+    if (releSeq) clearInterval(releSeq);
+    const ate = Date.now() + 60000;
+    releSeq = setInterval(() => {
+      if (rot.estado().fase !== 'PreEndOfGame' || Date.now() > ate) { clearInterval(releSeq); releSeq = null; return; }
+      lerSequencia().catch(() => {});
+    }, 1000);
+  };
   context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => {
     const f = msg?.data;
     if (typeof f !== 'string') return;
     rot.aoFase(f);
     if (f === 'ChampSelect') lerSessao();
+    if (f === 'PreEndOfGame') { lerSequencia().catch(() => {}); vigiarSequencia(); }
   });
   context.socket.observe('/lol-gameflow/v1/session', msg => { if (msg?.eventType !== 'Delete' && msg?.data) rot.aoSessao(msg.data); });
   // fase inicial (recarga do plugin no meio de qualquer fase); falha = tenta de novo, a fase do socket também chega
   const lerFase = async (tentativa = 0) => {
     const r = await lcuPadrao('GET', '/lol-gameflow/v1/gameflow-phase');
-    if (typeof r.json === 'string') { rot.aoFase(r.json); if (r.json === 'ChampSelect') lerSessao(); return; }
+    if (typeof r.json === 'string') { rot.aoFase(r.json); if (r.json === 'ChampSelect') lerSessao(); if (r.json === 'PreEndOfGame') { lerSequencia().catch(() => {}); vigiarSequencia(); } return; }
     if (tentativa < 5) setTimeout(() => lerFase(tentativa + 1), 3000);
     else rot.aoFase(null);
   };
