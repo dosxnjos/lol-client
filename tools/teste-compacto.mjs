@@ -69,6 +69,7 @@ function novoDoc() {
   doc.documentElement.append(doc.head, doc.body);
   doc.getElementById = id => { for (const n of doc.documentElement.desc()) if (n.id === id) return n; return null; };
   doc.querySelector = sel => doc.documentElement.querySelector(sel);
+  doc.querySelectorAll = sel => doc.documentElement.querySelectorAll(sel);
   doc.addEventListener = () => {};
   return doc;
 }
@@ -299,6 +300,26 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
     && s.nomes().slice(-2).join() === 'Window.ResizeTo 1280x720,Window.CenterToScreen' && s.telas.champselect.desmontadas === 1);
   s.rot.compactar();
   caso('Reconnect: pedir o compacto não encolhe e avisa o motivo', s.foto().efetivo === 'expandido' && s.avisos.some(([m]) => /reconectar/.test(m)));
+}
+
+{ // boot da Riot tira a camada do <body> e põe uma cópia sem ouvintes (14/10/2026: "lendo o lobby" para sempre)
+  const s = cenario();
+  s.rot.marcarPronto();
+  await s.ir('Lobby');
+  const minha = s.doc.getElementById('lc-compacto');
+  minha.remove();
+  const copia = h('div', { doc: s.doc, id: 'lc-compacto' }, h('main', { doc: s.doc, class: 'lc-cp-corpo' }, 'lendo o lobby…'));
+  s.doc.body.append(copia);
+  s.rot.reavaliar();
+  const vis = s.doc.getElementById('lc-compacto');
+  const raizTela = s.telas.lobby.raiz;
+  caso('camada trocada por cópia: remonta a tela na camada nova, a cópia sai e a tela pinta no que está à vista',
+    s.telas.lobby.montadas === 2 && s.doc.querySelectorAll('#lc-compacto').length === 1 && vis !== copia && vis !== minha
+      && raizTela.isConnected && !!vis.querySelector('[data-a=expandir]') && s.foto().efetivo === 'compacto'
+      && igual(s.nomes(), ['Window.ResizeTo 420x640']),
+    JSON.stringify({ montadas: s.telas.lobby.montadas, n: s.doc.querySelectorAll('#lc-compacto').length, nomes: s.nomes() }));
+  s.rot.reavaliar();
+  caso('camada já é a minha: reavaliar não remonta de novo', s.telas.lobby.montadas === 2);
 }
 
 { // a Riot devolve a janela a 1280×720 com a camada de pé (restore do plugin-runner, ux-show do aceite.js) [S]

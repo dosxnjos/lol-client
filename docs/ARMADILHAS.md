@@ -48,6 +48,11 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **A Riot devolve a janela a 1280×720 sozinha** [S] (restore do plugin-runner; `ux-minimize`/`ux-show` do `aceite.js`)
   → camada de 1280 que não é compacto. `criarJanela.ehCompacta` desconfia de medida ≥ 1000 px depois de 1,5 s do próprio
   `ResizeTo`; o `resize` da janela reavalia e o roteador encolhe de novo (3 vezes em 10 s = desiste e fica no normal).
+- **Compacto parado em "lendo o lobby", botões mortos (14/10/2026)** → no boot a Riot tira o `#lc-compacto` do `<body>` e
+  põe uma **cópia** sem ouvintes; a tela seguia pintando no original, fora da página. Medido com 1 só `montar()` no
+  registro. `criarCamada.conectada()` + roteador que remonta + vigia dos filhos do `<body>` (e intervalo de 2 s).
+  Diagnóstico: `__lolClient.compacto.montada().ctx.raiz.isConnected` falso. Instrumentar o plugin com `||=` fez o
+  Pengu não carregar nada (sem `__lolClient`): usar sintaxe simples.
 - **CSS das telas compactas vaza entre telas** → o `<style>` de cada tela nunca sai do documento; nome igual (`.lc-cp-jogar`)
   com a mesma especificidade = ganha o último injetado (o JOGAR do lobby encolhia depois do 1º pós-jogo). Regra de tela
   que reusa nome comum vai sob a classe da tela (`.lc-cp-pj` no pós-jogo).

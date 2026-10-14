@@ -253,6 +253,13 @@ export function criarRoteador({
     }
     if (a.modo === 'nada' || a.modo === 'esperar') return;
     if (a.modo === 'compacto') {
+      if (est.efetivo === 'compacto' && montagem && montagem.nome === a.tela && camada.conectada && !camada.conectada()) {
+        // a camada à vista não é a minha (a Riot trocou o <body> por uma cópia sem ouvintes): monta de novo
+        log('a camada saiu da página: montando de novo');
+        desmontarTela();
+        montarTela(a.tela, a.mod, camada.montar());
+        return;
+      }
       if (est.efetivo === 'compacto' && montagem && montagem.nome === a.tela) {
         // a Riot devolveu a janela a 1280×720 com a camada de pé (restore do plugin-runner, ux-show [S]): encolhe de
         // novo; se ela insistir (3 vezes em 10 s), desiste e fica no client normal (camada de 1280 não é compacto)
@@ -516,6 +523,11 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     if (typeof MutationObserver !== 'undefined')
       new MutationObserver(() => { if (rot.estado().fase === 'ReadyCheck') rot.reavaliar(); })
         .observe(doc.documentElement, { attributes: true, attributeFilter: ['class'] });
+    // camada trocada por cópia (boot da Riot): o roteador remonta. Observa só os filhos do <body>; o intervalo cobre
+    // um <body> novo (o observador ficaria preso no antigo)
+    const conferirCamada = () => { if (camada.existe() && !camada.conectada()) rot.reavaliar(); };
+    if (typeof MutationObserver !== 'undefined') new MutationObserver(conferirCamada).observe(doc.body, { childList: true });
+    setInterval(conferirCamada, 2000);
     // atalho só com a chave ligada: desligado, o Ctrl+Shift+M segue para o client como se o plugin não existisse
     window.addEventListener('keydown', e => {
       if (!cfg.compacto?.ligado || !ehAtalho(e)) return;

@@ -127,9 +127,14 @@ export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar
     // logo abaixo do topo, por cima do conteúdo da tela
     el.insertBefore ? el.insertBefore(alerta, partes.raiz) : el.appendChild(alerta);
   };
+  // a Riot, no boot, tira a camada do <body> e põe uma CÓPIA sem ouvintes (14/10/2026: tela parada em "lendo o
+  // lobby", botões mortos; ARMADILHAS § Client). conectada() = a camada à vista é a minha
+  const conectada = () => !!el && el.isConnected !== false && doc.getElementById?.('lc-compacto') === el;
   const montar = () => {
-    if (el && el.isConnected !== false && doc.getElementById?.('lc-compacto') === el) return partes;
-    doc.getElementById?.('lc-compacto')?.remove(); // sobra de outra carga do plugin
+    if (conectada()) return partes;
+    // sobra de outra carga do plugin ou cópia feita pela Riot: todas saem
+    for (const velho of doc.querySelectorAll?.('#lc-compacto') || []) velho.remove();
+    doc.getElementById?.('lc-compacto')?.remove();
     const titulo = h('div', { doc, class: 'lc-cp-titulo' });
     const extras = h('div', { doc, class: 'lc-cp-extras' });
     const raiz = h('main', { doc, class: 'lc-cp-corpo' });
@@ -148,7 +153,7 @@ export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar
     return partes;
   };
   const remover = () => { el?.remove(); el = null; partes = null; };
-  return { montar, remover, existe: () => !!el, partes: () => partes, pedirFechar };
+  return { montar, remover, existe: () => !!el, conectada, partes: () => partes, pedirFechar };
 }
 
 // Botão "▣ modo compacto" no client normal, ao lado da fila rápida (protótipo tela 6). Mesmo padrão do
