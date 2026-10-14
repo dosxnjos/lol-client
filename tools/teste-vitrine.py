@@ -6,7 +6,7 @@
 #      (chave = print; resto = alfa 140 da janela), com o recorte cortado na borda do monitor
 #   3. moldura: composto = `moldura.renderizar` (mesma rotina GDI da janela) por cima do print com
 #      chat/topo pixelados; borda e rótulo nítidos mesmo sobre a região pixelada
-#   4. taxa: 1 por tipo a cada 20 s, no máximo 25 (aqui 3) por partida
+#   4. taxa: 1 por tipo a cada 90 s, no máximo 25 (aqui 3) por partida
 #   5. jogo fora do primeiro plano: nada gravado, print nem chamado; SetForegroundWindow e afins
 #      armados como armadilha e proibidos no código-fonte (vitrine e os três ganchos)
 #   6. 2 telas, região fora de todo monitor (avisa, sem tentar a cada quadro) e alt-tab entre a

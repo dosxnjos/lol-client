@@ -474,7 +474,7 @@ print `mss` → primeiro plano conferido de novo (alt-tab no meio = descartado) 
 Saída em `temp\vitrine\<data>\`: `*-minimapa-composto.png` (mapa + 40 px de margem) e `*-camada.png` (RGBA exata),
 `*-moldura-<cor>-tela.png` (tela inteira em 1280 px, chat medido, canto de baixo à esquerda e topo central
 pixelados antes de compor), `vitrine.jsonl` (gameTime, tipo, aviso, rótulo, `revisao_privacidade: "pendente"`) e
-`LEIA-ME-privacidade.txt`. No máximo 1 print a cada 20 s por tipo (`overlay-calor`, `overlay-texto`,
+`LEIA-ME-privacidade.txt`. No máximo 1 print a cada 90 s por tipo (`overlay-calor`, `overlay-texto`,
 `moldura-<cor>`) e 25 por partida; falha de disco ou `mss` só loga. O recorte usa o monitor que contém a
 região (lista do `mss`, não o `monitor_do_jogo` do game.cfg, que com 2 telas pode errar); região fora de todo
 monitor é logada e espera o intervalo do tipo. Custo medido no fio de quem chama: gancho < 0,1 ms com a tela
