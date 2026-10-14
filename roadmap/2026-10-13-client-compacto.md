@@ -362,6 +362,89 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
      `[lol-client] compacto: bannable-champion-ids … n=` no `LeagueClientUx.log` (n = 0 confirma a causa da grade
      vazia; n grande com `noCatalogo` > 0 derruba a dedução e a causa volta a ser procurada).
 
+11. [ ] **Paridade com o expandido (pedido de 14/10/2026 ~15:35).** Palavras dele: "garanta que todos os outros recursos
+    que implementamos no modo expandido também tenham no modo compacto." Inventário e conferência no código em 14/10/2026
+    (só leitura, `pengu/index.js`, `compacto/*`, `posjogo/index.js`, `champselect.js`, `runas.js`, `recompensas.js`,
+    `config.js`, `aceite.js`, `sem-popups.js`, `estilo.css`, README). **Regra de dono:** `compacto/tela-champselect.js` e
+    `tela-fila.js` são da frente seleção (passo 10: fotos da intenção, altura, roda de skins, anel);
+    `compacto/tela-posjogo.js`, chat do pós-jogo, honra/placar, mentor e o painel de 6 abas no compacto são da frente fim
+    de partida (protótipo `temp/2026-10-14-prototipo-compacto-fim-de-partida.html`). Correção num arquivo de outra frente
+    = **especificar para ela** (o quê, linha, prova), nunca editar direto. Legenda: [S] = não medido no client real.
+
+    **a) Já existe nos dois modos (18, nada a fazer):** aceitar sozinho com contagem e "não aceitar" (`#lc-aceite` por
+    cima da tela da fila; "não aceitar" expande) · atraso do aceite · client pisca e volta para trás (com o [S] da janela
+    devolvida a 1280 pelo `ux-show`, que o roteador reencolhe) · calar o som em loop · janelinha aceitar/recusar e reserva
+    do aceite no coletor · fila rápida (= JOGAR da tela 1, mesmo `buscarFilaRapida`) · fila e posições (a tela 1 grava em
+    `filaRapida.*`) · freios de tilt e madrugada (telas 1 e 4) · jogar de novo e buscar (tela 4) · runa automática ao
+    travar (✓ na tela 3) · escolha entre 2+ páginas (dentro da tela 3) · calar o aviso de runas mudadas e o de golpear ·
+    painel da 2ª tela, voz, moldura, overlay, F8/F9 (na partida a camada sai) · V/D, KDA e farm na tela 4 (PDL segue
+    [S], `tela-posjogo.js:8`) · fechar a tela de estatísticas · coleta de recompensas · ⤢ expandir, Ctrl+Shift+M e
+    "▣ modo compacto" · MCP.
+
+    **b) Corrigir sem tela nova (categoria 1; ordem de execução):**
+
+    | # | lacuna | correção | arquivo · dono |
+    | --- | --- | --- | --- |
+    | 1 | análise só começa no clique em "ver análise completa" com a camada à vista: o ramo `compactoAVista()` retorna sem `obterAnalise` | chamar `obterAnalise(gid)` antes do `return`; o `aoMudarAnalise` desiste sozinho com `ultimaAberta` nulo, então nada é desenhado embaixo da camada | `pengu/posjogo/index.js` ~488-500 · livre |
+    | 2 | Ctrl+K "analisar última partida" no compacto abre o painel em `display:none`; o `aoClicarFora` dele fecha no 1º clique na camada e o `keydown` de captura come o Esc enquanto ele existe | no `perform`, `compacto.expandir()` quando `compacto.estado().efetivo === 'compacto'` e só depois `analisarUltima()` | `pengu/index.js` (`registrarAcoes`, ~70) · livre |
+    | 3 | avisos por `Toast` direto podem ficar embaixo da camada [S] | trocar pelo `avisar` de `compacto/comum.js:98` (já põe o aviso dentro do `#lc-compacto` quando ele existe e cai no Toast quando não): `runas.js:43` ("página da regra sumiu", "tua runa atual é a de X"), `recompensas.js:221` ("recompensa para escolher", falhas), `config.js:186` (confirmações do Ctrl+K). `fila-rapida.js` e `posjogo/index.js:297` só agem no expandido: ficam | `runas.js`, `recompensas.js`, `config.js` · livre |
+    | 4 | travar no compacto com 2+ páginas e expandir antes de escolher: o `aoTravar` devolveu `acao:'compacto'` e marcou `tratado`; expandido, o popup não abre e fica a runa atual sem aviso (raro) | rodar `aoTravar` de novo ao sair do compacto na fase `ChampSelect` com a escolha pendente | `pengu/runas.js` · livre |
+    | 5 | lições da tela 4 mostram "fora" sem o coletor (o motor local do painel não roda) | export novo em `servicos.posjogo` com as lições da análise local (depende do item 1; custo: partida + linha do tempo, até ~75 s com as novas tentativas). Consumo na tela 4 | export: `posjogo/index.js` · livre; consumo: `tela-posjogo.js` · **especificar para a frente fim de partida** |
+    | 6 | selo do champ select: os dados já existem e a tela 3 não usa | reaproveitar `servicos.champ.coach()`, `estatisticas(id,pos)` e os formatadores `textoSelo`, `linhaMatchup`, `linhaTrauma`, `linhasDraft` de `champselect.js` (nenhuma leitura nova; o `champselect.js` já busca `/draft/<id>` a cada 3 s nos dois modos); o `estatFav` ignora `champSelect.ligado` (1 linha) | `compacto/tela-champselect.js:903-912` · **especificar para a frente seleção** |
+
+    Decisões técnicas (orquestrador, 14/10/2026): (i) Toast → `avisar` do compacto, confiança alta (ele já escolhe pelo
+    DOM e o Toast segue como reserva); reverte se a medição do item c2 mostrar o Toast por cima da camada e ele preferir o
+    visual da Riot. (ii) "runa X aplicada" **não** vai para o aviso da camada quando ela está à vista (sairia em dobro com o
+    ✓ da tela 3), confiança média; reverte se ele sentir falta da confirmação.
+
+    **c) Medir no client real (só leitura, fase `None`/`Lobby`, antes de decidir):**
+    1. a CommandBar do Ctrl+K desenha por cima do `#lc-compacto` (z 100000)? Se sim, toda chave liga/desliga e de ciclo
+       já se edita sem expandir e o item d1 encolhe para os blocos com campos (regras de runa, escolhas do coach).
+    2. o Toast do Pengu fica embaixo da camada? Com o b3 feito, só documenta (ARMADILHAS).
+    3. celebração depois da coleta de recompensas (achado novo): a coleta roda na carga e 30 s depois da partida, com a
+       tela 1 à vista; `.vignette-celebration` dispara a regra 7 e o `est.forcado` só limpa quando o destino muda →
+       provável lobby expandido até a próxima busca depois de toda partida com recompensa. Confirmado → voltar ao
+       compacto quando o modal da Riot fecha (`compacto/index.js` `aoModal`/`alvo`, livre; registrar como decisão
+       técnica) ou aceitar como está.
+    4. PDL da tela 4 (frente fim de partida; segue [S] até a medição).
+
+    **d) Precisa de tela nova: protótipo único + aprovação do Gabriel antes de código (regra do passo 0):**
+    1. Configurações de dentro do compacto: hoje não há engrenagem e abrir as Configurações da Riot expande (regra 7).
+       Mesmo "⚙ expandir e abrir as Configurações" é elemento novo (`compacto/modo.js` `criarCamada`). Tamanho depende do c1.
+    2. Selo completo na tela 3: KDA, recorte por posição, campeão em hover ou travado (hoje só "n partidas · wr%" geral
+       dos favoritos), matchup, "X é trauma", força do draft e "coletor fora". Não há lugar na tela 3 para isso; a frente
+       seleção não cobre (tela dela) → protótipo, depois especificado para ela.
+    3. "📊 reabrir análise" no lobby: no expandido o botão fica até o próximo aceite (README); no compacto fica em z 99990,
+       embaixo da camada (100000), e `ultimaAberta` segue nulo se a análise nunca abriu, então baixar o z-index não
+       resolve. Falta um caminho na tela 1 (`compacto/tela-lobby.js`, livre; fronteira com a frente fim de partida).
+    **Proposto (dono: gabriel):** o chat de time da seleção e o da tela de estatísticas são da Riot, não do plugin, e o
+    💬 do compacto cobre só conversas 1:1 (`chat-botao.js:3`). Se para ele paridade é "tudo o que eu uso", entra no
+    protótipo do d. Recomendo deixar de fora agora: o chat do pós-jogo já está com a frente fim de partida e o da seleção
+    não teve pedido.
+
+    **e) Já com as outras frentes (não duplicar):** chat do pós-jogo melhorado, honra e placar dos 10, veredito e
+    pergunta ao mentor, painel de 6 abas no compacto, PDL (frente fim de partida); fotos da intenção, altura, roda de
+    skins, anel (frente seleção). Conferido: `chat-posjogo.js` não chama `focus()` (linha 33), não rouba o teclado por
+    baixo da camada.
+
+    **f) Não faz sentido no compacto:** § Descartado e impraticável (linhas "paridade, 14/10").
+
+    **Correções ao inventário:** a dica do coach no lobby é só do compacto (o coletor não tem a rota `/dica`): sobra, não
+    lacuna. `favoritos`, `larg`, `alt` não têm campo em nenhum modo (README): não é paridade. Fila rápida: paridade
+    completa (o Toast dela só existe no botão da barra da Riot; a tela 1 usa o aviso da camada). Recompensas: a coleta
+    vale nos dois; o risco é o c3.
+
+    **O que o pedido não dizia (completei no levantamento):** c3 (celebração que deixa o lobby expandido), b4 (runa
+    pendente ao expandir) e o b2 ser pior que "não abre" (o painel invisível come o Esc e o 1º clique).
+    — **prova:** b1-b4: casos novos vermelhos antes e verdes depois em `node tools/teste-compacto-posjogo.mjs`
+    (`EndOfGame` com a camada à vista → `obterAnalise` chamado e `#lc-posjogo` ausente), `teste-compacto.mjs` (Ctrl+K
+    com a camada → `expandir` antes do painel), `teste-aceite.mjs`/teste de runas (aviso dentro do `#lc-compacto` falso;
+    `aoTravar` de novo ao expandir com escolha pendente); `rodar-testes.py` inteiro verde. c1-c3: resultado anotado em
+    ARMADILHAS § Client e Pengu. b5/b6: especificação entregue às frentes, com linha e prova. d: protótipo publicado em
+    `temp/` e o parecer dele colado aqui.
+    **reprova se:** item d com código de produto antes da aprovação dele; correção feita direto em arquivo de outra
+    frente; aviso "runa aplicada" em dobro na tela 3; algum caminho do b2 abre o painel com a camada ainda à vista.
+
 ## Revisão da construção (13/10/2026)
 
 Revisão adversarial achou 20 defeitos; nenhum falso, dois repetidos (12 = 2, 18 = 5): 18 distintos, todos corrigidos
@@ -434,6 +517,11 @@ expande (decisão acima).
 | aceitar troca sozinho, pick/ban automático | automatiza decisão do jogador | Gabriel (fronteira) |
 | chat da partida nas janelas de chat | `/lol-chat/v1/conversations` fica `[]` a partida inteira (ARMADILHAS); só OCR | medição de 13/10 |
 | vários protótipos alternativos | ele pediu "só um protótipo inicialmente" | Gabriel |
+| paridade, 14/10: esconder TFT, coluna larga, evento, CLASSIC e loja no compacto | CSS sobre telas da Riot que a camada cobre; volta a valer ao expandir | orquestrador (conferência de 14/10) |
+| paridade, 14/10: esconder o popup do ready check no compacto | o popup já fica embaixo da camada | orquestrador (conferência de 14/10) |
+| paridade, 14/10: aceitar/recusar dentro da camada com o aceite automático desligado | a decisão é do popup da Riot (o compacto expande) e a janelinha do coletor já serve nos dois modos; tela própria de recusar iria contra "nada decide pelo jogador" | orquestrador (conferência de 14/10) |
+| paridade, 14/10: ARAM e seleção com banco, reconectar, honra, falha ao abrir o jogo | telas da Riot; já descartadas neste plano (regra 7) | orquestrador |
+| paridade, 14/10: `ux-show`/`ux-flash` do popup de runas no compacto | quem escolhe é a tela 3, e ele já está nela porque acabou de travar | orquestrador (conferência de 14/10) |
 
 ## Relatório
 
