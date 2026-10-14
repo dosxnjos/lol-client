@@ -537,7 +537,7 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     Nota sem correção: 2 avisos seguidos da mesma coleta de recompensas deixam só o último visível na camada (o Toast
     empilhava).
     — **prova:** `teste-compacto.mjs` 122 → 127, `teste-compacto-selecao.mjs` 143 → 157, `teste-compacto-posjogo.mjs`
-    85 → 103, `teste-runas.mjs` 4/4 com extras 5 → 21, `teste-recompensas.mjs` 39 → 41, `teste-config.mjs` 49 → 50, todos
+    85 → 104, `teste-runas.mjs` 4/4 com extras 5 → 21, `teste-recompensas.mjs` 39 → 41, `teste-config.mjs` 49 → 50, todos
     verdes; casos novos vermelhos antes da correção (os de b2 e da análise pronta conferidos revertendo a correção).
     Sem mudança e verdes: `teste-compacto-lobby` 136, `teste-aceite` 43, `teste-posjogo` 11, `teste-jogar-de-novo` 96,
     `teste-sem-popups` 22, `teste-chat-posjogo` 45, `teste-winrate`, `teste-licoes`, `teste-abas`, `teste-matchup`.

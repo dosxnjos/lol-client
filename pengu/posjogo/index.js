@@ -390,6 +390,9 @@ let padrao = { cfg: { traumas: { ligado: true } }, coletor: null };
 // botão do topo e, pronta a análise, abre se ele não mexeu no client nesse meio tempo (D4). Sem `automatico` (botão,
 // Ctrl+K, "ver análise completa"): caixa de carregamento com ✕ na hora. Fechar no carregamento não cancela a análise.
 export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor, { fimDePartida = false, automatico = false } = {}) {
+  // 2º EndOfGame da mesma partida com o painel dela aberto: fica como está (o ++abertura abaixo mataria o `vivo` dele:
+  // mentor, ranked e revisão parariam de pintar; e a saída "análise pronta" poria o botão ao lado do painel)
+  if (automatico && painel?.r?.gameId === gameId && document.getElementById('lc-posjogo')) return painel.r;
   const minha = ++abertura;
   // 2º EndOfGame da mesma partida com a análise em voo: segue a espera que já existe (não apaga a caixa de carregamento
   // que ele abriu pelo botão nem zera o "ele mexeu" desta partida)

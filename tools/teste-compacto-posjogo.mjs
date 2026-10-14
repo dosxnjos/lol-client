@@ -673,6 +673,11 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     caso('EndOfGame: carregando sem caixa por cima (só o botão "analisando")', !s.painelEl() && s.botao()?.textContent === '⏳ analisando a partida…');
     abrir(); await tick(20);
     caso('EndOfGame sem clique dele no client: o painel abre sozinho quando a análise fica pronta', s.painelPronto() && !s.botao());
+    // 2º EndOfGame da mesma partida com o painel dela aberto: fica o mesmo painel (vivo, pintando), sem botão ao lado
+    const mesmo = s.painelEl();
+    s.emitir('/lol-gameflow/v1/gameflow-phase', 'EndOfGame'); await tick(20);
+    caso('2º EndOfGame com o painel da partida aberto: mesmo painel, sem "reabrir" ao lado, sem ler a LCU de novo',
+      s.painelEl() === mesmo && s.painelPronto() && !s.botao() && leituras === 1, JSON.stringify({ mesmo: s.painelEl() === mesmo, botao: s.botao()?.textContent, leituras }));
 
     // ...e com clique dele no meio do carregamento: não cai por cima, espera no botão
     s = await nova();
