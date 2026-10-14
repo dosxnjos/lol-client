@@ -258,6 +258,9 @@ html.lc-modo-compacto #lc-runas, html.lc-modo-compacto #lc-winrate, html.lc-modo
 /* ready check no compacto: a contagem do aceite.js (z 100002) logo abaixo do topo, na largura da janela; a tela da fila
    desce o anel (lc-cp-anel-rc) para ela não cobrir o "partida encontrada" */
 html.lc-modo-compacto #lc-aceite { top:54px; left:12px; right:12px; transform:none; justify-content:center; flex-wrap:wrap; }
+/* Ctrl+K do Pengu (CommandBar: raiz fixed z-[99], lido no core.dll em 14/10/2026) por cima da camada; se o Pengu mudar as
+   classes, a regra só deixa de casar e volta ao de antes (lista por baixo) */
+html.lc-modo-compacto .fixed.top-0.left-0.z-\\[99\\] { z-index:100003 !important; }
 #lc-botao-compacto { position:absolute; left:368px; top:24px; height:34px; padding:0 12px; box-sizing:border-box; z-index:2;
   display:flex; align-items:center; white-space:nowrap; cursor:pointer; user-select:none; pointer-events:auto;
   font:700 12px/1 var(--font-display); letter-spacing:.08em; text-transform:uppercase; color:#cdbe91;
