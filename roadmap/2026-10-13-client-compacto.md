@@ -572,7 +572,8 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     mesma coisa que eu falei antes. Se eu estiver na base ou morto, não faz sentido avisar. Agora, de outra forma, tem que
     avisar se voltou e em qual lane voltou.") é do coach ao vivo (`coletor/coach_vivo.py`, `coletor/avisos.py`): vai para
     [calibrar os avisos](2026-10-14-calibrar-avisos.md), que outra sessão está editando agora (D2/D20 já calam o "mid
-    sumiu" com ele morto ou na base; falta o "voltou, em qual rota").
+    sumiu" com ele morto ou na base). Conferir lá se o `adversario_voltou` ("o top voltou pra rota") já cobre o mid: o
+    pedido pode ser só a volta do mid dizendo a rota (não verificado aqui).
     — **prova:** parecer colado no chat com as 4 linhas `aprovada` → registrar data e frase dele aqui; só então vira plano
     de construção (rotas [S] medidas antes de depender: 2º `POST ballot`, envio na sala, som da cerimônia).
     **reprova se:** qualquer `ajuste:`/`sem parecer` (ajusta o protótipo e pede de novo) ou código em `pengu/` desta frente
