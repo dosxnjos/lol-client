@@ -48,7 +48,7 @@ Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fa
 | `participantes` | os 10 de cada partida, com puuid, `eu`, KDA, CS de tropa e de selva |
 | `frames` | 1 linha por (partida, frame, participante): posição, ouro, xp, CS, nível |
 | `eventos` | eventos da linha do tempo em ordem (`seq`), colunas + json do evento |
-| `lp`, `sessoes`, `eog` | telemetria ao vivo: só existe das sessões em que o coletor rodou (`eog` bruto, com o Riot ID dos 10) |
+| `lp`, `sessoes`, `eog` | telemetria ao vivo: só existe das sessões em que o coletor rodou (`eog` bruto, com o Riot ID dos 10, **sem** a senha e o token da sala do chat: `banco.SEGREDOS`, filtrados ao gravar e limpos no `abrir()` desde 14/10/2026) |
 | `campeoes`, `meta` | nomes dos campeões; puuid e Riot ID do jogador |
 | `champ_select` | um retrato por seleção de campeão (abaixo); só existe das sessões em que o coletor rodou |
 | `ao_vivo`, `eventos_ao_vivo` | amostra de 10 s da Live Client por participante e os eventos dela (§ Ao vivo); sem Riot ID |
@@ -155,7 +155,7 @@ no lugar; nada lê memória, injeta ou clica. Módulos (todos em `coletor/`, tes
 | `jungler.py` | `EstadoJungler`: pista = último avistamento, objetivo com `KillerName`, abate com ele, renascer na fonte; zonas (rota/rio/selva/base, relativas ao meu time) com prior por horário; `gank()` | `teste-jungler.py` 5/5; `--real` toca a partida medida |
 | `selva.py` | `EstadoSelva`: lado de início, rota provável e campos limpos pelo tempo, nível 3 previsto, contra-selva; horários em [SELVA](SELVA.md) | `teste-selva.py` 2/2 + partida real |
 | `alcance.py` | `Grade` (caminhável do próprio minimapa; Dijkstra 8-vizinhos, ~40 ms), `Area` (velocidade × tempo, um salto da [MOBILIDADE](MOBILIDADE.md), Flash = 0,5), `GradeViva` (regera ~20 s após o 2º `DragonKill` e a cada 5 min; `dados/mapas/`), `velocidade()` (Data Dragon + bota) | `teste-alcance.py` 4/4 |
-| `overlay_minimapa.py` | janela Win32 click-through, topo, sem foco, **fora do print** (`WDA_EXCLUDEFROMCAPTURE`) sobre o retângulo, desenhada por `UpdateLayeredWindow` com alfa por px (desde 14/10/2026; antes Tk com cor-chave, que serrilhava); calor ∩ fog em **uma cor só** (`COR`) com a probabilidade na opacidade (`ALPHA_MIN` 12% em toda a área com calor ≥ `LIMIAR` a `ALPHA` 45%), borda desfocada (`SUAVE_PX`) e transição contínua (`Transicao`, τ 0,35 s, ~15 quadros/s só enquanto muda); some 30 s após a última pista (esmaecendo) e mostra "jungler sumido há X s" (caixa do tamanho do texto) por 10 s, depois some até a próxima pista; F8 liga/desliga (retorno "overlay ligado/desligado" na moldura, azul; registro e cada F8 recebido vão para o log) | `tools/teste-overlay.py` (cor, opacidade, borda, transição, conta da composição, custo ~2% de um núcleo animando); `python coletor/overlay_minimapa.py --demo` (estilos, `WindowFromPoint`, desenho contra a conta e exclusão do print) |
+| `overlay_minimapa.py` | janela Win32 click-through, topo, sem foco, **fora do print** (`WDA_EXCLUDEFROMCAPTURE`) sobre o retângulo, desenhada por `UpdateLayeredWindow` com alfa por px (desde 14/10/2026; antes Tk com cor-chave, que serrilhava); calor ∩ fog em **uma cor só** (`COR`) com a probabilidade na opacidade (`ALPHA_MIN` 12% em toda a área com calor ≥ `LIMIAR` a `ALPHA` 45%), borda desfocada (`SUAVE_PX`) e transição contínua (`Transicao`, τ 0,35 s, ~15 quadros/s só enquanto muda); some 30 s após a última pista (esmaecendo) e mostra "jungler sumido há X s" (caixa do tamanho do texto) por 10 s, depois some até a próxima pista; F8 liga/desliga (tecla observada, `teclas.py`, só com o jogo na frente; retorno "overlay ligado/desligado" na moldura, azul; cada F8 vai para o log) | `tools/teste-overlay.py` (cor, opacidade, borda, transição, conta da composição, custo ~2% de um núcleo animando); `python coletor/overlay_minimapa.py --demo` (estilos, `WindowFromPoint`, desenho contra a conta e exclusão do print) |
 
 Ligação no laço ao vivo (quem integra; `relogio()` = `gameTime` estimado do laço, `live` = última
 amostra da Live Client):
@@ -325,11 +325,14 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   plugin migram.
 - **Aviso por evento**: `Aviso.molde` escolhe a fala em `TEXTOS` quando um tipo tem falas por evento
   (`feitico_marcado`: `feitico_armado`, `feitico_desfeito`, `feitico_sem_inimigo`…), e `Aviso.destinos`
-  só restringe os do tipo (o F9 armado vai só para a moldura).
+  só restringe os do tipo (o F7 armado vai só para a moldura). O `adversario_voltou` também: `adversario_outra_rota`
+  ("o top apareceu no mid") quando o adversário reaparece fora da rota dele.
 - **Retorno de atalho** (`retorno=True` em `TIPOS`: `feitico_marcado`, `overlay_f8`) só preenche tempo
   ocioso: na moldura sai quando nenhum alerta está na tela (2,5 s desde o último; o mais novo substitui os
   anteriores) e não conta no gap, então um alerta que chega depois entra na hora; na voz sai na hora, sem
-  urgência (não corta a frase em curso) e fora do intervalo de 20 s. Nunca apaga nem atrasa um alerta.
+  urgência (não corta a frase em curso) e fora do intervalo de 20 s. Nunca apaga nem atrasa um alerta. O gasto
+  lido no chat (`feitico_marcado`, evento `chat`, só moldura) espera a moldura quieta por `INTERVALO_MOLDURA` (ninguém
+  apertou nada: não troca a cor logo depois de um alerta).
 - **Log**: cada fala e cada moldura saem no `dados\coletor.log` (`aviso voz <tipo>/<cor>: <fala>`,
   `aviso moldura <tipo>/<cor>: <rótulo>`): "a borda ficou vermelha" se confere pelo log.
 
@@ -347,7 +350,10 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   `Aviso.tom` postos pelo gatilho sobrepõem os do tipo/motor; voz com 1 fala a cada 20 s (gank e intruso
   vermelho furam e cortam a fala comum; alerta de posição com prio ≥ 70 fala ≥ 5 s depois de uma fala
   informativa de prio < 50, marcado `furou`), aviso que esperou além da `validade` cai; moldura 1 por
-  vez (2,5 s entre elas); painel mostra o de maior prioridade dos últimos ~8 s. Tabela de tipos,
+  vez, **10 s entre bordas de cor diferente** (`INTERVALO_MOLDURA`; dentro deles sai na hora o alerta de prio maior
+  que a da borda na tela sem a cor descer, `GRAVIDADE_COR` azul < verde < amarelo < vermelho, e o da mesma cor depois
+  de 2,5 s, quando a anterior acabou: o 2º gank; alerta de posição que esperou mais de `IDADE_MOLDURA` 3 s cai;
+  antes 2,5 s e todo urgente furava: "as bordas começaram a piscar em diferentes cores", partida 3293149183); painel mostra o de maior prioridade dos últimos ~8 s. Tabela de tipos,
   cores e limiares no topo de `avisos.py` (`TIPOS`, `OBJETIVOS`, constantes das classes).
 - **Onde estou** (`AlertasPosicao.onde_estou`, 14/10/2026): meu ícone visto há ≤ 4 s numa rota = ela; no rio
   ou na selva, a rota cuja faixa me contém (senão nenhuma: andando pela selva longe das rotas nenhuma rota é
@@ -380,7 +386,11 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   se jungler ou 2+, amarelo se 1; "chegando" = **ele** entrou na faixa ou reapareceu nela, nunca eu
   entrando numa rota onde ele já estava. Eu morto ou na base (inclusive a presumida), o intruso da minha rota só
   conta com aliado visto nela, a regra do gank (D24 do [plano de calibração](../roadmap/2026-10-14-calibrar-avisos.md)). Adversário da rota do champ select que volta depois de ≥ 20 s
-  sumido = azul. Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
+  sumido = azul, de qualquer rota minha (top, mid, bot): calado comigo morto ou na base (inclusive a presumida); na
+  rota dele, "o top voltou pra rota"; em outra, "o top apareceu no mid" (molde `adversario_outra_rota`), salvo
+  quando ele entra na rota onde eu estou (é intruso) ou é o mid que tinha sumido (o "mid indo X" já diz), só na fase
+  de rotas (até 14:00, `MID_JANELA`) e, entre duas faixas, na de centro mais perto
+  (`AlertasPosicao._adversario_voltou`, partida 3293149183). Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
   nada (com o ícone numa rota, o jungler deles chegando = vermelho urgente, o contra-gank).
   Na minha rota, intruso vence "mid indo".
 - **Escolhas nas Configurações** (pedido do Gabriel de 14/10/2026; [plano](../roadmap/2026-10-14-calibrar-avisos.md)
@@ -405,7 +415,8 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
 - **Catálogo** (`avisos.catalogo()`, plano [voz pré-gravada](../roadmap/2026-10-13-voz-pregravada-e-foco.md)
   passos 3/3b): toda fala possível = molde × tom × valores finitos (`avisos.valores_catalogo()`: zonas de
   `zona()`, `{rota}` de `ROTA_FALA` + "inimigo", `{n}` 2–5, objetivos, 8 feitiços com cronômetro, picos
-  6/11/16). **452 falas** (226 por tom) em 13/10/2026, versão `avisos.versao_catalogo()`. Texto livre
+  6/11/16). **452 falas** (226 por tom) em 13/10/2026; **476** desde 14/10/2026 (+24 do `adversario_outra_rota`,
+versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Maria), versão `avisos.versao_catalogo()`. Texto livre
   (`avisos.LIVRES`: regra do coach.py, hoje nenhuma ao vivo) fica fora; molde com placeholder sem valores
   finitos é listado por `moldes_fora_do_catalogo()`. Provas: `teste-coach.py` (catálogo, replay) e o ensaio
   (toda fala dentro).
@@ -439,7 +450,12 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
 - **Moldura** (`coletor\moldura.py`): janela própria de tela inteira, click-through
   (`WS_EX_LAYERED|TRANSPARENT|TOPMOST|TOOLWINDOW|NOACTIVATE`), borda pulsando + rótulo no canto por
   2 s, só com "League of Legends (TM) Client" em primeiro plano, e **fora do print**
-  (`WDA_EXCLUDEFROMCAPTURE`, [ARMADILHAS](ARMADILHAS.md) § Tela).
+  (`WDA_EXCLUDEFROMCAPTURE`, [ARMADILHAS](ARMADILHAS.md) § Tela). Desde 14/10/2026 (pedido do Gabriel: "fade
+  transparente em direção ao centro" e "cores levemente mais escurecidas") é `UpdateLayeredWindow` com alfa por px:
+  `renderizar` (RGBA) = 12 px da beirada na cor cheia (`CORES_MOLDURA`, 80% de `CORES`) e um degradê até 0 em 10%
+  do menor lado (`FADE`, `FADE_INICIO`), rótulo em caixa opaca; o pulso é o alfa constante (sem redesenhar). Custo
+  medido: ~45 ms por alerta em 2560×1080 no fio da moldura (o 1º monta o degradê, ~120 ms). A vitrine compõe o
+  mesmo RGBA (`vitrine.compor` → `overlay_minimapa.compor_sobre`).
 
 | o quê | comando |
 | --- | --- |
@@ -460,19 +476,28 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   resolução do `game.cfg`, senão o principal; o `monitors[1]` do mss aqui é a 2ª tela); OCR sem resposta
   em 10 s mata o PowerShell e sobe outro no próximo print; recorte calibrado sozinho pelas linhas `mm:ss` e
   guardado em `dados\calibracao-chat.json`; OCR do Windows pt-BR num PowerShell persistente, imagem
-  pelo stdin, nada em disco) e `Atalhos` (F9 + 1..5 = TOP..UTILITY: Flash dele agora; repetir em
+  pelo stdin, nada em disco) e `Atalhos` (F7 + numérico 1..5 = TOP..UTILITY: Flash dele agora; repetir em
   10 s desfaz). Dedupe: mesmo inimigo e feitiço a ≤ 60 s = um gasto; linha > 300 s antes do
-  `gameTime` cai (a linha fica na tela 2 min ou mais).
-- **Como o F9 funciona** (só `RegisterHotKey`: escuta, nunca manda tecla ao jogo): o F9 fica registrado a
-  partida inteira; apertar arma por **2 s**, e só nesses 2 s o 1..5 é do coach (fora deles é tecla de
-  item do jogo). 1 top, 2 jungler, 3 mid, 4 atirador, 5 suporte = "ele acabou de usar o Flash" (sem Flash,
-  o outro feitiço com recarga); o mesmo número de novo em ≤ 10 s desfaz. `Feiticos.marcar(n)` devolve
+  `gameTime` cai (a linha fica na tela 2 min ou mais). O `processar_linhas` devolve só o gasto **novo** (a linha
+  relida a cada print só confirma, `ultima_leitura`); o coach loga `coach: chat -> gasto novo: <campeão> <feitiço>
+  às mm:ss (<rota>)` e mostra "<rota> sem flash" (verde) na moldura, sem voz (a voz fala quando ele volta); ping
+  sem "usou" não liga cronômetro e vai 1 vez ao log (`ping sem 'usou' ignorado`). Antes: "N gasto(s)" a cada 3 s.
+- **Como o F7 funciona** (desde 14/10/2026; antes F9 por `RegisterHotKey`, que não dispara com o jogo na frente e o
+  F9 é tecla do LoL dele, [ARMADILHAS](ARMADILHAS.md) § Windows): `coletor\teclas.py` **observa** o teclado
+  (`GetAsyncKeyState` a cada 25 ms, só com o jogo em primeiro plano; nada é enviado nem comido, a tecla também vai
+  ao jogo). F7 arma por **2 s**; nesses 2 s o **numérico** 1..5 escolhe (o 1..5 de cima são itens no LoL: não
+  contam; NumLock desligado manda setas, que mexem a câmera: também não). 1 top, 2 jungler, 3 mid, 4 atirador,
+  5 suporte = "ele acabou de usar o Flash" (sem Flash, o outro feitiço com recarga); **F7 duas vezes** = o
+  adversário da minha rota (`Feiticos.n_adversario`); o mesmo número de novo em ≤ 10 s desfaz. Ao ligar, o coletor
+  confere no `Config\input.ini`/`PersistedSettings.json` do LoL se F7, F8 ou o numérico viraram tecla do jogo e
+  loga aviso (`teclas.conflitos_no_lol`). `Feiticos.marcar(n)` devolve
   `marcado`/`desfeito`/`sem_inimigo`/`sem_feitico` + a rota da fala (`ROTA_FALA`), e o coach responde pelo
   `MotorAvisos` (tipo `feitico_marcado`, `avisos.aviso_atalho`; nunca vermelho, vermelho é perigo):
 
   | evento | moldura (rótulo, cor) | voz |
   | --- | --- | --- |
-  | F9 armado | "flash: 1-5", azul | — |
+  | F7 armado | "flash: 1-5", azul | — |
+  | gasto lido no chat | "<rota> sem flash", verde (espera 10 s sem alerta) | — |
   | marcado | "<rota> sem flash", verde | "flash do <rota> marcado" (descontraído: "anotado: <rota> sem flash") |
   | desfeito | "marcação desfeita", azul | "marcação desfeita" |
   | sem inimigo na posição (treino) | "sem inimigo", azul | — |
@@ -480,11 +505,11 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   Rota da fala genérica (top, jungler, mid, atirador, suporte; "inimigo" quando a Live Client não deu a
   posição dele, porque aí a ordem é a do `allPlayers` e a rota da tecla seria mentira), nunca nome de
   campeão. Com um alerta na tela (gank vermelho), o retorno da moldura espera ele acabar. A voz e a tela do
-  retorno se calam na seção LOL-CLIENT como qualquer tipo. No log: `atalho: F9 registrado`, `atalho: F9
-  recebido`, `atalho: F9 + n recebido`, `coach: F9+n -> <resultado>` (o F8: `overlay: F8 registrado`,
-  `overlay do minimapa ligado/desligado (F8)`). Sem a linha "recebido" depois de apertar = a tecla não
-  chegou ao `RegisterHotKey` ([ARMADILHAS](ARMADILHAS.md) § Windows). Fora da partida:
-  `python coletor\feiticos.py --sonda 30` imprime cada F8/F9 que o Windows entrega.
+  retorno se calam na seção LOL-CLIENT como qualquer tipo. No log: `atalho: F7 + numérico 1..5 observado`,
+  `atalho: F7 recebido`, `atalho: F7 + n recebido`, `atalho: F7 duas vezes recebido`, `coach: F7+n -> <resultado>`
+  (o F8, também observado: `overlay: F8 observado`, `overlay do minimapa ligado/desligado (F8)`). Sem a linha
+  "recebido" depois de apertar = o coach não viu a tecla. `python coletor\feiticos.py --sonda 30` imprime cada
+  F7/F8/F9/numérico observado (só lê; funciona com o jogo aberto).
 - **`coletor\sugestoes.py`**: `preparo_objetivo` (60 s antes: mortos, vistos/sumidos pelo minimapa,
   área do jungler; horários do `ao_vivo.py`), `revisar_previsao`/`precisao_acumulada` (previsão do
   jungler × timeline, ≤ 1000 unidades, só com ele na fog), `PicosDeForca` (adversário de rota e
@@ -511,7 +536,7 @@ tudo que bloqueia roda em `asyncio.to_thread`. `--sem-coach` desliga.
 | início do coletor | servidor local (8765; porta ocupada → loga e segue), mentor (tabela `mentor`) |
 | 1ª fase com client (lobby, champ select, fim) | `aquecer_estatico`: monta/confere `dados\cache\jogo-estatico.json` em thread (uma vez por processo; falhou = de novo na próxima fase após 60 s), para a 1ª partida já ler o cache (loga "dado estático pronto antes da partida") |
 | champ select (cada sessão) | `draft.Draft.analisar_sessao` → `GET /draft`; `GET /draft/<meu campeão>` junta `matchups` (`analise.matchups`) e `traumas` dele contra os inimigos travados (cache de 10 min por campeão): é o que o selo do plugin lê |
-| `InProgress`/`Reconnect` | processo **abaixo do normal**; laço ao vivo (`AoVivo`, só um ouvinte para sempre); por partida: `MotorAvisos` + `GatilhosLive` (voz, moldura, faixa do painel), `Captura` do minimapa + `EstadoJungler`/`GradeViva` + overlay, `Feiticos` + OCR do chat a cada 3 s + atalho F9, `PicosDeForca`, dado estático (cache; a LCU refaz por patch em thread); janela do painel |
+| `InProgress`/`Reconnect` | processo **abaixo do normal**; laço ao vivo (`AoVivo`, só um ouvinte para sempre); por partida: `MotorAvisos` + `GatilhosLive` (voz, moldura, faixa do painel), `Captura` do minimapa + `EstadoJungler`/`GradeViva` + overlay, `Feiticos` + OCR do chat a cada 3 s + atalho F7 (teclado observado), `PicosDeForca`, dado estático (cache; a LCU refaz por patch em thread); janela do painel |
 | carregamento (Live Client com `gameTime` ~0) | `Carregamento.verificar` (Riot API, uma vez por partida) → `carregamento` no `/estado`; `bloco_carregamento` → `composicao`; runas do spectator → `Feiticos.definir_runas` |
 | jogo, a cada leitura (1 s) | avisos da Live Client, `AlertasPosicao` sobre as detecções (com os eventos: torres e inibidores), jungler (gank pelo `avisos.decidir_gank`: a rota onde estou e, com aliado nela, as outras), feitiços que voltaram e picos de força → motor, `preparo_objetivo`, item curado do [ITENS](ITENS.md) no lugar do genérico; uma previsão do jungler a cada 10 s |
 | `WaitingForStats`/`PreEndOfGame` | para o que olha a tela: captura, overlay, OCR, atalho, moldura |
@@ -526,7 +551,7 @@ provável** (o centro da área inteira cai no meio do mapa assim que ela cresce)
 **Config** (`dados\config.json`, `servidor_local.CONFIG_PADRAO`; lida em cada `InProgress` e reaplicada
 na hora a cada `POST /config`): `painelAoVivo`, `amostrasAoVivo`, `voz`, `tomVoz` (`serio`|`descontraido`),
 `minimapa` (captura, jungler, alertas de posição), `overlayMinimapa`, `alertasTela` (moldura), `feiticos`
-(OCR e F9), `carregamento` (Riot API), `mentor`, `mentorModelo` (`sonnet`|`haiku`|`opus`) e `mentorEffort`
+(OCR e F7), `carregamento` (Riot API), `mentor`, `mentorModelo` (`sonnet`|`haiku`|`opus`) e `mentorEffort`
 (`low`|`medium`|`high`; padrão sonnet + medium, o vencedor do passo 20; aplicados no `Mentor` na criação e a
 cada `POST /config`), `avisosDesligados` (`{"voz": [...], "tela": [...]}`; a lista antiga é migrada para os
 dois, no arquivo salvo e no `POST`), `aceiteFlutuante` e `aceiteAtrasoS` (§ Aviso de partida), e as escolhas das

@@ -2,13 +2,15 @@
 uso: python tools/teste-feiticos.py [--sem-gravacao]
 - recarga com bota e Perspicácia Cósmica (300 × 100/110 = 272,7; 3158 + 8347 = 234,4);
 - leitura das linhas de ping (formato real, ruído de OCR, descartes), dedupe de aliados repetindo;
-- atalho F9 + 1..5 (máquina de estado simulada, sem tecla nenhuma) e RegisterHotKey real do F9;
+- atalho F7 + numérico 1..5 (máquina de estado simulada e teclado observado com estado falso, sem tecla nenhuma),
+  F7 duas vezes = adversário de rota, teclas livres no LoL do Gabriel, observador real liga e para;
 - marcar(): marcado / desfeito / sem inimigo (modo treino) / sem feitiço, com a rota da fala; ganchos
   ao_armar/ao_expirar do retorno ao jogador (a voz e a moldura do retorno: teste-alertas.py);
 - com a gravação 20261013-071040: OCR das telas + Live Client tocadas em ordem -> cronômetros.
 """
 import json
 import sys
+import tempfile
 import time
 from pathlib import Path
 
@@ -110,7 +112,10 @@ def main():
     f2 = F.Feiticos()
     f2.atualizar(live(1162.0, ini))
     f2.processar_linhas(["19:14 Amo (Annie): Tristana usou Flash", "19:15 Amo (Annie): Tristana usou Flash"], 1162.0)
-    f2.processar_linhas(["19:14 Amo (Annie): Tristana usou Flash"], 1165.0)
+    relido = f2.processar_linhas(["19:14 Amo (Annie): Tristana usou Flash"], 1165.0)
+    confere("reprint da mesma linha devolve 0 novos (só confirma: partida 3293149183 logava 'N gastos' a cada 3 s)",
+            relido == [] and f2.ultima_leitura["confirmados"] == 1 and f2.ultima_leitura["novos"] == 0,
+            f"{len(relido)} novos, {f2.ultima_leitura}")
     us = f2.usos[("Tristana", "Flash")]
     confere("dedupe: 2 linhas + reprint = 1 gasto às 19:14", len(us) == 1 and us[0]["ts"] == 1154, f"{[u['ts'] for u in us]}")
     f2.processar_linhas(["01:06 Amo (Annie): Yasuo usou Flash"], 1162.0)
@@ -191,35 +196,56 @@ def main():
     F.log.setLevel(nivel)
     confere("retorno: ao_armar 1 vez por F9, ao_expirar no tempo; callback quebrado não derruba", armou == [1, 1]
             and expirou == [1] and n == 1 and not b.armado, f"armou {armou}, expirou {expirou}")
-    confere("log do atalho: F9 recebido, F9 + 1 recebido, retorno quebrado avisado, expirou",
-            any("F9 recebido" in x for x in cap_log.linhas) and any("F9 + 1 recebido" in x for x in cap_log.linhas)
+    confere("log do atalho: F7 recebido, F7 + 1 recebido, retorno quebrado avisado, expirou",
+            any("F7 recebido" in x for x in cap_log.linhas) and any("F7 + 1 recebido" in x for x in cap_log.linhas)
             and any("retorno falhou: ZeroDivisionError" in x for x in cap_log.linhas)
             and any("expirou" in x for x in cap_log.linhas), str(len(cap_log.linhas)))
-    try:
-        real = F.Atalhos(lambda n: None).iniciar()
-        time.sleep(0.2)
-        real.parar()
-        confere("RegisterHotKey do F9 real (registra e solta, sem tecla)", True)
-    except RuntimeError as e:
-        confere("RegisterHotKey do F9 real", False, str(e))
-    # iniciar() estourou os 5 s: a thread que registra depois solta o F9 e sai (não prende a tecla)
-    import threading
-    orfa = F.Atalhos(lambda n: None)
-    orfa._desistiu = True
-    pronto_orfa = threading.Event()
-    t_orfa = threading.Thread(target=orfa._rodar, args=(pronto_orfa,), daemon=True)
-    F.log.disabled = True   # o aviso "registrou depois do prazo" é esperado aqui
-    t_orfa.start()
-    t_orfa.join(3)
-    F.log.disabled = False
-    try:
-        de_novo = F.Atalhos(lambda n: None).iniciar()
-        de_novo.parar()
-        livre = True
-    except RuntimeError:
-        livre = False
-    confere("thread órfã do atalho (iniciar desistiu) solta o F9: o próximo registra",
-            not t_orfa.is_alive() and not pronto_orfa.is_set() and livre)
+
+    # 6a. teclado OBSERVADO (partida 3293149183: o RegisterHotKey nunca disparou com o jogo na frente; o F9 é do LoL)
+    import teclas
+    apertadas = set()
+    tela = {"jogo": True}
+    marcas = []
+    c = F.Atalhos(marcas.append, estado=lambda vk: vk in apertadas, na_tela=lambda: tela["jogo"])
+    c.n_proprio = lambda: 1
+    obs = teclas.Observador([c.tecla, *F.VK_NUMERO], c._apertou, na_tela=c.na_tela, estado=c.estado, tique=c._tique)
+
+    def tecla(*vks):
+        for vk in vks:
+            apertadas.add(vk)
+            obs.passo()
+            obs.passo()            # segurada: 1 aperto só
+            apertadas.discard(vk)
+            obs.passo()
+    obs.passo()                    # 1ª leitura com tudo solto (tecla já segura ao ligar não conta)
+    tecla(F.VK_ARMAR, 0x63)        # F7, numérico 3
+    tecla(F.VK_ARMAR, F.VK_ARMAR)  # F7 duas vezes = adversário da minha rota (1 = top)
+    tecla(0x33)                    # "3" de cima (item 3 no LoL) não é do coach
+    tecla(F.VK_ARMAR, 0x33)
+    c._armado_em -= 3              # passa a janela de 2 s
+    obs.passo()
+    tela["jogo"] = False           # F7 com outro programa na frente: nada
+    tecla(F.VK_ARMAR, 0x61)
+    confere("F7 + numérico 3 marca o mid; F7 duas vezes marca o adversário da minha rota; '3' de cima e fora do jogo, nada",
+            marcas == [3, 1] and not c.armado, f"{marcas}")
+    confere("o observador só lê: nada de RegisterHotKey/SendInput/keybd_event no código dos atalhos",
+            not any(p in (RAIZ / "coletor" / m).read_text(encoding="utf-8")
+                    for m in ("teclas.py", "feiticos.py") for p in ("RegisterHotKey(", "SendInput", "keybd_event")))
+    real = F.Atalhos(lambda n: None, na_tela=lambda: False).iniciar()
+    time.sleep(0.2)
+    vivo = real.thread.is_alive()
+    real.parar()
+    confere("observador real liga e para (GetAsyncKeyState, sem tecla nenhuma)", vivo and not real.thread.is_alive())
+    # teclas do LoL do Gabriel (Config\input.ini e PersistedSettings.json): o F9 é dele (trava o cursor); F7, F8 e o
+    # numérico estão livres. Sem a pasta (outra máquina) a prova é pulada
+    if teclas.CONFIG_LOL.exists():
+        conf = teclas.conflitos_no_lol(["F7", "F8", "F9", "F10", "Num 1", "Num 3"])
+        confere("LoL do Gabriel: F9 = evtToggleMouseClip; F7, F8, F10 sozinho e numérico livres",
+                "evtToggleMouseClip" in conf.get("F9", []) and not set(conf) - {"F9"}, str(conf))
+    with tempfile.TemporaryDirectory() as tmp:
+        (Path(tmp) / "input.ini").write_text("[GameEvents]\nevtX=[F7]\nevtY=[Ctrl][F8]\nevtZ=[a],[Num 2]\n", encoding="utf-8")
+        conf = teclas.conflitos_no_lol(["F7", "F8", "Num 2"], tmp)
+        confere("conflito: tecla sozinha conta, com Ctrl não", conf == {"F7": ["evtX"], "Num 2": ["evtZ"]}, str(conf))
 
     # 6b. monitor do print: o do jogo, não o monitors[1] do mss (nesta máquina, a 2ª tela)
     import minimapa

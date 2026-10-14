@@ -97,6 +97,10 @@ TEXTOS = {
                     "descontraido": ("tu tá duas mortes antes dos dez, segura a onda", "segura a onda")},
     "adversario_voltou": {"serio": ("o {rota} voltou pra rota", "{campeao} voltou"),
                           "descontraido": ("o {rota} voltou, cuidado", "{campeao} voltou")},
+    # o adversário da minha rota (champ select) reaparece em OUTRA rota (tipo adversario_voltou, molde por evento):
+    # "o top apareceu no mid" (pedido do Gabriel depois da partida 3293149183: "tem que avisar se voltou e em qual lane")
+    "adversario_outra_rota": {"serio": ("o {rota} apareceu {zona}", "{campeao} {zt}"),
+                              "descontraido": ("o {rota} apareceu {zona}, avisa o time", "{campeao} {zt}")},
     "inimigo_fed": {"serio": ("o {rota} tá forte, evita o um contra um", "evita 1x1"),
                     "descontraido": ("o {rota} tá fed, nada de um contra um", "evita 1x1")},
     "ouro_guardado": {"serio": ("ouro guardado, hora de voltar?", "hora de voltar"),
@@ -224,6 +228,7 @@ def valores_catalogo():
         "objetivo_60s": {"objetivo": OBJETIVOS_FALA},
         "mortes_cedo": {},
         "adversario_voltou": {"rota": ROTAS_DE_ROTA},
+        "adversario_outra_rota": {"rota": ROTAS_DE_ROTA, "zona": rotas},
         "inimigo_fed": {"rota": ROTAS_COM_POSICAO},
         "ouro_guardado": {},
         "feitico_marcado": {"rota": ROTAS_FALA, "feitico": FEITICOS_FALA},
@@ -305,6 +310,8 @@ class Aviso:
     # grupo: contagem própria do `intervalo` do tipo (o jungler longe com junglerLonge="tudo" sai com os destinos do
     # de perto e, sem grupo, calava o de perto por 20 s: revisão de 14/10/2026)
     grupo: str = ""
+    # só retorno (TIPOS retorno=True): s sem alerta na moldura antes de sair; 0 = GAP_MOLDURA (o do atalho apertado)
+    ocioso_s: float = 0.0
     # preenchidos pelo motor (validade > 0 posta pelo gatilho sobrepõe a do tipo: gank de outra rota)
     fala: str = ""
     rotulo: str = ""
@@ -341,15 +348,21 @@ class RelogioJogo:
 
 class MotorAvisos:
     """Recebe avisos (publicar), descarta repetidos e desligados, e entrega: voz (1 por vez, intervalo
-    mínimo de 20 s entre falas, exceto urgente), moldura (1 por vez, 2,5 s entre elas) e painel (o
-    aviso de maior prioridade ainda válido). Consumidores: voz.falar(texto, urgente=, prioridade=) e
+    mínimo de 20 s entre falas, exceto urgente), moldura (1 por vez, 10 s entre cores diferentes) e painel (o
+    aviso de maior prioridade ainda válido; regra da borda em _distribuir). Consumidores: voz.falar(texto, urgente=, prioridade=) e
     moldura.mostrar(cor, rotulo); sem eles, só registra em `emitidos` (é o que os testes leem)."""
     INTERVALO_VOZ = 20.0
     # fala informativa (prio < PRIO_INFO: feitiço voltou, pico, objetivo, ouro, regra) não segura alerta
     # de posição (prio >= PRIO_FURA: jungler apareceu, intruso, mid indo) por 20 s: ele fala depois de
     # FURA_S. Revisão 13/10/2026: o Flash da Tristana calou "jungler rio top", que venceu na fila.
     PRIO_INFO, PRIO_FURA, FURA_S = 50, 70, 5.0
-    GAP_MOLDURA = 2.5
+    GAP_MOLDURA = 2.5        # retorno de atalho: sai depois disto sem alerta na moldura (a borda dura 2 s)
+    INTERVALO_MOLDURA = 10.0  # entre duas bordas de alerta de cor diferente (partida 3293149183; regra em _distribuir)
+    # a cor da borda só sobe dentro do INTERVALO_MOLDURA (azul < verde < amarelo < vermelho)
+    GRAVIDADE_COR = {"azul": 0, "verde": 1, "amarelo": 2, "vermelho": 3}
+    # alerta de posição esperando a vez na borda: mais velho que isto não vai à tela (posição antiga engana)
+    IDADE_MOLDURA = 3.0
+    TIPOS_POSICAO = ("gank", "intruso_grupo", "intruso", "jungler_apareceu", "mid_indo", "adversario_voltou")
     PAINEL_S = 8.0
     # a mesma fala (texto normalizado) não sai de novo na voz dentro disto, qualquer tipo e chave (calibração
     # 14/10/2026: gank top a 31 s do anterior; chaves diferentes com a mesma frase). Retorno de atalho fica fora.
@@ -377,6 +390,8 @@ class MotorAvisos:
         self._falas = {}                    # fala normalizada -> em da última vez que saiu na voz
         self._fila_voz, self._fila_moldura, self._painel = [], [], []
         self._ultima_fala = self._ultima_moldura = float("-inf")
+        self._prio_moldura = None           # prio da última borda de alerta (só prio maior fura o INTERVALO_MOLDURA)
+        self._cor_moldura = None            # cor da última borda de alerta (a cor só sobe dentro do intervalo)
         self._prio_fala = None              # prio da última fala (a regra do FURA_S olha para ela)
 
     def configurar(self, tom=None, voz=None, moldura=None, painel=None, desligados=None, cortar_repetida=None):
@@ -464,18 +479,43 @@ class MotorAvisos:
             for a in vencidos:
                 fila.remove(a)
                 self.suprimidos["vencido"] += 1
+        # alerta de posição que esperou a vez na borda além de IDADE_MOLDURA não vai mais à tela (posição velha)
+        velhos = [a for a in self._fila_moldura if a.tipo in self.TIPOS_POSICAO and not self._e_retorno(a)
+                  and agora - a.em > self.IDADE_MOLDURA]
+        for a in velhos:
+            self._fila_moldura.remove(a)
+            self.suprimidos["moldura_velho"] += 1
+        # moldura: uma borda por vez, INTERVALO_MOLDURA entre duas bordas de alerta. Dentro dele sai na hora:
+        #  - o alerta de prioridade ESTRITAMENTE maior que a da última borda, se a cor não descer (GRAVIDADE_COR):
+        #    a mais importante vence, a cor só sobe (azul -> amarela -> vermelha), nunca vermelha -> amarela;
+        #  - o alerta da MESMA cor, passado GAP_MOLDURA (a borda anterior já acabou): o 2º gank, o "2 inimigos no
+        #    top" depois do "gank top", sai vermelho de novo sem trocar de cor.
+        # O resto espera e cai (validade ou IDADE_MOLDURA). Partida 3293149183: com 2,5 s e todo urgente furando,
+        # 7 bordas em 52 s e amarela -> vermelha em 1 s ("as bordas começaram a piscar em diferentes cores"); a 1ª
+        # correção (só URGENTE furava) calava o intruso amarelo atrás de um "voltou" azul e o 2º gank (revisão).
         alertas = [a for a in self._fila_moldura if not self._e_retorno(a)]
         if alertas:
             a = self._melhor(alertas)
-            if agora - self._ultima_moldura >= self.GAP_MOLDURA or a.urgente:
+            desde = agora - self._ultima_moldura
+            livre = desde >= self.INTERVALO_MOLDURA
+            g = self.GRAVIDADE_COR
+            sobe = (self._prio_moldura is not None and a.prio > self._prio_moldura
+                    and g.get(a.cor, 0) >= g.get(self._cor_moldura, 0))
+            mesma = a.cor == self._cor_moldura and desde >= self.GAP_MOLDURA
+            if livre or sobe or mesma:
                 self._fila_moldura.remove(a)
-                self._ultima_moldura = agora
+                self._ultima_moldura, self._prio_moldura, self._cor_moldura = agora, a.prio, a.cor
+                if not livre:
+                    self.suprimidos["moldura_furou"] += 1
                 self._emitir(agora, "moldura", a)
         # retorno de atalho (TIPOS retorno=True) só preenche tempo ocioso: sai quando nenhum alerta está na
-        # tela (GAP_MOLDURA desde o último), o mais novo substitui os anteriores, e não mexe em
-        # _ultima_moldura (um alerta que chega depois apaga o retorno na hora, nunca o contrário)
-        retornos = [a for a in self._fila_moldura if self._e_retorno(a)]
-        if retornos and agora - self._ultima_moldura >= self.GAP_MOLDURA:
+        # tela (GAP_MOLDURA desde o último; o retorno com `ocioso_s` espera mais: o lido no chat, que não foi o
+        # Gabriel que apertou, espera o INTERVALO_MOLDURA para não trocar a cor logo depois de um alerta), o mais
+        # novo substitui os anteriores, e não mexe em _ultima_moldura (um alerta que chega depois apaga o retorno
+        # na hora, nunca o contrário)
+        desde = agora - self._ultima_moldura
+        retornos = [a for a in self._fila_moldura if self._e_retorno(a) and desde >= (a.ocioso_s or self.GAP_MOLDURA)]
+        if retornos:
             a = max(retornos, key=lambda x: x.em)
             for x in retornos:
                 self._fila_moldura.remove(x)
@@ -546,6 +586,9 @@ def aviso_de(d):
 _RETORNO_F9 = {   # evento do F9 -> (molde em TEXTOS, destinos, cor)
     "armado": ("feitico_armado", "m", "azul"),
     "marcado": ("feitico_marcado", "vm", "verde"),
+    # gasto lido no ping do chat (feiticos.LeitorChat): o mesmo rótulo do F9 ("top sem flash"), só na moldura (o
+    # chat é lido sozinho, de aliado também: voz a cada ping seria ruído; a voz fala quando ele VOLTA)
+    "chat": ("feitico_marcado", "m", "verde"),
     "desfeito": ("feitico_desfeito", "vm", "azul"),
     "sem_inimigo": ("feitico_sem_inimigo", "m", "azul"),
     "sem_feitico": ("feitico_sem_feitico", "m", "azul"),
@@ -563,8 +606,12 @@ def aviso_atalho(evento, chave, rota=None, feitico=None, estado=None):
         return Aviso("overlay_f8", {"estado": estado or "?"}, str(chave), cor="azul")
     molde, destinos, cor = _RETORNO_F9[evento]
     f = (str(feitico or "flash").split() or ["flash"])[0].lower()
-    return Aviso("feitico_marcado", {"rota": rota or "?", "feitico": f}, f"{evento}:{chave}", cor=cor,
-                 molde=molde, destinos=destinos)
+    a = Aviso("feitico_marcado", {"rota": rota or "?", "feitico": f}, f"{evento}:{chave}", cor=cor,
+              molde=molde, destinos=destinos)
+    if evento == "chat":   # ninguém apertou nada: espera a moldura quieta como entre dois alertas (não troca a cor
+        #                    logo depois de um gank) e, para isso, vale mais tempo na fila
+        a.ocioso_s, a.validade = MotorAvisos.INTERVALO_MOLDURA, MotorAvisos.INTERVALO_MOLDURA + 5
+    return a
 
 
 # --------------------------------------------------------------------------------------------
@@ -990,6 +1037,41 @@ class AlertasPosicao:
             return "luta"                # n_visiveis = o maior grupo de inimigos à vista JUNTOS (_agrupados)
         return None
 
+    def _adversario_voltou(self, n, estava_fora, fora_s, perto_todas, chegou, mid_tinha_sumido, agora, x=None, y=None):
+        """o adversário da minha rota (champ select: `rivais`) reapareceu perto de uma rota depois de ≥ VOLTOU_S
+        sumido -> Aviso ou None. Pedido do Gabriel depois da partida 3293149183 ("eu morto e sendo avisado que o
+        malphite voltou pra lane"; "se eu estiver na base ou morto, não faz sentido avisar [...] tem que avisar se
+        voltou e em qual lane voltou"; vale para todas as rotas): calado comigo morto ou na base (inclusive a
+        presumida, D20); na rota dele = "o top voltou pra rota"; noutra = "o top apareceu no mid" (molde
+        adversario_outra_rota), salvo quando entrou na rota onde EU estou (é intruso, que avisa com cor de perigo) ou
+        é o mid que tinha sumido (o "mid indo X" já diz para onde), e só na fase de rotas (MID_JANELA[1]: depois
+        todo mundo agrupa no mid e cada reaparição viraria "o top apareceu no mid"; revisão). Antes: só na rota do champ select, e só se ela
+        fosse a vigiada; comigo morto ela era (a reserva), por isso o aviso com ele morto."""
+        if n not in self.rivais or not estava_fora or fora_s is None or fora_s < self.VOLTOU_S or not perto_todas:
+            return None
+        if self.onde_estou(agora)["fonte"] in ("base", "morto"):
+            self.calados["voltou_eu_fora"] += 1
+            return None
+        if self.minha_rota in perto_todas:
+            rota = self.minha_rota
+        elif x is not None and y is not None:   # entre duas faixas (rio): a de centro mais perto, não a 1ª do alfabeto
+            rota = min(sorted(perto_todas), key=lambda r: math.hypot(x - _centro_rota(r)[0], y - _centro_rota(r)[1]))
+        else:
+            rota = sorted(perto_todas)[0]
+        j = self.jog[n]
+        dados = {"campeao": j.get("campeao", n), "rota": rota_fala(j.get("posicao"))}
+        if rota == self.minha_rota:
+            zc, zt, zf = zona(*_centro_rota(rota), self.meu_time)[1]
+            return Aviso("adversario_voltou", {**dados, "zona": zf, "zc": zc, "zt": zt}, n)
+        if chegou or (n == self.mid and mid_tinha_sumido):
+            return None
+        if agora >= self.MID_JANELA[1]:   # fim da fase de rotas: todos agrupam, "o top apareceu no mid" vira ruído
+            self.calados["voltou_fim_das_rotas"] += 1
+            return None
+        zc, zt, zf = zona(*_centro_rota(rota), self.meu_time)[1]
+        return Aviso("adversario_voltou", {**dados, "zona": zf, "zc": zc, "zt": zt}, f"{n}:{rota}",
+                     molde="adversario_outra_rota")
+
     def _agrupados(self, vistos, mortos):
         """o maior número de inimigos à vista a até LUTA_RAIO de um deles (luta, agrupamento). Na fase de
         rotas o top, o mid e a dupla do bot à vista ao mesmo tempo, cada um na sua rota, não é luta."""
@@ -1084,12 +1166,11 @@ class AlertasPosicao:
             # também é "jungler"
             rota = "jungler" if n == self.jungler else rota_fala(self.jog[n].get("posicao"))
             dados = {"campeao": camp, "rota": rota, "zona": zf, "zc": zc, "zt": zt}
+            voltou = self._adversario_voltou(n, estava_fora, fora_s, perto_todas, chegou, mid_tinha_sumido, agora, x, y)
+            if voltou is not None:
+                avisos.append(voltou)
             if chegou and n in self.ocupantes.get(perto[0], ()):
-                # morador da rota: só o adversário da MINHA rota (champ select) "voltou"; na rota em que
-                # eu só estou de passagem (gank, rotação) ele não é aviso
-                if perto[0] == self.minha_rota and estava_fora and fora_s is not None and fora_s >= self.VOLTOU_S:
-                    avisos.append(Aviso("adversario_voltou", dados, n))
-                continue
+                continue   # morador da rota vigiada: não é intruso (o "voltou" é o _adversario_voltou)
             if chegou:
                 rz = zona(x, y, self.meu_time)[1] if reg in ("rota_top", "rota_meio", "rota_bot") else \
                     zona(*_centro_rota(perto[0]), self.meu_time)[1]

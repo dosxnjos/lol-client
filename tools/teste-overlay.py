@@ -209,6 +209,27 @@ def principal():
          and ov.por_cima(20, 10, anterior) is False and ov.por_cima(20, 30, lambda h: 99, limite=5) is None,
          f"{ov.por_cima(20, 30, anterior)}, {ov.por_cima(40, 30, anterior)}")
 
+    # 14/10/2026, partida 3293149183: o F8 por RegisterHotKey nunca chegou com o jogo na frente. Agora é observado
+    # (teclas.Observador): estado falso da tecla, sem janela e sem tecla de verdade; só com o jogo em primeiro plano
+    import threading
+    o = ov.OverlayMinimapa(lambda: None, atalho=False)
+    seq = iter([False, True, True, False, True, False] + [False] * 400)   # F8 apertado 2 vezes (a 1ª segurada)
+    o.estado_tecla = lambda vk: vk == ov.VK_F8 and next(seq)
+    alternou = []
+    o.ao_alternar = alternou.append
+    real_jogo = ov._janela_do_jogo
+    jogo_na_frente = {"v": True}
+    ov._janela_do_jogo = lambda: 1 if jogo_na_frente["v"] else None
+    t = threading.Thread(target=o._escutar_atalho, daemon=True)
+    t.start()
+    time.sleep(0.4)
+    jogo_na_frente["v"] = False
+    o._parar.set()
+    t.join(2)
+    ov._janela_do_jogo = real_jogo
+    caso("F8 observado: 2 apertos (um segurado) = 2 alternâncias, com o jogo na frente; a thread para",
+         alternou == [False, True] and not t.is_alive(), f"{alternou}")
+
     n = sum(resultados)
     print(f"\n{'ok' if n == len(resultados) else 'FALHOU'} ({n}/{len(resultados)})")
     return 0 if n == len(resultados) else 1

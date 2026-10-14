@@ -4,8 +4,8 @@
 #      marca de outra partida ou expirada -> apagada e nada liga
 #   2. overlay: a camada gravada é o `renderizar` (RGBA) pixel a pixel e o composto é a mistura exata
 #      (alfa 0 = print; resto = conta do UpdateLayeredWindow com o alfa do px), recorte cortado na borda do monitor
-#   3. moldura: composto = `moldura.renderizar` (mesma rotina GDI da janela) por cima do print com
-#      chat/topo pixelados; borda e rótulo nítidos mesmo sobre a região pixelada
+#   3. moldura: composto = `moldura.renderizar` (o RGBA da janela, degradê desde 14/10/2026) por cima do print com
+#      chat/topo pixelados, pela conta do UpdateLayeredWindow; borda e rótulo nítidos sobre a região pixelada
 #   4. taxa: 1 por tipo a cada 90 s, no máximo 25 (aqui 3) por partida
 #   5. jogo fora do primeiro plano: nada gravado, print nem chamado; SetForegroundWindow e afins
 #      armados como armadilha e proibidos no código-fonte (vitrine e os três ganchos)
@@ -74,38 +74,6 @@ def png(caminho):
 def linhas(pasta):
     return [json.loads(x) for p in sorted(Path(pasta).glob("*/vitrine.jsonl"))
             for x in p.read_text(encoding="utf-8").splitlines() if x.strip()]
-
-
-def imprimir_janela(hwnd, w, h):
-    """RGB do que a janela pinta no próprio WM_PAINT (PrintWindow num bitmap; nada de tela); None se falhar"""
-    import ctypes.wintypes as wt
-    u, g = moldura.user32, moldura.gdi32
-    g.CreateCompatibleDC.argtypes = [wt.HDC]
-    g.CreateCompatibleDC.restype = wt.HDC
-    g.CreateDIBSection.argtypes = [wt.HDC, ctypes.c_void_p, wt.UINT, ctypes.POINTER(ctypes.c_void_p), wt.HANDLE, wt.DWORD]
-    g.CreateDIBSection.restype = wt.HBITMAP
-    g.DeleteDC.argtypes = [wt.HDC]
-    u.GetDC.restype = wt.HDC
-    u.ReleaseDC.argtypes = [wt.HWND, wt.HDC]
-    u.PrintWindow.argtypes = [wt.HWND, wt.HDC, wt.UINT]
-    tela = u.GetDC(None)
-    mem = g.CreateCompatibleDC(tela)
-    bih = moldura._BITMAPINFOHEADER(biSize=ctypes.sizeof(moldura._BITMAPINFOHEADER), biWidth=w, biHeight=-h,
-                                    biPlanes=1, biBitCount=32)
-    bits = ctypes.c_void_p()
-    dib = g.CreateDIBSection(mem, ctypes.byref(bih), 0, ctypes.byref(bits), None, 0)
-    try:
-        antigo = g.SelectObject(mem, dib)
-        ok = u.PrintWindow(hwnd, mem, 0)
-        g.GdiFlush()
-        img = np.frombuffer((ctypes.c_ubyte * (w * h * 4)).from_address(bits.value), np.uint8) \
-            .reshape(h, w, 4)[:, :, 2::-1].copy()
-        g.SelectObject(mem, antigo)
-        return img if ok else None
-    finally:
-        g.DeleteObject(dib)
-        g.DeleteDC(mem)
-        u.ReleaseDC(None, tela)
 
 
 def calor_sintetico(lado):
@@ -227,23 +195,27 @@ def caso_moldura(tmp):
     esperar(v, 1)
     v.parar()
     ln = linhas(saida)
+    # desde 14/10/2026 a moldura é RGBA (degradê em direção ao centro, UpdateLayeredWindow): o composto é a conta da
+    # janela (overlay_minimapa.compor_sobre) sobre o print já pixelado, px a px
     camada = moldura.renderizar(W, H, "vermelho", "gank no top", 12)
-    vermelho = np.array(moldura.CORES["vermelho"])
-    desenho = ~np.all(camada == (255, 0, 255), axis=2)
-    texto = desenho & np.all(camada > 200, axis=2)     # px brancos do rótulo (DrawTextW)
+    vermelho = np.array(moldura.CORES_MOLDURA["vermelho"])
+    texto = (camada[..., 3] == 255) & np.all(camada[..., :3] > 200, axis=2)     # px brancos do rótulo
     ok = len(ln) == 1 and ln[0]["aviso"] == "gank" and ln[0]["rotulo"] == "gank no top"
     det = f"{len(ln)} linhas"
     if ok:
+        import overlay_minimapa
         comp = png(next(saida.iterdir()) / ln[0]["arquivos"][0]).astype(int)
-        px_ok = np.array_equal(comp[desenho], camada[desenho].astype(int))
+        esperado = overlay_minimapa.compor_sobre(vitrine.pixelar(tela.img), camada).astype(int)
+        px_ok = np.array_equal(comp, esperado)
         borda_ok = (comp[2, W // 2] == vermelho).all() and (comp[H - 3, 5] == vermelho).all()  # sobre topo/chat pixelados
         meio_ok = np.array_equal(comp[H // 2, W // 3], tela.img[H // 2, W // 3].astype(int))   # fora das regiões: intacto
         cx, cy = int(0.62 * W), int(0.83 * H)          # chat medido, sem moldura por cima: pixelado
         pix_ok = not np.array_equal(comp[cy - 20:cy + 20, cx - 20:cx + 20], tela.img[cy - 20:cy + 20, cx - 20:cx + 20])
-        ok = px_ok and borda_ok and meio_ok and pix_ok and texto.sum() > 50 and (camada[40, 40] == vermelho).all()
-        det = f"px da moldura idênticos {px_ok}, borda sobre região pixelada {borda_ok}, fora intacto {meio_ok}, " \
+        ok = px_ok and borda_ok and meio_ok and pix_ok and texto.sum() > 50 and (camada[40, 40, :3] == vermelho).all() \
+            and camada[40, 40, 3] == 255
+        det = f"composto = conta da janela {px_ok}, borda sobre região pixelada {borda_ok}, fora intacto {meio_ok}, " \
               f"chat pixelado {pix_ok}, {int(texto.sum())} px de texto"
-    caso("moldura: composto = moldura.renderizar (GDI da janela) sobre o print com chat e topo pixelados", ok, det)
+    caso("moldura: composto = moldura.renderizar (RGBA da janela) sobre o print com chat e topo pixelados", ok, det)
     # reduzida para 1280 de largura quando a tela é maior
     tela2 = TelaFalsa(2560, 1080, semente=4)
     v2 = vitrine.Vitrine(lambda: 1.0, pasta=tmp / "moldura2", primeiro_plano=lambda: True,
@@ -430,14 +402,15 @@ def caso_ganchos(tmp):
     m.ao_mostrar = lambda *a: vistos.append(a)
     m.mostrar("amarelo", "intruso na selva azul")
     time.sleep(0.3)
-    janela = imprimir_janela(m.hwnd, geo[2], geo[3])   # o que o WM_PAINT da janela pintou (PrintWindow)
+    # janela UpdateLayeredWindow não pinta no WM_PAINT (o PrintWindow sai vazio): a prova é o BGRA entregue a ela
+    entregue = m.ultimo_bgra
     m.parar()
     caso("Moldura chama ao_mostrar(cor, rótulo de até 3 palavras, geometria, espessura)",
          vistos == [("amarelo", "intruso na selva", geo, 12)], str(vistos))
-    ref = moldura.renderizar(geo[2], geo[3], "amarelo", "intruso na selva", 12)
-    caso("janela da moldura (PrintWindow) = moldura.renderizar pixel a pixel (a camada da vitrine é a da tela)",
-         janela is not None and np.array_equal(janela, ref),
-         "sem PrintWindow" if janela is None else f"{int(np.any(janela != ref, axis=2).sum())} px diferentes")
+    ref = moldura.premultiplicar(moldura.renderizar(geo[2], geo[3], "amarelo", "intruso na selva", 12))
+    caso("janela da moldura recebe premultiplicar(moldura.renderizar) pixel a pixel (a camada da vitrine é a da tela)",
+         entregue is not None and np.array_equal(entregue, ref),
+         "nada entregue" if entregue is None else f"{int(np.any(entregue != ref, axis=2).sum())} px diferentes")
 
     import coach_vivo
     log_coach = logging.getLogger("coletor.coach")

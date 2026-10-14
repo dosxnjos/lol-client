@@ -7,6 +7,10 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 DB_PADRAO = RAIZ / "dados" / "lol.db"
+# credencial que a LCU põe em blocos que o coletor grava (eog: sala do chat do pós-jogo). Nunca vai ao banco
+# (sem_segredos); chat_janelas.PROIBIDOS contém todos (teste-banco confere). Achado de 14/10/2026.
+SEGREDOS = ("password", "multiUserChatPassword", "mucJwtDto", "jwt")
+_SEGREDOS_MIN = {k.lower() for k in SEGREDOS}
 
 ESQUEMA = """
 create table if not exists meta (chave text primary key, valor text);
@@ -58,6 +62,7 @@ def abrir(caminho=DB_PADRAO):
     c.execute("pragma journal_mode=wal")
     c.execute("pragma busy_timeout=30000")
     c.executescript(ESQUEMA)
+    limpar_segredos(c)   # banco gravado antes de 14/10/2026 (eog com senha e token da sala): limpa ao abrir
     return c
 
 
@@ -182,10 +187,51 @@ def gravar_fase(c, fase, game_id=None, fila=None):
                   (agora_ms(), fase, game_id, fila))
 
 
+def sem_segredos(dado):
+    """cópia do JSON sem as chaves de SEGREDOS, em qualquer profundidade (dict/list); o resto intacto"""
+    if isinstance(dado, dict):
+        return {k: sem_segredos(v) for k, v in dado.items() if k.lower() not in _SEGREDOS_MIN}
+    if isinstance(dado, list):
+        return [sem_segredos(v) for v in dado]
+    return dado
+
+
 def gravar_eog(c, dado):
+    # o bloco do fim de partida traz a senha e o token da sala do chat do pós-jogo: nunca vão ao banco (14/10/2026)
     with c:
         c.execute("insert into eog (ts, game_id, json) values (?,?,?)",
-                  (agora_ms(), (dado or {}).get("gameId"), json.dumps(dado, ensure_ascii=False)))
+                  (agora_ms(), (dado or {}).get("gameId"), json.dumps(sem_segredos(dado), ensure_ascii=False)))
+
+
+def limpar_segredos(c):
+    """tira SEGREDOS do JSON já gravado no `eog` (gravado assim até 14/10/2026). Com `secure_delete` os bytes
+    antigos não ficam nas páginas livres; o checkpoint TRUNCATE esvazia o -wal (que também tinha a versão antiga).
+    Devolve quantas linhas mudaram. Idempotente: sem linha suspeita, só o SELECT."""
+    linhas = c.execute("select id, json from eog where " +
+                       " or ".join("json like ?" for _ in SEGREDOS), [f'%"{k}"%' for k in SEGREDOS]).fetchall()
+    if not linhas:
+        return 0
+    n = 0
+    c.execute("pragma secure_delete=on")
+    with c:
+        for i, txt in linhas:
+            try:
+                d = json.loads(txt)
+            except (TypeError, ValueError):
+                continue
+            limpo = json.dumps(sem_segredos(d), ensure_ascii=False)
+            if limpo != txt:
+                c.execute("update eog set json=? where id=?", (limpo, i))
+                n += 1
+    if n == 0:
+        # o LIKE casou só por acaso (ex.: a string "password" dentro de uma lista): sem checkpoint, que pode esperar
+        # o busy_timeout (30 s) com o MCP lendo, a cada abrir() (revisão 14/10/2026)
+        return 0
+    try:
+        c.execute("pragma wal_checkpoint(TRUNCATE)")
+    except sqlite3.OperationalError:
+        pass   # leitor segurando o WAL: o próximo checkpoint automático leva a página nova
+    return n
 
 
 CS_COLUNAS = ("chave", "ts", "game_id", "fila", "posicao", "preferidas", "autofill", "autofill_riot",
@@ -266,3 +312,48 @@ def gravar_eventos_ao_vivo(c, game_id, eventos):
                        e.get("KillerName"), e.get("VictimName"),
                        json.dumps(e.get("Assisters") or [], ensure_ascii=False),
                        json.dumps(e, ensure_ascii=False, separators=(",", ":"))))
+
+
+def backup(c, destino):
+    """cópia consistente com o WAL aberto pelo coletor vivo (Connection.backup; cópia de arquivo sai inconsistente)"""
+    destino = Path(destino)
+    destino.parent.mkdir(parents=True, exist_ok=True)
+    d = sqlite3.connect(destino)
+    try:
+        c.backup(d)
+    finally:
+        d.close()
+    return destino
+
+
+def _principal(argv=None):
+    import argparse
+    import sys
+    ap = argparse.ArgumentParser(description="manutenção do banco do coletor")
+    ap.add_argument("--limpar-segredos", action="store_true",
+                    help="backup em dados/ e tira senha/token da sala do chat do pós-jogo do eog")
+    ap.add_argument("--db", default=str(DB_PADRAO))
+    a = ap.parse_args(argv)
+    sys.stdout.reconfigure(encoding="utf-8")
+    if not a.limpar_segredos:
+        ap.print_help()
+        return 1
+    db = Path(a.db)
+    c = sqlite3.connect(db, timeout=30)
+    c.execute("pragma busy_timeout=30000")
+    conta = "select count(*) from eog where " + " or ".join("json like ?" for _ in SEGREDOS)
+    pad = [f'%"{k}"%' for k in SEGREDOS]
+    antes = c.execute(conta, pad).fetchone()[0]
+    if antes:
+        # o backup TEM os segredos (é a cópia de antes): apagar depois de conferir o banco limpo (ARMADILHAS)
+        b = backup(c, db.parent / f"{db.stem}-antes-de-limpar-segredos-{time.strftime('%Y-%m-%d')}.db")
+        print(f"backup: {b}")
+    n = limpar_segredos(c)
+    depois = c.execute(conta, pad).fetchone()[0]
+    c.close()
+    print(f"eog com segredo: {antes} antes, {n} limpas, {depois} depois")
+    return 0 if depois == 0 else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(_principal())

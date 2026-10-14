@@ -186,9 +186,9 @@ class _Partida:
         self.threads = []
         self.ticks = []                   # duração de cada passo do laço (ms), para o ensaio medir
         self._fonte_ov = None             # overlay_minimapa.fonte_jungler, quando cap e jungler existem
-        self._n_retorno = 0               # chave única de cada retorno de atalho (F8/F9)
-        # o retorno sai da thread do hotkey por esta fila: publicar pode esperar a janela da moldura
-        # nascer (até 5 s), e a thread do F9 parada segura o WM_TIMER (1..5 longe do jogo além dos 2 s)
+        self._n_retorno = 0               # chave única de cada retorno de atalho (F8/F7) e do chat
+        # o retorno sai da thread que observa a tecla por esta fila: publicar pode esperar a janela da moldura
+        # nascer (até 5 s), e a thread do F7 parada perderia teclas e o fim da janela de 2 s
         self._fila_retorno = queue.Queue()
         self._thread(self._laco_retorno, "coach-retorno")
         self._carregar_estatico()        # antes da config: o OCR e o atalho precisam do Feiticos
@@ -235,6 +235,9 @@ class _Partida:
                                      campeao_id=feiticos.ids_por_nome(est) if est else None)
             if self.f is not None:  # troca a tabela sem perder o que já foi marcado
                 novo.usos, novo.anunciados, novo.runas = self.f.usos, self.f.anunciados, self.f.runas
+                novo._sem_usou = self.f._sem_usou
+                # a rota que o F7 F7 marca e a última leitura do chat (sem elas, o atalho fica mudo até o próximo laço)
+                novo.minha_posicao, novo.ultima_leitura = self.f.minha_posicao, self.f.ultima_leitura
             self.f = novo
         self.picos = sugestoes.PicosDeForca(est["lendarios"]) if est else None
 
@@ -333,9 +336,10 @@ class _Partida:
             try:
                 at = self.coach.fab["atalhos"](self._atalho)
                 at.ao_armar = self._armado   # retorno ao jogador ("flash: 1-5" na moldura)
+                at.n_proprio = self._n_proprio   # F7 duas vezes = o adversário da minha rota
                 self.atalhos = at.iniciar()
-            except Exception as e:  # F9 registrado por outro programa: segue sem atalho
-                self.coach.avisa("atalho F9", e)
+            except Exception as e:  # sem o atalho a partida segue (o chat continua)
+                self.coach.avisa("atalho F7", e)
                 self.atalhos = None
         elif not sim:
             self._parar_feiticos()
@@ -347,16 +351,16 @@ class _Partida:
             try:
                 at.parar()
             except Exception as e:
-                self.coach.avisa("atalho F9", e)
+                self.coach.avisa("atalho F7", e)
         if leitor is not None:
             try:
                 leitor.parar()
             except Exception as e:
                 self.coach.avisa("OCR do chat", e)
 
-    # -- atalhos (thread do RegisterHotKey): todo aperto tem retorno na moldura (e voz, quando marca) --
+    # -- atalhos (threads que observam o teclado, teclas.py): todo aperto tem retorno na moldura (e voz, quando marca) --
     def _retorno(self, evento, **kw):
-        """chamado das threads do F9/F8: só enfileira (nunca bloqueia a thread do hotkey), em ordem"""
+        """chamado das threads do F7/F8 e do OCR: só enfileira (nunca bloqueia quem observa a tecla), em ordem"""
         self._n_retorno += 1
         self._fila_retorno.put(avisos.aviso_atalho(evento, self._n_retorno, **kw))
 
@@ -374,10 +378,14 @@ class _Partida:
     def _armado(self):
         self._retorno("armado")
 
+    def _n_proprio(self):
+        with self.trava_f:
+            return self.f.n_adversario() if self.f is not None else None
+
     def _atalho(self, n):
         with self.trava_f:
             r = self.f.marcar(n, self.relogio())
-        log.info("coach: F9+%d -> %s (%s, %s, %s)", n, r["resultado"], r["rota"], r["inimigo"], r["feitico"])
+        log.info("coach: F7+%d -> %s (%s, %s, %s)", n, r["resultado"], r["rota"], r["inimigo"], r["feitico"])
         self._retorno(r["resultado"], rota=r["rota"], feitico=r["feitico"])
 
     def _overlay_alternado(self, ligado):
@@ -392,10 +400,27 @@ class _Partida:
                 continue
             try:
                 novos = leitor.passo(self.relogio())   # OCR fora da trava; só o registro do gasto a usa
-                if novos:
-                    log.info("coach: chat -> %d gasto(s) de feitiço", len(novos))
+                self._lido_no_chat(novos)
             except Exception as e:
                 self.coach.avisa("OCR do chat", e)
+
+    def _lido_no_chat(self, novos):
+        """gasto NOVO lido no chat (o processar_linhas já tira a repetição da linha que segue na tela): log com o
+        ping interpretado (campeão inimigo e feitiço, nunca a linha crua: tem nome de jogador) e retorno na moldura,
+        como o do F9 ("top sem flash", verde, só no tempo ocioso). Antes só havia "N gasto(s)" a cada 3 s pelo mesmo
+        ping e nada na tela: o Gabriel não tinha como saber se o coach pegou (partida 3293149183)."""
+        from feiticos import mmss
+        with self.trava_f:
+            leitura = dict(getattr(self.f, "ultima_leitura", None) or {})
+            # consome: o LeitorChat.passo volta [] sem ler (jogo fora da tela) e a leitura velha relogaria a cada 3 s
+            self.f.ultima_leitura = {"novos": 0, "confirmados": 0, "sem_usou": []}
+            rotas = {u["inimigo"]: self.f.rota_de(u["inimigo"]) for u in novos or []}
+        for p in leitura.get("sem_usou") or []:
+            log.info("coach: chat -> ping sem 'usou' ignorado: %s %s às %s", p["inimigo"], p["feitico"], mmss(p["ts"]))
+        for u in novos or []:
+            log.info("coach: chat -> gasto novo: %s %s às %s (%s; %d repetido(s) no mesmo print)", u["inimigo"],
+                     u["feitico"], mmss(u["ts"]), rotas[u["inimigo"]], leitura.get("confirmados", 0))
+            self._retorno("chat", rota=rotas[u["inimigo"]], feitico=u["feitico"])
 
     # -- passo do laço (thread do ao_vivo, 1 Hz) --
     def passo(self, bruto, limpo, est):

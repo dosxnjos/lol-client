@@ -334,6 +334,106 @@ def caso_visto_minimapa():
          adv2["atual"] is True and adv2["vistoHaS"] == 1, f"adv {adv2}")
 
 
+def caso_chat_feitico():
+    """partida 3293149183 (14/10/2026): o log dizia "coach: chat -> N gasto(s) de feitiço" a cada ~3 s (a linha do
+    ping fica na tela 2 min e o processar_linhas devolvia também os repetidos) e nada aparecia na tela. Agora: 1
+    linha de log por gasto NOVO, com o ping interpretado, e o retorno na moldura ("top sem flash", verde) como o F9"""
+    import logging
+
+    import coach_vivo
+    import feiticos
+    log_coach = logging.getLogger("coletor.coach")
+    log_coach.propagate = False
+    linhas_log = []
+
+    class Coleta(logging.Handler):
+        def emit(self, r):
+            linhas_log.append(r.getMessage())
+    coleta = Coleta()
+    log_coach.addHandler(coleta)
+    nivel = log_coach.level
+    log_coach.setLevel(logging.INFO)
+
+    class Peca:
+        ligado = True
+        ao_mostrar = ao_desenhar = ao_alternar = _thread = None
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __getattr__(self, nome):
+            return lambda *a, **k: None
+
+    class Janela:
+        def fase(self, f):
+            pass
+
+        def fechar(self):
+            pass
+
+    def sem(*a):
+        raise RuntimeError("fora do teste")
+
+    def jog(nome, time_, pos, f):
+        return {"championName": nome, "team": time_, "position": pos, "riotId": nome, "level": 6, "items": [],
+                "scores": {"creepScore": 50}, "runes": {},
+                "summonerSpells": {"summonerSpellOne": {"displayName": f[0]}, "summonerSpellTwo": {"displayName": f[1]}}}
+    live = {"activePlayer": {"riotId": "Renekton"}, "gameData": {"gameTime": 560.0},
+            "allPlayers": [jog("Renekton", "ORDER", "TOP", ("Flash", "Teleporte")),
+                           jog("Malphite", "CHAOS", "TOP", ("Flash", "Teleporte")),
+                           jog("Cho'Gath", "CHAOS", "JUNGLE", ("Golpear", "Flash"))]}
+    texto = ["09:15 Eu (Renekton): Malphite usou Flash", "09:16 Amigo (Ahri): Cho'Gath Flash"]
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        arq.write_text(json.dumps({"voz": False, "minimapa": False, "feiticos": False, "carregamento": False,
+                                   "mentor": False, "amostrasAoVivo": False, "painelAoVivo": False}), encoding="utf-8")
+        fab = {"voz": Peca, "moldura": Peca, "overlay": Peca, "estatico": sem, "mentor": sem, "captura": sem,
+               "janela": lambda url, ligado: Janela()}
+        c = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=arq, liveclient="http://127.0.0.1:9", fabricas=fab)
+        p = c.iniciar_partida(9003, 420)
+        p.relogio.atualizar(560.0)
+        with p.trava_f:
+            p.f = feiticos.Feiticos()
+            p.f.atualizar(live)
+        trav = coach_vivo._FeiticosTravado(p)
+        por_print = []
+        for gt in (560.0, 563.0, 566.0, 569.0):           # o mesmo chat relido a cada ~3 s
+            novos = trav.processar_linhas(texto, gt)
+            por_print.append(len(novos))
+            p._lido_no_chat(novos)
+            if gt == 560.0:            # jogo fora da tela: o LeitorChat.passo volta [] sem ler; nada pode relogar
+                p._lido_no_chat([])
+                p._lido_no_chat([])
+        # revisão P9: o dado estático chegando no meio da partida troca o Feiticos; a rota do "F7 duas vezes" e a
+        # última leitura do chat vão junto (antes: F7 F7 mudo até o próximo laço)
+        antes_troca = (p.f.minha_posicao, p.f.ultima_leitura)
+        p._montar_feiticos()
+        depois_troca = (p.f.minha_posicao, p.f.ultima_leitura)
+        fim = time.monotonic() + 3
+        molduras = []
+        while time.monotonic() < fim and not molduras:
+            time.sleep(0.05)
+            p.motor.tick(570.0)
+            molduras = [a for _, d, a in p.motor.emitidos if d == "moldura" and a.tipo == "feitico_marcado"]
+        vozes = [a for _, d, a in p.motor.emitidos if d == "voz" and a.tipo == "feitico_marcado"]
+        c.encerrar_partida()
+    log_coach.propagate = True
+    log_coach.removeHandler(coleta)
+    log_coach.setLevel(nivel)
+    gasto = [ln for ln in linhas_log if "gasto novo" in ln]
+    sem_usou = [ln for ln in linhas_log if "sem 'usou'" in ln]
+    caso("3293149183: o mesmo ping relido em 4 prints = 1 gasto novo (antes: 'N gasto(s)' a cada print)",
+         por_print == [1, 0, 0, 0] and len(gasto) == 1 and "Malphite Flash às 9:15 (top" in gasto[0]
+         and not any("gasto(s) de feitiço" in ln for ln in linhas_log), f"novos por print {por_print}; log {gasto}")
+    caso("3293149183: ping sem 'usou' vai ao log 1 vez (candidato ao 'marquei e não funcionou'), sem cronômetro",
+         len(sem_usou) == 1 and "Cho'Gath Flash às 9:16" in sem_usou[0], str(sem_usou))
+    caso("3293149183: gasto lido no chat dá retorno na moldura ('top sem flash', verde), sem voz",
+         len(molduras) == 1 and molduras[0].rotulo == "top sem flash" and molduras[0].cor == "verde" and not vozes,
+         f"{[(a.rotulo, a.cor) for a in molduras]}, vozes {len(vozes)}")
+    caso("revisão P9: trocar o Feiticos no meio da partida mantém a minha rota (F7 F7) e a última leitura",
+         antes_troca[0] == "TOP" and depois_troca == antes_troca, f"antes {antes_troca[0]!r}, depois {depois_troca[0]!r}")
+
+
 def caso_catalogo():
     # plano voz pré-gravada, passos 3 e 3b: fala genérica e finita; o catálogo cobre todo molde falado
     import ao_vivo
@@ -343,7 +443,8 @@ def caso_catalogo():
     falados = {t for t, p in avisos.TIPOS.items() if "v" in p["destinos"] and not p.get("retorno")}
     falados |= {m for m, d, _ in avisos._RETORNO_F9.values() if "v" in d}
     falados |= {"feitico_voltou", "pico_nivel", "pico_nivel_visto", "pico_item"}
-    sujas = [f for f in cat if "?" in f.replace("cadê o mid?", "").replace("voltar?", "") or "{" in f]
+    falados |= {"adversario_outra_rota"}   # molde por evento do adversario_voltou (partida 3293149183)
+    sujas =[f for f in cat if "?" in f.replace("cadê o mid?", "").replace("voltar?", "") or "{" in f]
     caso("catálogo: cobre todo molde com voz, sem placeholder solto nem fala com campeão",
          set(avisos.valores_catalogo()) == falados and not avisos.moldes_fora_do_catalogo()
          and not avisos.moldes_fora_do_catalogo(TEXTOS) and not sujas and len(cat) == len(set(cat)),
@@ -723,6 +824,7 @@ def principal():
     caso_textos_md()
     caso_ouro_rota()
     caso_visto_minimapa()
+    caso_chat_feitico()
     caso_catalogo()
     caso_fila_voz()
     caso_pacote_voz()

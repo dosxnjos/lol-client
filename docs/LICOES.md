@@ -32,6 +32,7 @@ prioridade e cor: [COLETOR § Avisos ao vivo](COLETOR.md#avisos-ao-vivo-voz-e-mo
 - `objetivo_60s` | sério: {objetivo} em um minuto / {objetivo} 1 min | descontraído: {objetivo} nasce em um minuto, se prepara / {objetivo} 1 min
 - `mortes_cedo` | sério: duas mortes antes dos dez, joga seguro / joga seguro | descontraído: tu tá duas mortes antes dos dez, segura a onda / segura a onda
 - `adversario_voltou` | sério: o {rota} voltou pra rota / {campeao} voltou | descontraído: o {rota} voltou, cuidado / {campeao} voltou
+- `adversario_outra_rota` | sério: o {rota} apareceu {zona} / {campeao} {zt} | descontraído: o {rota} apareceu {zona}, avisa o time / {campeao} {zt}
 - `inimigo_fed` | sério: o {rota} tá forte, evita o um contra um / evita 1x1 | descontraído: o {rota} tá fed, nada de um contra um / evita 1x1
 - `ouro_guardado` | sério: ouro guardado, hora de voltar? / hora de voltar | descontraído: tá rico, volta e gasta / hora de voltar
 - `feitico_voltou` | sério: {feitico} do {rota} voltou / {campeao} com {feitico_nome} | descontraído: {feitico} do {rota} voltou, cuidado / {campeao} com {feitico_nome}

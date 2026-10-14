@@ -55,7 +55,7 @@ CONVITE_VALE_S = 60                   # "convidado" fica no botão por isso
 TEXTO_MAX = 500
 MSGS_MAX = 100
 # campos que nunca saem para a página (sala de grupo: senha e jwt; a sessão do champ select tem os mesmos)
-PROIBIDOS = ("password", "mucJwtDto", "inviterId", "multiUserChatPassword")
+PROIBIDOS = ("password", "mucJwtDto", "inviterId", "multiUserChatPassword", "jwt")   # ⊇ banco.SEGREDOS
 FILAS = {420: "Solo/Duo", 440: "Flex", 400: "Normal", 430: "Normal", 490: "Rápida", 450: "ARAM", 1700: "Arena",
          1900: "URF", 900: "ARURF", 700: "Clash", 830: "Co-op", 840: "Co-op", 850: "Co-op", 870: "Co-op",
          880: "Co-op", 890: "Co-op", 0: "Personalizada", 3100: "Personalizada", 1090: "TFT", 1100: "TFT ranqueada",

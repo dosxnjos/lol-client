@@ -3,7 +3,7 @@
 # em cima do retângulo do minimapa achado pelo passo 13. Não toca no processo do jogo, não manda tecla nem
 # clique: é uma janela do Windows por cima de outra (só funciona com o jogo sem borda, WindowMode=2).
 # Mostra o mapa de calor de onde o jungler pode estar; some ~30 s depois da última pista e troca por
-# "sumido há X s" por 10 s, depois some de vez até a próxima pista. F8 liga/desliga (RegisterHotKey: só escuta o atalho).
+# "sumido há X s" por 10 s, depois some de vez até a próxima pista. F8 liga/desliga (teclas.py: só OBSERVA a tecla).
 # Calibração de 14/10/2026 (roadmap/2026-10-14-calibrar-avisos.md): uma cor só (COR) com a probabilidade na
 # opacidade, borda suavizada e transição contínua. Janela Win32 com UpdateLayeredWindow e alfa POR PIXEL (a
 # versão Tk com cor-chave + alfa global serrilhava: cada px era 100% cor ou 100% transparente) e sem Tk (que
@@ -50,8 +50,7 @@ WS_POPUP = 0x80000000
 WS_EX_LAYERED, WS_EX_TRANSPARENT = 0x00080000, 0x00000020
 WS_EX_TOPMOST, WS_EX_TOOLWINDOW, WS_EX_NOACTIVATE = 0x00000008, 0x00000080, 0x08000000
 ESTILO = WS_EX_LAYERED | WS_EX_TRANSPARENT | WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE
-VK_F8, WM_HOTKEY, ID_ATALHO = 0x77, 0x0312, 0x4C43
-MOD_NOREPEAT = 0x4000              # segurar o F8 = 1 alternância (sem ele o autorrepeat piscava o overlay)
+VK_F8 = 0x77                       # observado (teclas.Observador): segurar o F8 = 1 alternância (borda de descida)
 WDA_EXCLUIR = 0x11                 # WDA_EXCLUDEFROMCAPTURE
 WM_DESTROY, WM_CLOSE, WM_TIMER, WM_NCHITTEST = 0x0002, 0x0010, 0x0113, 0x0084
 HTTRANSPARENT = -1
@@ -415,6 +414,7 @@ class OverlayMinimapa:
         self.quadro_ms = quadro_ms
         self.ligado = True
         self.atalho = atalho
+        self.estado_tecla = None  # vk -> bool (teste); None = GetAsyncKeyState (teclas.Observador)
         self.ao_alternar = None   # callback(ligado) do F8: retorno ao jogador ("overlay ligado" na moldura)
         self.ao_desenhar = None   # callback(img RGBA, (left, top, lado), quadro) a cada quadro mostrado (vitrine)
         # o overlay fica EM CIMA do minimapa que o passo 13 captura: sem isto o print veria o próprio
@@ -615,24 +615,19 @@ class OverlayMinimapa:
             log.warning("overlay: gancho da vitrine falhou: %s", e)
 
     def _escutar_atalho(self):
-        # WinDLL próprio com use_last_error: o GetLastError depois de uma chamada do ctypes não é confiável
-        u = ctypes.WinDLL("user32", use_last_error=True)
-        if not u.RegisterHotKey(None, ID_ATALHO, MOD_NOREPEAT, VK_F8):
-            log.warning("overlay: RegisterHotKey do F8 falhou (erro %d; 1409 = outro programa já tem o F8)",
-                        ctypes.get_last_error())
-            return
-        log.info("overlay: F8 registrado (RegisterHotKey, thread %d)", threading.get_native_id())
-        msg = wt.MSG()
+        # F8 por OBSERVAÇÃO do teclado (teclas.py, GetAsyncKeyState): o RegisterHotKey do F8 nunca disparou com o jogo
+        # na frente (partidas 3292803384 e 3293149183, nenhum "(F8)" no log). Só com o jogo em primeiro plano (F8 em
+        # outro programa é de outro programa); a tecla segue para o jogo (no LoL do Gabriel o F8 não faz nada)
+        import teclas
         try:
-            while not self._parar.is_set():
-                if u.PeekMessageW(ctypes.byref(msg), None, WM_HOTKEY, WM_HOTKEY, 1):
-                    if msg.message == WM_HOTKEY and msg.wParam == ID_ATALHO:
-                        self.alternar()   # loga "overlay do minimapa ligado/desligado (F8)"
-                time.sleep(0.05)
+            teclas.avisar_conflitos(["F8"], "overlay")
+            obs = teclas.Observador([VK_F8], lambda vk: self.alternar(), na_tela=lambda: _janela_do_jogo() is not None,
+                                    estado=self.estado_tecla)
+            log.info("overlay: F8 observado (GetAsyncKeyState, só leitura; thread %d)", threading.get_native_id())
+            obs.rodar(self._parar)   # loga "overlay do minimapa ligado/desligado (F8)" a cada aperto
         except Exception as e:
             log.warning("overlay: escuta do F8 morreu: %s: %s", type(e).__name__, e)
         finally:
-            u.UnregisterHotKey(None, ID_ATALHO)
             log.info("overlay: F8 solto")
 
     def fora_do_print(self, sim=True):

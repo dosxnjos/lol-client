@@ -15,6 +15,7 @@ TESTES = [
     ["node", "tools/teste-posjogo.mjs"],
     [PY, "tools/teste-champselect.py"],
     [PY, "tools/teste-mcp.py", "temp/teste-champselect.db"],
+    [PY, "tools/teste-banco.py"],          # banco sem senha/token da sala do chat (eog), em pasta temporária
     [PY, "tools/validar-licoes.py"],
     [PY, "tools/teste-licoes.py"],
     ["node", "tools/teste-licoes.mjs"],

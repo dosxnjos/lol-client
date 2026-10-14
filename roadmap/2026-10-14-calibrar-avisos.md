@@ -82,6 +82,15 @@ Quem decidiu: o agente executor (opus, técnico). Reverter = `git revert` do com
 | D22 | (passo 8) "visto" do painel = o mais recente entre a assinatura da Live Client (nível, itens, farm) e a última detecção do minimapa (`ao_vivo.mesclar_vistos`, no passo do coach; grava no banco também, então o `visto_gt` do `ao_vivo` passa a incluir o minimapa) | alta | detecção falsa do adversário no minimapa marcando "atual" o que está parado (o painel mostraria números velhos sem o cinza) |
 | D23 | (passo 8, corrigida na revisão) overlay: a janela fica como está (a hipótese do print foi derrubada com prova). A causa do "não funcionou mais" é **defeito do desenho**, não gosto: o desfoque σ=2 do `alfa_alvo` diluía a mancha pequena (jungler recém-visto = calor de 1–2 px) a 2–8% de alfa; 4 dos 7 quadros de calor da partida ficaram abaixo de 16% (145059-03 0,09; 145529-13 0,11; 145659-15 0,04; 150000-21 0,15). Correção: pedaço pequeno (área < π·(2·`MANCHA_MIN_PX`)²) alarga 3 px antes do desfoque e o pico volta ao de antes do desfoque (nunca acima); zona grande fica com a borda de antes. Força e cor não mudam. Fica também o diagnóstico no log (`janela pronta`, `na tela {...}`, aviso se o jogo estava por cima na ordem Z) e a 2ª fase do `--demo` | alta | mancha de ponto grande demais ou "pulando" na tela (ele dizer): baixar `MANCHA_MIN_PX` para 2 (ponto ainda com área ≥ π·4² px acima de 10%). O log "na tela, sem o jogo por cima" **não** prova que ele viu: a janela TOPMOST sobre o jogo sem borda (`WindowMode=2`) não perde na ordem Z |
 | D24 | (passo 8, revisão) eu na base (inclui a base presumida da D20) ou morto: **intruso** na minha rota só conta com aliado lá, a mesma regra do gank ("nem tinha aliado nenhum meu no top, então não fazia sentido se preocupar"). Quem chega enquanto estou fora já está na rota quando eu volto e não vira intruso (regra de 13/10). O "o top voltou" (morador) não muda | média | ele dizer que quer saber, da base, quem está esperando na rota dele: tirar o filtro `longe` do laço de intrusos em `AlertasPosicao.observar` |
+| D25 | (passo 9) chat: `processar_linhas` devolve só o gasto **novo** (a linha relida só confirma, `ultima_leitura`); o coach loga o ping interpretado (campeão inimigo, feitiço, mm:ss; nunca a linha crua) e mostra "<rota> sem flash" na moldura (evento `chat` do `feitico_marcado`, só moldura, verde); ping sem "usou" vai 1 vez ao log e segue sem cronômetro | alta | a borda do chat virar ruído (ping de aliado repetido em outro minuto): tirar o `_retorno("chat")` de `_lido_no_chat` (fica o log) |
+| D26 | (passo 9) atalho por **observação** do teclado (`coletor/teclas.py`: `GetAsyncKeyState` a cada 25 ms, só com o jogo em primeiro plano; nada enviado nem comido; o que o OBS faz). F9 sai (é `evtToggleMouseClip` no LoL dele); **F7** arma, **numérico** 1..5 escolhe (1, 2, 3, 5 de cima são itens), **F7 duas vezes** = adversário da minha rota; aviso no log se o LoL ligar alguma dessas teclas. Sem `WH_KEYBOARD_LL` (com o GIL ocupado atrasaria toda tecla do jogo). Risco Vanguard/termos: ler o estado da tecla, sem escrever nada no jogo, é a categoria de Discord/OBS | média | nenhum "F7 recebido" com ele apertando na próxima partida (o jogo também esconderia o estado assíncrono): raw input com `RIDEV_INPUTSINK` numa janela própria; teclado sem numérico: outra tecla livre (F10, F11) |
+| D27 | (passo 9) F8 do overlay também observado, só com o jogo na frente (antes `RegisterHotKey` global, que também nunca chegou in-game) | média | o mesmo da D26 |
+| D28 | (passo 9, revista) moldura: `INTERVALO_MOLDURA` 10 s entre bordas de cor diferente; dentro dele sai na hora o alerta de prio **maior** que a da borda na tela se a cor não descer (`GRAVIDADE_COR` azul < verde < amarelo < vermelho), e o da **mesma cor** passados 2,5 s (a anterior acabou: o 2º gank); o resto espera e cai; alerta de posição que esperou > `IDADE_MOLDURA` 3 s não vai à tela velho; o retorno lido no chat espera os 10 s sem alerta (o do atalho apertado segue nos 2,5 s). A 1ª versão (só urgente furava) calava o intruso amarelo atrás de um "voltou" azul e o 2º gank, porque 10 s > validade de 5–6 s (revisão P1/P2) | média | ele achar que ainda pisca vermelho demais num gank longo: exigir prio ≥ a da borda também na mesma cor; perigo vermelho → amarelo calado (ex.: jungler 80 e logo intruso 85): permitir a descida passados 2,5 s |
+| D32 | (passo 9, revisão P5) "o top apareceu no mid" (`adversario_outra_rota`) só na fase de rotas (`MID_JANELA[1]`, 14:00; `calados["voltou_fim_das_rotas"]`); entre duas faixas vale a de centro mais perto (P4). O "voltou pra rota" na rota dele segue sem limite | média | ele sentir falta das rotações do meio de jogo: liberar com destino só painel (`vp` sem borda) |
+| D33 | (passo 9, revisão P7) piso do pulso da moldura 0,6 (`PULSO_MIN`; era 0,45: o azul escurecido no vale ficava ~115/255 sobre o mapa escuro) | média (gosto) | ele achar que a borda não pulsa: baixar para 0,5, ou pulsar só o degradê |
+| D29 | (passo 9) `adversario_voltou` (adversário direto da rota do champ select, qualquer rota minha): calado comigo morto ou na base (inclusive a presumida da D20, `calados["voltou_eu_fora"]`); na rota dele, o de sempre; em outra, molde novo `adversario_outra_rota` ("o top apareceu no mid", rótulo "Malphite mid"); fica de fora quando ele entra na rota onde eu estou (é intruso) ou é o mid que tinha sumido (o "mid indo X" já diz). Catálogo 452 → 476 (`76d3c16afdfb`); as 24 novas tocam na Maria até a tarefa de voz gravar | média | ele reclamar do "apareceu" em rotação comum: exigir ≥ `VOLTOU_S` também fora da rota dele, ou só fala (sem borda) |
+| D30 | (passo 9) moldura em `UpdateLayeredWindow` com alfa por px: 12 px da beirada em alfa 255 na cor a 80% (`CORES_MOLDURA`), degradê `FADE_INICIO` 0,6 → 0 em 10% do menor lado com curva (1 − t)², rótulo em caixa opaca (Pillow, Segoe UI Bold); pulso = alfa constante (sem redesenhar); vitrine compõe o mesmo RGBA. Escolha de cor/força nas Configurações **não** feita: a tela é `pengu/**` (outra frente) | média (gosto) | ele achar a borda fraca/forte: `FADE`, `FADE_INICIO`, `ESCURECER` no topo de `moldura.py` |
+| D31 | (passo 9) `eog` sem `multiUserChatPassword`/`mucJwtDto`/`password`/`jwt` (`banco.SEGREDOS`, em qualquer profundidade): filtrado no `gravar_eog`, limpo no `abrir()` e pela CLI com backup antes; `secure_delete` + `wal_checkpoint(TRUNCATE)` para os bytes antigos não ficarem nas páginas livres nem no `-wal` | alta | — |
 
 Espelho do mapa: a geometria das rotas é absoluta (rota top = canto de cima à esquerda para os dois times);
 base e selva são relativas ao meu time (`analise.regiao`, `jungler.nome_zona`), e `zonas_de_gank` usa os
@@ -203,6 +212,84 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
      corpo a corpo a menos de ~370 unidades um dos dois ícones some. Nos 12 prints da partida nenhum dos dois
      aconteceu. Risco conhecido da D20: ícone dele perdido em < 4 s logo ao sair da base deixa o gank real no
      top "só com aliado" por até 45 s.
+9. **Relato da partida 3293149183** (14/10/2026, 15:49–16:15, top contra Malphite; gameTime 0 ≈ 15:48:17). Executor
+   que nunca viu a conversa: o Gabriel jogou, contou o que sentiu, e esta frente corrige 5 coisas. Em palavras dele:
+   1. "Eu marquei que o malphite flashou e não funcionou no coach, f9 também parece não servir pra nada, acho que por
+      conta da função nativa do lol de pintar uma borda vermelha fina na tela, talvez ele roube a função do coach."
+   2. "Ali por volta dos 15 minutos eu recebi um gank de umas duas pessoas diferentes e as bordas começaram a piscar
+      em diferentes cores. Que loucura."
+   3. "eu morto e sendo avisado que o malphite voltou pra lane." Depois (~16:25): "Se eu estiver na base ou morto,
+      não faz sentido avisar. Agora, de outra forma, tem que avisar se voltou e em qual lane voltou." E (~16:30):
+      "Mesma coisa para todas as lanes [...] se eu estivesse jogando no mid, ele ia avisar que o mid foi para outra
+      lane. Mesma coisa o bot."
+   4. Borda (~16:30): "elas podem ter o fim delas esmaecido, um fade transparente em direção ao centro da tela [...]
+      sai da borda colorido e vai em direção ao centro de forma transparente. e cores levemente mais escurecidas."
+   5. (achado do agente, 14/10) o banco `dados\lol.db` guarda `multiUserChatPassword` e `mucJwtDto` (senha e token da
+      sala do chat do pós-jogo) de cada partida, na tabela `eog`.
+   - Decisões D25–D33 na tabela acima (D28 revista, D32 e D33 da revisão adversarial).
+   - **Causas, com evidência** (`dados\coletor.log`, 15:49–16:15):
+     - (1, chat) **premissa corrigida**: o caminho do chat funcionava. As leituras de 15:57 viraram "flash do jungler
+       voltou" 16:01:59 e "flash do mid voltou" 16:02:19; a de 16:03:18 virou "barreira do atirador voltou" 16:05:50.
+       O que estava errado: `processar_linhas` devolvia também o gasto repetido (a linha fica no chat 2 min e é relida
+       a cada print), daí "N gasto(s)" a cada ~3 s, e nada aparecia na tela. O Flash do **Malphite** nunca entrou
+       (nenhum "flash do top voltou"); sem a linha crua no log não dá para separar OCR errando o nome, o ping dele
+       sair na variante sem "usou" (não liga cronômetro, decisão de 13/10 com n = 1) ou ele ter usado só o F9.
+     - (1, F9/F8) "atalho: F9 registrado" e "overlay: F8 registrado" às 15:49:49 e nenhum "recebido" na partida (e no
+       treino de 13/10). No `Config\input.ini` dele: `evtToggleMouseClip=[F9]`, ou seja o F9 **chegava ao jogo** (a
+       "borda vermelha fina" é o LoL travando o cursor), o hotkey nem via a tecla. 1, 2, 3, 5, t, y são itens, 4 a
+       sentinela, F1–F5 câmera, Ctrl+F10 HUD; F7, F8, F10 sozinho e o numérico estão livres.
+     - (2) 16:02:40–16:03:32: 7 molduras (vermelhas, depois azul e amarela); 16:12:56 amarela e 16:12:57 vermelha. O
+       motor tinha 2,5 s entre bordas e **todo** urgente furava.
+     - (3) Morto ou sem ícone, "onde estou" = rota do champ select (reserva), que vira a vigiada; o "voltou" só olhava
+       isso. E só valia a rota do champ select, nunca outra.
+     - (4) Moldura GDI com cor-chave: cada px 100% cor ou 100% transparente (degradê impossível).
+     - (5) `gravar_eog` gravava o `eog-stats-block` inteiro: 29 linhas com senha e token da sala do pós-jogo.
+   - **Correções:** `feiticos` (`_registrar`, `ultima_leitura`, `n_adversario`, `rota_de`, `Atalhos` observado),
+     `coach_vivo._lido_no_chat` e `_n_proprio`, `coletor/teclas.py` (novo), `overlay_minimapa._escutar_atalho`,
+     `avisos` (`INTERVALO_MOLDURA`, `Aviso.ocioso_s`, evento `chat`, `_adversario_voltou`, molde
+     `adversario_outra_rota`), `moldura.py` reescrito em `UpdateLayeredWindow`, `vitrine` (comentários; já compunha
+     RGBA), `banco` (`SEGREDOS`, `sem_segredos`, `limpar_segredos`, `backup`, CLI), `chat_janelas.PROIBIDOS` (+ `jwt`).
+     Banco real limpo em 14/10 17:14 (29 → 0 linhas, 13 valores distintos, nenhum byte sobrando no `.db` nem no
+     `-wal`); o backup `dados\lol-antes-de-limpar-segredos-2026-10-14.db` (+ `-shm`/`-wal`) foi conferido (todas as
+     tabelas com a mesma contagem do vivo; as 29 linhas do `eog` iguais tirando os segredos) e **apagado**, junto com
+     as cópias antigas do banco com segredos em `temp\pengu\`, `temp\revisao\` e `temp\v2\mcp-achados.db` (revisão P3).
+   - **Provas** (vermelhas no código de antes, rodadas numa cópia do `HEAD` em worktree): `teste-banco.py` (novo, 12;
+     no `HEAD` o `gravar_eog` grava a senha), `teste-feiticos.py` (reprint = 0 novos; F7 + numérico, F7 duas vezes,
+     "3" de cima e fora do jogo não contam; observador real liga e para; teclas do LoL dele: F9 =
+     `evtToggleMouseClip`, F7/F8/numérico livres; nada de `RegisterHotKey(`/`SendInput`/`keybd_event` no código),
+     `teste-coach.py` (`caso_chat_feitico`: 4 prints = 1 gasto, ping sem "usou" 1 vez no log, moldura "top sem flash"
+     verde sem voz; catálogo com o molde novo), `teste-alertas.py` (`relato_3293149183_voltou` 8 casos;
+     `relato_3293149183_rajada` com os instantes reais do log: antes 12 bordas e 5 trocas ruins, agora 10 e nenhuma;
+     o gank 1 s depois de uma azul sai na hora; `relato_3293149183_moldura`: RGBA, beirada 255 na cor escurecida,
+     degradê monotônico até 0, rótulo legível, custo), `teste-overlay.py` (F8 observado, segurar = 1),
+     `teste-vitrine.py` (composto = conta da janela; BGRA entregue = `premultiplicar(renderizar)`). Com o jogo
+     fechado: janela real da moldura (`teste-alertas.py` sem `--sem-janela`), pulso medido (R da borda 187 → 97 → 186
+     em 0,7 s), `rodar-testes.py` **43/43** (o ensaio agora tem 3 molduras `feitico_marcado` do chat gravado).
+     `voz-agendada.py estado`: 452 de 476, faltam 24 (o catálogo é lido vivo; a tarefa está `Ready`).
+     Da revisão: `_lido_no_chat` consome a `ultima_leitura` (o `LeitorChat.passo` volta `[]` sem ler com o jogo fora
+     da tela e o "ping sem 'usou'" relogava a cada 3 s; `caso_chat_feitico` chama 2 vezes sem leitura) e a thread que
+     observa a tecla loga a própria morte (`teclas.Observador.rodar`).
+     Revisão adversarial (2ª, antes do commit), cada uma com teste vermelho no código anterior: P1/P2 regra da borda
+     (D28 revista; `teste-alertas` "revisão P1/P2": intruso amarelo 1 s depois do azul sai, 2º perigo vermelho 4 s
+     depois sai, 2º gank sai aos 2,5 s, vermelha → amarela não sai, alerta velho cai; a rajada real dá 11 bordas,
+     1 troca de cor, subindo); P4/P5 (D32; "revisão P4/P5"); P7 (D33); P9 a troca do `Feiticos` no meio da partida
+     leva `minha_posicao` e `ultima_leitura` (`teste-coach`); P10 `limpar_segredos` sem checkpoint quando nada mudou
+     (`teste-banco`); P6 a causa do `RegisterHotKey` mudo corrigida no ARMADILHAS (o F8, sem tecla no LoL, também
+     não chegava) e o log diz se o coletor roda como administrador (UIPI); P3 cópias do banco com segredos em
+     `temp/` e o backup de `dados/` (ver abaixo). P8 (F7 duas vezes marca com voz) vai no texto ao Gabriel.
+   - **Sem prova (próxima partida):** o F7/numérico/F8 in-game (log `atalho: F7 recebido`, `(F8)`): se não aparecer
+     com ele apertando, nem o estado assíncrono passa (D26 diz o que fazer); se o teclado dele tem numérico; a borda
+     nova na tela do jogo (só vista na área de trabalho e na conta); o Flash do Malphite (o log novo diz se o ping
+     dele sai sem "usou"); o "apareceu no mid" numa partida real.
+   - **Falta (orquestrador / outra frente):** reiniciar o coletor no lobby (o `abrir()` já limpa qualquer banco
+     antigo); `pengu/blocos.js` linhas 147 e 208 ainda dizem "F9" (texto da tela, frente do `pengu/**`); contar ao
+     Gabriel: **F7** arma (F7 F7 = o adversário da tua rota, **com voz**: apertar F7 de novo para "cancelar" marca;
+     desfaz com F7 F7 em até 10 s), **numérico** 1–5 escolhe, F8 segue igual, e o F9 voltou a ser só do jogo
+     (trava o cursor).
+   - **Buraco registrado (não mexido):** se a tarefa `lol-client-voz` se desativar por "completo" e o catálogo
+     crescer depois, ninguém a religa (o `estado` avisa, a tarefa não roda); hoje ela está `Ready`, então as 24
+     novas entram. Correção possível: o coletor rodar `voz-agendada.py instalar` quando `faltam > 0` e a tarefa
+     estiver desativada.
 
 ## O que o overlay mostra (para o Gabriel)
 
@@ -247,6 +334,18 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
   linha `config do coach` de 15:19:04); não é desta frente.
 - fica de fora (passo 7, não pedido): atalho Ctrl+K para as chaves novas e o `alfa` que a vitrine grava no jsonl
   (segue o `ALPHA` do módulo, não a força escolhida; a imagem gravada já sai com a força certa).
+- completei (passo 9): log do ping interpretado e retorno "top sem flash" na moldura para o gasto lido no chat (o
+  Gabriel não tinha como saber que o coach pegou); a borda do chat espera 10 s sem alerta (não troca a cor logo
+  depois de um gank).
+- completei (passo 9): "F7 duas vezes" = o adversário da tua rota (teclado sem numérico e o caso mais comum);
+  aviso no log se o LoL dele passar a usar F7, F8 ou o numérico.
+- completei (passo 9): o banco é limpo também no `abrir()` (outro banco antigo, cópia, backup restaurado) e a limpeza
+  usa `secure_delete` + checkpoint (um UPDATE comum deixava o token nas páginas livres e no `-wal`); `jwt` entrou na
+  lista do `chat_janelas.PROIBIDOS`.
+- correção (passo 9): "o OCR lê mas a marcação não sai" era meia verdade: o gasto entrava (voltaram 3 feitiços na
+  voz), o que faltava era retorno na tela e o log repetia o mesmo ping.
+- fica de fora (passo 9, não pedido ou de outra frente): escolha de cor/força da moldura nas Configurações (tela em
+  `pengu/**`); trocar "F9" por "F7" nos textos de `pengu/blocos.js`.
 - fica de fora (não pedido): "o top voltou pra rota" (5 falas, 8 molduras); as 5 falas estão a mais de 1 min
   uma da outra no log, então a regra de fala repetida em 60 s **não** muda nada nela. Fica para a calibração
   que o Gabriel disse que vai trazer.

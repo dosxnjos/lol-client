@@ -22,6 +22,8 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   trazer o jogo para a frente. Provas que abrem janela só com o jogo fechado (`rodar-testes.py` e `ensaio-coach.py` recusam).
 - Pacote de voz: a tarefa `lol-client-voz` completa e converge sozinha (`python tools/voz-agendada.py estado`); gerador
   só com o jogo fechado e nada do `pythonw` sem `CREATE_NO_WINDOW` ([COLETOR](docs/COLETOR.md) § Avisos ao vivo).
-- Credencial do lockfile nunca em arquivo, log ou doc. Heurísticas do pós-jogo: dona é
+- Atalho do coach (F7 + numérico, F8) só **observa** o teclado (`coletor/teclas.py`), em tecla livre no LoL; nunca
+  `RegisterHotKey` (não dispara com o jogo na frente), `SendInput`/`keybd_event` ou hook que coma tecla (ARMADILHAS § Windows).
+- Credencial do lockfile nunca em arquivo, log ou doc; senha/token de sala de chat nunca no banco (`banco.SEGREDOS`). Heurísticas do pós-jogo: dona é
   [docs/INSIGHTS.md](docs/INSIGHTS.md) (JS e Python seguem ela). Coletor, banco e MCP:
   [docs/COLETOR.md](docs/COLETOR.md).

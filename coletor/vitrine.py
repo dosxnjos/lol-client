@@ -3,7 +3,8 @@
 # (WDA_EXCLUDEFROMCAPTURE: senão o próprio coach leria o overlay ao capturar o minimapa; ARMADILHAS §
 # Tela), então a vitrine NÃO liga a exclusão: grava o print do jogo (que não vê as janelas) e compõe por
 # cima a camada que o coach desenhou naquele instante (overlay: o quadro RGBA que a janela mandou ao
-# UpdateLayeredWindow, alfa por px, na mesma posição; moldura: a mesma rotina GDI da janela, `moldura.renderizar`).
+# UpdateLayeredWindow, alfa por px, na mesma posição; moldura: o mesmo RGBA da janela, `moldura.renderizar`, também
+# UpdateLayeredWindow com alfa por px desde 14/10/2026).
 #
 # Liga para UMA partida (`python tools/vitrine.py ligar`): marca em dados/vitrine.json (pasta do banco),
 # válida por 3 h até a partida começar; a partida que começa consome e, ao acabar, apaga a marca.
@@ -152,10 +153,10 @@ def da_partida(caminho, game_id, relogio, agora=None, **kw):
 # ---------- composição ----------
 
 def compor(fundo, camada, x, y, alfa=None, chave=None):
-    """o que aparece na tela: `camada` em (x, y) sobre `fundo` (RGB). Camada RGBA (overlay do minimapa, alfa
-    por px desde 14/10/2026) = a conta do UpdateLayeredWindow (overlay_minimapa.compor_sobre); camada RGB
-    (moldura) = px da `chave` transparentes e o resto misturado com `alfa` 0–255 (o mesmo byte da janela
-    layered). A camada pode passar da borda do fundo (é cortada)."""
+    """o que aparece na tela: `camada` em (x, y) sobre `fundo` (RGB). Camada RGBA (overlay do minimapa e moldura,
+    alfa por px desde 14/10/2026) = a conta do UpdateLayeredWindow (overlay_minimapa.compor_sobre); camada RGB
+    (formato antigo da moldura, cor-chave) = px da `chave` transparentes e o resto misturado com `alfa` 0–255.
+    A camada pode passar da borda do fundo (é cortada)."""
     out = fundo.copy()
     h, w = camada.shape[:2]
     H, W = fundo.shape[:2]
@@ -396,7 +397,7 @@ class Vitrine:
             return [], None
         fundo = pixelar(fundo)   # privacidade antes de compor: a borda e o rótulo ficam nítidos
         camada = self.camada_moldura(l, a, item["cor"], item["rotulo"], item["espessura"])
-        # alfa 255: no instante do aviso o pulso começa no máximo (moldura._pulsar com agora == t0)
+        # camada RGBA com o alfa de cada px; o alfa constante do pulso começa em 255 (moldura._pulsar com agora == t0)
         comp = compor(fundo, camada, x - reg["left"], y - reg["top"], 255, (255, 0, 255))
         if comp.shape[1] > LARGURA_TELA:
             import cv2

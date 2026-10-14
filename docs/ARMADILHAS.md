@@ -493,6 +493,13 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   `07:06` e Flash: `/` vira 7 e o feitiço casa por semelhança com o dicionário fechado
   (`feiticos._ts_norm`/`ler_ping`, 13/10/2026). Ping sem "usou" (`Seraphine Exaustão`) não diz que
   gastou: não liga cronômetro.
+- **"coach: chat -> N gasto(s) de feitiço" a cada ~3 s com nada na tela** (partida 3293149183, 14/10/2026) → a
+  linha do ping fica no chat 2 min ou mais e é relida a cada print; o `processar_linhas` devolvia também o gasto
+  repetido (dedupe certo, retorno errado), e o coach só logava. Os gastos funcionavam ("flash do jungler voltou"
+  ~5 min depois), mas o Gabriel não tinha como saber. Hoje: só o novo volta, o log diz `gasto novo: <campeão>
+  <feitiço> às mm:ss` (nunca a linha crua: tem nome de jogador) e a moldura mostra "top sem flash"; ping sem
+  "usou" vai ao log como `ping sem 'usou' ignorado`. O Flash do Malphite que ele marcou não entrou: sem a linha
+  crua no log não dá para saber se foi a variante sem "usou" (a próxima partida diz).
 - **Painel pós-jogo não deixa rastro de sucesso** → `fechar()` remove `#lc-posjogo` sem log; depois
   que o Gabriel fecha, não dá para provar de fora que abriu sozinho (13/10/2026).
 - **Overlay próprio aparece no print do minimapa** → o `mss` (BitBlt com `CAPTUREBLT`) captura
@@ -566,9 +573,22 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **`sct.monitors[1]` não é o monitor principal** → aqui é a 2ª tela (1920×1200 em (2560, 595)); o do
   jogo é o `[2]`. O OCR do chat usava o `[1]` e lia painel, navegador e conversas. Escolher pelo
   `minimapa.monitor_do_jogo` (resolução do `game.cfg`, senão `is_primary`) (revisão de 13/10/2026).
-- **`RegisterHotKey` come a tecla** → a janela em foco não recebe a tecla registrada. Só o F9 fica
-  registrado; 1..5 (teclas de item do jogo) só nos 2 s depois do F9 (`feiticos.Atalhos`). Registro
-  medido em 13/10/2026; com o jogo aberto ainda não (se o F9 já for atalho do jogo, trocar a tecla).
+- **`RegisterHotKey` não dispara com o LoL em primeiro plano** (partidas 3292803384 e 3293149183, 14/10/2026: "F9
+  registrado" e "F8 registrado" no log e nenhum "recebido" a partida inteira; o Gabriel: "f9 também parece não servir
+  pra nada") → o F8, que **não** é tecla do LoL dele, também nunca chegou: o jogo cala hotkey de aplicativo com ele
+  na frente (hipótese: raw input com `RIDEV_NOHOTKEYS`). O F9 ainda por cima é tecla do jogo (`Config\input.ini`,
+  `evtToggleMouseClip=[F9]`: a "borda vermelha fina" que ele viu é o LoL travando o cursor).
+  Hoje o atalho **observa** a tecla (`coletor/teclas.py`, `GetAsyncKeyState` em 25 ms, só com o jogo na frente; é o
+  que o OBS faz): nada é enviado nem comido, então a tecla também vai ao jogo. Por isso F7 (livre) arma, o
+  **numérico** 1..5 escolhe (o 1, 2, 3 e 5 de cima são itens dele, o 4 é a sentinela) e F7 duas vezes marca o
+  adversário da rota; o coletor loga aviso se alguma dessas virar tecla do LoL (`teclas.conflitos_no_lol`). Sem hook
+  `WH_KEYBOARD_LL`: com o GIL ocupado (minimapa, overlay) ele atrasaria toda tecla do jogo. Risco (Vanguard/termos):
+  ler o estado da tecla é o que Discord/OBS fazem; o que a casa não faz é mandar tecla (`SendInput`/`keybd_event`).
+  Risco que sobra (UIPI): `GetAsyncKeyState` devolve 0 se o jogo roda com integridade maior que o coletor (Riot
+  Client aberto como administrador); o log `teclas: ... coletor como administrador: sim/não` diz o lado do coletor.
+  F7 duas vezes **marca** (com voz) o Flash do adversário da rota: quem aperta F7 de novo para "cancelar" marca; desfaz
+  com F7 F7 outra vez em até 10 s. Sem prova in-game até a próxima partida (log `atalho: F7 recebido`,
+  `overlay do minimapa ... (F8)`); antes de ranqueada, `python coletor/feiticos.py --sonda 30` no modo treino.
 - **F8 e F9 "não fazem nada" no jogo** (treino 3292803384, 13/10/2026) → registro deu certo (nenhum
   aviso de falha no log; o mesmo código fora do jogo, com `keybd_event`, alterna e marca), mas nenhum
   F8 chegou (o `alternar` loga cada um). A borda vermelha que o Gabriel viu ao apertar F9 não é do coach
@@ -579,7 +599,8 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   alternativa: tecla F na camada Fn/multimídia. Agora o log diz `F9 registrado`/`F8 registrado` e cada
   tecla recebida: apertar na partida sem linha "recebido" = o jogo segurou; `python coletor\feiticos.py
   --sonda 30` fora da partida separa o teclado. Se o jogo segurar, `RegisterHotKey` não serve lá e a
-  saída (`GetAsyncKeyState`, ainda só leitura) é decisão: a linha da casa hoje é "só RegisterHotKey".
+  saída (`GetAsyncKeyState`, ainda só leitura) é decisão. **Resolvido em 14/10/2026** (entrada acima: o jogo segura,
+  o F9 é tecla dele; hoje F7/numérico/F8 observados). O `--sonda` agora observa (F7, F8, F9, numérico).
   O retorno ao jogador também faltava: no treino não há inimigo, o F9 + n devolvia `None` calado e o F8
   só muda um overlay vazio; hoje todo aperto tem rótulo na moldura ([COLETOR](COLETOR.md) § Feitiços).
 - **Janela Tk rouba o foco ao nascer, mesmo com `WS_EX_NOACTIVATE`** (13/10/2026, janelinha do ready check)
@@ -614,10 +635,14 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   rio" na fila vencia. Hoje o retorno é `retorno=True` (`avisos.TIPOS`), nunca urgente: só preenche tempo
   ocioso (moldura sem alerta há 2,5 s; voz na hora, sem cortar e fora do intervalo). Prova: `teste-alertas.py`.
 - **F8 sem `MOD_NOREPEAT`** → segurar a tecla gera um `WM_HOTKEY` por autorrepeat: o overlay piscava e o
-  log ganhava ~30 linhas por segundo. O F8 e o F9 registram com `MOD_NOREPEAT` (13/10/2026).
+  log ganhava ~30 linhas por segundo (13/10/2026). Com a tecla observada (14/10/2026) vale a borda de descida:
+  segurar = 1 aperto (`teclas.Observador`, `teste-overlay.py`).
 - **`Atalhos.iniciar` estoura os 5 s e a thread segue viva** → registrava o F9 depois, sem dono, e as
-  partidas seguintes davam 1409. Hoje a thread confere `_desistiu` sob trava e solta a tecla; e o retorno
-  sai da thread do hotkey por fila (`_Partida._laco_retorno`): a thread do F9 não espera a moldura nascer.
+  partidas seguintes davam 1409 (até 13/10/2026; observar não registra nada, então não há tecla a prender). O
+  retorno sai da thread da tecla por fila (`_Partida._laco_retorno`): ela não espera a moldura nascer.
+- **Janela `UpdateLayeredWindow` sai vazia no `PrintWindow`** (14/10/2026, moldura nova) → ela não pinta no
+  `WM_PAINT`; a prova compara o BGRA entregue (`Moldura.ultimo_bgra`) com `premultiplicar(renderizar(...))`
+  (`teste-vitrine.py`). O pulso é só o alfa constante (`UpdateLayeredWindow` sem DC de origem mantém a imagem).
 - **`ConvertTo-Json` do PowerShell 5.1 desembrulha lista de 1** (e array dentro de array sai como
   `{value, Count}`): no OCR cada palavra vai como hashtable e o Python normaliza lista/dict
   (`feiticos.OcrChat.ler`). Imagem sem arquivo: base64 no stdin → `MemoryStream` →
@@ -687,6 +712,14 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   para o que olha a tela; `EndOfGame` ou fora do jogo para tudo).
 - **Cópia do `dados\lol.db` inconsistente** (WAL aberto pelo coletor real) → copiar com
   `sqlite3.Connection.backup`, não com cópia de arquivo (`tools\ensaio-coach.py`).
+- **Banco com a senha e o token da sala do chat do pós-jogo** (achado de 14/10/2026: 29 partidas) → o
+  `eog-stats-block` traz `multiUserChatPassword` e `mucJwtDto` e o `gravar_eog` gravava o bloco inteiro. Hoje
+  `banco.sem_segredos` filtra antes de gravar e `banco.limpar_segredos` (no `abrir()` e em `python coletor\banco.py
+  --limpar-segredos`) limpa o antigo com `secure_delete` + checkpoint (UPDATE simples deixa os bytes nas páginas
+  livres e no `-wal`). A CLI faz backup antes, e **o backup tem os segredos** (`dados\lol-antes-de-limpar-segredos-
+  <data>.db`): apagar depois de conferir o banco limpo (o de 14/10 já foi). Cópia de `dados\lol.db` em `temp\`
+  (ensaio, revisão) leva os segredos junto e o `abrir()` do coletor não passa nela: apagar, nunca `--limpar-segredos`
+  nela (faz mais um backup). Prova: `tools\teste-banco.py`.
 - **Previsão do jungler sempre no meio do mapa** (ensaio, 13/10/2026) → o centro do calor da área inteira
   cai em (8000–9000, 8000–9000) assim que ela cresce: não diz nada. O coach grava o centro **dentro da
   zona mais provável**. Nenhum dos dois passou de 2/26 a ≤ 1000 no ensaio (zona certa 4/29), mas lá o
@@ -705,6 +738,15 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   "mid sumiu" **aceito** morria quando o motor barrava o sumiu por intervalo/teto (hoje: liga pela relevância);
   gank de outra rota com a validade de 6 s do tipo vencia mudo atrás da fala de 20 s (hoje: 22 s). Todo filtro
   novo pede o teste do lado oposto: o aviso legítimo que ele não pode calar (`teste-coach`, `teste-alertas`).
+- **Bordas piscando em cores diferentes num gank** (partida 3293149183, 14/10/2026: 7 molduras em 52 s, amarela ->
+  vermelha em 1 s) → 2,5 s entre bordas e **todo** urgente furava. Hoje 10 s entre cores diferentes
+  (`MotorAvisos.INTERVALO_MOLDURA`): fura o de prio maior sem a cor descer, e a mesma cor repete passados 2,5 s; o
+  retorno lido no chat espera os 10 s. A 1ª versão (só **urgente** furava) calava o intruso amarelo atrás de um
+  "voltou" azul e o 2º gank: o intervalo (10 s) é maior que a validade de todo alerta de posição (5–6 s), então
+  esperar = calar. Filtro de ritmo na borda pede o teste do alerta que chega 1–4 s depois (`teste-alertas`, revisão P1/P2).
+- **"O top voltou pra rota" com ele morto** (mesma partida) → morto ou sem ícone, "onde estou" vale a rota do champ
+  select, que vira a vigiada; o "voltou" saía. Hoje `AlertasPosicao._adversario_voltou` cala com ele morto ou na base
+  (inclusive a presumida) e diz a rota para onde o adversário foi (`adversario_outra_rota`).
 
 - **Plugin e painel param de falar com o coletor** sem erro no coletor (13/10/2026) → um `python -m
   http.server 8765` de teste subiu na mesma porta do `servidor_local` (127.0.0.1:8765): no Windows os dois

@@ -157,6 +157,210 @@ def extra_adversario_voltou():
     caso("extra: adversário volta da base → 'Riven voltou' azul", ok, f"{resumo(s)}")
 
 
+def relato_3293149183_voltou():
+    """partida 3293149183 (14/10/2026): "eu morto e sendo avisado que o malphite voltou pra lane"; "se eu estiver na
+    base ou morto, não faz sentido avisar [...] tem que avisar se voltou e em qual lane voltou"; "mesma coisa para
+    todas as lanes". O adversário da MINHA rota (champ select) sumido ≥ 20 s e de volta perto de uma rota."""
+    BASE_EU = (600, 600)
+
+    def volta(rival, onde, eu=None, eu_pos=TOP_ROTA, casa=TOP_ROTA_2):
+        """o rival na rota dele até 5 s, some (base) e reaparece em `onde` aos 40"""
+        def r(t):
+            v = [(eu, eu_pos)] if eu else []
+            return v + ([(rival, casa)] if t <= 5 else [(rival, onde)] if t >= 40 else [])
+        return r
+    # 1. eu morto (6–45), Riven volta ao top em 40: calado (antes: "Riven voltou" com a reserva = top)
+    al1 = []
+    m, mol, s = rodar("Illaoi", volta("Riven", TOP_ROTA_2), 45, mortos=lambda t: {"Illaoi"} if t >= 6 else set(),
+                      al_out=al1)
+    caso("3293149183: eu morto e o adversário volta à rota dele → calado", s == [] and al1[0].calados["voltou_eu_fora"] == 1,
+         f"{resumo(s)}; calados {dict(al1[0].calados)}")
+    # 2. eu na base (ícone visto na fonte): calado
+    m, mol, s = rodar("Illaoi", volta("Riven", TOP_ROTA_2, "Illaoi", BASE_EU), 45)
+    caso("3293149183: eu na base e o adversário volta → calado", s == [], f"{resumo(s)}")
+    # 3. eu na rota: avisa (como antes), azul, fala genérica
+    m, mol, s = rodar("Illaoi", volta("Riven", TOP_ROTA_2, "Illaoi", TOP_ROTA), 45)
+    caso("3293149183: eu na rota e ele volta a ela → 'o top voltou pra rota' (azul)",
+         resumo(s) == [(40, "adversario_voltou", "Riven voltou", "azul")] and s[0][1].fala == "o top voltou pra rota",
+         f"{resumo(s)}; fala {[a.fala for _, a in s]}")
+    # 4. eu no top, ele reaparece no mid: diz a rota
+    m, mol, s = rodar("Illaoi", volta("Riven", MID, "Illaoi", TOP_ROTA), 45)
+    caso("3293149183: o top reaparece no mid → 'o top apareceu no mid' (rótulo 'Riven mid')",
+         resumo(s) == [(40, "adversario_voltou", "Riven mid", "azul")] and s[0][1].fala == "o top apareceu no mid",
+         f"{resumo(s)}; fala {[a.fala for _, a in s]}")
+    # 5. eu mid (Annie): o mid deles some e reaparece no top. Na fase de rotas o "mid sumiu"/"mid indo top" já diz
+    #    para onde (sem "apareceu" em dobro); depois dela (revisão P5: todos agrupam no mid) fica calado
+    def mid_roda(t0):
+        return lambda t: [("Annie", MID)] + ([("Yasuo", MID)] if t < t0 + 6 else
+                                             [("Yasuo", TOP_ROTA)] if t >= t0 + 40 else [])
+    m, mol, s = rodar("Annie", mid_roda(300), 45, inicio=300)
+    caso("3293149183: eu mid na fase de rotas, o mid deles vai ao top → 'mid indo' (não 'apareceu' em dobro)",
+         "mid_indo" in [a.tipo for _, a in s] and "adversario_voltou" not in [a.tipo for _, a in s], f"{resumo(s)}")
+    al5 = []
+    m, mol, s = rodar("Annie", mid_roda(1000), 45, inicio=1000, al_out=al5)
+    caso("revisão P5: depois da fase de rotas (16:40) o mid reaparecendo no top fica calado",
+         s == [] and al5[0].calados["voltou_fim_das_rotas"] == 1, f"{resumo(s)}; {dict(al5[0].calados)}")
+    # 5b. revisão P4: o top deles reaparece no rio entre mid e bot, mais perto do mid: "no mid" (antes: "no bot",
+    #     a 1ª rota do alfabeto)
+    m, mol, s = rodar("Illaoi", volta("Riven", (6250, 3750), "Illaoi", TOP_ROTA), 45)
+    caso("revisão P4: rival entre duas rotas sai na de centro mais perto → 'o top apareceu no mid'",
+         [a.fala for _, a in s if a.tipo == "adversario_voltou"] == ["o top apareceu no mid"], f"{resumo(s)}")
+    # 6. eu atirador no bot: a Tristana (moradora do bot) reaparece no mid
+    m, mol, s = rodar("Nilah", volta("Tristana", MID, "Nilah", BOT_EU, BOT_TRISTANA), 45)
+    caso("3293149183: eu bot, o atirador deles reaparece no mid → 'o atirador apareceu no mid'",
+         [(a.tipo, a.fala) for _, a in s] == [("adversario_voltou", "o atirador apareceu no mid")], f"{resumo(s)}")
+    # 7. lado oposto: eu no mid (rotação), a Riven chega no mid = intruso (perigo), não o recado azul
+    m, mol, s = rodar("Illaoi", volta("Riven", MID, "Illaoi", MID), 45)
+    caso("3293149183: o adversário chega na rota onde EU estou → intruso, não 'apareceu'",
+         [a.tipo for _, a in s] == ["intruso"], f"{resumo(s)}")
+    # 8. a fala nova está no catálogo do pacote de voz (cai na Maria até a tarefa gravar)
+    import avisos
+    cat = set(avisos.catalogo())
+    caso("3293149183: 'o top apareceu no mid' e 'o atirador apareceu no top' estão no catálogo",
+         {"o top apareceu no mid", "o atirador apareceu no top"} <= cat, f"{len(cat)} falas")
+
+
+def relato_3293149183_rajada():
+    """partida 3293149183 (14/10/2026), ~15 min: "recebi um gank de umas duas pessoas diferentes e as bordas começaram a
+    piscar em diferentes cores". As molduras do log (tipo, cor, prio e urgência como o AlertasPosicao publica), nos
+    mesmos instantes. Regra: uma borda por vez, ≥ INTERVALO_MOLDURA entre elas; dentro dele só fura urgente de prio
+    estritamente maior (a cor só sobe); nunca azul/amarela logo depois de vermelha."""
+    def aviso(tipo, cor, chave, prio=None, urgente=None):
+        return Aviso(tipo, {"zona": "no top", "zc": "top", "zt": "top", "n": 2, "campeao": "Malphite",
+                            "rota": "jungler"}, chave, cor=cor, prio=prio, urgente=urgente)
+    # 16:02:40,979 ... 16:03:32,458 (t = segundos desde a 1ª) e 16:12:42,842 ... 16:12:57,945 (+ 600 s)
+    rajadas = [
+        (0.0, aviso("gank", "vermelho", "top")),
+        (12.1, aviso("intruso", "vermelho", "j1", 95, True)),
+        (20.2, aviso("intruso_grupo", "vermelho", "top")),
+        (32.3, aviso("intruso", "vermelho", "j2", 95, True)),
+        (38.3, aviso("intruso_grupo", "vermelho", "top2")),
+        (48.4, aviso("adversario_voltou", "azul", "Malphite")),
+        (51.5, aviso("intruso", "amarelo", "mid1")),
+        (600.0, aviso("jungler_apareceu", "vermelho", "base deles")),
+        (601.0, aviso("intruso", "vermelho", "j3", 95, True)),
+        (610.1, aviso("gank", "vermelho", "bot")),
+        (614.1, aviso("intruso", "amarelo", "sup")),
+        (615.1, aviso("intruso_grupo", "vermelho", "bot")),
+    ]
+    mol = MolduraFalsa()
+    m = MotorAvisos(textos=TEXTOS, moldura=mol)
+    fila = list(rajadas)
+    t = 0.0
+    while t <= 640.0:
+        while fila and fila[0][0] <= t + 1e-9:
+            m.publicar(fila.pop(0)[1], t)
+        m.tick(t)
+        t = round(t + 0.1, 1)
+    bordas = [(round(em, 1), a.cor, a.prio, a.urgente) for em, d, a in m.emitidos if d == "moldura"]
+    ruins = []
+    intervalo = getattr(MotorAvisos, "INTERVALO_MOLDURA", 10.0)   # o código de antes não tinha (prova vermelha)
+    grav = {"azul": 0, "verde": 1, "amarelo": 2, "vermelho": 3}
+    for (t0, c0, p0, _), (t1, c1, p1, u1) in zip(bordas, bordas[1:]):
+        # dentro do intervalo: só prio maior sem a cor descer, ou a MESMA cor depois da borda anterior acabar
+        if t1 - t0 < intervalo and not ((p1 > p0 and grav[c1] >= grav[c0]) or (c1 == c0 and t1 - t0 >= 2.5)):
+            ruins.append((t0, c0, t1, c1))
+        if t1 - t0 < intervalo and grav[c1] < grav[c0]:
+            ruins.append((t0, c0, t1, c1))
+    trocas = sum(1 for (t0, c0, *_), (t1, c1, *_) in zip(bordas, bordas[1:]) if t1 - t0 < intervalo and c1 != c0)
+    caso("3293149183: rajada de bordas (16:02:40–16:03:32): dentro de 10 s a cor só sobe e a mesma cor só repete "
+         "depois da borda anterior acabar",
+         not ruins and trocas <= 1 and len(bordas) < len(rajadas),
+         f"{len(bordas)} bordas de {len(rajadas)}, {trocas} troca(s) de cor em < 10 s: {bordas}; ruins {ruins}")
+    seg = [b for b in bordas if b[0] >= 600]
+    caso("3293149183: 16:12:42–57 sem amarela entre vermelhas (o gank de 2 vence)",
+         [b[1] for b in seg] and all(c == "vermelho" for _, c, _, _ in seg), f"{seg}")
+    # lado oposto: o gank que chega logo depois de um recado azul aparece na hora (prio maior e urgente)
+    mol2 = MolduraFalsa()
+    m2 = MotorAvisos(textos=TEXTOS, moldura=mol2)
+    m2.publicar(aviso("adversario_voltou", "azul", "x"), 0.0)
+    m2.publicar(aviso("gank", "vermelho", "top"), 1.0)
+    caso("3293149183: gank 1 s depois de uma borda azul sai na hora (não espera o intervalo)",
+         mol2.mostradas == [("azul", "Malphite voltou"), ("vermelho", "gank top")], str(mol2.mostradas))
+
+    def cena(passos, ate=12.0):
+        """[(t, Aviso)] num motor novo, tique de 0,1 s -> (bordas [(t, cor, rotulo)], suprimidos)"""
+        mm = MotorAvisos(textos=TEXTOS, moldura=MolduraFalsa())
+        fila_c, tt = sorted(passos, key=lambda p: p[0]), 0.0
+        while tt <= ate:
+            while fila_c and fila_c[0][0] <= tt + 1e-9:
+                mm.publicar(fila_c.pop(0)[1], tt)
+            mm.tick(tt)
+            tt = round(tt + 0.1, 1)
+        return [(round(em, 1), a.cor, a.rotulo) for em, d, a in mm.emitidos if d == "moldura"], mm.suprimidos
+    # revisão P1: intruso AMARELO (prio 85, não urgente) 1 s depois do "voltou" azul: antes calado (vencia esperando
+    # os 10 s, só urgente furava); agora sai na hora (prio maior, a cor sobe)
+    b, sup = cena([(0.0, aviso("adversario_voltou", "azul", "x")), (1.0, aviso("intruso", "amarelo", "sup"))])
+    caso("revisão P1: intruso amarelo 1 s depois de um 'voltou' azul aparece na hora (não morre na fila)",
+         [(t, c) for t, c, _ in b] == [(0.0, "azul"), (1.0, "amarelo")] and not sup["vencido"], f"{b}; {dict(sup)}")
+    # revisão P2: "gank de umas duas pessoas": gank em 0 e o 2º (intruso_grupo, prio 95 < 100) em 4: sai em 4,
+    # vermelho de novo (mesma cor, a borda anterior já acabou); e o 2º gank 1 s depois sai assim que a 1ª acaba
+    b, sup = cena([(0.0, aviso("gank", "vermelho", "top")), (4.0, aviso("intruso_grupo", "vermelho", "top"))])
+    caso("revisão P2: 2º perigo vermelho 4 s depois do gank sai em 4 s (antes: 10 s, ou calado)",
+         [(t, c) for t, c, _ in b] == [(0.0, "vermelho"), (4.0, "vermelho")], f"{b}; {dict(sup)}")
+    b, sup = cena([(0.0, aviso("gank", "vermelho", "top")), (1.0, aviso("gank", "vermelho", "bot"))])
+    caso("revisão P2: 2º gank 1 s depois sai quando a 1ª borda acaba (2,5 s), sem trocar de cor",
+         [(t, c) for t, c, _ in b] == [(0.0, "vermelho"), (2.5, "vermelho")], f"{b}; {dict(sup)}")
+    # lado oposto: a cor não desce dentro do intervalo (jungler vermelho 80 -> intruso amarelo 85 cai), e o que
+    # esperou além de IDADE_MOLDURA não vai à tela velho (gank de outra rota: validade 22 s para a voz)
+    b, sup = cena([(0.0, aviso("jungler_apareceu", "vermelho", "rio")), (1.0, aviso("intruso", "amarelo", "sup"))])
+    caso("revisão P1 (lado oposto): vermelha -> amarela dentro de 10 s não sai (a cor só sobe)",
+         [(t, c) for t, c, _ in b] == [(0.0, "vermelho")], f"{b}; {dict(sup)}")
+    outra = Aviso("gank", {"zona": "no bot", "zc": "bot", "zt": "bot"}, "outra:bot", prio=75, urgente=False,
+                  cor="amarelo", validade=22)
+    b, sup = cena([(0.0, aviso("jungler_apareceu", "vermelho", "rio")), (1.0, outra)], ate=25.0)
+    caso("revisão P2: alerta de posição que esperou > IDADE_MOLDURA na borda cai (não aparece velho aos 10 s)",
+         [(t, c) for t, c, _ in b] == [(0.0, "vermelho")] and sup["moldura_velho"] == 1, f"{b}; {dict(sup)}")
+
+
+def relato_3293149183_moldura():
+    """partida 3293149183 (14/10/2026): "um fade transparente em direção ao centro da tela [...] sai da borda colorido
+    e vai em direção ao centro de forma transparente. e cores levemente mais escurecidas." Desenho puro (sem janela):
+    beirada cheia na cor escurecida (lição do overlay: degradê não pode apagar o desenho), alfa caindo até 0 no
+    miolo, rótulo opaco e legível; custo medido no tamanho da tela do Gabriel."""
+    import numpy as np
+
+    import moldura
+    W, H, e = 2560, 1080, moldura.Moldura.ESPESSURA
+    t0 = time.perf_counter()
+    img = moldura.renderizar(W, H, "vermelho", "gank no top", e)
+    bgra = moldura.premultiplicar(img) if img.shape[2] == 4 else None
+    ms = (time.perf_counter() - t0) * 1000
+    rgba = img.shape[2] == 4
+    caso("moldura: RGBA (alfa por px, UpdateLayeredWindow) em vez da cor-chave", rgba, f"forma {img.shape}")
+    if not rgba:
+        return
+    a = img[..., 3].astype(int)
+    linha = a[H // 2, :W // 2]                       # da beirada esquerda ao centro
+    escura = moldura.CORES_MOLDURA["vermelho"]
+    caso("moldura: beirada de ESPESSURA px na cor cheia (alfa 255) e escurecida, também no rótulo",
+         (a[:e, W // 2] == 255).all() and (a[H // 2, :e] == 255).all() and tuple(img[3, W // 2, :3]) == escura
+         and all(c2 < c1 for c1, c2 in zip(moldura.CORES["vermelho"], escura) if c1 > 60)
+         and tuple(img[e + 30, e + 30]) == (*escura, 255),
+         f"beirada {a[0, W // 2]}..{a[e - 1, W // 2]}, cor {tuple(img[3, W // 2, :3])} (antes {moldura.CORES['vermelho']})")
+    fade = int(moldura.FADE * min(W, H))
+    caso("moldura: degradê para o centro (alfa nunca sobe, começa forte logo depois da beirada, 0 no miolo)",
+         bool(np.all(np.diff(linha) <= 0)) and linha[e] >= 128 and 0 < linha[e + fade // 2] < linha[e]
+         and linha[e + fade + 1] == 0 and a[H // 2, W // 2] == 0,
+         f"alfa {linha[e]} logo dentro, {linha[e + fade // 2]} no meio do degradê ({fade} px), {linha[e + fade + 1]} depois")
+    # revisão P7: o pulso é o alfa da janela inteira; no vale a beirada não pode apagar (com 0,45: 115 de 255 numa cor
+    # já escurecida, o azul sumia no mapa escuro)
+    piso = getattr(moldura, "PULSO_MIN", 0.45)
+    caso("moldura: no vale do pulso a beirada fica ≥ 150 de 255 e o começo do degradê ≥ 0,35",
+         255 * piso >= 150 and moldura.FADE_INICIO * piso >= 0.35,
+         f"beirada {255 * piso:.0f}, degradê {moldura.FADE_INICIO * piso:.2f} no vale")
+    texto = (a == 255) & np.all(img[..., :3] > 200, axis=2)
+    caso("moldura: rótulo em caixa opaca com texto (branco no vermelho)", int(texto.sum()) > 300, f"{int(texto.sum())} px")
+    amarelo = moldura.renderizar(400, 200, "amarelo", "intruso top", e)
+    escuro = (amarelo[..., 3] == 255) & np.all(amarelo[..., :3] < 40, axis=2)
+    caso("moldura: rótulo escuro no amarelo", int(escuro.sum()) > 100, f"{int(escuro.sum())} px")
+    t1 = time.perf_counter()
+    moldura.premultiplicar(moldura.renderizar(W, H, "azul", "jungler rio top", e))
+    ms2 = (time.perf_counter() - t1) * 1000
+    caso("moldura: custo por alerta em 2560×1080 (fio da moldura, 1 vez por alerta; o pulso não redesenha)",
+         ms2 < 150 and bgra is not None, f"1º {ms:.0f} ms (monta o degradê), depois {ms2:.0f} ms")
+
+
 def extra_pausa():
     # Yasuo no mid até 5; jogo fora da tela 6–30 (morto, trocou de janela): nada de 'mid sumiu' sobre
     # quadro inválido; volta em 31 com Ekko no rio top: 2 s só observando (sem alerta), depois normal
@@ -814,7 +1018,8 @@ def janela_real():
     import numpy as np
     from moldura import ESTILO_EX, Moldura, janela_do_jogo
     ret = (40, 40, 480, 270)
-    vermelho = lambda p: p[0] > 180 and p[1] < 90 and p[2] < 90  # noqa: E731
+    # cor escurecida (CORES_MOLDURA, 188/36/36 desde 14/10/2026) com o pulso começando no máximo
+    vermelho = lambda p: p[0] > 150 and p[1] < 90 and p[2] < 90  # noqa: E731
 
     def mostrar_e_ler(fora_do_print):
         m = Moldura(forcar=True, retangulo=ret, fora_do_print=fora_do_print).iniciar()
@@ -863,6 +1068,9 @@ def principal():
     extra_jungler_na_rota()
     extra_dois_intrusos()
     extra_adversario_voltou()
+    relato_3293149183_voltou()
+    relato_3293149183_rajada()
+    relato_3293149183_moldura()
     extra_pausa()
     extra_morto()
     extra_lista_acumulada()
