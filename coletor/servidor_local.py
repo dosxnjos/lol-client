@@ -11,6 +11,7 @@
 #   GET  /licoes/<gameId>  as 3 lições da partida (coach.licoes_partida)
 #   GET  <rotas extras>    o coletor pendura outras (ex.: /draft, /revisao/<gameId>)
 #   GET/POST /chat/...     janelas do chat fora do client (coletor/chat_janelas.py pendura em rotas_get/rotas_post)
+#   POST /aceite/plugin    sinal e diagnóstico do aceite do plugin (aviso_partida.rota_aceite; coletor.py pendura)
 # CORS: só origem local (o client roda em https://127.0.0.1:<porta da LCU>; o Pengu em
 # https://plugins); site qualquer no navegador não lê nem muda nada. Host fora de 127.0.0.1/localhost
 # é recusado (rebinding de DNS).
@@ -165,6 +166,20 @@ def origem_chat_ok(rota, origem, porta):
         return False
 
 
+# /aceite/*: o plugin diz "não aceitar nesta vez" e manda o diagnóstico do aceite (aviso_partida.rota_aceite); a
+# reserva do coletor aceita a partida sozinha com base nisso. Inverso do /chat/: só a página do client (https em
+# 127.0.0.1/localhost, a porta da LCU), o Pengu (https://plugins, riot) ou pedido sem Origin. As páginas do próprio
+# coletor (http://127.0.0.1:<esta porta>) e qualquer outra página local em http não escrevem aqui.
+def origem_aceite_ok(rota, origem):
+    if not rota.startswith("/aceite/") or not origem:
+        return True
+    try:
+        u = urlsplit(origem)
+        return u.hostname in ("plugins", "riot") or (u.scheme == "https" and u.hostname in ("127.0.0.1", "localhost"))
+    except ValueError:
+        return False
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = "lol-client"
     sys_version = ""
@@ -202,6 +217,9 @@ class _Handler(BaseHTTPRequestHandler):
             self._enviar(403, {"erro": "origem"})
             return True
         if not origem_chat_ok(urlsplit(self.path).path, self.headers.get("Origin"), self.server.server_address[1]):
+            self._enviar(403, {"erro": "origem"})
+            return True
+        if not origem_aceite_ok(urlsplit(self.path).path, self.headers.get("Origin")):
             self._enviar(403, {"erro": "origem"})
             return True
         return False

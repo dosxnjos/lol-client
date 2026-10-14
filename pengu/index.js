@@ -23,7 +23,8 @@ export function init(context) {
   seguro('config', carregar);
   // antes de tudo: os plugins do client começam a pedir logo depois deste init (só GET das rotas exatas; sem-popups.js)
   const semPopups = seguro('sem popups', () => iniciarSemPopups(cfg));
-  const aceite = seguro('aceite', () => iniciarAceite(context, cfg));
+  // avisarColetor: "não aceitar" e diagnóstico ao coletor (POST /aceite/plugin; a reserva dele aceita se este não aceitar)
+  const aceite = seguro('aceite', () => iniciarAceite(context, cfg, { avisarColetor: coletor }));
   // champ select antes da fila rápida: o cache de histórico dele alimenta o freio de tilt (sem ele, a fila lê sozinha)
   const champ = seguro('champ select', () => iniciarChampSelect(context, cfg, coletor));
   const historico = champ ? { partidas: champ.partidas, ler: champ.lerHistorico } : null;

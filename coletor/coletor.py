@@ -142,9 +142,10 @@ class LCU:
         return json.loads(corpo) if corpo else None
 
     def post(self, caminho, corpo=None, timeout=10, metodo="POST"):
-        """escrita do coletor na LCU, sempre por clique do Gabriel: aceitar/recusar o ready check na janelinha
-        (aviso_partida.py) e, nas janelas do chat (chat_janelas.py), enviar mensagem, convidar e marcar a conversa
-        como lida (metodo="PUT"). Nada aqui escreve sozinho."""
+        """escrita do coletor na LCU: aceitar/recusar o ready check na janelinha e, nas janelas do chat
+        (chat_janelas.py), enviar mensagem, convidar e marcar a conversa como lida (metodo="PUT"), por clique do
+        Gabriel. A única escrita sozinha é a reserva do aceite (aviso_partida.py): accept do ready check em andamento
+        quando o plugin não aceitou no alvo dele, com o aceite automático ligado e sem "não aceitar"."""
         dados = json.dumps(corpo).encode() if corpo is not None else b""
         req = urllib.request.Request(f"https://127.0.0.1:{self.porta}{caminho}", data=dados, method=metodo,
                                      headers={"Authorization": self.auth, "Accept": "application/json",
@@ -467,9 +468,28 @@ def destravar():
 
 # ---------- laço principal ----------
 
-def _aviso_padrao(lcu, atraso_s):
+def _aviso_padrao(lcu, atraso_s, **kw):
     import aviso_partida
-    return aviso_partida.AvisoPartida(lcu, atraso_s)
+    return aviso_partida.AvisoPartida(lcu, atraso_s, **kw)
+
+
+def _sinal_aceite(coach):
+    """sinal do aceite do plugin (POST /aceite/plugin) pendurado no servidor do coach. None = sem a rota no ar
+    (--sem-coach, porta 8765 ocupada, erro): o "não aceitar" do plugin não chegaria, então a reserva fica DESARMADA
+    (só a janelinha, por clique). O coach.iniciar() roda antes do Coletor: servidor_no_ar já é o definitivo aqui."""
+    srv = getattr(coach, "srv", None)
+    if coach is None or srv is None or not getattr(coach, "servidor_no_ar", False):
+        log.info("reserva do aceite desarmada: sem rota do plugin (%s)",
+                 "sem coach" if coach is None else "servidor local fora do ar")
+        return None
+    try:
+        import aviso_partida
+        sinal = aviso_partida.SinalPlugin()
+        srv.rotas_post["/aceite/"] = aviso_partida.rota_aceite(sinal)
+        return sinal
+    except Exception as e:
+        log.warning("reserva do aceite desarmada: sinal fora: %s: %s", type(e).__name__, e)
+        return None
 
 
 def _chat_padrao(coach, lcu):
@@ -489,9 +509,11 @@ class Coletor:
     def __init__(self, args, coach=None, fab_aviso=None):
         self.args = args
         self.coach = coach  # coach_vivo.Coach (ao vivo, painel, mentor); None nos testes do retrato
-        # janelinha de "partida encontrada" (aviso_partida.py): f(lcu, atraso_s) -> objeto com mostrar()/fechar()
+        # janelinha de "partida encontrada" + reserva do aceite (aviso_partida.py):
+        # f(lcu, atraso_s, sinal=, janela=, reserva=) -> objeto com mostrar()/fechar()
         self.fab_aviso = fab_aviso or _aviso_padrao
         self.aviso = None
+        self.sinal = _sinal_aceite(coach)   # "não aceitar" e diagnóstico do plugin (POST /aceite/plugin)
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)
@@ -631,17 +653,23 @@ class Coletor:
         return bool(cfg.get("aceiteFlutuante")), cfg.get("aceiteAtrasoS")
 
     async def aviso_partida(self, fase):
-        """ReadyCheck liga a janelinha (se coach.aceiteFlutuante); qualquer outra fase fecha. Nunca derruba fase()"""
+        """ReadyCheck liga a janelinha (se coach.aceiteFlutuante) e a reserva do aceite (se o aceite automático está
+        ligado no espelho; sem a janelinha, roda sem janela); qualquer outra fase fecha. Nunca derruba fase()"""
         try:
             if fase == "ReadyCheck":
                 ligado, atraso = self._cfg_aviso()
-                if ligado and self.lcu is not None:
+                reserva = self.sinal is not None   # sem a rota do plugin no ar, nunca aceita sozinho
+                if (ligado or (atraso is not None and reserva)) and self.lcu is not None:
                     if self.aviso is None:   # websocket reconectado no meio do ReadyCheck: segue a mesma
-                        self.aviso = self.fab_aviso(self.lcu, atraso)
+                        self.aviso = self.fab_aviso(self.lcu, atraso, sinal=self.sinal, janela=ligado, reserva=reserva)
                         self.aviso.mostrar()
-                        log.info("aviso de partida aberto (aceite automático %s)",
-                                 "desligado" if atraso is None else f"em {atraso:g} s")
+                        auto = "desligado" if atraso is None else f"em {atraso:g} s, reserva do coletor " + (
+                            "armada" if reserva else "desarmada: sem rota do plugin")
+                        log.info("aviso de partida aberto (aceite automático %s)" if ligado else
+                                 "aviso de partida sem janela (aceite automático %s)", auto)
                     return
+            elif self.sinal is not None:
+                self.sinal.zerar()   # "não aceitar" vale só no ready check em que chegou
             a, self.aviso = self.aviso, None
             if a is not None:
                 await asyncio.to_thread(a.fechar)

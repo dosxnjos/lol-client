@@ -158,6 +158,14 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   sem botão se o aceite automático não vier ("não aceitar", POST de accept que falhou, GET do ready-check que falhou).
   O CSS vale só em `html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual)`, e o `aceite.js` põe `lc-aceite-manual`
   nesses três casos para o popup voltar (13/10/2026).
+- **O aceite automático do plugin pode não vir, com o client recebendo os eventos** (14/10/2026 10:10:21, config
+  `aceite {ligado, atrasoS 10}`): o `dados\medicao-compacto-2026-10-13.jsonl` mostra `ready-check` a cada ~1 s com `timer`
+  0…12 e `playerResponse` `None` do início ao fim, fase `Lobby` 13 s depois (tirado da fila); a janelinha abriu e
+  ninguém aceitou. O JS do `aceite.js` aceita no `setTimeout` e também direto no evento com `timer` ≥ alvo: não agiu
+  com 10, 11 e 12. Causa não provada (UX minimizado pelo foco do `aceite.js`, observador morto depois das recargas da
+  interface das ~10:00, outra). Defesa: reserva no coletor (Python) que aceita no alvo + 0,7 s, e o plugin manda cada
+  decisão ao `coletor.log` (`aceite (plugin): …`): ready check sem essas linhas = JS fora
+  ([COLETOR](COLETOR.md) § Quem aceita).
 - **Sons do ready-check** (rcp-fe-lol-navigation, patch 16.20): intro (`sfx-readycheck-lowspec-intro.ogg`, canal
   `sfx-notifications`), `ringmagic-countdown` e `ringmagic-accepted-loop` (`sfx-ui`, `isLoop`), criados uma vez no
   `init` do componente: calar no `play()`, não no `createSound` (`aceite.embrulharAudio`, 13/10/2026).

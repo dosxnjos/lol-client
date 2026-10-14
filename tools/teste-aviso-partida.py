@@ -5,9 +5,13 @@
 #   C. LCU.post monta POST com a credencial (urlopen trocado: nada vai à rede)
 #   D. Coletor.fase com janelinha falsa: abre no ReadyCheck, não duplica, fecha ao sair, chave desligada
 #      não abre, erro na janelinha não derruba a fase
+#   F. reserva do aceite sem janela (LCU falsa): aceita no alvo + folga, relê antes do POST, não aceita se já
+#      Accepted/Declined, "não aceitar" ou desligado no plugin, aceite desligado no espelho, ready check acabado,
+#      clique em voo; POST que falha não repete
+#   G. rota POST /aceite/plugin num servidor local de teste (porta 8797): origem, sinal gravado, linha no log
 #   E. janela real com LCU falsa: estilo sem foco, canto inferior direito, GetForegroundWindow intocado,
 #      contagem, botões chamam accept/decline, some ao sair do ReadyCheck sem deixar thread nem janela,
-#      fecha sozinha se ninguém fechar. Pulado com o jogo aberto ou com --sem-janela.
+#      fecha sozinha se ninguém fechar, reserva com a janela. Pulado com o jogo aberto ou com --sem-janela.
 # uso: python tools/teste-aviso-partida.py [--sem-janela]
 import argparse
 import asyncio
@@ -158,11 +162,15 @@ class LCUFalsa:
             self.resp = "Declined"
 
 
-def novo_coletor(cfg, fab_aviso=None, lcu=None):
+def novo_coletor(cfg, fab_aviso=None, lcu=None, rota=False):
+    """rota=True: como se o servidor do coach estivesse no ar com /aceite/ pendurado (sinal do plugin, reserva armada);
+    sem coach (o padrão destes testes) a reserva fica desarmada"""
     arq = TMP / f"cfg-{time.monotonic_ns()}.json"
     arq.write_text(json.dumps(cfg), encoding="utf-8")
     args = SimpleNamespace(db=str(TMP / "teste.db"), ocioso_min=10, lockfile=None, config=str(arq))
     col = coletor.Coletor(args, None, fab_aviso=fab_aviso)
+    if rota:
+        col.sinal = aviso_partida.SinalPlugin()
     col.lcu = lcu or LCUFalsa()
     return col
 
@@ -171,8 +179,9 @@ def integracao():
     criados = []
 
     class AvisoFalso:
-        def __init__(self, lcu, atraso):
+        def __init__(self, lcu, atraso, sinal=None, janela=True, reserva=True):
             self.atraso, self.aberto, self.fechado = atraso, False, False
+            self.sinal, self.janela, self.reserva = sinal, janela, reserva
             criados.append(self)
 
         def mostrar(self):
@@ -182,7 +191,7 @@ def integracao():
             self.fechado = True
 
     async def roteiro():
-        col = novo_coletor({"aceiteFlutuante": True, "aceiteAtrasoS": 8}, AvisoFalso)
+        col = novo_coletor({"aceiteFlutuante": True, "aceiteAtrasoS": 8}, AvisoFalso, rota=True)
         await col.fase("Matchmaking")
         caso("D1 Matchmaking não abre", not criados)
         await col.fase("ReadyCheck")
@@ -196,22 +205,295 @@ def integracao():
         await col.fase("Matchmaking")   # um terceiro recusou: volta à fila
         caso("D4 ready check seguinte abre outra e fecha ao voltar à fila",
              len(criados) == 2 and criados[1].fechado)
-        col2 = novo_coletor({"aceiteFlutuante": False}, AvisoFalso)
+        caso("D3b janelinha recebe o sinal do plugin do coletor, janela=True e reserva armada (rota no ar)",
+             criados[0].sinal is col.sinal and col.sinal is not None and criados[0].janela is True
+             and criados[0].reserva is True)
+        col2 = novo_coletor({"aceiteFlutuante": False}, AvisoFalso, rota=True)
         await col2.fase("ReadyCheck")
-        caso("D5 aceiteFlutuante false não abre", len(criados) == 2)
+        caso("D5 aceiteFlutuante false: sem janela, mas a reserva roda (janela=False, atraso 10)",
+             len(criados) == 3 and criados[2].janela is False and criados[2].atraso == 10 and criados[2].aberto
+             and criados[2].reserva is True)
+        await col2.fase("Lobby")
+        col2b = novo_coletor({"aceiteFlutuante": False, "aceiteAtrasoS": None}, AvisoFalso, rota=True)
+        await col2b.fase("ReadyCheck")
+        caso("D5b aceiteFlutuante false e aceite automático desligado: nada abre", len(criados) == 3)
+        # sem a rota do plugin no ar (--sem-coach, porta 8765 ocupada): o "não aceitar" não chegaria -> sem reserva
+        n = len(criados)
+        col2c = novo_coletor({"aceiteFlutuante": False, "aceiteAtrasoS": 10}, AvisoFalso)
+        await col2c.fase("ReadyCheck")
+        caso("D5c sem rota do plugin e sem janelinha: nada abre (a reserva não roda sozinha)",
+             col2c.sinal is None and len(criados) == n and col2c.aviso is None)
+        col2d = novo_coletor({"aceiteFlutuante": True, "aceiteAtrasoS": 10}, AvisoFalso)
+        await col2d.fase("ReadyCheck")
+        caso("D5d sem rota do plugin com janelinha: abre só a janela, reserva=False",
+             len(criados) == n + 1 and criados[n].janela is True and criados[n].reserva is False)
+        await col2d.fase("Lobby")
         col3 = novo_coletor({"aceiteAtrasoS": None}, AvisoFalso)
         await col3.fase("ReadyCheck")
         caso("D6 padrão liga; null passa None (sem aceite automático)",
-             len(criados) == 3 and criados[2].atraso is None)
+             len(criados) == n + 2 and criados[n + 1].atraso is None)
         await col3.fase("Lobby")
+        # "não aceitar" do plugin não passa para o próximo ready check: sair da fase zera
+        col.sinal.registrar({"evento": "nao-aceitar", "desligadoNestaVez": True})
+        await col.fase("Lobby")
+        caso("D8 sair do ReadyCheck zera o 'não aceitar' do plugin", col.sinal.nao_aceitar_em is None)
 
-        def quebra(lcu, atraso):
+        def quebra(lcu, atraso, **kw):
             raise RuntimeError("janela não nasceu")
         col4 = novo_coletor({}, quebra)
         await col4.fase("ReadyCheck")
         linha = col4.c.execute("select fase from sessoes order by rowid desc limit 1").fetchone()
         caso("D7 janelinha quebrada não derruba a fase (gravada no banco)", linha and linha[0] == "ReadyCheck", linha)
     asyncio.run(roteiro())
+
+
+# ---------- F. reserva do aceite (sem janela: roda com o jogo aberto) ----------
+class LCURegistro(LCUFalsa):
+    """LCUFalsa que registra a ordem das chamadas ao ready check ("GET"/"POST <rota>", segundos desde a criação) e
+    simula o resto: resposta que muda num instante (o plugin aceitando), ready check que acaba (404) e POST que falha"""
+
+    def __init__(self, timer0=0, resp_em=None, fim_em=None, post_falha=False, reinicio_em=None, reinicio_404=True):
+        super().__init__(timer0)
+        self.c0 = time.monotonic()
+        self.resp_em = resp_em or {}     # {segundos: "Accepted"|"Declined"}
+        self.fim_em = fim_em
+        self.post_falha = post_falha
+        self.reinicio_em = reinicio_em   # outro ready check começa aqui (timer volta a 0), com um 404 antes se reinicio_404
+        self.reinicio_404 = reinicio_404
+        self.post_timeout = None
+        self.ops = []
+
+    def get(self, caminho, timeout=None):
+        dt = time.monotonic() - self.c0
+        for t, r in self.resp_em.items():
+            if dt >= t:
+                self.resp = r
+        if caminho == aviso_partida.ROTA:
+            self.ops.append(("GET", round(dt, 2)))
+            if self.fim_em is not None and dt >= self.fim_em:
+                raise OSError("404 Not attached to a matchmaking queue")
+            if self.reinicio_em is not None and dt >= self.reinicio_em:
+                self.reinicio_em = None
+                self.t0 = time.monotonic()
+                if self.reinicio_404:
+                    raise OSError("404 Not attached to a matchmaking queue")
+        return super().get(caminho, timeout)
+
+    def post(self, caminho, corpo=None, timeout=None):
+        self.post_timeout = timeout
+        self.ops.append(("POST " + caminho.rsplit("/", 1)[1], round(time.monotonic() - self.c0, 2)))
+        if self.post_falha:
+            self.posts.append(caminho)
+            raise OSError("500 Internal Server Error")
+        return super().post(caminho, corpo, timeout)
+
+
+def rodar_reserva(lcu, atraso=0.3, sinal=None, s=1.8, antes=None, idade_min_s=0):
+    """AvisoPartida sem janela por `s` segundos; alvo 0,3 + folga 0,7 = aceite da reserva em ~1 s. antes(av) roda
+    logo depois de mostrar() (ex.: clique em voo). idade_min_s 0: sem a espera do aviso recém-nascido (F26 testa ela)"""
+    av = aviso_partida.AvisoPartida(lcu, atraso, sinal=sinal, janela=False, idade_min_s=idade_min_s).mostrar()
+    if antes:
+        antes(av)
+    time.sleep(s)
+    av.fechar()
+    return av
+
+
+def reserva():
+    from aviso_partida import FOLGA_S, SinalPlugin, alvo_aceite, decidir_reserva
+    rc = {"state": "InProgress", "playerResponse": "None", "timer": 3}
+    # pura
+    caso("F1 decidir: antes do alvo + folga espera (alvo 10, 10,5 s -> 0,2 s)",
+         decidir_reserva(rc, 10, 10.5) == {"acao": "esperar", "emS": 10 + FOLGA_S - 10.5})
+    caso("F2 decidir: passou do alvo + folga com None -> aceitar", decidir_reserva(rc, 10, 10.8)["acao"] == "aceitar")
+    caso("F3 decidir: Accepted/Declined/fora de InProgress/aceite desligado/bloqueio -> parar",
+         all(decidir_reserva(r, a, 11, b)["acao"] == "parar" for r, a, b in (
+             ({**rc, "playerResponse": "Accepted"}, 10, None), ({**rc, "playerResponse": "Declined"}, 10, None),
+             ({**rc, "state": "Invalid"}, 10, None), (rc, None, None), (rc, 10, "não aceitar nesta vez (plugin)"))))
+    caso("F4 decidir: sem leitura nenhuma (404) nunca aceita direto", decidir_reserva(None, 10, 11)["acao"] == "esperar")
+    caso("F5 alvo igual ao do plugin: min(atraso, 12 − 2)", alvo_aceite(15) == 10 and alvo_aceite(7) == 7
+         and alvo_aceite(None) is None)
+    caso("F6 folga dentro de [0,5; 1,0] (medição de 14/10/2026 no cabeçalho)", 0.5 <= FOLGA_S <= 1.0, FOLGA_S)
+    s = SinalPlugin()
+    s.registrar({"atrasoS": 5, "limiteS": 12})
+    caso("F7 alvo da reserva = o mais tardio entre espelho e plugin", s.alvo(10) == 10 and s.alvo(3) == 5
+         and s.alvo(None) is None)
+
+    # com a LCU falsa e o relógio de verdade
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu)
+    t_post = next((t for o, t in lcu.ops if o.startswith("POST")), None)
+    caso("F8 plugin calado: a reserva aceita uma vez, no alvo + folga (~1,0 s, não 0,5 s depois)",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and t_post is not None and 0.95 <= t_post <= 1.3
+         and av.reserva_fim == "aceitou", (lcu.ops, av.reserva_fim))
+    caso("F8b POST da reserva com prazo curto (não congela a consulta)", lcu.post_timeout == aviso_partida.POST_RESERVA_S
+         and aviso_partida.POST_RESERVA_S <= 3, lcu.post_timeout)
+    i = next(i for i, (o, _) in enumerate(lcu.ops) if o.startswith("POST"))
+    caso("F9 GET do ready check logo antes do POST (releitura)", i > 0 and lcu.ops[i - 1][0] == "GET"
+         and t_post - lcu.ops[i - 1][1] < 0.1, lcu.ops)
+    lcu = LCURegistro(resp_em={0.6: "Accepted"})
+    av = rodar_reserva(lcu)
+    caso("F10 o plugin aceitou antes: nenhum POST, a reserva registra 'já aceita'",
+         lcu.posts == [] and av.reserva_fim == "já aceita", (lcu.ops, av.reserva_fim))
+    lcu = LCURegistro(resp_em={0.3: "Declined"})
+    av = rodar_reserva(lcu)
+    caso("F11 recusada (janelinha ou client): nenhum POST", lcu.posts == [] and av.reserva_fim == "recusada",
+         av.reserva_fim)
+    # o plugin aceita entre a última consulta e a releitura: a releitura vê e não posta (relógio parado, um passo só)
+    lcu = LCURegistro()
+    lcu.leituras = 1        # sem o 404 da 1ª leitura
+    lcu.resp = "Accepted"   # o que a releitura vai ler
+    av = aviso_partida.AvisoPartida(lcu, 0.3, relogio=lambda: 1.5, janela=False)
+    av._t0 = av.inicio = 0.0
+    av.rc = {"state": "InProgress", "playerResponse": "None", "timer": 1}   # a última consulta ainda dizia None
+    av._reserva_passo()
+    caso("F12 aceite do plugin no último instante: a releitura vê e não posta",
+         lcu.posts == [] and [o for o, _ in lcu.ops] == ["GET"] and av.reserva_fim == "já aceita", (lcu.ops, av.reserva_fim))
+    sinal = SinalPlugin()
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, sinal=sinal, antes=lambda a: sinal.registrar({"evento": "nao-aceitar", "desligadoNestaVez": True}))
+    caso("F13 'não aceitar' do plugin neste ready check: nenhum POST",
+         lcu.posts == [] and av.reserva_fim == "não aceitar nesta vez (plugin)", av.reserva_fim)
+    caso("F14 com 'não aceitar' a janelinha não promete aceite (conta até expirar, sem alerta)",
+         av.estado()["fase"] in ("expirando",) and "alerta" not in av.estado(), av.estado())
+    sinal = SinalPlugin()
+    sinal.registrar({"desligadoNestaVez": True})
+    sinal.nao_aceitar_em -= 5   # chegou 5 s antes deste ready check: era do anterior
+    lcu = LCURegistro()
+    rodar_reserva(lcu, sinal=sinal)
+    caso("F15 'não aceitar' velho (de outro ready check) não trava a reserva",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"], lcu.ops)
+    sinal = SinalPlugin()
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, sinal=sinal, antes=lambda a: sinal.registrar({"evento": "evento", "ligado": False}))
+    caso("F16 aceite desligado no plugin durante o ready check: nenhum POST", lcu.posts == [], av.reserva_fim)
+    sinal.zerar()
+    lcu = LCURegistro()
+    rodar_reserva(lcu, sinal=sinal)
+    caso("F17 ligado false de um ready check anterior (zerado na troca de fase) não trava o seguinte",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"], lcu.ops)
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, atraso=None)
+    caso("F18 aceite automático desligado no espelho (null): nenhum POST", lcu.posts == [], av.reserva_fim)
+    lcu = LCURegistro(fim_em=0.75)
+    av = rodar_reserva(lcu)
+    caso("F19 ready check acabou (404) com a última leitura ainda 'None': a releitura barra, nenhum POST",
+         lcu.posts == [] and str(av.reserva_fim).startswith("releitura falhou"), (lcu.ops[-3:], av.reserva_fim))
+    lcu = LCURegistro(post_falha=True)
+    av = rodar_reserva(lcu)
+    caso("F20 POST da reserva falhou: uma tentativa só, botões voltam com o erro",
+         len(lcu.posts) == 1 and av.reserva_fim == "falhou" and av.clicado is None and av.erro, (lcu.ops, av.erro))
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, antes=lambda a: setattr(a, "clicado", "recusar"))
+    caso("F21 clique do Gabriel em voo: a reserva não posta por cima", lcu.posts == [], lcu.ops)
+    lcu = LCURegistro(post_falha=True)
+
+    def recusar(a):
+        a.exibido = {"botoes": True}   # sem janela não há exibido: o clique exige os botões à vista
+        a._clicar("recusar")
+    av = rodar_reserva(lcu, antes=recusar)
+    caso("F23 'recusar' da janelinha cujo POST falhou: a reserva não aceita por cima",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/decline"] and str(av.reserva_fim).startswith("recusar"),
+         (lcu.ops, av.reserva_fim))
+    # outro ready check na mesma instância (fase Matchmaking perdida): o início antigo faria a reserva aceitar cedo
+    # (alvo 2: sem a correção, POST ~1,2 s depois do 2º ready check começar, em vez de 2,7 s)
+    lcu = LCURegistro(reinicio_em=1.2)
+    av = rodar_reserva(lcu, atraso=2, s=3.2)
+    caso("F24 404 e timer de volta a 0 (outro ready check): a reserva para, nenhum POST",
+         lcu.posts == [] and av.reserva_fim == "outro ready check", (lcu.ops, av.reserva_fim))
+    lcu = LCURegistro(reinicio_em=1.2, reinicio_404=False)
+    av = rodar_reserva(lcu, atraso=2, s=3.2)
+    caso("F25 timer que volta sem 404 também é outro ready check: nenhum POST",
+         lcu.posts == [] and av.reserva_fim == "outro ready check", (lcu.ops, av.reserva_fim))
+    # aviso criado tarde (coletor subiu ou reconectou com o ready check em ~11 s, alvo + folga já passou)
+    lcu = LCURegistro(timer0=11)
+    av = rodar_reserva(lcu, atraso=10, s=2.2, idade_min_s=1.5)
+    t_post = next((t for o, t in lcu.ops if o.startswith("POST")), None)
+    caso("F26 aviso criado depois do alvo + folga: espera a idade mínima (1,5 s) antes do POST",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and t_post is not None and t_post >= 1.45,
+         (lcu.ops, av.reserva_fim))
+    sinal = SinalPlugin()
+    lcu = LCURegistro(timer0=11)
+    av = rodar_reserva(lcu, atraso=10, s=2.2, idade_min_s=1.5, sinal=sinal, antes=lambda a: threading.Timer(
+        0.8, sinal.registrar, args=({"evento": "evento", "desligadoNestaVez": True},)).start())
+    caso("F26b ... e o 'não aceitar' que chega nessa espera ainda barra", lcu.posts == [], (lcu.ops, av.reserva_fim))
+    # "não aceitar" de antes do aviso nascer (websocket reconectado no meio): vale pelo início do ready check
+    relo = [100.0]
+    sinal = SinalPlugin(relogio=lambda: relo[0])
+    sinal.registrar({"evento": "nao-aceitar", "desligadoNestaVez": True})
+    av = aviso_partida.AvisoPartida(LCURegistro(), 10, relogio=lambda: relo[0], sinal=sinal, janela=False)
+    relo[0] = 105.0
+    av._t0, av.inicio = 105.0, 100.2   # aviso nasceu em 105, o timer da LCU diz que o ready check começou em ~100
+    caso("F27 bloqueio pelo início do ready check (timer da LCU), não pela hora do aviso",
+         av._bloqueio() == "não aceitar nesta vez (plugin)", av._bloqueio())
+    # ligado true fora de ordem não desfaz o ligado false (POSTs concorrentes do plugin)
+    s = SinalPlugin()
+    s.registrar({"evento": "agendou", "ligado": False})
+    s.registrar({"evento": "evento", "ligado": True})
+    b1 = s.bloqueio(s.relogio() - 5)
+    s.registrar({"evento": "fim", "ligado": True, "desligadoNestaVez": False})
+    caso("F28 ligado true atrasado não destrava; só o fim do ready check (ou zerar) destrava",
+         b1 == "aceite automático desligado no plugin" and s.bloqueio(s.relogio() - 5) is None, b1)
+    caso("F29 linha do log sem \\r nem \\n vindos do plugin",
+         not any(c in aviso_partida.linha_diag({"evento": "a\rb\nc", "detalhe": "x\r\ny"}) for c in "\r\n"))
+    caso("F22 nenhuma thread da reserva viva depois de fechar", not threads_do_aviso(), threads_do_aviso())
+
+
+# ---------- G. rota /aceite/plugin (servidor local numa porta de teste) ----------
+def rota_plugin():
+    import urllib.error
+    import urllib.request
+    from aviso_partida import SinalPlugin
+    linhas = []
+
+    class Coletar(logging.Handler):
+        def emit(self, rec):
+            linhas.append(rec.getMessage())
+    h = Coletar(logging.INFO)
+    lg = logging.getLogger("coletor.aceite")
+    lg.addHandler(h)
+    lg.setLevel(logging.INFO)
+    coach = SimpleNamespace(srv=servidor_local.ServidorLocal(porta=8797, config=TMP / "cfg-rota.json"),
+                            servidor_no_ar=False)
+    col = novo_coletor({}, lambda *a, **k: None)
+    caso("G0 sem coach (--sem-coach) ou servidor fora do ar (porta ocupada): sem sinal, nada pendurado",
+         coletor._sinal_aceite(None) is None and coletor._sinal_aceite(coach) is None
+         and "/aceite/" not in coach.srv.rotas_post)
+    coach.servidor_no_ar = coach.srv.iniciar()
+    if not coach.servidor_no_ar:
+        caso("G2 porta de teste 8797 livre", False)
+        return
+    sinal = coletor._sinal_aceite(coach)
+    caso("G1 o coletor pendura /aceite/ no servidor do coach", "/aceite/" in coach.srv.rotas_post and sinal is not None)
+    try:
+        def post(corpo, origem=None, rota="/aceite/plugin"):
+            dados = corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode()
+            req = urllib.request.Request(f"http://127.0.0.1:8797{rota}", data=dados, method="POST",
+                                         headers={"Content-Type": "application/json", **({"Origin": origem} if origem else {})})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return r.status
+            except urllib.error.HTTPError as e:
+                return e.code
+        corpo = {"evento": "nao-aceitar", "desligadoNestaVez": True, "ligado": True, "atrasoS": 10, "limiteS": 12,
+                 "timer": 4, "hidden": False, "visibilityState": "visible", "foco": False, "lixo": {"x": 1}}
+        caso("G2 página do client (https://127.0.0.1:<porta da LCU>) grava o sinal",
+             post(corpo, "https://127.0.0.1:54321") == 200 and sinal.nao_aceitar_em is not None)
+        caso("G3 Pengu (https://plugins) e pedido sem Origin passam",
+             post({"evento": "evento"}, "https://plugins") == 200 and post({"evento": "evento"}) == 200)
+        caso("G4 página do próprio coletor (http://127.0.0.1:8797) e outra página local em http são recusadas",
+             post(corpo, "http://127.0.0.1:8797") == 403 and post(corpo, "http://localhost:3000") == 403)
+        caso("G5 site de fora recusado", post(corpo, "https://exemplo.com") == 403)
+        caso("G6 json inválido -> 400; rota desconhecida -> 404",
+             post(b"{nao", "https://plugins") == 400 and post({}, "https://plugins", "/aceite/outra") == 404)
+        diag = next((ln for ln in linhas if "evento=nao-aceitar" in ln), "")
+        caso("G7 diagnóstico vira uma linha no log do coletor (campos conhecidos, sem o resto)",
+             "desligadoNestaVez=True" in diag and "visibilityState=visible" in diag and "timer=4" in diag
+             and "lixo" not in diag, diag)
+    finally:
+        coach.srv.parar()
+        lg.removeHandler(h)
+        col.c.close()
 
 
 # ---------- E. janela real ----------
@@ -288,8 +570,8 @@ def threads_do_aviso():
 def janela_real():
     feitos = []
 
-    def fab(lcu, atraso):
-        a = aviso_partida.AvisoPartida(lcu, atraso)
+    def fab(lcu, atraso, **kw):
+        a = aviso_partida.AvisoPartida(lcu, atraso, **kw)
         feitos.append(a)
         return a
 
@@ -376,7 +658,8 @@ def janela_real():
     h = Coletar(logging.WARNING)
     logging.getLogger("coletor.aviso").addHandler(h)
     try:
-        av = aviso_partida.AvisoPartida(LCUFalsa(timer0=5), 2).mostrar()
+        # reserva=False: a janela sozinha (o alerta aparece quando a reserva também não aceitou)
+        av = aviso_partida.AvisoPartida(LCUFalsa(timer0=5), 2, reserva=False).mostrar()
         av.esperar_pronto(5)
         caso("E17 alvo passou sem resposta: 'expira em', com alerta, botões ficam",
              esperar(lambda: (av.exibido or {}).get("fase") == "sem_aceite", 3)
@@ -385,6 +668,15 @@ def janela_real():
         time.sleep(0.3)
         av.fechar()
         caso("E18 pintar o alerta não gera erro na janela", not avisos_log, avisos_log)
+        # reserva com a janela: o alvo passou, a reserva aceita e a janelinha mostra "aceita"
+        lcu = LCUFalsa(timer0=5)
+        av = aviso_partida.AvisoPartida(lcu, 2).mostrar()
+        av.esperar_pronto(5)
+        caso("E19 reserva com a janela: accept sozinho e a janelinha vai a 'aceita' sem alerta",
+             esperar(lambda: (av.exibido or {}).get("fase") == "aceita", 4)
+             and lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"], (lcu.posts, (av.exibido or {}).get("linha")))
+        av.fechar()
+        caso("E20 sem erro na janela com a reserva", not avisos_log, avisos_log)
     finally:
         logging.getLogger("coletor.aviso").removeHandler(h)
 
@@ -397,6 +689,8 @@ def principal():
     config()
     lcu_post()
     integracao()
+    reserva()
+    rota_plugin()
     if a.sem_janela:
         print("parte E pulada (--sem-janela)")
     elif jogo_aberto():

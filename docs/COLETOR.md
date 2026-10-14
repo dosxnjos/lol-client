@@ -246,7 +246,8 @@ Rotas (o servidor HTTP encaminha `/mentor…` para `Mentor.rota_http`): `GET /me
 - **`coletor\servidor_local.py`** (`127.0.0.1:8765`): `/` painel (estado embutido no 1º quadro),
   `/estado`, `/config` GET/POST (`dados\config.json`; chaves em § Coach na partida), `/mentor/...`
   (encaminha ao `Mentor.rota_http`), `/contexto/<gameId>` e `/licoes/<gameId>` (`coach.py`), e as rotas
-  que o coach pendura (`/draft`, `/revisao/<gameId>`). CORS só para origem local (`127.0.0.1`,
+  que o coach pendura (`/draft`, `/revisao/<gameId>`) e o coletor (`/chat/...`, `POST /aceite/plugin`: § Sinal e
+  diagnóstico do plugin). CORS só para origem local (`127.0.0.1`,
   `localhost`, `plugins`, `riot`; preflight responde `Access-Control-Allow-Private-Network`); `Host` de
   fora → 403. O plugin chama `http://127.0.0.1:8765` (por IP: loopback não é conteúdo misto).
 - **`painel\`**: HTML/CSS/JS sem build, 4 blocos fixos + faixa de 1 aviso, consulta `/estado` 1/s. O que
@@ -513,21 +514,68 @@ ela também se fecha sozinha em 20 s (o ready check dura 12), caso o websocket c
   `GET /lol-matchmaking/v1/ready-check` (o mesmo alvo do `pengu\aceite.js`); com `null` (aceite automático
   desligado), "expira em N s" até os 12 s. O `timer` é inteiro: a janela ancora o início pelo menor
   `agora − timer` e conta pelo relógio local (o 1º GET pode dar 404 antes do payload).
-- **O espelho pode mentir:** o `aceiteAtrasoS` é o último que o plugin mandou (plugin fora do ar, "não aceitar"
-  no overlay, POST que nunca chegou). Passado o alvo + `TOLERANCIA_S` (1 s) com `playerResponse` ainda `None`,
-  volta a "expira em N s" com o alerta vermelho "o aceite automático não veio: clique" (fase `sem_aceite`).
+- **O espelho pode mentir:** o `aceiteAtrasoS` é o último que o plugin mandou (plugin fora do ar, POST que nunca
+  chegou). Passado o alvo + `FOLGA_S` (0,7 s) com `playerResponse` ainda `None`, a reserva aceita (abaixo); se ela
+  também não aceitar (POST falhou), volta a "expira em N s" com o alerta vermelho "o aceite automático não veio:
+  clique" (fase `sem_aceite`). Com "não aceitar" do plugin nesta vez, a janelinha só conta até expirar, sem alerta.
 - **Depois do clique:** "aceita" (+ "esperando os outros") ou "recusada", sem botões; um POST por ready
   check; POST que falha devolve os botões com "o client não respondeu".
   O aceite automático do plugin respeita o recusar: ele para com `playerResponse` `Declined` e, antes de
   aceitar, relê o ready check e só aceita com `None`.
-- **Única escrita do coletor na LCU** (`LCU.post`), e só pelo clique do Gabriel.
 - **Config:** `aceiteFlutuante` (padrão `true`) e `aceiteAtrasoS` (número 0–60 ou `null`; padrão 10 =
-  `PADRAO.aceite.atrasoS` do plugin, que manda o valor espelhado). Lidas na hora do `ReadyCheck`.
+  `PADRAO.aceite.atrasoS` do plugin, que manda o valor espelhado). Lidas na hora do `ReadyCheck`. Com
+  `aceiteFlutuante` `false` e o aceite ligado, a reserva roda sem janela (`AvisoPartida(janela=False)`).
+
+### Quem aceita: o plugin primeiro, a reserva do coletor depois (14/10/2026)
+
+O `pengu\aceite.js` aceita no alvo `min(atrasoS, limiteS − 2)` (10 s de 12). O JS do client pode não agir (caso de
+14/10/2026 em [ARMADILHAS](ARMADILHAS.md) § Client e Pengu), então a consulta da janelinha (`AvisoPartida`, Python,
+não congela com o client) tem uma **reserva**: passado o mesmo alvo + `FOLGA_S` (0,7 s), ela relê
+`GET /lol-matchmaking/v1/ready-check` e só faz `POST .../accept` com `state` `InProgress` e `playerResponse` `None`.
+Uma tentativa por ready check; log `aceite pela reserva do coletor (plugin não aceitou; N s do ready check; último
+sinal do plugin há N s | nenhum sinal do plugin)` ou `reserva do aceite: não agiu (<motivo>; N s)` (ex.: `já aceita;
+10.1 s` = o plugin aceitou a tempo).
+
+- **Só arma com a rota do plugin no ar:** sem coach (`--sem-coach`) ou com o servidor local fora do ar (porta 8765
+  ocupada), o "não aceitar" não teria por onde chegar, então `coletor._sinal_aceite` devolve `None`, o log diz
+  `reserva do aceite desarmada: sem rota do plugin` e a janelinha (se ligada) abre só com os botões (`reserva=False`).
+- **Não age:** aceite automático desligado no espelho (`aceiteAtrasoS` `null`), "não aceitar" do overlay do plugin ou
+  aceite desligado nele **neste** ready check (sinal recebido até 1 s antes do início dele, ancorado no `timer` da
+  LCU; o coletor zera ao sair da fase; `ligado true` atrasado não destrava, só o `fim`), `Accepted`/`Declined`, ready
+  check fora de `InProgress` ou releitura que falha (404 = acabou), clique da janelinha em voo, "recusar" da janelinha
+  cujo POST falhou, **outro ready check** na mesma instância (`timer` que volta ou 404 entre dois payloads: falha
+  fechada, log `não agiu (outro ready check; …)`). Alvo = o mais tardio entre o espelho e o último `atrasoS` do plugin.
+- **Aviso recém-nascido** (coletor que sobe ou reconecta com o alvo + folga já passado): espera `IDADE_MIN_S` (1,5 s)
+  de vida antes do POST, tempo de chegar ao menos um evento do plugin (~1/s) com o "não aceitar".
+- **Limite:** o "não aceitar" vai a cada evento do plugin (~1/s), então um POST perdido não basta para a reserva
+  errar; o furo real é a rota fora do ar, que desarma a reserva (acima).
+- **Folga 0,7 s** (`aviso_partida.FOLGA_S`, a mesma da tela). Medido no `dados\medicao-compacto-2026-10-13.jsonl`
+  (ready check de 14/10 10:10:21): o evento com `timer` 10 chega ~9,8 s depois da fase, o `timer` 12 em ~+12,0 s e a
+  fase sai em ~+13,0 s. Estimado, não medido: o aceite do plugin visível no GET até ~+10,4 s (13/10: aceitou com
+  `timer` 10,0 em 3/3, mais uma consulta). Agir depois de ~10,5 deixa a releitura ver o aceite do plugin; antes de
+  ~11,5 o POST chega antes do `timer` 12. A consulta acorda na hora do alvo + folga, mas o início é ancorado no
+  `timer` inteiro com consulta a cada 0,5 s: a reserva age entre ~10,7 e ~11,2 s reais do ready check (nunca antes
+  de 10,7: `agora − timer` nunca é anterior ao início real).
+- **POST duplicado com o plugin:** a releitura logo antes do POST estreita a janela, mas o GET pode levar até 2 s
+  (prazo dele); o que a LCU devolve a um 2º accept não foi medido (proibido testar accept no client real). Qualquer
+  erro do POST vira log + botões de volta. O POST da reserva tem prazo de 3 s (`POST_RESERVA_S`).
+
+### Sinal e diagnóstico do plugin (`POST /aceite/plugin`)
+
+O `aceite.js` manda ao coletor (`coach.coletor`, prazo 1,5 s, nunca esperado) cada decisão: `evento` (cada payload do
+ready check, com `timer` e `playerResponse`), `agendou` (`emS`), `aceitando`, `post` (`status` da LCU), `nao-aceitou`
+(motivo), `nao-aceitar` (overlay), `fim`, `foco` e `foco-lcu` (minimizar/mostrar e o status). Todo corpo leva `ligado`,
+`atrasoS`, `limiteS`, `desligadoNestaVez`, `hidden`, `visibilityState` e `foco` (`document.hasFocus()`). O coletor
+guarda o que serve à reserva (`aviso_partida.SinalPlugin`) e grava uma linha `aceite (plugin): evento=… timer=…` no
+`dados\coletor.log` (só as chaves de `CAMPOS_DIAG`): ready check sem nenhuma linha `aceite (plugin)` = o JS do plugin
+não estava vivo. Origem (`servidor_local.origem_aceite_ok`): só a página do client (`https://127.0.0.1:<porta da LCU>`),
+o Pengu (`https://plugins`) ou sem `Origin`; as páginas do próprio coletor e outra página local em `http` levam 403.
 
 | o quê | comando |
 | --- | --- |
 | ver a janelinha com um ready check falso | `python coletor\aviso_partida.py --demo [--atraso 10 \| -1] [--segundos 12]` |
-| prova (contagem, config, `Coletor.fase`, janela real; a janela é pulada com o jogo aberto) | `python tools\teste-aviso-partida.py [--sem-janela]` |
+| prova (contagem, config, `Coletor.fase`, reserva, rota `/aceite/plugin`, janela real; a janela é pulada com o jogo aberto) | `python tools\teste-aviso-partida.py [--sem-janela]` |
+| prova do lado do plugin (decisão, foco, som, popup, aviso ao coletor injetado) | `node tools\teste-aceite.mjs` |
 
 ## Segurança: token da LCU no log Security
 

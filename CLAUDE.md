@@ -3,8 +3,9 @@
 Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub:
 [cerebro/projetos/lol-client.md](../cerebro/projetos/lol-client.md) · plano vigente em `roadmap/`.
 
-- **Nunca** `POST .../matchmaking/search` em teste automatizado; recarregar a interface só
-  em fase `None`/`Lobby`. Detalhe: [docs/ARMADILHAS.md](docs/ARMADILHAS.md).
+- **Nunca** `POST .../matchmaking/search` nem accept/decline do ready check em teste contra o client real (só LCU falsa);
+  recarregar a interface só em fase `None`/`Lobby`. Detalhe: [docs/ARMADILHAS.md](docs/ARMADILHAS.md).
+- Única escrita sozinha do coletor na LCU: a reserva do aceite, só com a rota do plugin no ar e sem "não aceitar" ([COLETOR](docs/COLETOR.md) § Quem aceita).
 - Busca na fila só por clique do Gabriel (fila rápida, jogar de novo), sempre pelos freios de `pengu/freios.js`
   (tilt e madrugada, 2º clique); escrita da coleta de recompensas só por
   `ROTAS_COLETA` (`pengu/recompensas.js`), nunca rota que gasta (baú, criação, fichas, passe).

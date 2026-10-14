@@ -157,9 +157,31 @@ export const CLASSE_POPUP_LIVRE = 'lc-aceite-manual';
 const lcuSimples = (metodo, url) => fetch(url, { method: metodo }).catch(e => console.error('[lol-client] aceite', url, e));
 
 // Liga o observador. cfg = objeto vivo do config.js (lê cfg.aceite a cada evento).
-export function iniciarAceite(context, cfg) {
-  const foco = criarFoco({ cfg, lcu: lcuSimples, focoInicial: typeof document !== 'undefined' && document.hasFocus?.() !== false,
-    log: m => console.log('[lol-client]', m) });
+// avisarColetor(caminho, {metodo, corpo, prazoMs}) = coach.coletor (index.js): manda ao coletor o "não aceitar" desta
+// vez (a reserva do coletor aceita sozinha se este JS não aceitar no alvo) e o diagnóstico de cada decisão, que vira
+// linha no dados/coletor.log (caso de 14/10/2026: o JS não aceitou e nada dizia se estava vivo). Nunca esperado: o
+// aceite não depende do coletor. Sem ele (teste), nada sai.
+export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
+  let agendado = null, desligadoNestaVez = false, aceitando = false, emReadyCheck = false;
+  const diag = (evento, extra = {}) => {
+    if (!avisarColetor) return;
+    try {
+      const a = cfg.aceite || {};
+      const doc = typeof document !== 'undefined' ? document : null;
+      const corpo = {
+        evento, t: Date.now(), ligado: !!a.ligado, atrasoS: a.atrasoS, limiteS: a.limiteS, desligadoNestaVez,
+        hidden: doc?.hidden, visibilityState: doc?.visibilityState, foco: doc?.hasFocus?.(), ...extra,
+      };
+      Promise.resolve(avisarColetor('/aceite/plugin', { metodo: 'POST', corpo, prazoMs: 1500 })).catch(() => {});
+    } catch { /* diagnóstico nunca derruba o aceite */ }
+  };
+  const lcuFoco = (metodo, url) => {
+    const p = lcuSimples(metodo, url);
+    Promise.resolve(p).then(r => diag('foco-lcu', { detalhe: `${metodo} ${url}`, status: r?.status ?? 0 })).catch(() => {});
+    return p;
+  };
+  const foco = criarFoco({ cfg, lcu: lcuFoco, focoInicial: typeof document !== 'undefined' && document.hasFocus?.() !== false,
+    log: m => { console.log('[lol-client]', m); diag('foco', { detalhe: m }); } });
   window.addEventListener('focus', () => foco.aoFoco());
   // foco indo para um iframe da página (chat) também dispara blur na janela: só conta se a página perdeu o foco
   window.addEventListener('blur', () => setTimeout(() => { if (!document.hasFocus()) foco.aoBlur(); }, 0));
@@ -174,7 +196,6 @@ export function iniciarAceite(context, cfg) {
   try { context.rcp?.postInit?.('rcp-fe-audio', comAudio); } catch (e) { console.error('[lol-client] som', e); }
   try { context.rcp?.whenReady?.('rcp-fe-audio')?.then?.(comAudio).catch?.(() => {}); } catch { /* sem whenReady */ }
 
-  let agendado = null, desligadoNestaVez = false, aceitando = false;
   const limpar = () => { clearTimeout(agendado); agendado = null; esconderOverlay(); };
   // popup nativo escondido (esconderPopup) só enquanto o aceite desta vez vai mesmo sair: "não aceitar" ou accept
   // que não saiu devolvem o popup (senão não sobra botão no client e o ready check expira). Volta no fim do ready check.
@@ -184,29 +205,37 @@ export function iniciarAceite(context, cfg) {
     aceitando = true;
     limpar();
     setTimeout(() => { aceitando = false; }, 3000);
+    diag('aceitando');
     // confere de novo antes de aceitar: o Gabriel pode ter respondido na mão
     const atual = await fetch('/lol-matchmaking/v1/ready-check').then(r => (r.ok ? r.json() : null)).catch(() => null);
-    if (!atual || atual.state !== 'InProgress') return popupLivre(true); // leitura falhou: o popup decide
-    if (atual.playerResponse !== 'None') return; // já respondeu na mão
-    if (desligadoNestaVez || !cfg.aceite.ligado) return popupLivre(true);
+    if (!atual || atual.state !== 'InProgress') { diag('nao-aceitou', { detalhe: 'releitura falhou ou fora de InProgress' }); return popupLivre(true); } // o popup decide
+    if (atual.playerResponse !== 'None') return diag('nao-aceitou', { detalhe: 'já respondido', playerResponse: atual.playerResponse });
+    if (desligadoNestaVez || !cfg.aceite.ligado) { diag('nao-aceitou', { detalhe: 'desligado' }); return popupLivre(true); }
     const r = await fetch('/lol-matchmaking/v1/ready-check/accept', { method: 'POST' }).catch(() => null);
+    diag('post', { status: r?.status ?? 0, timer: atual.timer });
     if (!r?.ok) {
       popupLivre(true);
       try { Toast.error('não consegui aceitar a partida: aceita no popup do client'); } catch { console.error('[lol-client] aceite falhou', r?.status); }
     }
   };
   const avaliar = payload => {
-    if (!payload || payload.state !== 'InProgress') { desligadoNestaVez = false; popupLivre(false); } // ready-check acabou: zera
+    const emCurso = !!payload && payload.state === 'InProgress';
+    if (emCurso) diag('evento', { timer: payload.timer, playerResponse: payload.playerResponse });
+    else if (emReadyCheck) { desligadoNestaVez = false; diag('fim'); } // ready-check acabou: o coletor zera o "não aceitar"
+    emReadyCheck = emCurso;
+    if (!emCurso) { desligadoNestaVez = false; popupLivre(false); } // ready-check acabou: zera
     const d = decidir(payload, cfg.aceite);
     if (d.acao === 'parar' || desligadoNestaVez) return limpar();
     if (aceitando) return; // GET/POST do aceite em voo: não reagenda nem reabre o overlay
     if (d.acao === 'aceitar') return aceitar();
     if (agendado) return; // já contando; o próximo evento só atualiza se mudar a resposta
     agendado = setTimeout(aceitar, d.emS * 1000);
+    diag('agendou', { emS: d.emS, timer: payload.timer });
     mostrarOverlay({
       restanteS: d.emS,
       aoAceitar: aceitar,
-      aoDesligar: () => { desligadoNestaVez = true; limpar(); popupLivre(true); },
+      // "não aceitar" vai ao coletor na hora: sem isso a reserva dele aceitaria no alvo + folga
+      aoDesligar: () => { desligadoNestaVez = true; limpar(); popupLivre(true); diag('nao-aceitar'); },
     });
   };
   context.socket.observe('/lol-matchmaking/v1/ready-check', msg => avaliar(msg?.eventType === 'Delete' ? null : msg?.data));

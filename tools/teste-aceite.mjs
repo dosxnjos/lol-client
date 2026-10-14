@@ -160,6 +160,50 @@ const popup = [
   ['accept que deu certo: popup segue escondido, sem aviso', !pOk.durante && pOk.escritas.length === 1 && pOk.toasts.length === 0, JSON.stringify(pOk)],
 ];
 
+// ---- aviso ao coletor (avisarColetor injetado; nada vai ao coletor de verdade na 8765) ----
+// "não aceitar" chega ao coletor antes da reserva dele agir; cada decisão vira diagnóstico; aviso pendurado não atrasa o POST
+async function rodarDiag({ timer, clicar, pendurar = false }) {
+  const avisos = [];
+  const falsa = lcuFalsa({
+    'GET /lol-matchmaking/v1/ready-check': rc(timer),
+    'POST /lol-matchmaking/v1/ready-check/accept': { status: 204 },
+  });
+  globalThis.fetch = falsa.fetch;
+  const avisarColetor = (caminho, opts) => { avisos.push({ caminho, ...opts.corpo, metodo: opts.metodo }); return pendurar ? new Promise(() => {}) : Promise.resolve({ status: 200 }); };
+  const obs = {};
+  iniciarAceite({ socket: { observe: (rota, fn) => { obs[rota] = fn; } } }, { aceite: { ligado: true, atrasoS: 10, limiteS: 12 } }, { avisarColetor });
+  const evento = data => obs['/lol-matchmaking/v1/ready-check'](data ? { eventType: 'Update', data } : { eventType: 'Delete' });
+  evento(rc(timer));
+  if (clicar) dom.get('lc-aceite')?.ouvintes[0]({ target: { closest: () => ({ dataset: { a: clicar } }) } });
+  await tique();
+  evento(null);
+  return { avisos, eventos: avisos.map(a => a.evento), escritas: falsa.escritas().map(c => c.url) };
+}
+const dNao = await rodarDiag({ timer: 0, clicar: 'desligar' });
+const dAceita = await rodarDiag({ timer: 11 });
+const dPendurado = await rodarDiag({ timer: 11, pendurar: true });
+const naoAceitar = dNao.avisos.find(a => a.evento === 'nao-aceitar');
+const post = dAceita.avisos.find(a => a.evento === 'post');
+const coletorCasos = [
+  ['ready check t=0: avisa evento (timer, playerResponse) e agendou (emS 10)',
+    dNao.eventos[0] === 'evento' && dNao.avisos[0].timer === 0 && dNao.avisos[0].playerResponse === 'None'
+    && dNao.avisos.some(a => a.evento === 'agendou' && a.emS === 10), JSON.stringify(dNao.eventos)],
+  ['"não aceitar" vai ao coletor com desligadoNestaVez true, POST em /aceite/plugin',
+    naoAceitar?.desligadoNestaVez === true && naoAceitar.caminho === '/aceite/plugin' && naoAceitar.metodo === 'POST', JSON.stringify(naoAceitar)],
+  ['fim do ready check avisa "fim" com desligadoNestaVez false', dNao.avisos.at(-1)?.evento === 'fim' && dNao.avisos.at(-1).desligadoNestaVez === false,
+    JSON.stringify(dNao.avisos.at(-1))],
+  ['aceite: avisa aceitando e post com o status da LCU (204)', dAceita.eventos.includes('aceitando') && post?.status === 204 && post.timer === 11,
+    JSON.stringify(dAceita.eventos)],
+  ['diagnóstico leva ligado, atrasoS, limiteS e o estado da página (hidden/visibilityState/foco)',
+    dAceita.avisos.every(a => a.ligado === true && a.atrasoS === 10 && a.limiteS === 12 && 'hidden' in a && 'visibilityState' in a && a.foco === true),
+    JSON.stringify(dAceita.avisos[0])],
+  ['aviso ao coletor não passa pelo fetch da LCU (só o accept é escrita)', JSON.stringify(dAceita.escritas) === '["/lol-matchmaking/v1/ready-check/accept"]',
+    JSON.stringify(dAceita.escritas)],
+  ['coletor pendurado (promessa que nunca resolve) não atrasa o accept', JSON.stringify(dPendurado.escritas) === '["/lol-matchmaking/v1/ready-check/accept"]',
+    JSON.stringify(dPendurado.escritas)],
+  ['sem avisarColetor (padrão) nada é avisado e o aceite segue igual', pOk.escritas.length === 1, JSON.stringify(pOk)],
+];
+
 let ok = 0, total = 0;
 const linha = (nome, passou, extra = '') => { total++; ok += !!passou; console.log(passou ? 'ok' : 'FALHOU', nome, passou ? '' : extra); };
 for (const [nome, d, conf] of casos) linha(nome, conf(d), JSON.stringify(d));
@@ -167,5 +211,6 @@ for (const [nome, d, conf] of extras) linha('(extra) ' + nome, conf(d), JSON.str
 for (const [nome, ch, conf] of foco) linha('(foco) ' + nome, conf(ch), JSON.stringify(ch));
 for (const [nome, passou] of som) linha('(som) ' + nome, passou);
 for (const [nome, passou, extra] of popup) linha('(popup) ' + nome, passou, extra);
+for (const [nome, passou, extra] of coletorCasos) linha('(coletor) ' + nome, passou, extra);
 console.log(`${ok}/${total} ok`);
 process.exit(ok === total ? 0 : 1);
