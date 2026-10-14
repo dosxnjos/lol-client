@@ -126,6 +126,8 @@ Estado antes (lido no código em 14/10/2026):
 
 ## Revisão adversarial e correções (14/10/2026, opus 5.5)
 
+- `python tools/rodar-testes.py` com o jogo fechado: 42/42 (inclui `teste-compacto-posjogo` 85/85, `teste-mentor`
+  `--seco` e `--offline`, `ensaio-coach`).
 - **Corrigidos, com caso de teste em `tools/teste-compacto-posjogo.mjs` (85/85):**
   - lições recolhidas e sem veredito com o mentor em `nada` (mentor desligado, personalizada, partida antiga e os
     primeiros minutos de toda partida): `licoesAuto` recolhe só com veredito pronto (D7, INSIGHTS § Resumo);
