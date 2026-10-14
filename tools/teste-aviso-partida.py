@@ -272,6 +272,9 @@ class LCURegistro(LCUFalsa):
             self.ops.append(("GET", round(dt, 2)))
             if self.fim_em is not None and dt >= self.fim_em:
                 raise OSError("404 Not attached to a matchmaking queue")
+            if getattr(self, "soluco_em", None) is not None and dt >= self.soluco_em:
+                self.soluco_em = None
+                raise OSError("404 soluço")
             if self.reinicio_em is not None and dt >= self.reinicio_em:
                 self.reinicio_em = None
                 self.t0 = time.monotonic()
@@ -401,6 +404,12 @@ def reserva():
     av = rodar_reserva(lcu, atraso=2, s=3.2)
     caso("F24 404 e timer de volta a 0 (outro ready check): a reserva para, nenhum POST",
          lcu.posts == [] and av.reserva_fim == "outro ready check", (lcu.ops, av.reserva_fim))
+    # 404 passageiro no MESMO ready check (14/10 11:27): o timer segue subindo, a reserva continua e aceita
+    lcu = LCURegistro()
+    lcu.soluco_em = 0.7   # depois do 1º payload (a LCU falsa dá 404 na 1ª leitura, antes de qualquer timer)
+    av = rodar_reserva(lcu, atraso=1.0, s=2.6)
+    caso("F24b 404 passageiro com o timer seguindo: não é outro ready check, a reserva aceita",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and av.reserva_fim == "aceitou", (lcu.ops, av.reserva_fim))
     lcu = LCURegistro(reinicio_em=1.2, reinicio_404=False)
     av = rodar_reserva(lcu, atraso=2, s=3.2)
     caso("F25 timer que volta sem 404 também é outro ready check: nenhum POST",

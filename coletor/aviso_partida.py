@@ -336,7 +336,6 @@ class AvisoPartida:
         self.reserva_fim = None     # None = armada; "aceitou" | "falhou" | motivo de não ter agido
         self.recusou = False        # o Gabriel clicou "recusar" neste ready check (a reserva não aceita por cima)
         self._ultimo_timer = None   # último timer lido: se voltar, é outro ready check (a reserva para)
-        self._viu_404 = False       # leitura falha depois de um payload: o próximo payload pode ser de outro ready check
         self.exibido = None         # último estado desenhado
         self.botoes = {}            # nome -> RECT em px do cliente (o teste clica no meio)
         self._hover = None
@@ -412,19 +411,18 @@ class AvisoPartida:
                     t = rc.get("timer")
                     if isinstance(t, (int, float)) and not isinstance(t, bool):
                         # outro ready check na mesma instância (fase Matchmaking perdida ou atrasada): o início abaixo
-                        # nunca anda para frente, então a reserva aceitaria cedo demais. Falha fechada: para
-                        if self.reserva_fim is None and (self._viu_404 or (
-                                self._ultimo_timer is not None and t < self._ultimo_timer)):
+                        # nunca anda para frente, então a reserva aceitaria cedo demais. Falha fechada: para. Só o timer
+                        # que volta conta: 404 passageiro no MESMO ready check acontece (14/10 11:27, logo depois do
+                        # aceite do plugin) e, com o plugin morto, faria a reserva desistir sem aceitar
+                        if self.reserva_fim is None and self._ultimo_timer is not None and t < self._ultimo_timer:
                             self._reserva_fim("outro ready check", self.relogio() - self.inicio)
                         self._ultimo_timer = t
                         # timer em segundos inteiros: o início real fica no máximo 1 s antes deste
                         self.inicio = min(self.inicio, self.relogio() - float(t))
                     self.rc = rc
-            except Exception as e:
-                # 404 antes do payload chegar ou client recarregando: a contagem segue pelo relógio. 404 depois de um
-                # payload = este ready check acabou (o próximo payload é de outro); timeout não conta (client lento)
-                if self._ultimo_timer is not None and (getattr(e, "code", None) == 404 or "404" in str(e)):
-                    self._viu_404 = True
+            except Exception:
+                # 404 (passageiro ou fim do ready check) ou client recarregando: a contagem segue pelo relógio
+                pass
             espera = self.consulta_s
             try:
                 em = self._reserva_passo()

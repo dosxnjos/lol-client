@@ -166,6 +166,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   interface das ~10:00, outra). Defesa: reserva no coletor (Python) que aceita no alvo + 0,7 s, e o plugin manda cada
   decisão ao `coletor.log` (`aceite (plugin): …`): ready check sem essas linhas = JS fora
   ([COLETOR](COLETOR.md) § Quem aceita).
+  - **404 passageiro no mesmo ready check** (14/10 11:27, logo depois do aceite do plugin, `timer` seguindo 9 → 10): a
+    reserva tomava qualquer 404 como "outro ready check" e desistia; com o plugin morto, não aceitaria. Só o `timer`
+    que volta marca outro ready check (`teste-aviso-partida.py` F24b).
 - **Sons do ready-check** (rcp-fe-lol-navigation, patch 16.20): intro (`sfx-readycheck-lowspec-intro.ogg`, canal
   `sfx-notifications`), `ringmagic-countdown` e `ringmagic-accepted-loop` (`sfx-ui`, `isLoop`), criados uma vez no
   `init` do componente: calar no `play()`, não no `createSound` (`aceite.embrulharAudio`, 13/10/2026).
