@@ -182,9 +182,9 @@ export function abaResumo(r, licoes, ctxEstado, opcoes = {}) {
   </div>`;
 }
 
-// texto do mentor: "Veredito:", "O essencial:", "Lições:" (formato até 13/10), "Próxima partida:" em destaque,
+// texto do mentor: "Veredito:", "O essencial:", "Mandou bem:" (opcional), "Lições:" (formato até 13/10), "Próxima partida:" em destaque,
 // **negrito** e quebras de linha. O modelo costuma escrever o rótulo em negrito ("**Veredito:**"): vira rótulo também.
-const ROTULOS = 'Veredito|O essencial|Lições|Próxima partida';
+const ROTULOS = 'Veredito|O essencial|Mandou bem|Lições|Próxima partida';
 const textoMentor = t => esc(t).replace(new RegExp(`^[ \\t]*\\*\\*(${ROTULOS}):?\\*\\*:?`, 'gm'), '$1:')
   .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
   .replace(new RegExp(`^[ \\t]*(${ROTULOS}):`, 'gm'), '<b class="lc-rotulo">$1:</b>').replace(/\n/g, '<br>');

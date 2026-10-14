@@ -232,7 +232,9 @@ Rotas (o servidor HTTP encaminha `/mentor…` para `Mentor.rota_http`): `GET /me
 
 Resposta do pós-jogo (14/10/2026, [plano](../roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md) D5/D6): até 120
 palavras em linguagem de jogador, `Veredito:` (1–2 frases, sem número, causa e efeito; o painel põe na faixa do topo do
-Resumo), `O essencial:` (1–2 itens com o número e o que fazer) e `Próxima partida:`. O que não está nos dados fica de
+Resumo), `O essencial:` (1 item, 2 só se pesou igual, com o número e o que fazer), `Mandou bem:` (opcional, 1 fato bom
+dos dados; sem nada claro a linha some; pedido do Gabriel 14/10) e `Próxima partida:`. Teto duro de 120 palavras contando
+tudo (com o `Mandou bem` passava de 120: medido 128–155, apertado para ~100). O que não está nos dados fica de
 fora, sem frase de "não tenho esse dado"; número só dos dados. Pergunta dele sobre algo fora dos dados (flash, vida do
 inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostram. Medição antes/depois: `python tools/medir-mentor.py
 [gameId …]` (antes = resposta guardada; depois = chamada real; banco só lido, saída em `temp/mentor-medicao/`).

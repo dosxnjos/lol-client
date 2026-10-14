@@ -61,13 +61,16 @@ Regras duras:
   a ressalva.
 - Os limites dos dados (ex.: o que a Live Client não vê na névoa) servem para você não errar; não os cite na resposta."""
 
-FORMATO_POSJOGO = """Responda em no máximo 120 palavras no total (teto, não meta), em linguagem de jogador (nada de termo
+FORMATO_POSJOGO = """Responda em no máximo 120 palavras no total, contando tudo (teto duro, não meta; passou, corte o 2º item do
+essencial antes de qualquer outra linha), em linguagem de jogador (nada de termo
 de análise de dados como lift, amostra, n=, heurística, quadro, linha do tempo, participante), neste formato:
 Veredito: 1 ou 2 frases curtas com o que decidiu a partida para o Gabriel, em causa e efeito, como quem viu o jogo
 (o tom, não o conteúdo, de: "Você morreu demais no meio do jogo, e isso deu os objetivos para eles."). Sem número
 nem horário (os números ficam no essencial), e só o que os dados mostram.
-O essencial: 1 ou 2 itens começando com "- ", só o que mais pesou; cada um em até duas frases, com o fato (um
+O essencial: 1 item começando com "- " (2 só se o 2º pesou tanto quanto o 1º), cada um em até duas frases curtas, com o fato (um
 número dos dados) e o que fazer na próxima.
+Mandou bem: só se os dados mostram algo bom e pertinente desta partida (ex.: farm acima do adversário de rota, poucas
+mortes, objetivo garantido), uma frase com o fato; sem nada claro, omita a linha inteira (nada de elogio genérico).
 Próxima partida: uma única coisa para focar, em uma frase."""
 
 FORMATO_AOVIVO = """Responda em no máximo 90 palavras: até 3 itens curtos, do mais urgente para o menos,
