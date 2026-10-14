@@ -125,8 +125,12 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   (60103 = `Jade_Ahri`); filtrar `id < 10000` (13/10/2026). Vale para a tabela `campeoes` do banco: 77
   nomes têm a variante 60xxx e um mapa nome→id sem o filtro pega ela (Lee Sin → 60064, sem participante:
   a revisão do jungler sumia calada; `coach_vivo.revisar`, revisão de 13/10/2026).
-- **Painel pós-jogo cobre o ready-check** → `#lc-posjogo` é tela cheia (z-index 100001) e o
-  modal do client fica embaixo. Ele fecha sozinho em `ReadyCheck`/`ChampSelect`/`GameStart`/`InProgress`
+- **Pós-jogo prendia o client** (Gabriel, 14/10/2026: "me impede de clicar em qualquer coisa") → o fundo escuro de
+  `#lc-posjogo` recebia todo clique e o carregamento não tinha ✕. Hoje o fundo é `pointer-events:none` (só a caixa recebe),
+  clique fora fecha e segue para o client, e fechar no carregamento não cancela a análise (cache em `posjogo/index.js`).
+  Caixa nova por cima do client: sem fundo que pega clique ([plano](../roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md) D1).
+- **Painel pós-jogo cobre o ready-check** → `#lc-posjogo` (z-index 100001) fica acima do
+  modal do client. Ele fecha sozinho em `ReadyCheck`/`ChampSelect`/`GameStart`/`InProgress`
   e o `#lc-aceite` fica acima (100002); tela nova por cima do client precisa do mesmo cuidado.
   O popup de runas (`#lc-runas`) não tem fundo bloqueante (só a caixa recebe clique: troca, feitiços
   e chat seguem usáveis), fecha com Esc e quando a fase sai de `ChampSelect` (Delete da sessão pode se perder).
@@ -703,3 +707,14 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   mentor é fixo (`%LOCALAPPDATA%\lol-client-mentor`); nunca `--no-session-persistence`.
 - **Prompt pela linha de comando**: estoura o limite de ~32 K do Windows no pós-jogo e cai no 4688 (o log
   Security grava a linha de comando). O prompt vai pelo stdin.
+- **"Não tenho dado de vida, nível ou recarga dele"** (14/10/2026: 1 a 2 frases assim em cada resposta) → era o próprio
+  `SISTEMA` que mandava dizer "não tenho esse dado"; a lição do motor ("confere vida, nível e recarga dele") puxava o
+  assunto. Hoje o prompt manda deixar de fora o que não está nos dados, sem comentar. Exemplo dentro do formato vira
+  conteúdo: com "até o barão" no exemplo do veredito, o modelo pôs barão onde não cabia (partida 3293092537); o exemplo
+  ficou sem objetivo. Medir antes/depois: `python tools/medir-mentor.py` (só lê o banco; saída em `temp/`).
+  Medição de 14/10 (3 partidas, 1 chamada cada): ~250 → ~110 palavras, frases de ausência 1–2 → 0, erros de fato 2,5 →
+  1 (0,5 + 0,5: "sem aliado" numa morte que tinha 1; objetivo atribuído também à Caitlyn); tabela no
+  [plano](../roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md) § Execução.
+- **Calar o que falta não pode valer para pergunta direta** → o `SISTEMA` serve análise, pergunta e ao vivo; "nunca diga
+  que um dado falta" empurra a resposta a "usei bem o flash?" para invenção ou desconversa. Hoje: não pedido = fica de
+  fora; perguntado = uma frase "daqui não dá para ver" e segue com os dados (medido em 14/10, 3 perguntas).

@@ -3,7 +3,7 @@
 // (abas.js). Do coletor (127.0.0.1:8765, opcional): contexto das lições, mentor e revisão do jungler.
 import { analisar, trajeto, FORA_DAS_CONTAS } from './analise.js';
 import { licoes as calcularLicoes } from './licoes.js';
-import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPartida, htmlMentor,
+import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPartida, htmlMentor, htmlVeredito, partesMentor,
   abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from './abas.js';
 import regrasMd from './licoes.md?raw';
 import { jogarDeNovo } from '../fila-rapida.js';
@@ -74,38 +74,80 @@ export async function analisarPartida(gameId, { aoEsperar, vivo } = {}) {
   return r;
 }
 
+// ---- análise em cache (roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md, D3) ----
+// A leitura da LCU não depende do painel: fechar (até no carregamento) não cancela, e reabrir mostra o resultado na
+// hora. Só a fase de aceite/seleção/partida cancela (esquecerAnalises). Fica em memória só a última partida pedida.
+let geracao = 0;
+const analises = new Map(); // gameId -> { promessa, pronta, r, erro, esperaMs }
+function obterAnalise(gameId) {
+  const velha = analises.get(gameId);
+  if (velha && !(velha.pronta && velha.erro)) return velha; // em voo ou pronta; com erro, tenta de novo
+  const minha = geracao;
+  const a = { pronta: false, r: null, erro: null, esperaMs: null };
+  analises.clear();
+  analises.set(gameId, a);
+  a.promessa = analisarPartida(gameId, {
+    vivo: () => minha === geracao,
+    aoEsperar: ms => { a.esperaMs = ms; aoMudarAnalise(gameId); },
+  }).then(r => { a.r = r; if (r?.erro) a.erro = r.erro; return r; },
+    e => { a.erro = e?.message || String(e); return null; })
+    .finally(() => { a.pronta = true; aoMudarAnalise(gameId); });
+  return a;
+}
+function esquecerAnalises() { geracao++; analises.clear(); }
+const textoCarregando = a => (a?.esperaMs ? `processando a partida (nova tentativa em ${a.esperaMs / 1000} s)…` : 'analisando a partida…');
+function aoMudarAnalise(gameId) {
+  if (ultimaAberta?.gameId !== gameId) return;
+  const t = document.getElementById('lc-posjogo')?.querySelector('.lc-carregando-texto');
+  if (t) t.textContent = textoCarregando(analises.get(gameId));
+  if (document.getElementById('lc-posjogo-reabrir')) mostrarReabrir(); // o botão troca "analisando" por "pronta"
+}
+
 // ---- painel ----
 
 // abertura: cada abertura ganha um número; fechar() o invalida, e análise em voo não reabre o painel
 let abertura = 0, painel = null;
+const dentroDoPainel = el => { for (let n = el; n; n = n.parentNode) if (n.id === 'lc-posjogo' || n.id === 'lc-posjogo-reabrir') return true; return false; };
 function remover() {
   document.getElementById('lc-posjogo')?.remove();
   window.removeEventListener('keydown', aoTecla, true);
+  window.removeEventListener('pointerdown', aoClicarFora, true);
   painel = null;
 }
-function fechar() { abertura++; remover(); }
+function fechar() { abertura++; remover(); vigiarInteracao(false); }
 
-// "reabrir análise" (Gabriel, 14/10/2026): fechar pelo ✕, Esc ou fundo deixa um botão no topo do pós-jogo da Riot;
-// some quando o painel abre de novo e nas fases em que o painel também fecha (aceite, seleção, partida)
-let ultimaAberta = null; // {gameId, fimDePartida} da última abertura com análise
+// "reabrir análise" (Gabriel, 14/10/2026): fechar pelo ✕, Esc ou clique fora deixa um botão no topo do pós-jogo da
+// Riot; some quando o painel abre de novo e nas fases em que o painel também fecha (aceite, seleção, partida).
+// Com a análise ainda em voo ele diz "analisando a partida…"; pronta, "análise pronta" (nunca vista) ou "reabrir".
+let ultimaAberta = null; // {gameId, fimDePartida, vista} da última abertura
 export function esconderReabrir() { document.getElementById('lc-posjogo-reabrir')?.remove(); }
 export function mostrarReabrir() {
-  esconderReabrir();
-  if (!ultimaAberta || !document.body) return null;
-  const { gameId, fimDePartida } = ultimaAberta;
-  const bt = document.createElement('button');
-  bt.id = 'lc-posjogo-reabrir';
-  bt.textContent = '📊 reabrir análise';
-  bt.title = 'abre de novo o painel do pós-jogo (mentor, lições, rota)';
-  bt.addEventListener('click', () => {
-    esconderReabrir();
-    abrirPainel(gameId, padrao.cfg, padrao.coletor, { fimDePartida }).catch(e => console.error('[lol-client] pós-jogo', e));
-  });
-  document.body.appendChild(bt);
+  if (!ultimaAberta || !document.body) { esconderReabrir(); return null; }
+  const { gameId, fimDePartida, vista } = ultimaAberta;
+  const a = analises.get(gameId);
+  const [texto, dica] = a && !a.pronta ? ['⏳ analisando a partida…', 'a análise segue aqui atrás; clica para ver o carregamento']
+    : a?.erro ? ['📊 tentar a análise de novo', `a última tentativa falhou: ${a.erro}`]
+    : vista ? ['📊 reabrir análise', 'abre de novo o painel do pós-jogo (mentor, lições, rota)']
+      : ['📊 análise pronta', 'abre o painel do pós-jogo (mentor, lições, rota)'];
+  let bt = document.getElementById('lc-posjogo-reabrir');
+  if (!bt) {
+    bt = document.createElement('button');
+    bt.id = 'lc-posjogo-reabrir';
+    bt.addEventListener('click', () => {
+      esconderReabrir();
+      abrirPainel(gameId, padrao.cfg, padrao.coletor, { fimDePartida }).catch(e => console.error('[lol-client] pós-jogo', e));
+    });
+    document.body.appendChild(bt);
+  }
+  bt.textContent = texto;
+  bt.title = dica;
   return bt;
 }
 function fecharPeloUsuario() { fechar(); mostrarReabrir(); }
 function aoTecla(e) { if (e.key === 'Escape') { e.stopPropagation(); e.preventDefault(); fecharPeloUsuario(); } }
+// o painel não bloqueia o client (D1): o fundo não recebe clique, e um clique fora da caixa fecha o painel e segue
+// para o client (o "jogar novamente" ou o chat da Riot reagem no mesmo clique)
+function aoClicarFora(e) { if (!dentroDoPainel(e.target)) fecharPeloUsuario(); }
 
 function moldura(conteudo) {
   esconderReabrir();
@@ -113,11 +155,35 @@ function moldura(conteudo) {
   const el = document.createElement('div');
   el.id = 'lc-posjogo';
   el.innerHTML = conteudo;
-  el.addEventListener('click', e => { if (e.target === el || e.target.closest('.lc-fechar')) fecharPeloUsuario(); });
+  el.addEventListener('click', e => { if (e.target.closest?.('.lc-fechar')) fecharPeloUsuario(); });
   document.body.appendChild(el);
   window.addEventListener('keydown', aoTecla, true);
+  window.addEventListener('pointerdown', aoClicarFora, true);
   return el;
 }
+const htmlCarregando = texto => `<div class="lc-carregando"><span class="lc-carregando-texto">${esc(texto)}</span>
+  <button class="lc-fechar" title="fechar (Esc): a análise segue e o botão no topo reabre">✕</button>
+  <div class="lc-nota">dá para fechar: a análise segue e o botão no topo reabre.</div></div>`;
+const htmlErro = msg => `<div class="lc-carregando">pós-jogo: ${esc(msg)} <button class="lc-fechar" title="fechar (Esc)">✕</button></div>`;
+
+// abertura automática (D4): enquanto carrega, só o botão do topo; se ele clicou ou digitou no client nesse meio
+// tempo, o painel não cai por cima: o botão vira "análise pronta" e espera o clique dele
+let interagiu = false;
+const marcarInteracao = e => { if (!dentroDoPainel(e.target)) interagiu = true; };
+function vigiarInteracao(sim) {
+  window.removeEventListener('pointerdown', marcarInteracao, true);
+  window.removeEventListener('keydown', marcarInteracao, true);
+  interagiu = false; // sempre: um "mexeu" de uma abertura anterior não pode segurar a próxima (lido antes desta chamada)
+  if (!sim) return;
+  window.addEventListener('pointerdown', marcarInteracao, true);
+  window.addEventListener('keydown', marcarInteracao, true);
+}
+
+// lições do motor (D7, docs/INSIGHTS.md § Resumo): recolhidas só com o veredito na faixa do topo; sem ele (mentor
+// ainda sem resposta, "nada", pensando, desligado, erro, coletor fora) as lições são o resumo e ficam abertas.
+// Abrir ou fechar na mão vale até o painel fechar (p.licoesAbertas !== null).
+export const licoesAuto = p => !(p.mentor?.status === 'pronto' && partesMentor(p.mentor.texto).veredito);
+const licoesAbertas = p => (p.licoesAbertas === null ? licoesAuto(p) : p.licoesAbertas);
 
 // estado do painel aberto; as partes que chegam do coletor repintam só o seu pedaço
 function pintar(p, partes) {
@@ -130,9 +196,14 @@ function pintar(p, partes) {
       p.licoes = p.licoesColetor || calcularLicoes(regrasMd, p.r, p.r.historico, p.r.criacao, ctx, nomes).licoes;
       const sec = q('[data-painel="resumo"] .lc-res-esq');
       const novo = document.createElement('div');
-      novo.innerHTML = abaResumo(p.r, p.licoes, p.licoesColetor ? 'coletor' : p.ctxEstado);
+      novo.innerHTML = abaResumo(p.r, p.licoes, p.licoesColetor ? 'coletor' : p.ctxEstado, { licoesAbertas: licoesAbertas(p) });
       sec?.replaceWith(novo.querySelector('.lc-res-esq'));
     } else if (parte === 'mentor') {
+      // veredito do mentor na faixa do topo (D7); as lições do motor abrem sozinhas só quando não há mentor
+      const v = q('[data-veredito]'), hv = htmlVeredito(p.mentor);
+      if (v && hv !== p.vereditoHtml) { v.innerHTML = hv; v.hidden = !hv; p.vereditoHtml = hv; }
+      const det = q('[data-licoes]');
+      if (det && det.open !== licoesAbertas(p)) det.open = licoesAbertas(p);
       // repinta só se mudou (a leitura a cada 15 s não pode jogar a rolagem para o topo); conversa nova desce ao fim
       const m = q('[data-mentor]'), html = htmlMentor(p.mentor);
       const conv = p.mentor?.conversa || [];
@@ -271,14 +342,21 @@ function ligarEventos(p) {
     if (!texto) return;
     acaoMentor(p, `/mentor/${p.r.gameId}/pergunta`, { pergunta: texto }).then(st => { if (st === 202) input.value = ''; });
   });
+  // abrir/fechar as lições na mão: vale até o painel fechar. O toggle também dispara quando o código muda o `open`
+  // (sempre para o valor automático): só conta como escolha dele o que diverge do automático
+  p.el.addEventListener('toggle', e => {
+    if (!e.target?.matches?.('[data-licoes]')) return;
+    if (p.licoesAbertas !== null || e.target.open !== licoesAuto(p)) p.licoesAbertas = e.target.open;
+  }, true);
 }
 
 // fimDePartida: painel aberto pelo EndOfGame (só ele tem o "jogar de novo": o do Ctrl+K pode ser de partida antiga)
 function montar(r, cfg, coletor, vivo, fimDePartida = false) {
-  const p = { r, cfg, coletor, vivo, aba: 'resumo', ctx: null, ctxEstado: coletor ? 'carregando' : 'fora', mentor: null, revisao: null, ranked: null };
+  const p = { r, cfg, coletor: coletor || (async () => ({ status: 0, dados: null })), temColetor: !!coletor, vivo, aba: 'resumo',
+    ctx: null, ctxEstado: coletor ? 'carregando' : 'fora', mentor: null, revisao: null, ranked: null, licoesAbertas: null };
   p.licoes = calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes;
   const html = {
-    resumo: abaResumo(r, p.licoes, p.ctxEstado),
+    resumo: abaResumo(r, p.licoes, p.ctxEstado, { licoesAbertas: licoesAbertas(p) }),
     rota: abaRota(r, nome),
     mortes: abaMortes(r, nome),
     objetivos: abaObjetivos(r),
@@ -296,19 +374,36 @@ function montar(r, cfg, coletor, vivo, fimDePartida = false) {
 // cfg e coletor do plugin (iniciarPosjogo); abrirPainel(id) do Ctrl+K e dos testes usa os mesmos
 let padrao = { cfg: { traumas: { ligado: true } }, coletor: null };
 
-export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor, { fimDePartida = false } = {}) {
-  moldura('<div class="lc-carregando">analisando a partida…</div>');
+// automatico: aberto pelo EndOfGame (ou pela camada compacta que caiu sozinha), não por clique dele. Carrega só com o
+// botão do topo e, pronta a análise, abre se ele não mexeu no client nesse meio tempo (D4). Sem `automatico` (botão,
+// Ctrl+K, "ver análise completa"): caixa de carregamento com ✕ na hora. Fechar no carregamento não cancela a análise.
+export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.coletor, { fimDePartida = false, automatico = false } = {}) {
   const minha = ++abertura;
-  ultimaAberta = { gameId, fimDePartida }; // painel com erro também reabre (a análise pode sair na 2ª)
-  const vivo = () => minha === abertura && !!document.getElementById('lc-posjogo');
-  try {
-    const r = await analisarPartida(gameId, {
-      vivo,
-      aoEsperar: ms => { const c = document.querySelector('#lc-posjogo .lc-carregando'); if (c) c.textContent = `processando a partida (nova tentativa em ${ms / 1000} s)…`; },
-    });
-    if (!vivo()) return r; // fechou enquanto carregava
-    if (r.erro) { moldura(`<div class="lc-carregando">pós-jogo: ${esc(r.erro)} <button class="lc-fechar">fechar</button></div>`); return r; }
-    const p = montar(r, cfg, coletor || (async () => ({ status: 0, dados: null })), vivo, fimDePartida);
+  // 2º EndOfGame da mesma partida com a análise em voo: segue a espera que já existe (não apaga a caixa de carregamento
+  // que ele abriu pelo botão nem zera o "ele mexeu" desta partida)
+  const repetida = automatico && ultimaAberta?.gameId === gameId && analises.get(gameId)?.pronta === false;
+  // painel com erro também reabre (a análise pode sair na 2ª); "vista" = o painel já apareceu para esta partida
+  if (ultimaAberta?.gameId !== gameId) ultimaAberta = { gameId, fimDePartida, vista: false };
+  else ultimaAberta.fimDePartida ||= fimDePartida;
+  const ana = obterAnalise(gameId);
+  if (!ana.pronta) {
+    if (repetida) { if (!document.getElementById('lc-posjogo')) mostrarReabrir(); }
+    else if (automatico) { remover(); vigiarInteracao(true); mostrarReabrir(); }
+    else moldura(htmlCarregando(textoCarregando(ana)));
+  } else vigiarInteracao(false);
+  const r = await ana.promessa;
+  const mexeu = automatico && interagiu;
+  if (minha !== abertura) return r; // fechou ou outra abertura tomou a frente: nada abre sozinho
+  vigiarInteracao(false);
+  if (mexeu) { mostrarReabrir(); return r; } // ele estava clicando no client: a análise espera no botão
+  // erro na abertura automática (LCU sem a partida depois de ~75 s, remake): nenhuma caixa sozinha por cima do client;
+  // o botão do topo vira "tentar a análise de novo" (D4). Com a caixa de carregamento que ele abriu, o erro vai nela.
+  if (automatico && (!r || r.erro) && !document.getElementById('lc-posjogo')) { mostrarReabrir(); return r; }
+  if (!r || r.erro) { moldura(htmlErro(r?.erro || ana.erro || 'falhou')); return r; }
+  {
+    const vivo = () => minha === abertura && !!document.getElementById('lc-posjogo');
+    ultimaAberta.vista = true;
+    const p = montar(r, cfg, coletor, vivo, ultimaAberta.fimDePartida);
     painel = p;
     json('/lol-ranked/v1/current-ranked-stats').then(d => { p.ranked = d; if (vivo()) pintar(p, ['sessao']); }).catch(() => {});
     // histórico lento (200 partidas): o painel abriu com o cache; quando a leitura chega, refaz tendência e sessão
@@ -326,10 +421,6 @@ export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.col
       coletor(`/revisao/${gameId}`).then(rv => { p.revisao = rv.status === 200 ? rv.dados : { status: rv.status }; if (vivo()) pintar(p, ['tendencia']); });
     } else pintar(p, ['licoes']);
     return r;
-  } catch (e) {
-    if (!vivo()) return null; // fechado: erro não reabre o painel
-    moldura(`<div class="lc-carregando">pós-jogo: ${esc(e.message)} <button class="lc-fechar">fechar</button></div>`);
-    throw e;
   }
 }
 
@@ -341,7 +432,7 @@ export const estadoPainel = () => painel && { aba: painel.aba, ctxEstado: painel
 export async function analisarUltima() {
   const ultima = (await historico())
     .filter(g => g.mapId === 11 && g.gameDuration >= 300 && !FORA_DAS_CONTAS.includes(g.queueId)).sort((a, b) => b.gameCreation - a.gameCreation)[0];
-  if (!ultima) { moldura('<div class="lc-carregando">nenhuma partida de Summoner\'s Rift no histórico <button class="lc-fechar">fechar</button></div>'); return null; }
+  if (!ultima) { moldura(htmlErro('nenhuma partida de Summoner\'s Rift no histórico')); return null; }
   return abrirPainel(ultima.gameId, padrao.cfg, padrao.coletor);
 }
 
@@ -385,7 +476,9 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
     faseAtual = fase;
     if (vigiaCompacto && fase !== 'EndOfGame') { vigiaCompacto.parar(); vigiaCompacto = null; }
     // o painel (tela cheia) não pode cobrir o aceite nem a seleção: fecha e cancela análise em voo
-    if (['ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress'].includes(fase)) { fechar(); esconderReabrir(); ultimaAberta = null; }
+    if (['ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress'].includes(fase)) {
+      fechar(); esconderReabrir(); ultimaAberta = null; vigiarInteracao(false); esquecerAnalises();
+    }
     // novo ciclo: o id da partida anterior não vale mais (Lobby traz gameId 0)
     if (['None', 'Lobby', 'Matchmaking'].includes(fase)) gameId = null;
     if (fase !== 'EndOfGame' || !cfg.posjogo.ligado) return;
@@ -402,12 +495,12 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
         vigiaCompacto = vigiarSaidaDoCompacto({ aoSair: () => {
           vigiaCompacto = null;
           if (faseAtual !== 'EndOfGame' || document.getElementById('lc-posjogo')) return;
-          abrirPainel(gid, cfg, coletor, { fimDePartida: true }).catch(e => console.error('[lol-client] pós-jogo', e));
+          abrirPainel(gid, cfg, coletor, { fimDePartida: true, automatico: true }).catch(e => console.error('[lol-client] pós-jogo', e));
         } });
         return;
       }
     }
-    abrirPainel(gameId, cfg, coletor, { fimDePartida: true }).catch(e => console.error('[lol-client] pós-jogo', e));
+    abrirPainel(gameId, cfg, coletor, { fimDePartida: true, automatico: true }).catch(e => console.error('[lol-client] pós-jogo', e));
   });
   // abrirPainel(id, {fimDePartida}): o "ver análise completa" da tela compacta; já aberto na mesma partida = fica
   const abrir = (id, opcoes = {}) => (painel?.r?.gameId === id && document.getElementById('lc-posjogo')

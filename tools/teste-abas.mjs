@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { analisar, trajeto } from '../pengu/posjogo/analise.js';
 import { licoes } from '../pengu/posjogo/licoes.js';
 import { ABAS, curvas, objetivosDaPartida, tendencia, sessaoDaPartida, alertasSessao, htmlTopo, htmlMentor,
-  abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from '../pengu/posjogo/abas.js';
+  htmlVeredito, partesMentor, abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from '../pengu/posjogo/abas.js';
 
 const raiz = fileURLToPath(new URL('../', import.meta.url));
 const lerJson = p => JSON.parse(readFileSync(raiz + p, 'utf8'));
@@ -76,6 +76,36 @@ for (const m of [null, { status: 'fora' }, { status: 'nada' }, { status: 'pensan
   { status: 'erro', conversa: [{ uso: 'posjogo', erro: 'timeout' }] }]) {
   const h = htmlMentor(m);
   if (/undefined|<b>\?/.test(h)) falhas.push(`mentor ${m?.status}: ${h.slice(0, 80)}`);
+}
+// veredito no topo (roadmap 2026-10-14, D7): formato novo com o ** do modelo, formato antigo e resposta sem veredito
+const NOVO = '**Veredito:** Você ganhou a rota, mas morreu <sozinho> demais.\n\n**O essencial:**\n- Foram 3 mortes antes dos 10.\n\n**Próxima partida:** zero mortes até os 10.';
+const pn = partesMentor(NOVO);
+if (pn.veredito !== 'Você ganhou a rota, mas morreu <sozinho> demais.' || pn.resto.includes('Veredito') || !pn.resto.startsWith('**O essencial:**'))
+  falhas.push(`partesMentor novo: ${JSON.stringify(pn)}`);
+const pa = partesMentor('Veredito: Perdeu a rota.\nLições:\n1. x\nPróxima partida: y');
+if (pa.veredito !== 'Perdeu a rota.' || !pa.resto.startsWith('Lições:')) falhas.push(`partesMentor antigo: ${JSON.stringify(pa)}`);
+const pv = partesMentor('Texto livre sem rótulo.');
+if (pv.veredito !== null || pv.resto !== 'Texto livre sem rótulo.') falhas.push(`partesMentor sem veredito: ${JSON.stringify(pv)}`);
+const pl = partesMentor('Veredito: duas linhas\nna mesma frase.\n\nO essencial:\n- a');
+if (pl.veredito !== 'duas linhas na mesma frase.') falhas.push(`partesMentor veredito em 2 linhas: ${JSON.stringify(pl)}`);
+const hv = htmlVeredito({ status: 'pronto', texto: NOVO });
+if (!hv.includes('Você ganhou a rota') || !hv.includes('&lt;sozinho&gt;') || hv.includes('<sozinho>')) falhas.push(`htmlVeredito: ${hv}`);
+if (htmlVeredito({ status: 'fora' }) !== '' || htmlVeredito(null) !== '' || htmlVeredito({ status: 'pronto', texto: 'sem rótulo' }) !== '') falhas.push('htmlVeredito fora/sem mentor/sem rótulo não esconde a faixa');
+if (!htmlVeredito({ status: 'pensando' }).includes('escrevendo')) falhas.push('htmlVeredito pensando');
+const hm = htmlMentor({ status: 'pronto', texto: NOVO, conversa: [] });
+if (hm.includes('Você ganhou a rota') || !hm.includes('<b class="lc-rotulo">O essencial:</b>') || !hm.includes('<b class="lc-rotulo">Próxima partida:</b>') || hm.includes('**'))
+  falhas.push(`htmlMentor sem o veredito, rótulos do formato novo: ${hm}`);
+if (!htmlMentor({ status: 'pronto', texto: 'Texto livre sem rótulo.', conversa: [] }).includes('Texto livre')) falhas.push('htmlMentor sem veredito some com o texto');
+// lições do motor: recolhidas ou abertas conforme opcoes.licoesAbertas; a faixa do veredito nasce escondida
+{
+  const r0 = analisar(fx('game-3292712362.json'), fx('timeline-3292712362.json'), fx('summoner.json').puuid, fx('historico.json').games.games);
+  const p0 = fx('game-3292712362.json').participants.find(p => p.participantId === r0.participantId);
+  Object.assign(r0, { stats: p0.stats });
+  const lic0 = [{ tipo: 'atencao', texto: 'a' }, { tipo: 'positiva', texto: 'b' }];
+  const fechado = abaResumo(r0, lic0, 'ok', { licoesAbertas: false }), aberto = abaResumo(r0, lic0, 'fora', { licoesAbertas: true });
+  if (!/<details class="lc-licoes-det" data-licoes>/.test(fechado) || !/data-licoes open>/.test(aberto)) falhas.push('lições: <details> sem o open certo');
+  if (!/data-veredito hidden/.test(fechado) || !fechado.includes('as 2 lições do motor de regras')) falhas.push('Resumo: faixa do veredito ou rótulo das lições');
+  if (!/data-licoes open>/.test(abaResumo(r0, lic0, 'ok'))) falhas.push('lições: sem opção, abertas (compatível com quem não passa o estado)');
 }
 console.log(falhas.length ? falhas.map(f => `FALHOU: ${f}`).join('\n') : `ok (${ABAS.length} abas x 2 partidas x com/sem coletor)`);
 process.exit(falhas.length ? 1 : 0);

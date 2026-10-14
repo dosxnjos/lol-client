@@ -66,8 +66,21 @@ class El {
     return true;
   }
   *desc() { for (const n of this.children) { yield n; yield* n.desc(); } }
-  querySelector(sel) { for (const n of this.desc()) if (n.matches(String(sel).trim())) return n; return null; }
-  querySelectorAll(sel) { return [...this.desc()].filter(n => n.matches(sel)); }
+  // seletor com descendente ("[data-painel=x] .y"): o último pedaço casa no nó, os outros num ancestral, em ordem
+  casa(sel) {
+    const partes = String(sel).trim().split(/\s+/);
+    if (!this.matches(partes.pop())) return false;
+    let n = this.parentNode;
+    for (let i = partes.length - 1; i >= 0; i--) {
+      while (n && n.nodeType === 1 && !n.matches(partes[i])) n = n.parentNode;
+      if (!n || n.nodeType !== 1) return false;
+      n = n.parentNode;
+    }
+    return true;
+  }
+  closest(sel) { for (let n = this; n && n.nodeType === 1; n = n.parentNode) if (n.matches(sel)) return n; return null; }
+  querySelector(sel) { for (const n of this.desc()) if (n.casa(sel)) return n; return null; }
+  querySelectorAll(sel) { return [...this.desc()].filter(n => n.casa(sel)); }
 }
 function novoDoc() {
   const doc = {};
@@ -424,23 +437,49 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   const erroOriginal = console.error, logOriginal = console.log;
   console.error = () => {}; console.log = () => {}; // o painel sem LCU loga o erro dele: não interessa aqui
   const esperarReal = ms => new Promise(r => setTimeout(r, ms));
-  async function rodada({ compacto, avista, mudarFase = null }) {
+  // window com ouvintes de verdade (o painel ouve keydown e pointerdown na captura): janela.disparar(tipo, alvo)
+  function novaJanela() {
+    const ouvintes = {};
+    return {
+      addEventListener(t, f) { (ouvintes[t] ||= new Set()).add(f); },
+      removeEventListener(t, f) { ouvintes[t]?.delete(f); },
+      disparar(t, target, extra = {}) { for (const f of [...(ouvintes[t] || [])]) f({ type: t, target, stopPropagation() {}, preventDefault() {}, ...extra }); },
+      ouvindo: t => ouvintes[t]?.size || 0,
+    };
+  }
+  // partida de referência 3292712362 (tests/fixtures) na LCU falsa: a abertura automática com erro não abre caixa
+  // nenhuma (vai para o botão, D4), então "o painel abre" precisa de uma partida que a LCU tem
+  const GREF = 3292712362;
+  const fxRef = n => JSON.parse(readFileSync(raiz + 'tests/fixtures/' + n, 'utf8'));
+  const ROTAS_REF = {
+    'GET /lol-summoner/v1/current-summoner': fxRef('summoner.json'),
+    [`GET /lol-match-history/v1/games/${GREF}`]: fxRef('game-3292712362.json'),
+    [`GET /lol-match-history/v1/game-timelines/${GREF}`]: fxRef('timeline-3292712362.json'),
+    'GET /lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199': fxRef('historico.json'),
+  };
+  async function rodada({ compacto, avista, mudarFase = null, rotas = ROTAS_REF }) {
     const doc = novoDoc();
     globalThis.document = doc;
-    globalThis.window = { addEventListener() {}, removeEventListener() {} };
-    globalThis.fetch = lcuFalsa({}).fetch; // tudo 404: o painel abre com a mensagem de erro (basta existir)
+    const janela = novaJanela();
+    globalThis.window = janela;
+    globalThis.fetch = lcuFalsa(rotas).fetch; // rotas: {} = tudo 404 (abertura automática com erro: só o botão)
+    // estado do módulo é um só: o aceite esquece análise, botão e "última aberta" da rodada anterior
+    const obs0 = [];
+    pj.iniciarPosjogo({ socket: { observe: (uri, cb) => { if (uri.endsWith('gameflow-phase')) obs0.push(cb); } } },
+      { posjogo: { ligado: false } }, null);
+    for (const cb of obs0) cb({ data: 'ReadyCheck' });
     if (avista) doc.documentElement.classList.add('lc-modo-compacto');
     const obs = new Map();
     const context = { socket: { observe: (uri, cb) => { (obs.get(uri) || obs.set(uri, []).get(uri)).push(cb); } } };
     const emitir = (uri, data) => { for (const cb of obs.get(uri) || []) cb({ uri, data, eventType: 'Update' }); };
     const cfg = { posjogo: { ligado: true }, compacto: { ligado: compacto }, filaRapida: {}, traumas: {} };
     const ret = pj.iniciarPosjogo(context, cfg, null);
-    emitir('/lol-gameflow/v1/session', { gameData: { gameId: GID, queue: { id: 400 } }, map: { id: 11 } });
+    emitir('/lol-gameflow/v1/session', { gameData: { gameId: GREF, queue: { id: 400 } }, map: { id: 11 } });
     emitir('/lol-gameflow/v1/gameflow-phase', 'EndOfGame');
     if (mudarFase) { await esperarReal(50); emitir('/lol-gameflow/v1/gameflow-phase', mudarFase); }
     await esperarReal(pj.ESPERA_COMPACTO_MS + 150);
     await tick(10);
-    return { doc, ret, emitir, aberto: !!doc.getElementById('lc-posjogo') };
+    return { doc, ret, emitir, janela, aberto: !!doc.getElementById('lc-posjogo') };
   }
   const a = await rodada({ compacto: true, avista: true });
   caso('posjogo/index.js: EndOfGame com a camada compacta à vista → #lc-posjogo fechado', !a.aberto);
@@ -451,13 +490,14 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   caso('posjogo/index.js: compacto ligado mas client normal à vista (expandido por ti, modal da Riot) → abre como antes', b.aberto);
   const c = await rodada({ compacto: false, avista: false });
   caso('posjogo/index.js: compacto desligado → abre como antes', c.aberto);
-  // reabrir (Gabriel, 14/10/2026): fechar pelo fundo deixa o botão; clicar reabre; fase do aceite tira o botão
-  c.doc.getElementById('lc-posjogo').disparar('click');
+  // reabrir (Gabriel, 14/10/2026): fechar (aqui, clique fora da caixa) deixa o botão; clicar reabre; fase do aceite tira o botão
+  c.janela.disparar('pointerdown', c.doc.body);
   const bt = c.doc.getElementById('lc-posjogo-reabrir');
   caso('pós-jogo fechado por ele: painel sai e aparece o "reabrir análise"', !c.doc.getElementById('lc-posjogo') && !!bt);
   bt?.click(); await tick(10);
   caso('reabrir análise: o painel volta e o botão some', !!c.doc.getElementById('lc-posjogo') && !c.doc.getElementById('lc-posjogo-reabrir'));
-  c.doc.getElementById('lc-posjogo').disparar('click');
+  c.janela.disparar('keydown', c.doc.body, { key: 'Escape' });
+  caso('Esc fecha o painel (e deixa o botão)', !c.doc.getElementById('lc-posjogo') && !!c.doc.getElementById('lc-posjogo-reabrir'));
   c.emitir('/lol-gameflow/v1/gameflow-phase', 'ReadyCheck');
   caso('ReadyCheck tira o "reabrir análise" (painel e botão fora do aceite)', !c.doc.getElementById('lc-posjogo') && !c.doc.getElementById('lc-posjogo-reabrir'));
   const d = await rodada({ compacto: true, avista: false, mudarFase: 'Lobby' });
@@ -465,6 +505,124 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   const e = await rodada({ compacto: true, avista: true });
   caso('posjogo/index.js: só lc-compacto (chave ligada) sem lc-modo-compacto não segura o painel',
     (() => { const dd = novoDoc(); dd.documentElement.classList.add('lc-compacto'); globalThis.document = dd; return !pj.compactoAVista(); })() && !e.aberto);
+  // ---- painel que não prende (roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md, D1/D3/D4) ----
+  // partida de referência 3292712362 (tests/fixtures) com a leitura do jogo presa num portão: dá para fechar no meio
+  {
+    const GJ = 3292712362;
+    const fx = n => JSON.parse(readFileSync(raiz + 'tests/fixtures/' + n, 'utf8'));
+    const jogo = fx('game-3292712362.json'), linha = fx('timeline-3292712362.json');
+    let abrir = null, leituras = 0, jogoServido = jogo;
+    const fecharPortao = () => { let a; const p = new Promise(r => { a = r; }); abrir = a; return p; };
+    let portao = fecharPortao();
+    const rotas = {
+      'GET /lol-summoner/v1/current-summoner': fx('summoner.json'),
+      [`GET /lol-match-history/v1/games/${GJ}`]: async () => { leituras++; await portao; return jogoServido; },
+      [`GET /lol-match-history/v1/game-timelines/${GJ}`]: linha,
+      'GET /lol-match-history/v1/products/lol/current-summoner/matches?begIndex=0&endIndex=199': fx('historico.json'),
+    };
+    // rodada limpa: ReadyCheck esquece análise e botão da rodada anterior (estado do módulo é um só)
+    const nova = async ({ fim = true } = {}) => {
+      portao = fecharPortao(); leituras = 0;
+      const doc = novoDoc(); globalThis.document = doc;
+      const janela = novaJanela(); globalThis.window = janela;
+      globalThis.fetch = lcuFalsa(rotas).fetch;
+      const obs = new Map();
+      const context = { socket: { observe: (uri, cb) => { (obs.get(uri) || obs.set(uri, []).get(uri)).push(cb); } } };
+      const emitir = (uri, data) => { for (const cb of obs.get(uri) || []) cb({ uri, data, eventType: 'Update' }); };
+      const ret = pj.iniciarPosjogo(context, { posjogo: { ligado: true }, compacto: { ligado: false }, filaRapida: {}, traumas: {} }, null);
+      emitir('/lol-gameflow/v1/gameflow-phase', 'ReadyCheck');
+      emitir('/lol-gameflow/v1/session', { gameData: { gameId: GJ, queue: { id: 420 } }, map: { id: 11 } });
+      if (fim) emitir('/lol-gameflow/v1/gameflow-phase', 'EndOfGame');
+      await tick(10);
+      const painelEl = () => doc.getElementById('lc-posjogo'), botao = () => doc.getElementById('lc-posjogo-reabrir');
+      return { doc, janela, emitir, ret, painelEl, botao, painelPronto: () => !!painelEl()?.innerHTML?.includes('lc-topo') };
+    };
+    const xis = { closest: s => (s === '.lc-fechar' ? {} : null), parentNode: null }; // o ✕ dentro do HTML do painel
+
+    // pedido por ele (botão, Ctrl+K, "ver análise completa"): caixa de carregamento com ✕, que fecha sem cancelar
+    let s = await nova({ fim: false });
+    s.ret.abrirPainel(GJ).catch(() => {}); await tick(10);
+    const carregando = s.painelEl()?.innerHTML || '';
+    caso('pedido por ele: "analisando a partida…" com ✕ na caixa de carregamento',
+      carregando.includes('analisando a partida') && carregando.includes('lc-fechar') && !s.painelPronto(), carregando);
+    s.painelEl()?.disparar('click', { target: xis });
+    caso('✕ no carregamento: a caixa sai e o botão do topo diz "analisando a partida…"',
+      !s.painelEl() && s.botao()?.textContent === '⏳ analisando a partida…', s.botao()?.textContent);
+    abrir(); await tick(20);
+    caso('análise chega com o painel fechado: nada abre sozinho; o botão vira "análise pronta"',
+      !s.painelEl() && s.botao()?.textContent === '📊 análise pronta', s.botao()?.textContent);
+    s.botao()?.click(); await tick(10);
+    caso('clique no botão: painel com a partida na hora, sem ler a LCU de novo (a análise seguiu em cache)',
+      s.painelPronto() && !s.botao() && leituras === 1, `leituras ${leituras}`);
+    s.janela.disparar('pointerdown', s.painelEl());
+    caso('clique dentro da caixa não fecha', s.painelPronto());
+    s.janela.disparar('pointerdown', s.doc.body);
+    caso('clique fora da caixa (no client) fecha o painel e deixa "reabrir análise"',
+      !s.painelEl() && s.botao()?.textContent === '📊 reabrir análise' && s.janela.ouvindo('pointerdown') === 0, s.botao()?.textContent);
+
+    // abertura automática do EndOfGame: carrega só com o botão; sem ele mexer no client, abre quando fica pronta
+    s = await nova();
+    caso('EndOfGame: carregando sem caixa por cima (só o botão "analisando")', !s.painelEl() && s.botao()?.textContent === '⏳ analisando a partida…');
+    abrir(); await tick(20);
+    caso('EndOfGame sem clique dele no client: o painel abre sozinho quando a análise fica pronta', s.painelPronto() && !s.botao());
+
+    // ...e com clique dele no meio do carregamento: não cai por cima, espera no botão
+    s = await nova();
+    s.janela.disparar('pointerdown', s.doc.body);
+    abrir(); await tick(20);
+    caso('EndOfGame com clique dele no client durante o carregamento: painel não abre; botão "análise pronta"',
+      !s.painelEl() && s.botao()?.textContent === '📊 análise pronta', s.botao()?.textContent);
+    s.botao()?.click(); await tick(10);
+    caso('...e o clique no botão abre o painel', s.painelPronto());
+    // o "mexeu" daquela abertura não vale para a próxima: abertura automática com a análise já pronta abre na hora
+    s.janela.disparar('pointerdown', s.doc.body);
+    s.ret.abrirPainel(GJ, { fimDePartida: true, automatico: true }); await tick(10);
+    caso('abertura automática seguinte, com a análise pronta: abre (o clique da anterior não segura)', s.painelPronto() && leituras === 1);
+
+    // aceite no meio do carregamento: some tudo e a análise em voo não abre nada depois
+    s = await nova();
+    s.emitir('/lol-gameflow/v1/gameflow-phase', 'ReadyCheck');
+    abrir(); await tick(20);
+    caso('ReadyCheck no carregamento: botão some e a análise que chega depois não abre o painel', !s.painelEl() && !s.botao());
+
+    // 2º EndOfGame da mesma partida com a análise em voo (revisão 14/10, achado 6): não apaga a caixa de carregamento
+    // que ele abriu pelo botão nem zera o "ele mexeu"
+    s = await nova();
+    s.janela.disparar('pointerdown', s.doc.body);
+    s.emitir('/lol-gameflow/v1/gameflow-phase', 'EndOfGame'); await tick(10);
+    abrir(); await tick(20);
+    caso('2º EndOfGame no carregamento depois de ele clicar no client: o painel continua sem cair por cima',
+      !s.painelEl() && s.botao()?.textContent === '📊 análise pronta' && leituras === 1, `${s.botao()?.textContent} leituras ${leituras}`);
+    s = await nova();
+    s.botao()?.click(); await tick(10);
+    const caixaAntes = s.painelEl()?.innerHTML?.includes('analisando a partida');
+    s.emitir('/lol-gameflow/v1/gameflow-phase', 'EndOfGame'); await tick(10);
+    caso('2º EndOfGame com a caixa de carregamento que ele abriu: a caixa fica', caixaAntes && !!s.painelEl()?.innerHTML?.includes('analisando a partida'));
+    abrir(); await tick(20);
+    caso('...e quando a análise fica pronta o painel aparece nela', s.painelPronto());
+
+    // erro na abertura automática (revisão 14/10, achado 2): nenhuma caixa sozinha; o botão oferece tentar de novo
+    jogoServido = { ...jogo, mapId: 12 }; // analisar() devolve erro ("só Summoner's Rift")
+    try {
+      s = await nova();
+      abrir(); await tick(20);
+      caso('abertura automática com erro: nenhuma caixa por cima do client; botão "tentar a análise de novo"',
+        !s.painelEl() && s.botao()?.textContent === '📊 tentar a análise de novo', s.botao()?.textContent);
+      s = await nova({ fim: false });
+      s.ret.abrirPainel(GJ).catch(() => {}); await tick(10);
+      abrir(); await tick(20);
+      caso('pedido por ele com erro: o erro aparece na caixa (com ✕)',
+        !!s.painelEl()?.innerHTML?.includes('pós-jogo:') && !!s.painelEl()?.innerHTML?.includes('lc-fechar'));
+    } finally { jogoServido = jogo; }
+
+    // lições do motor (D7 corrigido na revisão, achado 1): recolhidas só com veredito na faixa
+    const auto = st => pj.licoesAuto({ mentor: st });
+    caso('licoesAuto: abertas sem resposta do mentor, com "nada" (mentor desligado, personalizada, partida antiga), pensando, erro, fora',
+      auto(null) && auto({ status: 'nada' }) && auto({ status: 'pensando' }) && auto({ status: 'erro' }) && auto({ status: 'fora' }) && auto({ status: 'indisponivel' }));
+    caso('licoesAuto: recolhidas com o veredito pronto; abertas se a resposta pronta não tem "Veredito:"',
+      !auto({ status: 'pronto', texto: '**Veredito:** você morreu demais.\n\nO essencial:\n- x' }) && auto({ status: 'pronto', texto: 'Lições:\n1. x' }));
+  }
+
   // a camada cai DEPOIS dos 400 ms (celebração que chega tarde e a regra 7 expande, erro da tela 4, ⤢ expandir dele):
   // o client normal segue como hoje, com o painel; fora do EndOfGame, ou com o painel já aberto, nada
   const antesMO = globalThis.MutationObserver;

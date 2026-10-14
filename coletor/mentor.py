@@ -44,20 +44,31 @@ DRAGAO_LIVE_PT = {"Water": "oceano", "Earth": "montanha", "Air": "nuvem", "Fire"
 EVENTO_LIVE_PT = {"DragonKill": "dragão", "HordeKill": "vastilarva", "HeraldKill": "arauto",
                   "BaronKill": "barão", "TurretKilled": "torre", "InhibKilled": "inibidor"}
 
+# Pedido do Gabriel (14/10/2026, roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md): nada de "não tenho dado de vida,
+# nível ou recarga" (a ordem de dizer isso saiu daqui) e um veredito curto em linguagem de jogador no topo
 SISTEMA = """Você é o mentor de League of Legends do Gabriel (conta dele, jogador de topo e selva).
-Tom: mentor ácido e direto, sem ofensa, sem elogio vazio. Português do Brasil, prosa completa, sem abreviar palavras.
+Tom: direto e leve, como um parceiro de duo que entende do jogo; sem ofensa, sem elogio vazio. Português do Brasil,
+prosa completa, sem abreviar palavras.
 Regras duras:
 - Use SÓ o que está no bloco DADOS. Todo número que você citar tem de estar nos dados. Não invente fato
-  (flash, ward, visão, build, habilidade, recarga, posição, intenção de jogador): se o dado não existe, diga
-  "não tenho esse dado".
+  (flash, ward, visão, build, habilidade, recarga, vida, nível, posição, intenção de jogador). Não atribua a um
+  jogador o que os dados não atribuem a ele (quem pegou objetivo é só o nome entre parênteses na linha dele).
+- O que não está nos dados fica de fora: na análise e nos conselhos que ninguém pediu, não comente que um dado falta
+  nem que você não sabe algo. Se o Gabriel perguntar algo que os dados não cobrem, diga em uma frase curta que daqui
+  não dá para ver isso (sem listar o que falta) e siga com o que os dados mostram.
 - Separe fato de conselho: o fato vem com o número que o sustenta; o conselho é teu, curto e acionável.
-- Heurística não é veredito: "morte sozinho no lado inimigo" é padrão a olhar, não "você errou".
-- Respeite as observações sobre os limites dos dados (ex.: o que a Live Client não vê na névoa)."""
+- Padrão não é acusação: "morte sozinho no lado inimigo" é algo a olhar, não "você errou". Fale assim sem escrever
+  a ressalva.
+- Os limites dos dados (ex.: o que a Live Client não vê na névoa) servem para você não errar; não os cite na resposta."""
 
-FORMATO_POSJOGO = """Responda em no máximo 220 palavras, neste formato:
-Veredito: uma frase.
-Lições: 3 itens numerados, cada um com o fato (número dos dados) e o que fazer na próxima.
-Próxima partida: uma única coisa para focar."""
+FORMATO_POSJOGO = """Responda em no máximo 120 palavras no total (teto, não meta), em linguagem de jogador (nada de termo
+de análise de dados como lift, amostra, n=, heurística, quadro, linha do tempo, participante), neste formato:
+Veredito: 1 ou 2 frases curtas com o que decidiu a partida para o Gabriel, em causa e efeito, como quem viu o jogo
+(o tom, não o conteúdo, de: "Você morreu demais no meio do jogo, e isso deu os objetivos para eles."). Sem número
+nem horário (os números ficam no essencial), e só o que os dados mostram.
+O essencial: 1 ou 2 itens começando com "- ", só o que mais pesou; cada um em até duas frases, com o fato (um
+número dos dados) e o que fazer na próxima.
+Próxima partida: uma única coisa para focar, em uma frase."""
 
 FORMATO_AOVIVO = """Responda em no máximo 90 palavras: até 3 itens curtos, do mais urgente para o menos,
 dizendo o que fazer nos próximos 2 minutos e por quê (com o dado que sustenta)."""
@@ -237,7 +248,7 @@ def dados_posjogo(c, game_id, extras=None):
     L.append("")
     nomes_pid = {pid: n for pid, n in camp.items()}
     objs, placar = _objetivos(c, game_id, meu_time, nomes_pid)
-    L.append("Objetivos e prédios (tempo, o quê, quem):")
+    L.append("Objetivos e prédios (tempo, o quê, quem; prédio \"derrubado por eles\" era nosso):")
     L.extend(f"- {o}" for o in objs)
     L.append("Placar de objetivos: nós " + (", ".join(f"{v} {k}" for k, v in placar["nós"].items()) or "nada")
              + "; eles " + (", ".join(f"{v} {k}" for k, v in placar["eles"].items()) or "nada") + ".")
@@ -275,8 +286,8 @@ def dados_posjogo(c, game_id, extras=None):
         L.append(f"{titulo}:")
         L.append(texto if isinstance(texto, str) else json.dumps(texto, ensure_ascii=False))
     L.append("")
-    L.append("Limites dos dados: sem itens, wards, compras, habilidades, feitiços nem posições finas (linha do tempo "
-             "com 1 posição por minuto).")
+    L.append("Limites dos dados (servem para não errar; não comente na resposta): sem itens, wards, compras, "
+             "habilidades, feitiços nem posições finas (linha do tempo com 1 posição por minuto).")
     return "\n".join(L)
 
 
@@ -398,9 +409,10 @@ def dados_aovivo(amostra, historico=None, parados=None):
         L.append("")
         L.append(f"Padrão do Gabriel (histórico): {historico}")
     L.append("")
-    L.append("Limites dos dados (Live Client): não há posição de ninguém no mapa; farm, nível e itens de inimigo "
-             "congelam enquanto ele está na névoa (podem estar velhos); farm anda de 10 em 10; não há recarga de "
-             "feitiço nem de habilidade de ninguém; ouro no bolso só o do Gabriel.")
+    L.append("Limites dos dados (Live Client; servem para não errar, não comente na resposta): não há posição de "
+             "ninguém no mapa; farm, nível e itens de inimigo congelam enquanto ele está na névoa (podem estar velhos); "
+             "farm anda de 10 em 10; não há recarga de feitiço nem de habilidade de ninguém; ouro no bolso só o do "
+             "Gabriel.")
     return "\n".join(L)
 
 

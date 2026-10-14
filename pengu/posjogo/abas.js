@@ -150,7 +150,10 @@ const ctxNota = estado => ({
   erro: 'coletor sem esta partida: lições sem matchup, traumas e histórico',
 }[estado] || 'perguntando ao coletor…');
 
-export function abaResumo(r, licoes, ctxEstado) {
+// Resumo (docs/INSIGHTS.md § Pós-jogo v2, D7 do roadmap 2026-10-14): faixa do veredito do mentor no topo (vazia até
+// ele chegar: pintar('mentor') enche), placar e lições do motor à esquerda (recolhidas com o mentor ligado:
+// opcoes.licoesAbertas), resto do mentor à direita
+export function abaResumo(r, licoes, ctxEstado, opcoes = {}) {
   const s = r.stats;
   const farm = s.totalMinionsKilled + s.neutralMinionsKilled;
   const placar = [
@@ -160,11 +163,14 @@ export function abaResumo(r, licoes, ctxEstado) {
   const lic = licoes.length ? licoes.map((l, i) => `<div class="lc-licao lc-${l.tipo === 'positiva' ? 'positiva' : 'atencao'}">
       <span class="lc-licao-n">${i + 1}</span><span>${esc(l.texto)}</span></div>`).join('')
     : '<div class="lc-vazio">nenhuma regra disparou nesta partida</div>';
+  const abertas = opcoes.licoesAbertas === undefined ? true : !!opcoes.licoesAbertas;
+  const rotulo = licoes.length ? `${licoes.length === 1 ? 'a lição' : `as ${licoes.length} lições`} do motor de regras` : 'lições do motor de regras';
   return `<div class="lc-resumo">
+    <div class="lc-veredito" data-veredito hidden></div>
     <div class="lc-res-esq">
       <div class="lc-placar">${placar.map(([k, v]) => `<div><b>${esc(v)}</b><span>${k}</span></div>`).join('')}</div>
-      <h3>3 lições</h3>
-      <div class="lc-licoes">${lic}</div>
+      <details class="lc-licoes-det" data-licoes${abertas ? ' open' : ''}><summary>${rotulo}</summary>
+        <div class="lc-licoes">${lic}</div></details>
       <div class="lc-nota" data-ctx-nota>${ctxNota(ctxEstado)}</div>
     </div>
     <div class="lc-res-dir lc-mentor">
@@ -176,9 +182,30 @@ export function abaResumo(r, licoes, ctxEstado) {
   </div>`;
 }
 
-// texto do mentor: "Veredito:", "Lições:", "Próxima partida:" em destaque, **negrito** e quebras de linha
-const textoMentor = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
-  .replace(/^(Veredito|Lições|Próxima partida):/gm, '<b class="lc-rotulo">$1:</b>').replace(/\n/g, '<br>');
+// texto do mentor: "Veredito:", "O essencial:", "Lições:" (formato até 13/10), "Próxima partida:" em destaque,
+// **negrito** e quebras de linha. O modelo costuma escrever o rótulo em negrito ("**Veredito:**"): vira rótulo também.
+const ROTULOS = 'Veredito|O essencial|Lições|Próxima partida';
+const textoMentor = t => esc(t).replace(new RegExp(`^[ \\t]*\\*\\*(${ROTULOS}):?\\*\\*:?`, 'gm'), '$1:')
+  .replace(/\*\*(.+?)\*\*/g, '<b>$1</b>')
+  .replace(new RegExp(`^[ \\t]*(${ROTULOS}):`, 'gm'), '<b class="lc-rotulo">$1:</b>').replace(/\n/g, '<br>');
+
+// separa o veredito (linha "Veredito:", com ou sem **) do resto da resposta do mentor. Sem veredito: tudo no resto.
+// O veredito vai até a linha em branco, o próximo rótulo ou o fim do texto.
+export function partesMentor(texto) {
+  const t = String(texto ?? '');
+  const m = t.match(new RegExp(`^[ \\t]*(?:\\*\\*)?Veredito:?(?:\\*\\*)?:?[ \\t]*([\\s\\S]*?)(?=\\n[ \\t]*\\n|\\n[ \\t]*(?:\\*\\*)?(?:${ROTULOS})\\b|(?![\\s\\S]))`, 'm'));
+  const veredito = m ? m[1].replace(/\*\*/g, '').replace(/\s+/g, ' ').trim() : '';
+  if (!veredito) return { veredito: null, resto: t.trim() };
+  return { veredito, resto: (t.slice(0, m.index) + t.slice(m.index + m[0].length)).trim() };
+}
+
+// faixa do topo do Resumo: o veredito pronto, "escrevendo" enquanto o mentor pensa; '' (faixa escondida) sem mentor
+export function htmlVeredito(m) {
+  if (m?.status === 'pensando') return '<span class="lc-pensando">o mentor está escrevendo o veredito<span>…</span></span>';
+  if (m?.status !== 'pronto') return '';
+  const { veredito } = partesMentor(m.texto);
+  return veredito ? `<b class="lc-rotulo">Veredito</b> ${esc(veredito)}` : '';
+}
 
 export function htmlMentor(m) {
   if (!m || m.status === 'carregando') return 'perguntando ao coletor…';
@@ -191,7 +218,7 @@ export function htmlMentor(m) {
   else if (m.status === 'erro') {
     const ult = [...(m.conversa || [])].reverse().find(c => c.uso === 'posjogo');
     partes.push(`<div class="lc-neg">o mentor falhou: ${esc(ult?.erro || 'sem detalhe')}</div><button class="lc-botao" data-acao="mentor-gerar">tentar de novo</button>`);
-  } else partes.push(`<div class="lc-mentor-texto">${textoMentor(m.texto || '')}</div>`);
+  } else partes.push(`<div class="lc-mentor-texto">${textoMentor(partesMentor(m.texto).resto)}</div>`); // veredito: faixa do topo
   for (const c of (m.conversa || []).filter(x => x.uso === 'pergunta')) {
     const resp = c.status === 'pensando' ? '<span class="lc-pensando">pensando<span>…</span></span>'
       : c.status === 'erro' ? `<span class="lc-neg">${esc(c.erro || 'falhou')}</span>` : textoMentor(c.resposta || '');

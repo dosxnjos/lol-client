@@ -337,10 +337,15 @@ MCP: `traumas()`. Prova: `python tools/teste-traumas.py`.
 - **Trauma**: `n ≥ 3` e `lift ≥ 1,2`. Campeão que aparece em tudo fica com lift ~1. Com ~170 campeões
   comparados, 1–2 traumas podem ser acaso: mostrar sempre `n` e V/D ("Darius é trauma: 2V/7D").
 
-### Pós-jogo v2: Objetivos, Tendência e Sessão
+### Pós-jogo v2: Resumo, Objetivos, Tendência e Sessão
 
 Plano v2, passo 7 (`pengu/posjogo/abas.js`; prova sem client: `node tools/teste-abas.mjs`).
 
+- **Resumo** (14/10/2026, [plano](../roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md) D7): o veredito do mentor
+  (linha `Veredito:` da resposta, formato em [COLETOR](COLETOR.md) § Mentor) vai numa faixa no topo; o resto do mentor
+  (o essencial, próxima partida, conversa) fica à direita; as 3 lições do motor ficam recolhidas só quando há veredito
+  na faixa, e abertas em todo o resto (mentor ainda sem resposta, pensando, desligado, com erro, coletor fora, partida
+  fora das contas): sem veredito, as lições são o resumo. Nenhuma regra nova: só a ordem do que já existe.
 - **Objetivos**: monstros do `ELITE_MONSTER_KILL` com o time do matador (o `teamId` vem 0) e prédios do
   `BUILDING_KILL` com o time **contrário** ao dono (`teamId` = quem perdeu o prédio).
 - **Tendência**: esta partida contra as 20 válidas anteriores (Rift, fora `FORA_DAS_CONTAS` e remake) do

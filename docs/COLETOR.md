@@ -230,6 +230,13 @@ Rotas (o servidor HTTP encaminha `/mentor…` para `Mentor.rota_http`): `GET /me
 `POST /mentor/aovivo`. Teste: `python tools/teste-mentor.py --seco | --offline | (real) | --comparar`
 (escreve só em `temp/`). Comparação de modelos: plano v2, passo 20.
 
+Resposta do pós-jogo (14/10/2026, [plano](../roadmap/2026-10-14-posjogo-livre-e-mentor-enxuto.md) D5/D6): até 120
+palavras em linguagem de jogador, `Veredito:` (1–2 frases, sem número, causa e efeito; o painel põe na faixa do topo do
+Resumo), `O essencial:` (1–2 itens com o número e o que fazer) e `Próxima partida:`. O que não está nos dados fica de
+fora, sem frase de "não tenho esse dado"; número só dos dados. Pergunta dele sobre algo fora dos dados (flash, vida do
+inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostram. Medição antes/depois: `python tools/medir-mentor.py
+[gameId …]` (antes = resposta guardada; depois = chamada real; banco só lido, saída em `temp/mentor-medicao/`).
+
 ## Ao vivo: laço, servidor local e painel da 2ª tela (plano v2, passos 8, 10 e 11)
 
 - **`coletor\ao_vivo.py`**: `AoVivo` lê `allgamedata` a cada 1 s numa thread, passa por

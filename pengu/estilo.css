@@ -67,12 +67,18 @@ html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual) #lol-uikit-layer-manager
   color: #0ac8b9; background: #010a13; border: 1px solid #0ac8b9; border-radius: 2px;
 }
 #lc-posjogo-reabrir:hover { background: #0a323c; color: #f0e6d2; }
+/* o painel não bloqueia o client (roadmap 2026-10-14-posjogo-livre-e-mentor-enxuto, D1/D2): o fundo não recebe clique
+   (pointer-events: none) e só a caixa recebe; a caixa fica no topo e deixa livre a faixa de baixo (--lc-pj-livre), onde
+   a Riot põe o campo do chat e o botão de jogar ([S] medido no lobby, não na tela de estatísticas) */
 #lc-posjogo {
-  position: fixed; inset: 0; z-index: 100001; display: flex; align-items: center; justify-content: center;
-  background: rgba(1, 10, 19, .78); font: 12px/1.4 var(--font-body); color: #a09b8c;
+  --lc-pj-topo: 10px; --lc-pj-livre: 92px;
+  position: fixed; inset: 0; z-index: 100001; display: flex; align-items: flex-start; justify-content: center;
+  padding-top: var(--lc-pj-topo); box-sizing: border-box; pointer-events: none;
+  background: transparent; font: 12px/1.4 var(--font-body); color: #a09b8c;
 }
+#lc-posjogo > * { pointer-events: auto; }
 #lc-posjogo .lc-caixa {
-  width: 1180px; max-width: calc(100vw - 32px); height: 640px; max-height: calc(100vh - 40px); box-sizing: border-box;
+  width: 1180px; max-width: calc(100vw - 32px); height: 640px; max-height: calc(100vh - var(--lc-pj-topo) - var(--lc-pj-livre)); box-sizing: border-box;
   display: grid; grid-template-columns: 330px 1fr; grid-template-rows: auto 1fr; gap: 10px 18px; padding: 14px 18px;
   background: #010a13; border: 1px solid #785a28; box-shadow: 0 0 30px rgba(0, 0, 0, .8);
 }
@@ -103,7 +109,9 @@ html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual) #lol-uikit-layer-manager
 #lc-posjogo .lc-padroes li { color: #cdbe91; margin-bottom: 3px; }
 #lc-posjogo .lc-padroes { margin: 0; padding-left: 18px; }
 #lc-posjogo .lc-nota { font-size: 11px; color: #5b5a56; margin-top: 8px; }
-#lc-posjogo .lc-carregando { font: 14px var(--font-body); color: #cdbe91; padding: 30px; background: #010a13; border: 1px solid #785a28; }
+#lc-posjogo .lc-carregando { position: relative; font: 14px var(--font-body); color: #cdbe91; padding: 22px 52px 18px 26px; background: #010a13; border: 1px solid #785a28; box-shadow: 0 0 30px rgba(0, 0, 0, .8); }
+#lc-posjogo .lc-carregando .lc-fechar { position: absolute; top: 8px; right: 8px; margin: 0; padding: 4px 8px; }
+#lc-posjogo .lc-carregando .lc-nota { margin-top: 6px; }
 
 /* seção "lol-client" nas Configurações (configuracoes.js): o conteúdo nativo só fica escondido */
 .lol-settings-container.lc-ativo .lol-settings-options > :not(#lc-config-painel) { display: none !important; }
@@ -214,8 +222,16 @@ html:not(.lc-champ-select) #lc-winrate { display: none; }
 #lc-posjogo .lc-res-esq .lc-placar > div { flex-basis: calc((100% - 16px) / 3); }
 
 /* Resumo: lições à esquerda, mentor à direita */
-#lc-posjogo .lc-resumo { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; height: 100%; }
+#lc-posjogo .lc-resumo { display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: auto minmax(0, 1fr); gap: 0 18px; height: 100%; } /* espaço sob o veredito: margem dele (escondido, linha 1 some sem sobra) */
 #lc-posjogo .lc-res-esq, #lc-posjogo .lc-res-dir { min-height: 0; display: flex; flex-direction: column; }
+#lc-posjogo .lc-res-esq { overflow: auto; }
+#lc-posjogo .lc-res-esq, #lc-posjogo .lc-res-dir { grid-row: 2; } /* veredito escondido não puxa as colunas para a linha 1 */
+/* veredito do mentor (D7): faixa larga no topo; as lições do motor ficam num <details> */
+#lc-posjogo .lc-veredito { grid-column: 1 / -1; grid-row: 1; margin-bottom: 12px; padding: 10px 14px; background: #0a1118; border: 1px solid #1e2328; border-left: 3px solid #c8aa6e; font-size: 15px; line-height: 1.45; color: #f0e6d2; }
+#lc-posjogo .lc-veredito[hidden] { display: none; }
+#lc-posjogo .lc-veredito .lc-rotulo { color: #c8aa6e; margin-right: 6px; font: 700 12px var(--font-display); letter-spacing: .08em; text-transform: uppercase; }
+#lc-posjogo .lc-licoes-det > summary { cursor: pointer; margin: 4px 0 8px; font: 700 12px var(--font-display); letter-spacing: .08em; text-transform: uppercase; color: #c8aa6e; }
+#lc-posjogo .lc-licoes-det > summary:hover { color: #f0e6d2; }
 #lc-posjogo .lc-licoes { display: flex; flex-direction: column; gap: 8px; }
 #lc-posjogo .lc-licao { display: flex; gap: 10px; align-items: flex-start; padding: 9px 12px; background: #0a1118; border: 1px solid #1e2328; border-left: 3px solid #c8aa6e; font-size: 13px; line-height: 1.45; color: #f0e6d2; }
 #lc-posjogo .lc-licao.lc-positiva { border-left-color: #0ac8b9; }
