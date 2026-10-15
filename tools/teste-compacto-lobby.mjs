@@ -8,6 +8,7 @@ import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada } from '../pengu/compacto/modo.js';
 import { criarRoteador, CLASSE } from '../pengu/compacto/index.js';
 import { _zerarCatalogo } from '../pengu/compacto/comum.js';
+import * as modComum from '../pengu/compacto/comum.js';
 import { criarTelaLobby, estadoGrupo, planoJogar, convitesPendentes, proximaPosicao, partidasDeHoje, resumoHoje, sequenciaHoje,
   dicaLocal, naoLidas, amigosParaConvidar, ranqueSolo, haQuanto, mmss, _zerarCache, variacaoDoDia, _zerarPdlDia } from '../pengu/compacto/tela-lobby.js';
 import { criarTelaFila, estadoBusca, textoEspera, CSS_FILA } from '../pengu/compacto/tela-fila.js';
@@ -636,6 +637,18 @@ const buscando = (over = {}) => ({ searchState: 'Searching', timeInQueue: 41, es
   const s = cenario({ fase: 'Matchmaking', servicos: { historico: { partidas: () => null, ler: async () => {} }, champ: null } });
   await s.iniciar();
   caso('fila: sem leitura nem histórico, tela de pé', s.efetivo() === 'compacto' && s.texto().includes('entrando na fila') && s.texto().includes('lendo o histórico'));
+}
+
+// ================= preferidas do lobby para a seleção (plano do compacto, passo 16, revisão 15/10/2026) =================
+{
+  const memo = modComum.preferidasLobby;
+  if (memo) Object.assign(memo, { pos1: '', pos2: '', em: 0 });
+  const s = cenario({ lobby: lobbySolo({ localMember: { ...eu, secondPositionPreference: 'FILL' } }) });
+  await s.iniciar(); await tick();
+  caso('preferidas: a tela do lobby guarda as pedidas cruas, com FILL (a seleção compara com elas se o GET de lá falhar)',
+    memo?.pos1 === 'TOP' && memo?.pos2 === 'FILL' && memo.em > 0, JSON.stringify(memo));
+  await s.evento('/lol-lobby/v2/lobby', lobbySolo({ gameConfig: { queueId: 3100, mapId: 11, isCustom: true, showPositionSelector: false } }));
+  caso('preferidas: lobby personalizado apaga a reserva', memo?.pos1 === '' && memo?.em === 0, JSON.stringify(memo));
 }
 
 // ================= linha que não se cruza: busca nunca sem clique =================

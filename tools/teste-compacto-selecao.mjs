@@ -13,6 +13,7 @@ import * as tela from '../pengu/compacto/tela-champselect.js';
 import { lerSessao, rotuloFase, estadoTroca, acompanharPedidos, novaMemoria, listaGrade, skinsDoCampeao, skinMarcada, trocarFeitico,
   TROCAS, RESULTADO_MS } from '../pengu/compacto/tela-champselect.js';
 import { lcu as lcuComum, _zerarCatalogo } from '../pengu/compacto/comum.js';
+import * as comumMod from '../pengu/compacto/comum.js';
 import { criarRoteador, TELAS } from '../pengu/compacto/index.js';
 import { criarJanela, invocadorRiot, criarCamada } from '../pengu/compacto/modo.js';
 
@@ -49,6 +50,7 @@ class El {
   set textContent(v) { this.replaceChildren(new Texto(v)); }
   get isConnected() { let p = this; while (p.parentNode) p = p.parentNode; return p === this.doc.documentElement; }
   addEventListener(ev, fn) { (this.ouvintes[ev] ||= []).push(fn); }
+  removeEventListener(ev, fn) { this.ouvintes[ev] = (this.ouvintes[ev] || []).filter(f => f !== fn); }
   disparar(ev, extra = {}) { const e = { target: this, stopPropagation() {}, preventDefault() {}, ...extra }; for (const fn of this.ouvintes[ev] || []) fn(e); }
   click() { if (!this.disabled) this.disparar('click'); }
   focus() { this.doc.ativo = this; }
@@ -78,7 +80,11 @@ function novoDoc() {
   doc.documentElement.append(doc.head, doc.body);
   doc.getElementById = id => { for (const n of doc.documentElement.desc()) if (n.id === id) return n; return null; };
   doc.querySelector = sel => doc.documentElement.querySelector(sel);
-  doc.addEventListener = () => {};
+  // ouvintes do documento (o painel da posição fecha com uma tecla: passo 16, revisão)
+  doc.ouvintes = {};
+  doc.addEventListener = (ev, fn) => { (doc.ouvintes[ev] ||= []).push(fn); };
+  doc.removeEventListener = (ev, fn) => { doc.ouvintes[ev] = (doc.ouvintes[ev] || []).filter(f => f !== fn); };
+  doc.disparar = (ev, extra = {}) => { for (const fn of doc.ouvintes[ev] || []) fn({ target: doc.body, ...extra }); };
   return doc;
 }
 // todo texto e todo title da árvore (o que o Gabriel lê, inclusive no passar do mouse)
@@ -901,8 +907,11 @@ const todasEscritas = [];
     linhas(s) === '12 partidas · 58% · KDA 3,1 / selva: 5 partidas · 60%' && pedidos.some(([id, pos]) => id === 154 && pos === 'JUNGLE'), linhas(s));
   caso('b6: title com o selo inteiro (as linhas do selo do client normal: textoSelo)',
     /Zac/.test(s?.getAttribute('title') || '') && /12 partidas · 58% · KDA 3,1/.test(s?.getAttribute('title') || '') && /selva: 5 partidas · 60% · KDA 2,8/.test(s?.getAttribute('title') || ''), s?.getAttribute('title'));
+  // passo 16: a coluna da direita da linha "tu" é [selo][palavra da posição] (div.lc-cp-sel-eudir); sem posição, o selo direto
+  const dirEu = linhaDo(t, 4)?.children.at(-1);
   caso('b6: o selo mora na coluna da direita da linha "tu" (a das trocas dos aliados; nenhuma seção nova na tela)',
-    !!s && linhaDo(t, 4)?.classList.contains('lc-cp-sel-eu') && linhaDo(t, 4).children.at(-1) === s && t.todos('[data-a="selo"]').length === 1);
+    !!s && linhaDo(t, 4)?.classList.contains('lc-cp-sel-eu') && (dirEu === s || (dirEu?.classList.contains('lc-cp-sel-eudir') && s.parentNode === dirEu))
+    && t.todos('[data-a="selo"]').length === 1);
   await t.emitir(S(58));
   s = selo(t);
   caso('b6: travado (finalização) → selo do campeão travado', linhas(s) === '12 partidas · 58% · KDA 3,1 / selva: 5 partidas · 60%', linhas(s));
@@ -1008,6 +1017,325 @@ const todasEscritas = [];
     Date.now = realNow;
     if (tela._relogio) tela._relogio.agora = () => Date.now();
   }
+}
+
+// ---------- 9. posição em destaque (plano, passo 16; relato de 15/10/2026 ~04:15) ----------
+// "já é a segunda vez que eu caio de jungle, não percebo e acabo indo de Renekton": a posição era só a palavra pequena
+// embaixo do "tu". Caso real (dados/lol.db, 15/10/2026 03:22): preferidas TOP,JUNGLE, recebeu JUNGLE, isAutofilled false,
+// travou Renekton. (1) painel com o ícone e o nome da posição no lugar da grade por alguns segundos, ao entrar; (2) a
+// palavra grande à direita da linha "tu" a seleção inteira; (3) aviso discreto do campeão com poucas partidas na posição.
+{
+  const R = JSON.parse(readFileSync(RAIZ + 'tests/fixtures/selecao-ranqueada-20261014.json', 'utf8')).eventos;
+  const AF = JSON.parse(readFileSync(RAIZ + 'tests/fixtures/champselect-autofill.json', 'utf8')).eventos;
+  const BL = JSON.parse(readFileSync(RAIZ + 'tests/fixtures/champselect-blind.json', 'utf8')).eventos;
+  const SR = i => clonar(R[i].session);
+  const P = tela._papel || { ms: 3500, vistos: new Set() };
+  const zerar = () => P.vistos?.clear?.();
+  const LOBBY = { 'GET /lol-lobby/v2/lobby': { localMember: { firstPositionPreference: 'TOP', secondPositionPreference: 'JUNGLE' }, gameConfig: { queueId: 420 } } };
+  const comPos = (s, pos, extra = {}) => { for (const c of s.myTeam) if (c.cellId === s.localPlayerCellId) Object.assign(c, { assignedPosition: pos }, extra); return s; };
+  const painel = t => t.achar('div[data-a="papel-painel"]');
+  const aberto = t => !!painel(t) && t.raiz.classList.contains('lc-cp-sel-papel-on');
+  const palavra = (t, cell) => linhaDo(t, cell)?.querySelector('[data-a="papel"]');
+  const papelDe = tela.papelDe || (() => undefined);
+
+  // pura
+  {
+    const l0 = lerSessao(SR(0));
+    const p = papelDe(l0, null);
+    caso('posição: papelDe na ranqueada ev 0 = TOP, "TOPO", ícone do client, sem destaque', p?.pos === 'TOP' && p.nome === 'TOPO'
+      && p.icone === '/fe/lol-champ-select/svg/position-top.svg' && p.destaque === 'normal', JSON.stringify(p));
+    const pj = papelDe(lerSessao(comPos(SR(0), 'jungle')), { pos1: 'TOP', pos2: 'JUNGLE' });
+    caso('posição: o caso do relato (pediu TOP/JUNGLE, recebeu JUNGLE, isAutofilled false) = destaque "segunda", pediu TOPO',
+      pj?.nome === 'SELVA' && pj.destaque === 'segunda' && /TOPO/.test(pj.nota || ''), JSON.stringify(pj));
+    const pa = papelDe(lerSessao(clonar(AF[1].session)), null);
+    caso('posição: isAutofilled true (fixture autofill, sem lobby) = destaque "auto"', pa?.pos === 'UTILITY' && pa.nome === 'SUPORTE' && pa.destaque === 'auto'
+      && /PREENCHIMENTO AUTOM/.test(pa.nota || ''), JSON.stringify(pa));
+    const pf = papelDe(lerSessao(comPos(SR(0), 'utility')), { pos1: 'TOP', pos2: 'JUNGLE' });
+    caso('posição: fora das 2 pedidas sem FILL e isAutofilled false = "auto" (a regra do coletor)', pf?.destaque === 'auto' && /TOPO e SELVA/.test(pf.nota || ''), JSON.stringify(pf));
+    const pfill = papelDe(lerSessao(comPos(SR(0), 'utility')), { pos1: 'TOP', pos2: 'FILL' });
+    caso('posição: com FILL nas pedidas não é autofill, mas não é a 1ª = "segunda"', pfill?.destaque === 'segunda', JSON.stringify(pfill));
+    const p1 = papelDe(l0, { pos1: 'TOP', pos2: 'JUNGLE' });
+    caso('posição: recebeu a 1ª = "normal"', p1?.destaque === 'normal', JSON.stringify(p1));
+    caso('posição: às cegas (assignedPosition vazio) = null', papelDe(lerSessao(clonar(BL[1].session)), null) === null);
+    caso('posição: lerSessao lê isAutofilled por linha', lerSessao(clonar(AF[1].session))?.eu?.autofill === true && lerSessao(SR(0))?.eu?.autofill === false);
+  }
+
+  // (1) painel ao entrar
+  {
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    const img = painel(t)?.querySelector('img[data-a="papel-icone"]');
+    caso('painel: ranqueada ev 0 (PLANNING) abre o painel no lugar da grade, com o ícone do client e "TOPO"',
+      aberto(t) && img?.getAttribute('src') === '/fe/lol-champ-select/svg/position-top.svg' && /TOPO/.test(painel(t).textContent),
+      painel(t)?.textContent);
+    caso('painel: a grade fica (escondida pela classe, o campo de busca não sai do DOM)', !!t.achar('div.lc-cp-sel-sel')?.querySelector('input[data-a="busca"]'));
+    caso('painel: lobby lido 1 vez (GET), nenhuma escrita', t.lcu.chamadas.filter(c => c.url === '/lol-lobby/v2/lobby').length === 1 && t.escritas().length === 0,
+      t.lcu.chamadas.map(c => c.url).join(' '));
+    await t.emitir(SR(0)); await t.emitir(SR(0));
+    caso('painel: eventos da mesma seleção não releem o lobby', t.lcu.chamadas.filter(c => c.url === '/lol-lobby/v2/lobby').length === 1);
+    caso('painel: some sozinho no prazo (_papel.ms)', (t.rodarTimers(P.ms), !aberto(t) && !painel(t)));
+    await t.emitir(SR(0));
+    caso('painel: não volta na mesma seleção', !aberto(t));
+    const t2 = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    caso('painel: remontar a tela na mesma seleção (expandir e voltar) não abre de novo', !aberto(t2));
+  }
+  {
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    painel(t)?.disparar('click');
+    caso('painel: clique nele fecha na hora', !aberto(t));
+    zerar();
+    const t2 = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    t2.raiz.disparar('click');
+    caso('painel: clique em qualquer lugar da tela fecha na hora', !aberto(t2));
+  }
+  {
+    // a vez dele de agir fecha na hora: PLANNING (painel) -> ev 1, o meu ban abre
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    const antes = aberto(t);
+    await t.emitir(SR(1));
+    caso('painel: o meu ban abriu (ev 1) = fecha na hora e o BANIR está lá', antes && !aberto(t) && !!t.achar('button[data-a="acao"]'), `antes=${antes}`);
+    // 1ª sessão vista já na vez dele (plugin recarregado no meio): não abre
+    zerar();
+    const s = SR(1); s.id = 'outra-selecao';
+    const t2 = await montarTela({ inicial: s, rotas: LOBBY });
+    caso('painel: 1ª sessão vista já com o ban/pick dele aberto = não abre (nunca segura a ação)', !aberto(t2) && lerSessao(s).modo.tipo === 'banir');
+    zerar();
+    const s14 = SR(14); s14.id = 'outra-selecao-2';
+    const t3 = await montarTela({ inicial: s14, rotas: LOBBY });
+    caso('painel: 1ª sessão vista na minha vez de escolher = não abre', !aberto(t3) && lerSessao(s14).modo.tipo === 'escolher');
+  }
+  {
+    // às cegas (sem posição): nada; autofill sem lobby: destaque pelo isAutofilled
+    zerar();
+    const t = await montarTela({ inicial: clonar(BL[1].session) });
+    caso('painel: às cegas = sem painel e sem a palavra', !aberto(t) && !t.achar('[data-a="papel"]'));
+    zerar();
+    const t2 = await montarTela({ inicial: clonar(AF[1].session) });
+    caso('painel: autofill (BAN_PICK, esperando a vez, lobby 404) = painel "SUPORTE" com o destaque de preenchimento automático',
+      aberto(t2) && painel(t2).dataset.destaque === 'auto' && /SUPORTE/.test(painel(t2).textContent) && /PREENCHIMENTO AUTOM/.test(painel(t2).textContent), painel(t2)?.textContent);
+    // o caso do relato: lobby TOP/JUNGLE, recebeu JUNGLE
+    zerar();
+    const t3 = await montarTela({ inicial: comPos(SR(0), 'jungle'), rotas: LOBBY });
+    caso('painel: o caso do relato (pediu TOP/JUNGLE, recebeu SELVA) = "SELVA" e "não é a tua 1ª: tu pediu TOPO"',
+      aberto(t3) && painel(t3).dataset.destaque === 'segunda' && /SELVA/.test(painel(t3).textContent) && /tu pediu TOPO/.test(painel(t3).textContent), painel(t3)?.textContent);
+    caso('palavra: na linha "tu" com o mesmo destaque', palavra(t3, 1)?.textContent === 'SELVA' && palavra(t3, 1)?.dataset.destaque === 'segunda', palavra(t3, 1)?.textContent);
+    // lobby que não responde: segue sem a comparação (nada quebra)
+    zerar();
+    const t4 = await montarTela({ inicial: comPos(SR(0), 'jungle') });
+    caso('painel: lobby 404 = "SELVA" sem destaque (só o isAutofilled decide) e sem erro', aberto(t4) && painel(t4).dataset.destaque === 'normal' && t4.falhas.length === 0);
+  }
+  {
+    // posição mudou na mesma seleção (troca de posição aceita): o painel volta com a nova
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    t.rodarTimers(P.ms);
+    await t.emitir(comPos(SR(0), 'utility'));
+    caso('painel: troca de posição feita na seleção = painel de novo com a nova ("SUPORTE")', aberto(t) && /SUPORTE/.test(painel(t).textContent) && palavra(t, 1)?.textContent === 'SUPORTE');
+  }
+
+  // (2) a palavra grande na linha "tu", a seleção inteira
+  {
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    t.rodarTimers(P.ms);
+    const eu = linhaDo(t, 1);
+    caso('palavra: "TOPO" na linha "tu" (a dos botões de troca dos aliados) com o painel fechado', palavra(t, 1)?.textContent === 'TOPO');
+    caso('palavra: o "Topo · " pequeno embaixo do "tu" sai (a palavra grande ocupa o lugar)', !/Topo ·/.test(eu?.querySelector('div.lc-cp-sel-n')?.textContent || ''), eu?.querySelector('div.lc-cp-sel-n')?.textContent);
+    caso('palavra: aliados seguem com a posição pequena e sem a palavra', /Meio ·/.test(linhaDo(t, 0)?.textContent || '') && !palavra(t, 0));
+    for (const i of [14, 27, 29]) await t.emitir(SR(i));
+    caso('palavra: segue na finalização e no GAME_STARTING', palavra(t, 1)?.textContent === 'TOPO');
+  }
+
+  // (3) aviso: campeão com poucas partidas na posição atribuída
+  {
+    const champ = {
+      partidas: () => [],
+      estatisticas: (id, pos) => ({ geral: { n: id === 58 ? 75 : 0, winrate: 51, kda: 2.6 },
+        posicao: !pos ? null : { pos, ...(id === 58 ? ({ TOP: { n: 74, winrate: 51 }, JUNGLE: { n: 1, winrate: 0 } }[pos] || { n: 0 }) : { n: 0 }) } }),
+    };
+    const aviso = t => t.achar('[data-a="aviso-posicao"]');
+    const avisoPosicao = tela.avisoPosicao || (() => undefined);
+    caso('aviso: puro, Renekton na selva com 1 partida = "Renekton na selva: 1 partida · no topo: 74"',
+      avisoPosicao(champ, 58, 'JUNGLE', 'Renekton') === 'Renekton na selva: 1 partida · no topo: 74', avisoPosicao(champ, 58, 'JUNGLE', 'Renekton'));
+    caso('aviso: puro, Renekton no topo (74) = nada', avisoPosicao(champ, 58, 'TOP', 'Renekton') === null);
+    caso('aviso: puro, sem partida nenhuma com ele = "nenhuma partida"', /^Zac de suporte: nenhuma partida$/.test(avisoPosicao(champ, 154, 'UTILITY', 'Zac') || ''), avisoPosicao(champ, 154, 'UTILITY', 'Zac'));
+    caso('aviso: puro, histórico ainda lendo = nada (não acusa sem dado)', avisoPosicao({ ...champ, partidas: () => null }, 58, 'JUNGLE', 'Renekton') === null);
+    // na tela: ev 10 (vez do aliado, a minha intenção 58), eu na selva
+    zerar();
+    const s10 = comPos(SR(10), 'jungle');
+    const t = await montarTela({ inicial: s10, rotas: LOBBY, servicos: { champ } });
+    t.rodarTimers(P.ms);
+    caso('aviso: intenção Renekton na selva → aviso discreto na seleção', /Renekton na selva: 1 partida · no topo: 74/.test(aviso(t)?.textContent || ''), aviso(t)?.textContent);
+    // altura: o aviso ocupa a linha da nota genérica de espera (1 linha a mais rolava 10 px em 420×680 no harness)
+    caso('aviso: no lugar da nota "tua vez de escolher ainda não chegou" (mesma altura)', !/ainda não chegou/.test(t.raiz.textContent), t.raiz.textContent.slice(0, 200));
+    caso('aviso: linha da posição do selo em amarelo (lc-cp-sel-pouco)', !!linhaDo(t, 1)?.querySelector('[data-a="selo"]')?.classList.contains('lc-cp-sel-pouco'));
+    const peq = linhaDo(t, 1)?.querySelector('div.lc-cp-sel-n')?.textContent || '';
+    caso('palavra: embaixo do "tu" só o campeão da intenção (sem posição nem "(escolhendo)": cabe ao lado de ATIRADOR e do selo)',
+      peq === 'tuRenekton', peq);
+    // minha vez (ev 14): o aviso segue e o TRAVAR continua ligado (nunca impede)
+    await t.emitir(comPos(SR(14), 'jungle'));
+    t.rodarTimers(tela.ARMAR_MS);
+    const b = t.achar('button[data-a="acao"]');
+    caso('aviso: na minha vez segue o aviso e TRAVAR Renekton ligado (nunca impede)', !!aviso(t) && /TRAVAR Renekton/.test(b?.textContent || '') && !b.disabled, b?.textContent);
+    b?.click(); await tick();
+    caso('aviso: TRAVAR com o aviso = o mesmo PATCH de sempre', t.escritas().at(-1) === 'PATCH /lol-champ-select/v1/session/actions/13 {"completed":true,"championId":58}', t.escritas().join('; '));
+    todasEscritas.push(...t.escritas());
+    zerar();
+    const t2 = await montarTela({ inicial: SR(10), rotas: LOBBY, servicos: { champ } });
+    caso('aviso: Renekton no topo = sem aviso', !aviso(t2));
+    zerar();
+    const t3 = await montarTela({ inicial: s10, rotas: LOBBY, servicos: { champ }, cfg: { ...CFG, champSelect: { ligado: false } } });
+    caso('aviso: "winrate no champ select" desligado = sem aviso', !aviso(t3));
+    zerar();
+    const s1 = comPos(SR(1), 'jungle'); s1.id = 'ban-selva';
+    const t4 = await montarTela({ inicial: s1, rotas: LOBBY, servicos: { champ } });
+    t4.achar('button.lc-cp-sel-gc[data-id="58"]')?.click(); await tick();
+    caso('aviso: no ban nunca (banir Renekton não é jogar de Renekton)', !aviso(t4));
+  }
+  {
+    // champselect-real.json: duas seleções reais (ids fa638f25… e d07303e7…) na mesma montagem, eu na selva nas duas
+    zerar();
+    const t = await montarTela({ inicial: S(1), rotas: LOBBY });
+    const a1 = aberto(t) && /SELVA/.test(painel(t)?.textContent || '');
+    await t.emitir(S(6));
+    const f6 = !aberto(t);
+    await t.emitir(S(28));
+    caso('painel (sessão real): abre na 1ª seleção, fecha no meu ban (ev 6) e abre de novo na 2ª seleção (ev 28, id novo)',
+      a1 && f6 && aberto(t) && /SELVA/.test(painel(t)?.textContent || ''), `${a1} ${f6} ${aberto(t)}`);
+    caso('painel (sessão real): lobby lido 1 vez por seleção (2) e nenhuma escrita',
+      t.lcu.chamadas.filter(c => c.url === '/lol-lobby/v2/lobby').length === 2 && t.escritas().length === 0, t.escritas().join('; '));
+    // refeito com a mesma posição (o lobby chega depois e muda o destaque): sem a animação de entrada de novo
+    zerar();
+    const t2 = await montarTela({ inicial: comPos(SR(0), 'jungle'), rotas: LOBBY });
+    caso('painel: o lobby chega depois e o destaque muda (amarelo) sem a animação de entrada de novo',
+      painel(t2)?.dataset.destaque === 'segunda' && painel(t2)?.style.animation === 'none', `${painel(t2)?.dataset.destaque} ${painel(t2)?.style.animation}`);
+    const antes = painel(t2);
+    await t2.emitir(comPos(SR(0), 'jungle'));
+    caso('painel: evento sem mudança não refaz o painel', painel(t2) === antes);
+    zerar();
+    const t3 = await montarTela({ inicial: comPos(SR(0), 'jungle') });
+    caso('painel: 1ª pintura com a entrada animada', !!painel(t3) && painel(t3).style.animation !== 'none');
+  }
+  {
+    // ícone que não carrega (client sem o svg): some o img, fica o nome grande
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    const img = painel(t)?.querySelector('img[data-a="papel-icone"]');
+    img?.disparar('error');
+    caso('painel: ícone que não carregou sai e o nome fica', !!img && !painel(t)?.querySelector('img') && /TOPO/.test(painel(t)?.textContent || ''));
+    caso('painel: nenhum erro de tela em toda a seção', t.falhas.length === 0);
+    if (P) P.semIcone = false;
+  }
+
+  // ---- revisão adversarial (15/10/2026): troca de posição, preferidas sem o GET, tecla, recarga, aviso sem dado ----
+  {
+    // troca aceita: assignedPosition muda, as preferidas e o isAutofilled não. Antes: SUPORTE em vermelho "PREENCHIMENTO
+    // AUTOMÁTICO · tu pediu TOPO e SELVA" numa troca que ele mesmo pediu/aceitou
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    t.rodarTimers(P.ms);
+    await t.emitir(comPos(SR(0), 'utility'));
+    caso('revisão: troca TOPO → SUPORTE (lobby TOP/JUNGLE) não vira "preenchimento automático" no painel nem na palavra',
+      aberto(t) && painel(t).dataset.destaque !== 'auto' && palavra(t, 1)?.dataset.destaque !== 'auto' && !/PREENCHIMENTO/.test(painel(t).textContent),
+      `${painel(t)?.dataset.destaque} ${palavra(t, 1)?.dataset.destaque} ${painel(t)?.textContent}`);
+    caso('revisão: o painel da troca diz de onde ele veio ("trocou de posição: era TOPO")', /trocou de posição: era TOPO/.test(painel(t)?.textContent || ''), painel(t)?.textContent);
+    // e a volta para a posição de antes mostra o painel de novo (a palavra já muda; o painel também)
+    t.rodarTimers(P.ms);
+    await t.emitir(SR(0));
+    caso('revisão: trocou e voltou para TOPO na mesma seleção = painel de novo com "TOPO" (antes: nada, a chave já estava vista)',
+      aberto(t) && /TOPO/.test(painel(t)?.textContent || '') && painel(t).dataset.destaque === 'normal', `${aberto(t)} ${painel(t)?.textContent}`);
+    // expandir e voltar depois da troca: a tela nova ainda sabe que foi troca
+    t.rodarTimers(P.ms);
+    await t.emitir(comPos(SR(0), 'utility'));
+    t.rodarTimers(P.ms);
+    const t2 = await montarTela({ inicial: comPos(SR(0), 'utility'), rotas: LOBBY });
+    caso('revisão: remontar depois da troca (expandir e voltar) segue sem vermelho e sem painel', !aberto(t2) && palavra(t2, 1)?.dataset.destaque !== 'auto',
+      `${aberto(t2)} ${palavra(t2, 1)?.dataset.destaque}`);
+  }
+  {
+    // autofill (SUPORTE, isAutofilled true) que trocou para a 1ª pedida (TOPO): o isAutofilled segue true na sessão
+    zerar();
+    const LAF = { 'GET /lol-lobby/v2/lobby': { localMember: { firstPositionPreference: 'TOP', secondPositionPreference: 'JUNGLE' } } };
+    const t = await montarTela({ inicial: clonar(AF[1].session), rotas: LAF });
+    const antes = painel(t)?.dataset.destaque;
+    t.rodarTimers(P.ms);
+    const s = clonar(AF[1].session);
+    for (const c of s.myTeam) if (c.cellId === s.localPlayerCellId) c.assignedPosition = 'top';
+    await t.emitir(s);
+    caso('revisão: autofill de SUPORTE que trocou para TOPO (a 1ª dele, isAutofilled ainda true) = TOPO sem vermelho',
+      antes === 'auto' && palavra(t, 4)?.textContent === 'TOPO' && palavra(t, 4)?.dataset.destaque === 'normal', `${antes} ${palavra(t, 4)?.textContent} ${palavra(t, 4)?.dataset.destaque}`);
+    const pp = papelDe({ eu: { pos: 'JUNGLE', autofill: true } }, { pos1: 'TOP', pos2: 'JUNGLE' });
+    caso('revisão: puro, isAutofilled true numa posição pedida (só acontece depois de troca) = não é "auto"', pp?.destaque === 'segunda', JSON.stringify(pp));
+  }
+  {
+    // GET do lobby falhou na seleção (sem prova de que ele responde lá): vale a última leitura da tela do lobby
+    const memo = comumMod.preferidasLobby;
+    caso('revisão: comum.js exporta preferidasLobby (a tela do lobby grava, a seleção lê)', !!memo && typeof memo === 'object');
+    if (memo) {
+      zerar();
+      Object.assign(memo, { pos1: 'TOP', pos2: 'JUNGLE', em: Date.now() });
+      const t = await montarTela({ inicial: comPos(SR(0), 'jungle') });
+      caso('revisão: lobby 404 na seleção + preferidas lidas no lobby = "não é a tua 1ª: tu pediu TOPO"',
+        painel(t)?.dataset.destaque === 'segunda' && /tu pediu TOPO/.test(painel(t)?.textContent || ''), painel(t)?.textContent);
+      zerar();
+      Object.assign(memo, { pos1: 'TOP', pos2: 'JUNGLE', em: Date.now() - 3 * 3600e3 });
+      const t2 = await montarTela({ inicial: comPos(SR(0), 'jungle') });
+      caso('revisão: preferidas do lobby velhas (3 h) não valem: sem destaque', painel(t2)?.dataset.destaque === 'normal', painel(t2)?.dataset.destaque);
+      zerar();
+      Object.assign(memo, { pos1: 'MIDDLE', pos2: 'BOTTOM', em: Date.now() });
+      const t3 = await montarTela({ inicial: comPos(SR(0), 'jungle'), rotas: LOBBY });
+      caso('revisão: o GET da seleção respondeu = vale ele, não a memória do lobby', painel(t3)?.dataset.destaque === 'segunda' && /tu pediu TOPO/.test(painel(t3)?.textContent || ''), painel(t3)?.textContent);
+      Object.assign(memo, { pos1: '', pos2: '', em: 0 });
+    }
+  }
+  {
+    // tecla com o painel aberto (ele começou a digitar o campeão): fecha na hora, sem comer a tecla
+    zerar();
+    const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+    const antes = aberto(t);
+    let impedida = false;
+    t.doc.disparar('keydown', { key: 'r', preventDefault() { impedida = true; } });
+    caso('revisão: tecla com o painel aberto fecha na hora e a tecla segue', antes && !aberto(t) && !impedida, `${antes} ${aberto(t)} ${impedida}`);
+    tela.desmontar(t.raiz);
+    caso('revisão: desmontar tira o ouvinte de tecla do documento', (t.doc.ouvintes.keydown || []).length === 0, (t.doc.ouvintes.keydown || []).length);
+  }
+  {
+    // recarga da interface no meio da seleção (módulo zerado): a memória da sessão (sessionStorage) diz que já mostrou e
+    // que a posição de entrada era TOPO
+    const guardado = new Map();
+    globalThis.sessionStorage = { getItem: k => (guardado.has(k) ? guardado.get(k) : null), setItem: (k, v) => guardado.set(k, String(v)) };
+    try {
+      zerar(); if (P) P.lido = true;
+      const t = await montarTela({ inicial: SR(0), rotas: LOBBY });
+      t.rodarTimers(P.ms);
+      await t.emitir(comPos(SR(0), 'utility'));
+      t.rodarTimers(P.ms);
+      // "recarga": módulo novo = mapa vazio e nada lido ainda
+      zerar(); if (P) P.lido = false;
+      const t2 = await montarTela({ inicial: comPos(SR(10), 'utility'), rotas: LOBBY });
+      caso('revisão: recarga no meio da seleção (esperando a vez) não mostra o painel de novo', !aberto(t2), painel(t2)?.textContent);
+      caso('revisão: recarga depois da troca segue sabendo que foi troca (sem vermelho)', palavra(t2, 1)?.dataset.destaque !== 'auto', palavra(t2, 1)?.dataset.destaque);
+      // storage que explode: segue sem ele
+      globalThis.sessionStorage = { getItem: () => { throw new Error('bloqueado'); }, setItem: () => { throw new Error('bloqueado'); } };
+      zerar(); if (P) P.lido = false;
+      const t3 = await montarTela({ inicial: SR(0), rotas: LOBBY });
+      caso('revisão: sessionStorage bloqueado = painel normal e nenhum erro', aberto(t3) && t3.falhas.length === 0, t3.falhas.map(String).join('; '));
+    } finally { delete globalThis.sessionStorage; if (P) P.lido = true; }
+  }
+  {
+    // aviso sem dado: partidas antigas sem o item da missão não contam em posição nenhuma; 20 partidas com ele e só 1
+    // classificada não dizem "1 partida na selva"
+    const avisoPosicao = tela.avisoPosicao || (() => undefined);
+    const champ = {
+      partidas: () => [],
+      estatisticas: (id, pos) => ({ geral: { n: 20, winrate: 50 }, posicao: !pos ? null : { pos, n: pos === 'TOP' ? 1 : 0 } }),
+    };
+    caso('revisão: aviso com a posição de quase nenhuma partida sabida (1 de 20) = nada (não acusa sem dado)',
+      avisoPosicao(champ, 58, 'JUNGLE', 'Renekton') === null, avisoPosicao(champ, 58, 'JUNGLE', 'Renekton'));
+  }
+  zerar();
 }
 
 // ---------- 8. linha que não se cruza, somada ----------

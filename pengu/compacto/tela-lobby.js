@@ -12,7 +12,7 @@
 // - nome mostrado aqui é só de quem está no grupo dele, de quem o convidou e dos amigos (nada da seleção ranqueada).
 // Campo ausente ou estado desconhecido nunca quebra a tela: vira botão cinza com o motivo. Erro que escapa de
 // handler/timer/evento (ctx.seguro) devolve o client normal.
-import { h, fotoCampeao, campeoes, estilo } from './comum.js';
+import { h, fotoCampeao, campeoes, estilo, preferidasLobby } from './comum.js';
 import { buscarFilaRapida, Recusa, restricaoDura, FILAS_COM_POSICAO } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, avaliarFreios, textoFreios, derrotasSeguidasAgora, ehMadrugada, MEDICAO,
   JANELA_MS, ATUALIZANDO } from '../freios.js';
@@ -326,6 +326,13 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
     // ---- leituras (só GET) ----
     const aplicarLobby = r => {
       const g = estadoGrupo(r);
+      // reserva das preferidas para o destaque da posição na seleção (comum.js preferidasLobby; personalizada não conta). Cru
+      // do localMember, com FILL (o g.pos1/pos2 joga FILL fora e a seleção leria "fora das pedidas" = autofill falso)
+      if (g.existe) {
+        const m = r.json?.localMember, cru = v => (typeof v === 'string' ? v.toUpperCase() : '');
+        Object.assign(preferidasLobby, g.custom || !m ? { pos1: '', pos2: '', em: 0 }
+          : { pos1: cru(m.firstPositionPreference), pos2: cru(m.secondPositionPreference), em: Date.now() });
+      }
       // lobby personalizado (ou o grupo numa fila que esta tela não cobre): a tela da Riot é a dona
       if (g.existe && (g.custom || (g.grupo && !ORDEM_FILAS.includes(g.fila)))) {
         if (!s.expandiu) {

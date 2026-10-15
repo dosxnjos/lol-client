@@ -22,7 +22,7 @@
 //   POST session/position-swaps|pick-order-swaps|champion-swaps/{id}/request|cancel|accept|decline
 //        (a troca de campeão é o campo `trades` da sessão, mas a rota é champion-swaps)
 //   GET  /lol-perks/v1/pages, /lol-perks/v1/currentpage; PUT /lol-perks/v1/currentpage <id puro> (ARMADILHAS § LCU)
-import { h, fotoCampeao, campeoes, estilo } from './comum.js';
+import { h, fotoCampeao, campeoes, estilo, preferidasLobby } from './comum.js';
 import { consultarRunas } from '../runas.js';
 import { textoSelo } from '../champselect.js';
 import { botaoChat, botaoCoach } from './chat-botao.js';
@@ -98,7 +98,7 @@ export function lerSessao(s) {
     const travado = num(c.championId) > 0 ? num(c.championId) : (a?.completed && num(a.championId) > 0 ? num(a.championId) : 0);
     const hover = travado ? 0 : (a && !a.completed && num(a.championId) > 0 ? num(a.championId) : Math.max(0, num(c.championPickIntent)));
     return { cellId: cell, eu: cell === me, pos: posDe(c.assignedPosition), travado, hover, ordem: ia < 0 ? 100 + cell : ia,
-      skin: num(c.selectedSkinId), spells: [num(c.spell1Id), num(c.spell2Id)] };
+      skin: num(c.selectedSkinId), spells: [num(c.spell1Id), num(c.spell2Id)], autofill: c.isAutofilled === true };
   }).sort((x, y) => x.ordem - y.ordem || x.cellId - y.cellId);
   let n = 0;
   time.forEach((t, i) => { t.n = i + 1; t.rotulo = t.eu ? 'tu' : `aliado ${++n}`; });
@@ -163,6 +163,96 @@ export function rotuloFase(l) {
   if (f === 'FINALIZATION') return ['FINALIZAÇÃO', 'FINALIZATION · skin, feitiços, trocas'];
   if (f === 'GAME_STARTING') return ['COMEÇANDO', 'GAME_STARTING · a partida vai abrir'];
   return ['SELEÇÃO', `fase ${f || 'sem leitura'}`];
+}
+
+// ---------- posição em destaque (plano, passo 16; relato de 15/10/2026 ~04:15) ----------
+// "já é a segunda vez que eu caio de jungle, não percebo e acabo indo de Renekton": a posição era só a palavra pequena embaixo
+// do "tu". Três peças: painel com o ícone e o nome no lugar da grade por _papel.ms ao entrar (ou quando a posição muda numa
+// troca), a palavra grande à direita da linha "tu" a seleção inteira, e o aviso do campeão com poucas partidas na posição.
+// Nada disso escreve nem segura clique: a vez dele de agir (ban/pick) fecha o painel na hora.
+// Ícone: o SVG do próprio client (o que a tela da Riot usa no pino da posição e no diálogo de troca: rcp-fe-lol-champ-select
+// 16.20, assets.wad lido em 15/10/2026); sem ele (404) o <img> sai e fica o nome grande.
+export const iconePosicao = p => `/fe/lol-champ-select/svg/position-${String(p).toLowerCase()}.svg`;
+const NA_POS = { TOP: 'no topo', JUNGLE: 'na selva', MIDDLE: 'no meio', BOTTOM: 'de atirador', UTILITY: 'de suporte' };
+// abaixo disso na posição atribuída, o aviso aparece (técnico, reversível: plano passo 16, decisão xxiii)
+export const POUCAS_NA_POSICAO = 3;
+// ms: quanto o painel fica; vistos: chave da seleção -> {ini: posição de entrada, vis: última posição já mostrada} (no módulo:
+// remontar a tela, expandir e voltar, não repete; espelhado no sessionStorage: recarga da interface no meio da seleção também
+// não repete e segue sabendo a posição de entrada, que separa troca de autofill). lido: o sessionStorage já foi lido
+export const _papel = { ms: 3500, vistos: new Map(), lido: false, semIcone: false };
+const MEM_PAPEL = 'lc-cp-papel';
+function vistosPapel() {
+  if (!_papel.lido) {
+    _papel.lido = true;
+    try {
+      const v = JSON.parse(globalThis.sessionStorage?.getItem(MEM_PAPEL) || '[]');
+      for (const e of Array.isArray(v) ? v : []) {
+        if (Array.isArray(e) && typeof e[0] === 'string' && POS[e[1]?.ini] && !_papel.vistos.has(e[0]))
+          _papel.vistos.set(e[0], { ini: e[1].ini, vis: POS[e[1].vis] ? e[1].vis : '' });
+      }
+    } catch { /* sem storage (bloqueado, node): só a memória do módulo */ }
+  }
+  return _papel.vistos;
+}
+function guardarPapel() {
+  // a chave de montagem (sessão sem id nem gameId) não sobrevive à recarga: não vale guardar
+  try { globalThis.sessionStorage?.setItem(MEM_PAPEL, JSON.stringify([..._papel.vistos].filter(([k]) => k[0] !== 'm').slice(-20))); } catch { /* segue */ }
+}
+// ms: idade máxima das preferidas lidas pela tela do lobby (comum.js) que ainda valem na seleção quando o GET de lá falha
+const PREFS_LOBBY_MS = 60 * 60e3;
+
+// posição dele nesta seleção e o quanto ela merece destaque. prefs = {pos1, pos2} do lobby (GET /lol-lobby/v2/lobby, [S] na
+// seleção, ou a última leitura da tela do lobby) ou null. ini = a posição com que ele entrou nesta seleção ('' = não sei).
+// Autofill = a regra do coletor (coletor.py retrato): isAutofilled, ou fora das pedidas sem FILL entre elas. Mas troca de
+// posição (aceita ou pedida por ele) muda o assignedPosition e não as preferidas nem o isAutofilled: posição diferente da de
+// entrada é troca (nunca vermelho), e isAutofilled numa posição pedida também (revisão 15/10/2026, ARMADILHAS § LCU).
+// -> null (sem posição: às cegas, ARAM, personalizada sem posição) | {pos, nome, icone, destaque: normal|segunda|auto, nota}
+export function papelDe(l, prefs = null, ini = '') {
+  const eu = l?.eu, pos = eu?.pos || '';
+  if (!POS[pos]) return null;
+  const NOME = p => POS[p].toUpperCase();
+  const pedidas = [prefs?.pos1, prefs?.pos2].map(posDe);
+  const fill = pedidas.includes('FILL');
+  const validas = pedidas.filter(p => POS[p]);
+  const p1 = pedidas[0];
+  let destaque = 'normal', nota = 'tua posição nesta seleção';
+  if (POS[ini] && ini !== pos) {
+    destaque = POS[p1] && p1 !== pos ? 'segunda' : 'normal';
+    nota = `trocou de posição: era ${NOME(ini)}` + (destaque === 'segunda' ? ` · tu pediu ${NOME(p1)}` : '');
+  } else if ((eu.autofill && !validas.includes(pos)) || (validas.length && !fill && !validas.includes(pos))) {
+    destaque = 'auto';
+    nota = 'PREENCHIMENTO AUTOMÁTICO' + (validas.length ? ` · tu pediu ${validas.map(NOME).join(' e ')}` : '');
+  } else if (POS[p1] && p1 !== pos) {
+    destaque = 'segunda';
+    nota = `não é a tua 1ª: tu pediu ${NOME(p1)}`;
+  } else if (p1 === pos) nota = 'tua 1ª opção';
+  return { pos, nome: NOME(pos), icone: iconePosicao(pos), destaque, nota };
+}
+
+// aviso do campeão (hover/intenção/vez dele) com poucas partidas na posição atribuída: os números do selo
+// (servicos.champ.estatisticas, o histórico do client; nenhuma leitura nova). Nunca bloqueia: é texto.
+// -> "Renekton na selva: 1 partida · no topo: 74" | null (posição com partidas suficientes, sem dado, histórico lendo)
+export function avisoPosicao(champ, id, pos, nome = '') {
+  const p = posDe(pos);
+  if (!(id > 0) || !POS[p] || typeof champ?.estatisticas !== 'function') return null;
+  try {
+    if (typeof champ.partidas === 'function' && champ.partidas() === null) return null;
+    const est = champ.estatisticas(id, p);
+    const n = num(est?.posicao?.n);
+    if (n >= POUCAS_NA_POSICAO) return null;
+    let melhor = null, sabidas = n; // onde ele mais joga o campeão (mesma fonte): diz o porquê do aviso em 1 olhada
+    for (const q of Object.keys(POS)) {
+      if (q === p) continue;
+      const m = num(champ.estatisticas(id, q)?.posicao?.n);
+      sabidas += m;
+      if (m > n && m > (melhor?.n || 0)) melhor = { q, n: m };
+    }
+    // partida sem o item da missão nem Golpear não conta em posição nenhuma (posicaoDaPartida): com menos da metade das
+    // partidas dele com o campeão de posição sabida, "1 partida na selva" seria palpite (revisão 15/10/2026)
+    if (num(est?.geral?.n) > 0 && sabidas * 2 < num(est.geral.n)) return null;
+    const qtd = n ? `${n} ${n === 1 ? 'partida' : 'partidas'}` : 'nenhuma partida';
+    return `${nome || `campeão ${id}`} ${NA_POS[p]}: ${qtd}${melhor ? ` · ${NA_POS[melhor.q]}: ${melhor.n}` : ''}`;
+  } catch { return null; }
 }
 
 // estado de uma troca com um aliado. slots: Map(cellId -> summoners/{slotId}) opcional (show* = false esconde)
@@ -401,10 +491,35 @@ export const CSS = `
 #lc-compacto .lc-cp-sel-runa button { background:var(--lc-pan2); border:1px solid var(--lc-linha); color:var(--lc-ouro2); font-family:inherit;
   font-size:11.5px; padding:4px 8px; cursor:pointer; }
 #lc-compacto .lc-cp-sel-runa button.lc-cp-sel-on { border-color:var(--lc-azul); }
+/* passo 16: posição em destaque. Painel no lugar da grade (a grade fica no DOM, escondida: o campo de busca não perde o foco) */
+#lc-compacto .lc-cp-sel.lc-cp-sel-papel-on .lc-cp-sel-sel { display:none; }
+#lc-compacto .lc-cp-sel-papel-painel { margin-top:auto; flex:1 0 auto; min-height:220px; display:flex; flex-direction:column; align-items:center;
+  justify-content:center; gap:2px; padding:12px 10px 14px; border-top:1px solid var(--lc-linha2); cursor:pointer; text-align:center;
+  background:radial-gradient(ellipse at 50% 38%,rgba(200,170,110,.18),rgba(9,20,40,.65) 68%); animation:lc-cp-sel-papel-in .18s ease-out; }
+@keyframes lc-cp-sel-papel-in { from { opacity:0; transform:scale(.96); } to { opacity:1; transform:none; } }
+#lc-compacto .lc-cp-sel-papel-painel img { width:104px; height:104px; filter:drop-shadow(0 0 10px rgba(200,170,110,.45)); }
+#lc-compacto .lc-cp-sel-papel-nome { font-size:46px; line-height:1.05; font-weight:700; letter-spacing:.1em; color:var(--lc-ouro2); margin-top:4px; }
+#lc-compacto .lc-cp-sel-papel-nota { font-size:13px; color:var(--lc-mudo); letter-spacing:.03em; }
+#lc-compacto .lc-cp-sel-papel-dica { font-size:10.5px; color:#5b6670; margin-top:8px; }
+#lc-compacto .lc-cp-sel-papel-painel.lc-cp-sel-d-segunda { box-shadow:inset 0 0 0 2px var(--lc-amarelo); }
+#lc-compacto .lc-cp-sel-papel-painel.lc-cp-sel-d-segunda .lc-cp-sel-papel-nome,
+#lc-compacto .lc-cp-sel-papel-painel.lc-cp-sel-d-segunda .lc-cp-sel-papel-nota { color:var(--lc-amarelo); }
+#lc-compacto .lc-cp-sel-papel-painel.lc-cp-sel-d-auto { box-shadow:inset 0 0 0 2px var(--lc-verm);
+  background:radial-gradient(ellipse at 50% 38%,rgba(232,64,87,.2),rgba(9,20,40,.65) 68%); }
+#lc-compacto .lc-cp-sel-papel-painel.lc-cp-sel-d-auto .lc-cp-sel-papel-nome { color:#ff8a9a; }
+#lc-compacto .lc-cp-sel-papel-painel.lc-cp-sel-d-auto .lc-cp-sel-papel-nota { color:#ff8a9a; font-weight:700; }
+/* a palavra grande na linha "tu", à direita (a coluna dos botões de troca dos aliados), ao lado do selo */
+#lc-compacto .lc-cp-sel-eudir { display:flex; align-items:center; gap:8px; min-width:0; }
+#lc-compacto .lc-cp-sel-papel { font-size:19px; line-height:1; font-weight:700; letter-spacing:.05em; color:var(--lc-ouro2); white-space:nowrap; }
+#lc-compacto .lc-cp-sel-papel.lc-cp-sel-d-segunda { color:var(--lc-amarelo); }
+#lc-compacto .lc-cp-sel-papel.lc-cp-sel-d-auto { color:#ff8a9a; }
+#lc-compacto .lc-cp-sel-selo.lc-cp-sel-pouco span:last-child { color:var(--lc-amarelo); }
+#lc-compacto .lc-cp-nota.lc-cp-sel-avisopos { color:var(--lc-amarelo); }
 `;
 
 // ---------- tela ----------
 let atual = null; // estado da montagem viva (o roteador monta uma tela por vez)
+let montagens = 0; // seleção sem id nem gameId: a chave do painel da posição vale por montagem
 
 export async function montar(raiz, ctx) {
   const doc = raiz.ownerDocument || raiz.doc || globalThis.document;
@@ -418,10 +533,18 @@ export async function montar(raiz, ctx) {
     // hover: clique guardado | hoverVoo: id em voo | hoverEnviado: {acao, id, em} | fechando: banir/travar clicado
     // {acao, id, verbo, nome, enviado} até a sessão mostrar a ação fechada | armando: botão de ação ainda cinza
     hover: null, hoverVoo: null, hoverEnviado: null, fechando: null, armando: false, chaveArmar: null, genArmar: 0,
+    // passo 16: painel da posição aberto, geração do prazo dele, preferidas do lobby (e de qual seleção)
+    papelAberto: false, genPapel: 0, prefs: null, prefsSid: null, montagem: ++montagens,
   };
   atual = st;
   st.ultimoEvento = _relogio.agora();
   montarEsqueleto(st);
+  // clique em qualquer lugar da tela fecha o painel da posição (captura: o clique segue para o botão onde caiu)
+  st.fecharPapelClique = ctx.seguro(() => { if (st.papelAberto) { fecharPapel(st); pintar(st); } });
+  raiz.addEventListener('click', st.fecharPapelClique, true);
+  // e qualquer tecla (ele começou a digitar o campeão): no documento, porque a busca escondida perde o foco; a tecla segue
+  st.docPapel = doc;
+  try { doc.addEventListener?.('keydown', st.fecharPapelClique, true); } catch { /* segue */ }
   ctx.observar(`${CS}/session`, msg => { if (msg?.eventType !== 'Delete' && msg?.data) aoSessao(st, msg.data); });
   ctx.intervalo(() => relogio(st), 250);
   // socket mudo (engasgo da LCU, reconexão que não reassina: ARMADILHAS § LCU) deixaria a tela congelada com o
@@ -446,7 +569,9 @@ export async function montar(raiz, ctx) {
 }
 
 export function desmontar(raiz) {
-  try { raiz?.classList?.remove('lc-cp-sel'); } catch { /* segue */ }
+  try { raiz?.classList?.remove('lc-cp-sel', 'lc-cp-sel-papel-on'); } catch { /* segue */ }
+  try { if (atual?.fecharPapelClique) raiz?.removeEventListener?.('click', atual.fecharPapelClique, true); } catch { /* segue */ }
+  try { if (atual?.fecharPapelClique) atual.docPapel?.removeEventListener?.('keydown', atual.fecharPapelClique, true); } catch { /* segue */ }
   atual = null;
 }
 
@@ -514,7 +639,59 @@ function aoSessao(st, s) {
   lerListas(st);
   lerSlots(st);
   if (l.modo.tipo === 'finalizar') { lerSkins(st); lerFeiticos(st); lerRuna(st); }
+  lerPreferidas(st, s);
+  papelAoSessao(st, s, l);
   pintar(st);
+}
+
+// ---------- posição em destaque (passo 16): quando abre e quando fecha o painel ----------
+const chaveSessao = (st, s) => (s?.id ? `s${s.id}` : num(s?.gameId) > 0 ? `g${num(s.gameId)}` : `m${st.montagem}`);
+// abre: 1ª vez que esta seleção mostra esta posição (PLANNING, ou a 1ª fase vista, ou a posição nova de uma troca, inclusive a
+// volta para a de antes), e só com a vez de outro (intenção/esperar). Fecha: vez dele de agir (ban/pick) na hora, sem
+// posição, prazo, clique ou tecla. Guarda também a posição de entrada (papelDe separa troca de autofill por ela).
+function papelAoSessao(st, s, l) {
+  const pos = l.eu?.pos || '';
+  const agir = l.modo.tipo === 'banir' || l.modo.tipo === 'escolher';
+  if (st.papelAberto && (agir || !POS[pos])) fecharPapel(st);
+  st.sid = chaveSessao(st, s);
+  if (!POS[pos]) return;
+  const vistos = vistosPapel();
+  let m = vistos.get(st.sid);
+  if (!m) {
+    if (vistos.size > 200) vistos.clear();
+    m = { ini: pos, vis: '' };
+    vistos.set(st.sid, m);
+  }
+  if (m.vis === pos) return;
+  m.vis = pos;
+  guardarPapel();
+  if (l.modo.tipo !== 'intencao' && l.modo.tipo !== 'esperar') return;
+  st.papelAberto = true;
+  const g = ++st.genPapel;
+  st.ctx.tempo(() => { if (st.genPapel === g && st.papelAberto) { fecharPapel(st); pintar(st); } }, _papel.ms);
+}
+function fecharPapel(st) { st.papelAberto = false; st.genPapel++; }
+// a posição dele agora, com as preferidas e a posição de entrada desta seleção
+const papelAgora = st => papelDe(st.l, st.prefs, vistosPapel().get(st.sid)?.ini || '');
+
+// 1ª e 2ª posição pedidas no lobby: GET /lol-lobby/v2/lobby na seleção ([S]: o coletor lê no Lobby/Matchmaking/ReadyCheck e só
+// tenta na seleção quando não leu antes, coletor.py ler_preferidas; sem medição de que responde aqui). Falhou = a última
+// leitura da tela do lobby (comum.js preferidasLobby, até PREFS_LOBBY_MS); sem nenhuma = só o isAutofilled decide.
+// Uma leitura por seleção.
+function lerPreferidas(st, s) {
+  if (!POS[st.l?.eu?.pos || '']) return;
+  const sid = chaveSessao(st, s);
+  if (st.prefsSid === sid) return;
+  st.prefsSid = sid; st.prefs = null;
+  const doLobby = () => (preferidasLobby.em && Date.now() - preferidasLobby.em < PREFS_LOBBY_MS && (preferidasLobby.pos1 || preferidasLobby.pos2)
+    ? { pos1: posDe(preferidasLobby.pos1), pos2: posDe(preferidasLobby.pos2) } : null);
+  st.prefs = doLobby();
+  st.ctx.lcu('GET', '/lol-lobby/v2/lobby').then(st.ctx.seguro(r => {
+    const m = r.ok && r.json && typeof r.json === 'object' ? r.json.localMember : null;
+    if (st.prefsSid !== sid || !m || typeof m !== 'object') return;
+    st.prefs = { pos1: posDe(m.firstPositionPreference), pos2: posDe(m.secondPositionPreference) };
+    pintar(st);
+  }));
 }
 
 const rotuloDe = (l, cell) => l?.time.find(t => t.cellId === cell)?.rotulo || 'aliado';
@@ -811,6 +988,30 @@ function pintar(st) {
   pintarTime(st);
   pintarInimigos(st);
   pintarSel(st);
+  pintarPapel(st);
+}
+
+// painel da posição: irmão da caixa de seleção (a caixa fica no DOM, escondida pela classe da raiz), nunca sobre o pedido de
+// troca recebido nem sobre os times
+function pintarPapel(st) {
+  const { raiz, partes: p, el } = st;
+  const papel = st.papelAberto ? papelAgora(st) : null;
+  raiz.classList.toggle('lc-cp-sel-papel-on', !!papel);
+  if (!papel) { if (p.papel) { p.papel.remove(); p.papel = null; } return; }
+  const chave = `${papel.pos}|${papel.destaque}|${papel.nota}|${_papel.semIcone}`;
+  if (p.papel?.parentNode === raiz && p.papelChave === chave) return;
+  // refeito com a mesma posição (o lobby respondeu e o destaque mudou): sem a entrada animada de novo
+  const refeito = !!p.papel && p.papelPos === papel.pos;
+  p.papel?.remove();
+  const icone = _papel.semIcone ? null : el('img', { src: papel.icone, alt: '', dataset: { a: 'papel-icone' },
+    on: { error: e => { _papel.semIcone = true; try { e?.target?.remove?.(); } catch { /* segue */ } } } });
+  p.papel = el('div', { class: `lc-cp-sel-papel-painel lc-cp-sel-d-${papel.destaque}`, role: 'status', title: 'clica para fechar',
+    dataset: { a: 'papel-painel', destaque: papel.destaque }, on: { click: st.fecharPapelClique } },
+  icone, el('div', { class: 'lc-cp-sel-papel-nome' }, papel.nome), el('div', { class: 'lc-cp-sel-papel-nota' }, papel.nota),
+  el('div', { class: 'lc-cp-sel-papel-dica' }, 'tua posição · some sozinho ou com um clique'));
+  p.papelChave = chave; p.papelPos = papel.pos;
+  if (refeito) p.papel.style.animation = 'none';
+  raiz.insertBefore(p.papel, p.sel);
 }
 
 // pedido que chegou: o 1º RECEIVED (um por vez no client: os outros ficam BUSY)
@@ -863,12 +1064,23 @@ function pintarTime(st) {
     if (t.travado) det = nomeDe(st, t.travado);
     else if (t.hover) det = el('i', {}, t.eu ? `${nomeDe(st, t.hover)} (escolhendo)` : `intenção: ${nomeDe(st, t.hover)}`);
     else det = el('i', {}, agindo ? 'escolhendo…' : 'ainda não escolheu');
-    const nome = el('div', { class: 'lc-cp-sel-n' }, t.rotulo, el('small', {}, `${nomePos(t.pos)} · `, det));
+    // a minha posição vira a palavra grande à direita (passo 16): embaixo do "tu" fica só o campeão
+    // e o "(escolhendo)" sai também (a foto tracejada e o itálico já dizem que é intenção): com ATIRADOR e o selo na coluna da
+    // direita sobram ~85 px em 420 de largura (harness, 15/10/2026: "Renekton (escolhendo)" cortava a 74/106 px)
+    const papel = t.eu ? papelAgora(st) : null;
+    if (papel && !t.travado && t.hover) det = el('i', { title: `intenção: ${nomeDe(st, t.hover)}` }, nomeDe(st, t.hover));
+    const nome = el('div', { class: 'lc-cp-sel-n' }, t.rotulo, el('small', {}, papel ? '' : `${nomePos(t.pos)} · `, det));
     let dir = '';
     // selo do meu campeão (hover ou travado), à direita da linha "tu" (onde os aliados têm as trocas): passo 11 b6
     const selo = t.eu && c && estatLigada(st) ? textoSeloTela(ctx.servicos?.champ, c, t.pos, nomeDe(st, c)) : null;
-    if (selo) dir = el('div', { class: 'lc-cp-sel-selo', dataset: { a: 'selo' }, title: selo.titulo || undefined },
+    // poucas partidas na posição: a linha da posição do selo em amarelo (o texto do aviso fica na seleção)
+    const pouco = selo && papel && !t.travado ? !!avisoPosicao(ctx.servicos?.champ, c, t.pos, nomeDe(st, c)) : false;
+    if (selo) dir = el('div', { class: 'lc-cp-sel-selo' + (pouco ? ' lc-cp-sel-pouco' : ''), dataset: { a: 'selo' }, title: selo.titulo || undefined },
       ...selo.linhas.map(l => el('span', {}, l)));
+    if (papel) {
+      dir = el('div', { class: 'lc-cp-sel-eudir' }, dir || null,
+        el('div', { class: `lc-cp-sel-papel lc-cp-sel-d-${papel.destaque}`, title: `${papel.nome}: ${papel.nota}`, dataset: { a: 'papel', destaque: papel.destaque } }, papel.nome));
+    }
     if (!t.eu) {
       const res = mem.resultados.get(t.cellId);
       const estados = TROCAS.map(tr => [tr, estadoTroca(s, tr, t.cellId, st.slots.get(t.cellId))]);
@@ -1018,8 +1230,10 @@ function pintarEscolha(st) {
   const ocupado = st.ocupado.has('acao');
   const stats = fav.map(x => estatFav(st, x));
   const f = st.fechando;
+  // passo 16: campeão que ele vai jogar (intenção ou vez dele; nunca o ban) com poucas partidas na posição atribuída
+  const avisoPos = tipo !== 'banir' && id && estatLigada(st) ? avisoPosicao(ctx.servicos?.champ, id, l.eu?.pos, nomeDe(st, id)) : null;
   const chave = JSON.stringify([tipo, l.modo.acao?.id, id, [...fora].sort(), permitidos ? permitidos.size : -1, semLista, st.cat.size, fav, stats, ocupado,
-    l.meuBan, l.revelado, l.fase, st.armando, f && [f.acao, f.id, f.enviado], l.time.map(t => t.hover)]);
+    l.meuBan, l.revelado, l.fase, st.armando, f && [f.acao, f.id, f.enviado], l.time.map(t => t.hover), avisoPos]);
   pintarGrade(st, d);
   if (chave === st.chaveSel) return;
   st.chaveSel = chave;
@@ -1042,14 +1256,18 @@ function pintarEscolha(st) {
       l.modo.acao ? '1 clique na grade declara' : 'tua vez ainda não chegou'));
   }
   const notas = [];
+  if (avisoPos) notas.push(el('div', { class: 'lc-cp-nota lc-cp-sel-avisopos', dataset: { a: 'aviso-posicao' },
+    title: 'partidas tuas com ele nesta posição, no histórico do client (o mesmo do selo); só aviso, nada é impedido' }, `⚠ ${avisoPos}`));
   // sem lista na escolha a nota do sem-lista já explica o cinza
   if ((tipo === 'banir' || tipo === 'escolher') && id && !pode(id) && !(semLista && tipo !== 'banir') && !f)
     notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'motivo' } }, motivoFora(st, d, id)));
   if (l.meuBan !== null && !l.revelado && l.fase === 'BAN_PICK' && tipo !== 'banir')
     notas.push(el('div', { class: 'lc-cp-nota' }, l.meuBan > 0 ? `tu baniu ${nomeDe(st, l.meuBan)}. Os bans dos 10 aparecem juntos quando todos terminarem.` : 'tu não baniu ninguém.'));
-  if (tipo === 'esperar') notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'tua vez de escolher ainda não chegou: 1 clique muda a intenção.' : 'tua vez ainda não chegou.'));
+  // com o aviso da posição, as notas genéricas de espera/intenção saem (o aviso ocupa a linha delas: 1 linha a mais rolava
+  // a tela 10 px em 420×680, harness 15/10/2026)
+  if (tipo === 'esperar' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'tua vez de escolher ainda não chegou: 1 clique muda a intenção.' : 'tua vez ainda não chegou.'));
   // a nota da intenção fica no topo, com as outras: o que fica embaixo da grade tem altura fixa entre as fases
-  if (tipo === 'intencao') notas.push(el('div', { class: 'lc-cp-nota' }, '1 clique declara a intenção (só o teu time vê); escolher de verdade é na tua vez.'));
+  if (tipo === 'intencao' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, '1 clique declara a intenção (só o teu time vê); escolher de verdade é na tua vez.'));
   if (semLista) notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'sem-lista' } }, tipo === 'banir'
     ? 'o client não mandou a lista de bans: mostrando todos (se não valer, o client recusa e avisa).'
     : 'o client não mandou a lista dos teus campeões: só os favoritos, cinza. ⤢ expandir para escolher na tela da Riot.'));

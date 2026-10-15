@@ -1104,6 +1104,79 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     monitor até o `MoveTo` (na 2ª tela, visível por 1+ quadro); `windowWidth` físico confirmado no `centerWithinMainWindow` da Riot.
     Fica de risco aceito: uma troca de tela da Riot exatamente na espera do `resize` (≤ 250 ms) de um clique na ⚙ ainda pode pôr
     o CSS novo antes do `MoveTo` (raro; a montagem com `entrando` segue com `porLarguras`).
+16. [ ] **Posição em destaque na seleção (relato de 15/10/2026 ~04:15).** Palavras dele: "assim que eu entrar numa seleção
+    de campeões, eu gostaria que por alguns segundos aparecesse um ícone representando a minha role. Poderia ser um ícone no
+    lugar de todos os campeões ali [...] essa seção toda poderia ficar limpa e mostrando só a minha role. De repente, já que na
+    linha do meu nome não tem os botões de posição, ordem, campeão, também dá para deixar uma palavra bem grande alinhada na
+    direita, representando a minha role. Assim fica bem na cara, porque atualmente é uma palavra pequena embaixo do meu nome, no
+    lugar da palavra 'tu'. Então fica bem difícil de perceber. E já é a segunda vez que eu caio de jungle, não percebo e acabo
+    indo de Renekton, que é um campeão majoritariamente top."
+    **Caso real** (`dados/lol.db`, `champ_select` de 15/10/2026 03:22): preferidas `TOP,JUNGLE`, recebeu `JUNGLE`,
+    `isAutofilled` false (era a 2ª opção dele, não autofill), travou Renekton (58). Por isso o destaque compara com a **1ª**
+    pedida, não só com o autofill.
+    **Construído em 15/10/2026 (offline), tudo em `pengu/compacto/tela-champselect.js`:**
+    - **(1) painel da posição:** na 1ª vez que uma seleção|posição aparece (`_papel.vistos`, no módulo: expandir e voltar não
+      repete) e só com a vez de outro (`intencao`/`esperar`), a caixa de seleção (busca, favoritos, grade, botão) some por
+      `_papel.ms` = 3,5 s e no lugar fica o ícone do client (`/fe/lol-champ-select/svg/position-<pos>.svg`, o do pino da posição
+      e do diálogo de troca da Riot; `assets.wad` do `rcp-fe-lol-champ-select` 16.20 lido em 15/10) e o nome grande
+      (TOPO, SELVA, MEIO, ATIRADOR, SUPORTE). Destaque: **amarelo** "não é a tua 1ª: tu pediu TOPO"; **vermelho**
+      "PREENCHIMENTO AUTOMÁTICO · tu pediu TOPO e SELVA" (`isAutofilled`, ou fora das 2 pedidas sem FILL: a regra do
+      `coletor.py` `retrato`). Fecha no prazo, com um clique em qualquer lugar da tela (captura na raiz: o clique segue para o
+      botão onde caiu) e **na hora** em que o ban/pick dele abre. 1ª sessão vista já na vez dele: não abre. Às cegas/ARAM/sem
+      posição: nada. Posição mudou na mesma seleção (troca aceita): abre de novo com a nova.
+    - **(2) palavra grande** à direita da linha "tu" (19 px, mesma cor do destaque), a seleção inteira, ao lado do selo do
+      passo 11 b6 (`div.lc-cp-sel-eudir` = [selo][PALAVRA]). Embaixo do "tu" sai a posição pequena e o "(escolhendo)": fica só o
+      campeão (itálico = intenção; a foto tracejada já marca).
+    - **(3) aviso** (`avisoPosicao`): campeão em intenção ou na vez dele com menos de `POUCAS_NA_POSICAO` = 3 partidas tuas na
+      posição atribuída → nota amarela "⚠ Renekton na selva: 1 partida · no topo: 74" (onde ele mais joga, mesma fonte) e a
+      linha da posição do selo em amarelo. Fonte: `servicos.champ.estatisticas` (o histórico do selo, nenhuma leitura nova).
+      Nunca no ban; nunca mexe em `pode()`/`disabled`; com "winrate no champ select" desligado, nada. Toma a linha da nota
+      genérica de espera/intenção (a altura não muda).
+    - Leitura nova: `GET /lol-lobby/v2/lobby` 1 vez por seleção (`lerPreferidas`), **[S]** nesta tela (o coletor já lê ali na
+      seleção); falha = só o `isAutofilled` decide. Nenhuma escrita.
+    **Decisões técnicas (opus com advisor, 15/10/2026, a mais reversível):** (xx) painel **irmão** da caixa de seleção, que fica
+    no DOM escondida pela classe `lc-cp-sel-papel-on` da raiz (nunca dentro dela: o `replaceChildren` do `pintarEscolha` o
+    apagaria e o campo de busca perderia o foco), sem cobrir pedido de troca nem os times: alta; reverte para sobreposição
+    absoluta se a grade pular ao fechar. (xxi) `<img>` com `onerror` (sai o ícone, fica o nome; `_papel.semIcone` não tenta de
+    novo), nunca `-webkit-mask` (404 vira bloco de cor): alta no harness, média no client. (xxii) lobby lido na seleção: média;
+    reverte guardando a pos1 lida pela tela do lobby num memo do `comum.js` se o GET der 404 na seleção. (xxiii) limiar 3 e a
+    posição da partida pelo item da missão/Golpear (`posicaoDaPartida`): partida sem item não conta, então pode avisar a mais
+    (é só texto): média; sobe/desce mudando a constante. (xxiv) arranjo da linha **lado a lado** medido no harness em 420×680
+    (fontes de reserva): todas as linhas 42 px, rolagem 0 em PLANNING, ban, espera, vez dele e finalização, nada cortado no pior
+    caso (Nunu e Willump + ATIRADOR + selo de 2 linhas: nome 92/92 px); a 1ª versão (palavra 21 px com "(escolhendo)") cortava
+    o nome a 74/106 px e foi trocada. Reverte para palavra sobre o selo se as fontes da Riot cortarem. (xxv) o aviso no lugar
+    da nota genérica: com as duas, a espera rolava 10 px (644/634): alta. (xxvi) 3,5 s: média (pedido "alguns segundos";
+    `_papel.ms`).
+    Painel refeito com a mesma posição (o lobby responde depois e o destaque muda) entra sem a animação de novo.
+    — **prova (15/10/2026):** `node tools/teste-compacto-selecao.mjs` 215/215 (seção 9, 50 casos novos, inclusive as duas
+    seleções reais de `champselect-real.json` na mesma montagem; antes do código: 180/207, 27 vermelhos); `teste-compacto` 175, `lobby` 136, `posjogo` 124, `fim-de-partida` 90, `lateral` 118, `jogo` 47, `winrate` ok.
+    Prints (harness, `temp/compacto-harness/2026-10-15-papel-*.png`, `#sel-papel` com `?pos=&ev=&hover=&auto=&fixo=`;
+    ícones copiados do `assets.wad` para `temp/compacto-harness/svg/` e servidos pelo `servir.mjs` em `/fe/...`): 0 antes,
+    1 SELVA 2ª opção, 2 SUPORTE autofill, 3 TOPO 1ª, 4 linha + aviso, 5 vez dele com TRAVAR ligado e o aviso, 6 finalização.
+    **Só o client prova:** o `GET /lol-lobby/v2/lobby` na seleção, o SVG carregando dentro da camada compacta, as fontes da Riot
+    na linha "tu" (corte) e se 3,5 s é tempo bom na PLANNING real.
+    **Revisão adversarial (opus com advisor, 15/10/2026), 6 achados, todos com caso vermelho antes:**
+    (a) **troca de posição pintava vermelho:** a troca muda o `assignedPosition` e não as preferidas nem o `isAutofilled`;
+    TOPO → SUPORTE trocado por ele saía "PREENCHIMENTO AUTOMÁTICO · tu pediu TOPO e SELVA", e o autofill que trocou para a 1ª
+    seguia vermelho. Agora `papelDe(l, prefs, ini)`: posição diferente da de entrada = "trocou de posição: era TOPO" (amarelo
+    só se não é a 1ª), nunca vermelho; `isAutofilled` numa posição pedida também não. (b) trocou e **voltou** para a posição de
+    antes: o painel não reabria (a chave `seleção|posição` já estava vista); agora `_papel.vistos` = seleção → {ini, vis}.
+    (c) **recarga no meio da seleção** mostrava o painel de novo e perdia a posição de entrada (o vermelho de (a) voltava):
+    `_papel.vistos` espelhado no `sessionStorage` (`lc-cp-papel`, 20 seleções, try/catch; sem storage = só o módulo).
+    (d) **o GET do lobby na seleção não tem medição** (o coletor lê no Lobby/Matchmaking/ReadyCheck): reserva
+    `preferidasLobby` em `comum.js`, gravada crua (com FILL) pela tela do lobby a cada leitura, apagada no lobby personalizado,
+    vale por 1 h se o GET falhar; o GET que responde ganha dela. (e) **tecla** com o painel aberto (começou a digitar o
+    campeão; a busca escondida perde o foco) fecha na hora, sem comer a tecla (ouvinte no documento, sai no `desmontar`).
+    (f) **aviso sem dado:** partida sem o item da missão nem Golpear não tem posição; com menos da metade das partidas dele com
+    o campeão de posição sabida, o aviso cala (20 partidas e só 1 classificada não viram "nenhuma partida na selva").
+    Conferido e mantido: o painel nunca abre na vez dele (1ª sessão vista já na vez = não abre; vez chegou = fecha no mesmo
+    evento); às cegas/ARAM sem nada; a palavra e o selo lado a lado seguem a medição (xxiv); "nenhuma partida" de campeão que
+    ele nunca jogou fica (é verdade e é o caso do relato). Decisões: (xxvii) troca pela posição de entrada, não pelo evento da
+    troca (`positionSwaps` some depois de aceito): alta; (xxviii) `sessionStorage` e não `localStorage` (morre com o client,
+    a seleção também): alta; (xxix) reserva de 1 h: média, reverte pelo `PREFS_LOBBY_MS`.
+    — **prova:** `teste-compacto-selecao.mjs` 231/231 (16 casos novos; 11 vermelhos antes), `teste-compacto-lobby.mjs` 138/138
+    (2 novos: reserva com FILL, personalizada apaga); `teste-compacto` 175, `posjogo` 124, `fim-de-partida` 90, `lateral` 118,
+    `jogo` 47, `expansoes` 34, `winrate` ok.
 
 ## Revisão da construção (13/10/2026)
 

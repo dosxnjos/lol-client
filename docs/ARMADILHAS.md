@@ -425,6 +425,12 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Gravação não diz se o champ select da normal é anônimo** → o gravador passa a sessão por
   `limpar_sessao()`, que apaga `nameVisibilityType` junto com a identidade. Para responder, gravar
   só sinais (`bool(valor)` e o enum) antes de limpar.
+- **"Não fui autofill" e mesmo assim caí fora da posição que eu queria** → `isAutofilled` é false quando a posição é a
+  **2ª** pedida (caso real 15/10/2026: TOP,JUNGLE → JUNGLE, Renekton na selva). Destaque e aviso comparam com a 1ª pedida do
+  lobby (`papelDe` na tela 3, plano do compacto passo 16); só o `isAutofilled` não basta.
+- **Trocou de posição na seleção e a tela diz "preenchimento automático"** → a troca aceita muda o `assignedPosition` e não
+  mexe nas preferidas do lobby nem no `isAutofilled`. Separar pela posição com que ele **entrou** na seleção (`_papel.vistos`
+  da tela 3, que sobrevive à recarga pelo `sessionStorage`), nunca só por "fora das pedidas" (plano do compacto, passo 16, revisão).
 - **Seleção desfeita por dodge de terceiro não vira linha** no `champ_select` (por design,
   conferido em dado real em 13/10/2026): "fui dodged" é dado perdido hoje.
 - **Tabela `eog` grava a mesma partida 3 vezes** em ~100 ms (eventos `Update` entre
