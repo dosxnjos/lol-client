@@ -9,7 +9,7 @@
 // uso: node tools/teste-compacto-lateral.mjs
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada, tamanho, LATERAL_MAX, CSS as CSS_MODO } from '../pengu/compacto/modo.js';
-import { criarRoteador, criarArrastoJanela, CLASSE } from '../pengu/compacto/index.js';
+import { criarRoteador, criarArrastoJanela, CLASSE, geometriaAtiva } from '../pengu/compacto/index.js';
 import { lcu as lcuReal } from '../pengu/compacto/comum.js';
 import { criarGeometria, lerTelaRiot, posicaoAlvo, cabeSemMover, normalizarTela } from '../pengu/compacto/geometria.js';
 import { criarLateral, layout, MAX_CONVERSAS } from '../pengu/compacto/lateral.js';
@@ -142,7 +142,8 @@ function janelaFalsa({ x = 640, y = 100, w = 1280, h = 720, z = 1.25, mon = MONI
 
 // ---------- telas falsas (a lateral não depende da tela da coluna) ----------
 const telaFalsa = nome => ({ montar(raiz, ctx) { raiz.append(ctx.raiz.doc.createElement('div')); ctx.titulo.append(`tela ${nome}`); }, atualizar() {} });
-const TELAS = { lobby: telaFalsa('lobby'), fila: telaFalsa('fila'), champselect: telaFalsa('champselect'), posjogo: telaFalsa('posjogo'), honra: telaFalsa('honra') };
+const TELAS = { lobby: telaFalsa('lobby'), fila: telaFalsa('fila'), champselect: telaFalsa('champselect'), posjogo: telaFalsa('posjogo'), honra: telaFalsa('honra'),
+  jogo: telaFalsa('jogo') };
 
 // ---------- dados da LCU falsa ----------
 const NOME_OCULTO = 'NomeOcultoDoAliado';
@@ -205,7 +206,7 @@ function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ 
   // esperar: a folga antes de reler depois do ResizeTo (120 ms no client) vira 2 voltas do laço (o ResizeTo "tarde" da janela
   // falsa assenta em 1)
   const geo = criarGeometria({ lerTela: () => lerTelaRiot(win), mover: (a, b) => janela.mover(a, b), medidas: () => s.rot?.medidasJanela() || null,
-    ativo: () => s.rot?.estado().efetivo === 'compacto', esperar: () => tick(2) });
+    ativo: () => geometriaAtiva(s.rot?.estado()), esperar: () => tick(2) });
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => {}, aoFechar: () => {} });
   const avisar = (m, e) => s.avisos.push([m, !!e]);
   const lat = criarLateral({ cfg, rot: () => s.rot, doc, lcu, servicos: { champ }, geometria: geo, avisar, log: (...a) => s.logs.push(a.map(String).join(' ')),
@@ -500,12 +501,19 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   ta.disparar('keydown', { key: 'Enter', isTrusted: false });
   await tick(8);
   caso('sala do time: Enter sintético (isTrusted false) não envia', s.falsa.escritas().length === nEsc);
-  // em partida: client normal; a lateral guarda; coach e sala do time saem (só existem na seleção)
+  // em partida (passo 14): tela compacta "jogo" só com a coluna (420); a lateral some e guarda; coach e sala do time saem do estado
   await s.passo(() => s.lat.abrirConversa(A1));
+  const nPart = s.win.pedidos.length;
   await s.ir('InProgress');
-  caso('em partida: client normal 1280 (o jogo cobre); coach e sala do time saem do estado; a conversa fica guardada',
-    s.win.w === 1280 && !s.doc.getElementById('lc-compacto') && igual(s.lat.estado().abas.map(a => a.k), ['c:a1@br1.pvp.net']) && s.lat.estado().lembrarCoach === true,
-    JSON.stringify(s.lat.estado()));
+  const naPartida = s.win.pedidos.slice(nPart).map(p => p.name);
+  caso('em partida: tela compacta "jogo" em 420 (lateral fora da janela), coach e sala do time saem, a conversa fica guardada',
+    s.win.w === 420 && s.rot.estado().tela === 'jogo' && !!s.doc.getElementById('lc-compacto') && s.partes().dir.children.length === 0
+      && igual(s.rot.estado().lateral, { esq: 0, dir: 0 }) && igual(s.lat.estado().abas.map(a => a.k), ['c:a1@br1.pvp.net']) && s.lat.estado().lembrarCoach === true,
+    JSON.stringify([s.win, s.rot.estado().lateral, s.lat.estado().abas]));
+  caso('em partida: a janela só recebe ResizeTo (nada de MoveTo/CenterToScreen com o jogo abrindo)', naPartida.length >= 1 && naPartida.every(n => n === 'Window.ResizeTo'), naPartida.join());
+  const leiturasAntes = s.falsa.chamadas?.length ?? null;
+  await s.passo(() => s.lat.volta());
+  caso('em partida: o relógio da lateral não lê nada da LCU', leiturasAntes === null || s.falsa.chamadas.length === leiturasAntes, String(leiturasAntes));
   const xJogo = s.win.x;
   await s.ir('EndOfGame');
   s.ancora = xJogo;
@@ -544,10 +552,34 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
     const n = s.win.pedidos.length;
     await s.ir('InProgress'); await tick(8); await s.geo.ocioso(); await tick(8);
     const depois = s.win.pedidos.slice(n).map(p => `${p.name} ${p.params.join('x')}`);
-    const i1280 = depois.findIndex(p => p === 'Window.ResizeTo 1280x720');
-    caso(`partida começa com o coach aberto${comConfig ? ' e as configurações à esquerda' : ''}: client em 1280 e nada encolhe nem anda depois do expandir`,
-      s.win.w === 1280 && i1280 >= 0 && !depois.slice(i1280 + 1).some(p => /ResizeTo|MoveTo/.test(p)), JSON.stringify(depois));
+    // passo 14: a partida fica compacta (tela "jogo", só a coluna); a geometria não anda a janela com o jogo abrindo
+    caso(`partida começa com o coach aberto${comConfig ? ' e as configurações à esquerda' : ''}: tela de jogo em 420, só ResizeTo, nada de MoveTo`,
+      s.win.w === 420 && s.rot.estado().tela === 'jogo' && depois.length >= 1 && depois.every(p => p.startsWith('Window.ResizeTo')), JSON.stringify(depois));
   }
+  globalThis.document = ANTES.document;
+}
+
+{
+  // corrida da revisão adversarial do passo 14 (achado 1): ele fecha ⚙ (painel da ESQUERDA: a geometria teria de andar a janela)
+  // nos últimos ms da seleção e a fase vira GameStart antes de a tarefa da geometria rodar. Antes do passo 14 a fase expandia e a
+  // guarda ativo() abortava; com a tela "jogo" compacta a guarda dava verdadeiro e saíam ResizeTo + MoveTo com o jogo abrindo
+  const champ = { partidas: () => [], estatisticas: () => ({ geral: { n: 0 } }), coach: () => ({}), lerCoach: async () => {}, estado: () => ({}) };
+  const s = cenario({ champ });
+  await s.ir('Lobby');
+  await s.passo(() => s.lat.alternarConfig());
+  s.est.sessao = sessaoCS(58);
+  s.rot.aoFase('ChampSelect');
+  s.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
+  await tick(8); await s.geo.ocioso(); await tick(4);
+  const esqAntes = s.rot.estado().lateral.esq;
+  const n = s.win.pedidos.length;
+  s.lat.alternarConfig(); // fecha ⚙: pedirLateral enfileira a tarefa da geometria (sem esperar)
+  s.rot.aoFase('GameStart'); // a fase vira na mesma volta, antes do ScreenData
+  await tick(8); await s.geo.ocioso(); await tick(8); await s.geo.ocioso(); await tick(8);
+  const depois = s.win.pedidos.slice(n).map(p => `${p.name} ${p.params.join('x')}`);
+  caso('corrida ⚙ fechada + GameStart: a tarefa atrasada da geometria não move a janela (nenhum MoveTo/CenterToScreen na partida)',
+    esqAntes > 0 && s.rot.estado().tela === 'jogo' && !depois.some(p => /MoveTo|CenterToScreen/.test(p)),
+    JSON.stringify([esqAntes, depois]));
   globalThis.document = ANTES.document;
 }
 
@@ -859,7 +891,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const b = cenario();
   await abrirEMarcar(b);
   await b.ir('InProgress');
-  caso('lida: entrou em partida (client normal) → DELETE', deletes(b) === 1 && b.lat.estado().ativaPorMim === null);
+  caso('lida: entrou em partida (a lateral some da tela de jogo) → DELETE', deletes(b) === 1 && b.lat.estado().ativaPorMim === null);
   const c = cenario();
   await abrirEMarcar(c);
   c.lat.aoOculto(); await tick(4);

@@ -254,8 +254,9 @@ const todasEscritas = [];
 // ---------- 3. tela por fase ----------
 {
   const t = await montarTela({ inicial: S(40) });
+  // 15669 ms -> 15 (floor como a tela da Riot desde 14/10/2026; era ceil = 16). A fixture é de 13/10: foto longe de agora, conta da chegada
   caso('montar: lê a sessão sozinho (GET) e pinta a fase no título e o tempo no topo',
-    t.titulo.textContent.startsWith('BANIMENTO') && t.extras.querySelector('span.lc-cp-sel-t')?.textContent === '16' && t.raiz.classList.contains('lc-cp-sel'));
+    t.titulo.textContent.startsWith('BANIMENTO') && t.extras.querySelector('span.lc-cp-sel-t')?.textContent === '15' && t.raiz.classList.contains('lc-cp-sel'));
   // protótipo (tela 3): relógio, 💬 com o contador, expandir; o contador só lê (GET /lol-chat/v1/conversations)
   const bt = t.extras.querySelector('button[data-a="chat"]');
   caso('topo: 💬 com o contador depois do relógio (protótipo da tela 3)', !!bt && t.extras.children.indexOf?.(bt) !== 0
@@ -931,6 +932,82 @@ const todasEscritas = [];
   // sem o serviço (champselect.js quebrou no init): sem selo, tela segue
   t = await montarTela({ inicial: S(53) });
   caso('b6: sem servicos.champ → sem selo e sem erro', !selo(t) && t.falhas.length === 0);
+}
+
+// ---------- 7c. relógio e barra da fase (relato de 14/10/2026 ~20:50: "contadores de tempo e a barra bugados") ----------
+// O timer da sessão é uma FOTO tirada em internalNowInEpochMs; a LCU repete a mesma foto quando outra coisa da sessão muda
+// (fixture real: ev 16 e 17, 6,2 s depois, com {adjusted 31400, internalNow ...349147}; ev 44 e 45). A conta da Riot
+// (rcp-fe-lol-champ-select 16.20): restante = adjusted − (agora − internalNow). Relógio falso: Date.now = ts do evento.
+{
+  const realNow = Date.now;
+  let agoraFalso = 0;
+  Date.now = () => agoraFalso;
+  if (tela._relogio) tela._relogio.agora = () => agoraFalso;
+  try {
+    const numero = t => Number(t.extras.querySelector('.lc-cp-sel-t')?.textContent);
+    const barra = t => parseFloat(t.raiz.querySelector('div.lc-cp-sel-barra')?.children[0]?.style.width);
+    const tiqueRelogio = t => t.intervalos.find(x => x.ms === 250)?.fn();
+    const esperado = (tm, agora) => Math.max(0, tm.adjustedTimeLeftInPhase - (agora - tm.internalNowInEpochMs));
+    // a 2ª seleção (ev 28-59) tocada evento a evento, cada um no seu ts
+    agoraFalso = ev[28].ts;
+    const t = await montarTela({ inicial: S(28) });
+    const vistos = [];
+    for (let i = 28; i < ev.length; i++) {
+      if (!ev[i].session?.timer) continue;
+      agoraFalso = ev[i].ts;
+      tiqueRelogio(t);
+      const antes = numero(t); // o que ele via um instante antes do evento
+      await t.emitir(S(i));
+      tiqueRelogio(t);
+      vistos.push({ i, antes, n: numero(t), b: barra(t), tm: ev[i].session.timer });
+    }
+    const v45 = vistos.find(x => x.i === 45);
+    const ms45 = esperado(ev[45].session.timer, ev[45].ts); // 31400 − 6585 = 24815
+    caso('relógio: foto repetida 6,2 s depois (ev 45) mostra o que falta de verdade (24), não volta a 32',
+      v45 && v45.n === Math.floor(ms45 / 1000), v45 && `${v45.n} (esperado ${Math.floor(ms45 / 1000)})`);
+    caso('barra: foto repetida (ev 45) fica em ~79%, não volta a 100%', v45 && Math.abs(v45.b - ms45 / 31400 * 100) < 1, v45 && `${v45.b}%`);
+    // mesma foto (fase e internalNow iguais) em eventos seguidos: o número nunca sobe
+    const subiu = [];
+    for (let k = 1; k < vistos.length; k++) {
+      const a = vistos[k - 1], b = vistos[k];
+      if (a.tm.phase === b.tm.phase && a.tm.internalNowInEpochMs === b.tm.internalNowInEpochMs && b.n > b.antes) subiu.push(`ev ${a.i}->${b.i}: ${b.antes}->${b.n}`);
+    }
+    caso('relógio: dentro da mesma foto o número nunca sobe', subiu.length === 0, subiu.join('; '));
+    // em todo evento o número bate com a conta da Riot (floor de adjusted − (agora − internalNow)); antes: ceil(adjusted)
+    const fora = vistos.filter(x => x.n !== Math.floor(esperado(x.tm, ev[x.i].ts) / 1000)).map(x => `ev ${x.i}: ${x.n}≠${Math.floor(esperado(x.tm, ev[x.i].ts) / 1000)}`);
+    caso('relógio: cada evento real mostra floor(adjusted − (agora − internalNow)) como a tela da Riot', fora.length === 0, fora.slice(0, 5).join('; '));
+
+    // socket mudo numa FINALIZATION calma (ev 58, 30 s): a releitura por GET a cada 2 s devolve a MESMA foto; o número desce
+    agoraFalso = ev[58].ts;
+    const f = await montarTela({ inicial: S(58) });
+    const reler = f.intervalos.find(x => x.ms === tela.RELER_MS);
+    const serie = [];
+    for (let s = 1; s <= 30; s++) {
+      agoraFalso = ev[58].ts + s * 1000;
+      if (s % 2 === 0) { reler?.fn(); await tick(); }
+      tiqueRelogio(f);
+      serie.push(numero(f));
+    }
+    const desce = serie.every((n, k) => k === 0 || n <= serie[k - 1]);
+    caso('relógio: releitura com a foto velha (socket mudo, FINALIZATION) não segura o número: desce até 0',
+      desce && serie.at(-1) === 0 && serie[9] <= 20, serie.join(','));
+    caso('barra: na mesma releitura a barra chega a 0%', barra(f) === 0, `${barra(f)}%`);
+    // sem internalNow (fixture remontada da ranqueada de 14/10): vale o adjusted a partir de agora (o de antes)
+    agoraFalso = 1000;
+    const semFoto = S(58); delete semFoto.timer.internalNowInEpochMs;
+    const g = await montarTela({ inicial: semFoto });
+    agoraFalso = 6000; tiqueRelogio(g);
+    caso('relógio: sem internalNowInEpochMs conta do evento (30 → 25)', numero(g) === 25, String(numero(g)));
+    // internalNow absurdo (relógio de outra máquina, valor torto): não confia, conta do evento
+    agoraFalso = 1791886688912;
+    const torta = S(58); torta.timer.internalNowInEpochMs = 1;
+    const h2 = await montarTela({ inicial: torta });
+    tiqueRelogio(h2);
+    caso('relógio: internalNow absurdo (longe de agora) não zera o relógio: conta do evento', numero(h2) === 30, String(numero(h2)));
+  } finally {
+    Date.now = realNow;
+    if (tela._relogio) tela._relogio.agora = () => Date.now();
+  }
 }
 
 // ---------- 8. linha que não se cruza, somada ----------

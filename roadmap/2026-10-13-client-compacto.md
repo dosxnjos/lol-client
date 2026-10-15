@@ -87,7 +87,8 @@ chat dentro da partida (só existe na tela do jogo, ver Descartado).
 - busca [H]: `GET /lol-matchmaking/v1/search` (`timeInQueue`, `estimatedQueueTime`, `lowPriorityData` com
   `penaltyTimeRemaining`), `DELETE` = cancelar. [S] fila de baixa prioridade (leaver) entra em `Matchmaking` com a
   contagem do `lowPriorityData`: é o único "castigo" que aparece na **tela 2**.
-- reconectar [H]: `POST /lol-gameflow/v1/reconnect` existe; o compacto **não** usa (expande e o botão é da Riot).
+- reconectar [H]: `POST /lol-gameflow/v1/reconnect` sem corpo (o `_performReconnect` do `rcp-fe-lol-navigation` 16.20); desde o
+  passo 14 o RECONECTAR da tela de jogo usa, só por clique dele.
 - PDL do pós-jogo [S]: `GET /lol-ranked/v1/current-lp-change-notification` ou diferença de `current-ranked-stats`
   antes/depois (`leaguePointsDelta` existe no `/help`); medir qual chega a tempo.
 
@@ -178,7 +179,7 @@ contra 58% de dia).
   único automático que já existe e continua é a troca da página de runa (`runas.js`) e o popup quando há 2+.
 - **Ready-check não é tela compacta:** `aceite.js` (z 100002) e a janelinha do coletor seguem donos. A tela compacta
   fica **abaixo** de 100002 e cede no `ReadyCheck`.
-- **Reconectar é clique dele no botão da Riot:** em `Reconnect` o compacto expande e some; nunca reconecta sozinho.
+- **Reconectar é clique dele:** desde o passo 14 no RECONECTAR da tela de jogo (a mesma rota do botão da Riot); nunca reconecta sozinho.
 - O `estilo.css` que enxuga o modo expandido (TFT, coluna larga) continua valendo no expandido.
 - Credencial da página/lockfile, `chatDetails.multiUserChatPassword` e `mucJwtDto` nunca em arquivo, log ou fixture.
 - Recarregar a interface só em `None`/`Lobby`.
@@ -199,8 +200,8 @@ monta `#lc-compacto` (tela cheia da janela, z-index 100000, abaixo do aceite) qu
 | 2 na fila | `ReadyCheck` | "partida encontrada" por baixo do `#lc-aceite` (desde 14/10/2026, passo 10; antes a camada saía e a tela da Riot aparecia cortada); quem aceita segue sendo o `aceite.js` e a janelinha do coletor |
 | 3 champ select | `ChampSelect` (SR: 420/440/400) | timer e fase, aliados (posição + campeão), inimigos só por campeão (recolhível), 10 bans, busca + favoritos (Renekton, Zac), banir/escolher/travar, skin, feitiços, runa (escolha **dentro** da tela quando há 2+), trocas com aceito/recusa/desistência/virada de fase, – e ✕ com aviso de dodge |
 | 7 regra | `ChampSelect` do ARAM (450) | expande: banco e reroll ficam com a tela da Riot |
-| — | `GameStart`/`InProgress` | camada sai de cena (client normal embaixo do jogo, como hoje); volta no pós-jogo |
-| 7 regra | `Reconnect`, `FailedToLaunch`, `TerminatedInError` | expande sozinho: o botão da Riot fica à mão |
+| partida | `GameStart`/`InProgress`/`Reconnect` | desde o passo 14 (14/10/2026): tela compacta atrás do jogo (campeão, fila, tempo, placar do time; RECONECTAR no `Reconnect`, por clique); antes a camada saía de cena |
+| 7 regra | `FailedToLaunch`, `TerminatedInError` | expande sozinho: a tela da Riot (crash report) fica à mão |
 | 4 pós-jogo | `WaitingForStats`/`PreEndOfGame` | "carregando" (honra do `PreEndOfGame`: regra 7, expande) |
 | 4 pós-jogo | `EndOfGame` | V/D, KDA, farm, PDL [S], 3 lições em 1 linha cada, jogar de novo (mesma fila da partida, freios; no grupo de outro só volta ao lobby), ver análise completa (expande e abre o `#lc-posjogo`; no compacto ele **não** abre sozinho) |
 | 5 chat | qualquer | lista de amigos (janela ~300×560, com "convidar") e **uma janela por conversa** (~360×420, até 3), fora do client |
@@ -922,6 +923,136 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     na lateral; janela em 2 monitores; recarga do plugin com a lateral aberta (volta a 420, estado não persiste); escala do
     arrasto (achado 5) e o id da sala do time contra o `multiUserChatId` (achado 7); `ResizeTo` síncrono ou não (achado 11). Antes da
     partida, depois da recarga no lobby: `node tools/cdp.mjs eval tools/compacto-importar.js` (os 5 módulos novos estão na lista).
+14. [ ] **Relógio da seleção e compacto durante a partida (relato de 14/10/2026 ~20:50).** Palavras dele: "Os contadores de
+    tempo e a barra de tempo durante a seleção de campeões estão bugados. O modo compacto sai assim que a partida inicia, na
+    tela de partida em andamento, corrija." Até aqui `GameStart`/`InProgress` tiravam a camada **por desenho** (tabela de
+    telas, linha "—"; passo 3) e a lateral fechava na partida e voltava depois (decisão 2 do passo 13). Este passo muda o
+    primeiro e mantém o segundo.
+    **14a. Relógio e barra da tela 3** (`pengu/compacto/tela-champselect.js`, `relogio`/`aoSessao`).
+    - **correção (premissa da tarefa):** a evidência apontada (`dados/medicao-compacto-2026-10-14.jsonl` e
+      `tests/fixtures/selecao-ranqueada-20261014.json`) não tem o relógio: o medidor grava só `phase`, `totalTimeInPhase` e
+      `isInfinite` (`tools/medir-compacto.py`, `sem_relogio`) e a fixture foi remontada com `adjustedTimeLeftInPhase =
+      totalTimeInPhase` em todo evento. A única gravação real com `adjustedTimeLeftInPhase` + `internalNowInEpochMs` é
+      `tests/fixtures/champselect-real.json` (61 leituras GET do `tools/gravador.py`, normal draft de 13/10/2026).
+    - **causa (provada):** o timer da sessão é uma **foto** tirada em `internalNowInEpochMs`; a tela fazia `fim = Date.now() +
+      adjustedTimeLeftInPhase` a cada evento ou releitura. A LCU repete a mesma foto quando outra coisa da sessão muda: na
+      fixture real, `ts 1791886349525` e `ts 1791886355766` (6,2 s depois) trazem o mesmo `{adjusted 31400, internalNow
+      1791886349147}`, e de novo `1791886605276 → 1791886611468`. A fixture é do `tools/gravador.py`, que lê por **GET** a cada
+      ~0,5 s: o ev 45 é uma resposta de GET com a foto de 6,6 s antes, então a releitura por GET também devolve foto velha. O relógio voltava de ~25 para 32 e a barra voltava a 100%
+      ("reinicia"); a releitura por GET do socket mudo (`SILENCIO_MS`/`RELER_MS`) faz o mesmo a cada 2 s numa fase calma
+      (FINALIZATION de 30 s: o número ficava preso entre 30 e 28). Fora isso, todo evento chega 100–500 ms depois da foto e o
+      número dava um pulinho para cima. A conta da Riot (lida no `rcp-fe-lol-champ-select` 16.20 com `tools/ler-wad.py`):
+      `restante = max(adjustedTimeLeftInPhase − (agora − internalNowInEpochMs), 0)`, sem `internalNow` vale o `adjusted`.
+      Não é o defeito do anel da fila (`4c3de6a`): a barra é um elemento só a montagem inteira; quem reiniciava era o número.
+    - **correção:** `fim = (internalNowInEpochMs > 0 e |agora − internalNowInEpochMs| ≤ FOTO_MAX_MS (120 s) ? internalNowInEpochMs :
+      agora) + adjustedTimeLeftInPhase` (foto mais longe que isso = relógio torto, conta da chegada como antes) e relógio
+      injetável (`_relogio.agora`, como o `tela-posjogo.js`). Número com `floor` como o da Riot (era `ceil`: 1 s a mais).
+    - **prova:** `node tools/teste-compacto-selecao.mjs` com relógio falso tocando os 61 eventos reais (`agora = ts`): depois
+      de `ts 1791886355766` o número é 24 (`floor(31400 − 6619 ms)`) e a barra ~79% (antes: 32 e 100%); dentro da mesma foto o número nunca sobe; a
+      releitura de 2 s numa FINALIZATION calma desce até 0. **reprova se:** algum par da mesma foto faz o número subir.
+    **14b. Tela compacta "partida em andamento"** (`pengu/compacto/tela-jogo.js`, roteador `compacto/index.js`).
+    - `GameStart`, `InProgress` e `Reconnect` → tela `jogo` (mesma chave: o "⤢ expandir" dele vale a partida inteira; o
+      botão muda pela fase). Janela 420×680 atrás do jogo: campeão (foto + nome), fila, tempo de jogo, placar do time e
+      "⤢ abrir o client normal". `Reconnect`: "RECONECTAR" = `POST /lol-gameflow/v1/reconnect` sem corpo (o
+      `_performReconnect` do `rcp-fe-lol-navigation` 16.20), só clique de verdade (`isTrusted`), cinza até a fase mudar;
+      falha = motivo + "abrir no client normal". Nada de `early-exit` nem `spectate/quit` (o "sair" da Riot).
+    - Dados, nesta ordem: `GET 127.0.0.1:8765/estado` do coletor (já lê a Live Client: `fase` `carregando`, `gt`, `meuTime`,
+      `jogadores[].aliado/k`, `euJogador.campeao`); só o que a Riot mostra no HUD (tempo e abates por time), nada de inimigo
+      na fog, itens ou "visto há". Coletor fora: campeão por `GET /lol-gameflow/v1/session` (`playerChampionSelections`/
+      `teamOne`/`teamTwo` casado com o puuid do `current-summoner`, nunca mostrado nem logado) e relógio local desde o
+      `GameStart`, rotulado "desde o carregamento" (inclui os ~99 s da tela de carregamento: ARMADILHAS § Live Client),
+      nunca "tempo de jogo". Fetch direto na 2999 fica de fora (certificado próprio da Riot no CEF: [S] novo sem ganho).
+    - `FailedToLaunch`/`TerminatedInError` seguem expandindo: a Riot abre o modal de crash report nessas fases
+      (`_gameflowStateCallback`) e não achei no front dela qual ação é a segura; regra 7 expandiria de todo jeito.
+    - **Foco:** sozinho, nas fases de jogo o roteador só chama `Window.ResizeTo` (nunca `MoveTo`/geometria nem `ux-show`), e em
+      `InProgress` sem o foco na página (`document.hasFocus()` falso = o jogo na frente) não mexe na janela de jeito nenhum:
+      reencolher, expandir por regra 7 e a montagem que precisaria de `ResizeTo` esperam ele voltar ao client (evento
+      `focus`); com ele no client, expandir é o de sempre (`ResizeTo` + `CenterToScreen`). `GameStart` (≈50 ms, antes da janela
+      do jogo) e `Reconnect` (o jogo caiu) não dependem do foco.
+    - **Lateral:** continua fechada na partida e volta depois (decisão 2): nas fases de jogo ela some da largura (`extra` 0),
+      não lê nada (relógio parado), devolve a conversa ativa (`DELETE conversations/active`) e guarda o que estava aberto.
+    - "▣ modo compacto" flutuante também nas fases de jogo (a tela da Riot ali não tem a barra de cima).
+    - **prova:** `teste-compacto.mjs` (13 fases → destino novo; invocações do `riotInvoke` falso nas fases de jogo: só
+      `Window.ResizeTo`; `InProgress` sem foco não chama nada e age no `focus`; `FailedToLaunch` expande),
+      `teste-compacto-jogo.mjs` (novo: campeão, fila, tempo e placar pelo coletor, reserva sem coletor, reconectar só com
+      clique e uma vez, nenhum POST fora do `/reconnect`), `teste-compacto-lateral.mjs` (partida com a lateral aberta: janela
+      420, estado guardado, volta no pós-jogo); harness com prints. **reprova se:** alguma fase de jogo chama `CenterToScreen`/
+      `MoveTo`, reconecta sem clique ou mostra dado de inimigo além do placar.
+    **Construído (14/10/2026, offline; nenhum POST/PATCH contra o client real; `coletor/` intocado; sem commit, a pedido).**
+    `tela-champselect.js` (`fimDaFase`, `_relogio`, `floor`), `tela-jogo.js` (novo), `index.js` (destino, `temFoco`/`podeMexer`,
+    `extra` 0 na partida, sem geometria na partida, log com o foco, `focus` relê, flutuante e aviso do ✕ na partida),
+    `lateral.js` (some e para de ler na partida, volta depois), `comum.js` (`FASES_JOGO`), `compacto-importar.js` (+4 módulos),
+    `rodar-testes.py` (+ `teste-compacto-jogo.mjs`). Completei: `tools/medir-compacto.py` passa a gravar `adjustedTimeLeftInPhase` e
+    `internalNowInEpochMs` no `sessao_cs` (só números; a comparação ignora os dois, sem linha a mais; `teste-medir-compacto.py`
+    35/35): a próxima ranqueada prova o 14a com dado dele (o medidor em execução só pega isso quando for reiniciado).
+    Decisões técnicas (opus, 14/10/2026, opção mais reversível): (i) `floor` como a Riot (era `ceil`): alta; (ii) foto do timer
+    a mais de 120 s de agora = conta da chegada (relógio torto): média, reverte se a medição mostrar relógios que divergem
+    pouco; (iii) as 3 fases de jogo com a mesma chave (⤢ dele vale a partida inteira): média; (iv) `FailedToLaunch`/
+    `TerminatedInError` seguem expandindo: alta; (v) fonte de dados = coletor `/estado`, sem fetch direto na 2999: média,
+    reverte se ele quiser o tempo sem o coletor (aí medir CORS/certificado da 2999 no CEF); (vi) sem foco em `InProgress` nada
+    mexe na janela, com foco o expandir é o de sempre: alta; (vii) leitura do coletor velha (> 8 s) cai para o relógio local:
+    média.
+    — **prova (14/10/2026):** `teste-compacto-selecao.mjs` 165/165 (7 casos novos ou mudados vermelhos contra o HEAD: 32 em
+    vez de 24, barra 100%, número que sobe dentro da mesma foto, releitura presa entre 30 e 27), `teste-compacto.mjs` 162/162
+    (15 vermelhos contra o HEAD), `teste-compacto-jogo.mjs` 39/39 (novo; o módulo não existia), `teste-compacto-lateral.mjs`
+    103/103 (4 vermelhos contra o HEAD); mutações em cópia no scratchpad: sem `podeMexer` (4 casos vermelhos), geometria na
+    partida (1), lateral sem sumir na partida (2). Sem mudança e verdes: `compacto-lobby` 136, `compacto-posjogo` 118,
+    `compacto-fim-de-partida` 89, `aceite` 43, `config` 50, `chat-posjogo` 45, `jogar-de-novo` 96, `posjogo` 11, `recompensas` 41,
+    `runas` 4, `sem-popups` 22, `abas`, `licoes`, `matchup`, `winrate`. Harness (`temp/compacto-harness/partida.html`, `servir.mjs
+    8843`, relógio falso): `2026-10-14-relogio-{antes,depois}.png` (ev 45 da gravação real: 31 e barra 98% antes, 24 e 77%
+    depois), `2026-10-14-partida-{InProgress,sem-coletor,Reconnect}.png`.
+    **Falta (só a partida prova):** `ResizeTo` com a janela minimizada ou atrás do jogo (foco), o `/reconnect` contra o client
+    real, `playerChampionSelections` real, `document.hasFocus()` no CEF com o jogo na frente, o que a Riot faz com o tamanho
+    da janela no fim da partida. No `LeagueClientUx.log` da próxima partida: `tela jogo (GameStart) foco=true redimensionou=…`
+    e nenhum `expandido: partida…`; antes dela, recarga no lobby e `node tools/cdp.mjs eval tools/compacto-importar.js`.
+    **Revisão adversarial do 14 (14/10/2026, só leitura) e correções (opus, 15/10/2026).** Relógio e barra da seleção: sem
+    segundo defeito (o `isInfinite` não passa pelo `fimDaFase`, cada troca de fase traz foto nova, nenhum outro código lê
+    `adjustedTimeLeftInPhase`). Achados da partida, todos corrigidos com teste que falha antes (mutação em cópia no scratchpad):
+    1. **ALTA, bloqueava:** `MoveTo` na partida pela tarefa atrasada da geometria. Fechar ⚙ (painel da esquerda) nos últimos ms da
+       seleção enfileira um `aplicar`; a fase vira GameStart no meio do ScreenData e a guarda `ativo()` (`efetivo === 'compacto'`)
+       seguia verdadeira com a tela de jogo compacta: `ResizeTo` + `MoveTo` com o jogo abrindo. Agora `geometriaAtiva(estado)`
+       (compacto e fora das fases de jogo), exportada do `index.js` e usada no client e no `teste-compacto-lateral.mjs` (que tinha
+       a cópia da guarda velha). Prova: "corrida ⚙ fechada + GameStart" (vermelho antes: `ResizeTo 420x680, MoveTo 640x100`).
+    2. **MÉDIA:** o adiado só voltava pelo evento `focus`, que não chega com o foco no iframe do chat da Riot. `iniciarCompacto`
+       relê a cada 500 ms (`FOCO_RELE_MS`, `voltouAoClient(estado, hasFocus())`). Prova: puro no `teste-compacto.mjs`; o intervalo
+       em si só a partida prova.
+    3. **MÉDIA (dado real):** `Reconnect` também aparece no fim de partida normal (InProgress → Reconnect 19:33:01 →
+       PreEndOfGame 19:33:12). Texto neutro ("o jogo fechou: se a partida ainda está rolando, reconecta"; título "o jogo fechou:
+       reconectar?"); o `tique` de 1 s repinta quando a fase muda sem `atualizar` (bloco e botão somem, título "terminou").
+       Prova: `teste-compacto-jogo.mjs` e harness `#fim-reconnect` (aos 1,3 s do PreEndOfGame: `caiu` escondido, título
+       "terminou"); print `2026-10-14-partida-Reconnect-texto-neutro.png`.
+    4. **BAIXA-MÉDIA:** "acertar o tamanho da janela" adiado nunca acontecia (ramo "mesma tela" só limpava o adiado). Nas fases de
+       jogo, com o foco, o ramo confere `noTamanho` e faz `ResizeTo`; fora delas não (a fila da geometria é dona da ordem CSS →
+       MoveTo → ResizeTo).
+    5. **BAIXA:** a `emergencia()` expandia sem olhar o foco; agora adia "expandir" em InProgress sem foco.
+    6. **BAIXA:** erro de tela com a expansão adiada repetia log e aviso a cada segundo e dizia "abri o client normal". Uma vez
+       por montagem (`m.falhou`, `token++`, timers e intervalos parados) e o texto sai no fim do `resolver` ("abre quando voltar a
+       ele" se adiou).
+    7. **BAIXA ([S]):** o relógio local zerava se o reconectar passasse por GameStart > 60 s depois. Mesmo `gameId` não zera; tela
+       remontada guarda o início de antes (`anterior`) e o devolve quando a sessão confirma a mesma partida.
+    8. **BAIXA:** o tempo do coletor era projetado da hora em que a tela leu. Agora de `atualizadoMs` (hora em que o coletor leu a
+       Live Client, mesmo relógio da máquina), no máximo `PROJECAO_MAX_MS` 4 s (partida pausada não corre e volta); a leitura
+       velha (> 8 s) conta pela mesma hora.
+    9. **BAIXA (desempenho):** o `GET /estado` não roda com a página escondida (`visibilityState === 'hidden'`, janela
+       minimizada). Sem foco continua lendo: o client pode estar à vista na 2ª tela ao lado do jogo.
+    10. **BAIXA ([S]):** TFT e Arena caíam na tela de jogo ("teu time × inimigos" sem sentido). Tela de jogo só com o mapa lido 11
+       ou 12 (`MAPAS_JOGO`); outro mapa volta ao de antes do passo 14 (client normal, que em InProgress sem foco também espera);
+       mapa não lido segue na tela de jogo. Espectador já é outra fase (`WatchInProgress` → client normal).
+    11. **DOC:** 14a corrigido (`FOTO_MAX_MS` na fórmula; 24, não 25); `CLAUDE.md`: "sozinho nada de `MoveTo`/`ux-show`, sem foco
+       nem `CenterToScreen`" (por clique dele o expandir segue com `CenterToScreen`).
+    Decisões técnicas (opus, 15/10/2026, a mais reversível): (viii) achado 4 só nas fases de jogo: alta, reverte se aparecer
+    janela fora do tamanho no lobby (aí entra pela fila da geometria, nunca direto); (ix) achado 9 por `visibilityState`, não por
+    foco: média, reverte se a medição mostrar que o CEF minimizado segue `visible` (aí a leitura volta a ser sempre); (x) achado 10
+    com mapa não lido = tela de jogo: média, reverte se TFT/Arena chegarem ao GameStart antes da sessão (aí esperar a sessão);
+    (xi) projeção máxima 4 s (coletor lê a cada 1 s, tela a cada 2 s, prazo 1,5 s): média; (xii) releitura do foco a cada 500 ms
+    (o `aceite.js` usa 250): alta.
+    — **prova (15/10/2026):** `teste-compacto.mjs` 175/175, `teste-compacto-lateral.mjs` 104/104, `teste-compacto-jogo.mjs` 47/47,
+    `teste-compacto-selecao.mjs` 165/165, `lobby` 136, `posjogo` 118, `fim-de-partida` 89, `aceite` 43, `config` 50, `sem-popups` 22,
+    `chat-posjogo` 45, `recompensas` 41, `jogar-de-novo` 96, `posjogo` 11, `runas` 4, `licoes`/`abas`/`winrate`/`matchup` rc 0,
+    `teste-medir-compacto.py` 35/35. Mutações (cada correção desfeita numa cópia): achados 1, 3, 4, 5, 6, 7, 8, 9 e 10 ficam
+    vermelhos. O `rodar-testes.py` inteiro não rodou: ele abre janelas (moldura, Tk) e o ensaio usa a porta 8766, com o client
+    aberto na tela dele. **Falta (só a partida prova), além da lista acima:** `hasFocus()` a cada 500 ms com o foco no chat da
+    Riot; `visibilityState` do CEF minimizado; mapa de TFT/Arena chegando antes ou depois do GameStart.
 
 ## Revisão da construção (13/10/2026)
 

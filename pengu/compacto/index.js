@@ -25,7 +25,7 @@
 // Linhas que não se cruzam (plano § guardrails): busca só por clique e pelos freios (freios.js); nome oculto nunca;
 // nada decide pelo jogador; nunca tecla ou clique no jogo.
 import { criarJanela, criarCamada, criarBotaoModo, criarArrasto, invocadorRiot, ehAtalho, CSS, GRACA_MEDIDA_MS, tamanho } from './modo.js';
-import { lcu as lcuPadrao, avisar as avisarPadrao, estilo } from './comum.js';
+import { lcu as lcuPadrao, avisar as avisarPadrao, estilo, FASES_JOGO } from './comum.js';
 import { avisarModo } from './chat-ponte.js';
 import { criarGeometria, lerTelaRiot } from './geometria.js';
 import { criarLateral, CSS_LATERAL, lateralLigada } from './lateral.js';
@@ -34,8 +34,10 @@ export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect
   'FailedToLaunch', 'TerminatedInError', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
 export const FILAS_CHAMPSELECT = [420, 440, 400]; // seleção do SR com ban e posição (ARAM 450 expande: decisão do plano)
 export const MAPA_SR = 11;
+export const MAPAS_JOGO = [11, 12]; // tela compacta da partida (passo 14): Summoner's Rift e ARAM
 export const TELAS = { lobby: './tela-lobby.js', fila: './tela-fila.js', champselect: './tela-champselect.js', posjogo: './tela-posjogo.js',
-  honra: './tela-honra.js' };
+  honra: './tela-honra.js', jogo: './tela-jogo.js' };
+export { FASES_JOGO };
 // PreEndOfGame (passo 12): a etapa vem do GET/evento /lol-pre-end-of-game/v1/currentSequenceEvent ({name}). Só honor-vote tem
 // tela compacta; celebração (subir de elo, desafio, missões) expande, mas só depois de ficar SEQ_FIRME_MS (vazias passam em
 // < 0,1 s e expandir nelas faria a janela piscar 420 -> 1280 -> 420 toda partida). Etapa não lida em ESPERA_SEQ_MS: expande.
@@ -87,8 +89,19 @@ export function destinoDaFase(fase, info = {}) {
       if (FILAS_CHAMPSELECT.includes(fila) || (info.custom && mapa === MAPA_SR)) return { tipo: 'tela', tela: 'champselect' };
       return { tipo: 'expandir', motivo: `seleção da fila ${fila || 'desconhecida'}: tela da Riot` };
     }
-    case 'GameStart': case 'InProgress': return { tipo: 'jogo' };
-    case 'Reconnect': return { tipo: 'expandir', motivo: 'reconectar é no botão da Riot' };
+    // partida (passo 14, relato de 14/10/2026 ~20:50: "o modo compacto sai assim que a partida inicia"): a tela "partida em
+    // andamento" fica atrás do jogo. Até aqui GameStart/InProgress tiravam a camada e Reconnect expandia. As 3 fases têm a
+    // mesma chave (tela:jogo): o "⤢ expandir" dele vale a partida inteira e o botão RECONECTAR aparece pela fase
+    // Só Summoner's Rift e ARAM (revisão adversarial, achado 10): TFT, Arena e outros modos não têm "teu time × inimigos" nem
+    // campeão do jogador e voltam ao de antes do passo 14 (client normal). Mapa não lido = tela de jogo (não espera nem bloqueia).
+    // Espectador já é outra fase (WatchInProgress -> default: client normal)
+    case 'GameStart': case 'InProgress': case 'Reconnect': {
+      const mapa = Number(info.mapa) || 0;
+      if (info.lida && mapa && !MAPAS_JOGO.includes(mapa)) return { tipo: 'jogo', motivo: `partida no mapa ${mapa} (TFT, Arena...): client normal` };
+      return { tipo: 'tela', tela: 'jogo' };
+    }
+    // a Riot abre o modal de crash report nessas fases (_gameflowStateCallback do rcp-fe-lol-navigation 16.20) e não há ação
+    // segura conhecida para um botão nosso: tela da Riot
     case 'FailedToLaunch': case 'TerminatedInError': return { tipo: 'expandir', motivo: 'o jogo não abriu ou caiu: tela da Riot' };
     case 'WaitingForStats': return { tipo: 'tela', tela: 'posjogo' };
     case 'PreEndOfGame': {
@@ -106,6 +119,20 @@ export function destinoDaFase(fase, info = {}) {
     case 'EndOfGame': return { tipo: 'tela', tela: 'posjogo' };
     default: return { tipo: 'expandir', motivo: `fase desconhecida (${fase ?? 'sem leitura'})` };
   }
+}
+
+// guarda da tarefa assíncrona da geometria (ativo() de criarGeometria): só com o compacto à vista E fora das fases de jogo.
+// Revisão adversarial do passo 14 (achado 1): fechar ⚙ nos últimos ms da seleção enfileira um aplicar; a fase vira GameStart
+// durante o ScreenData e, com a tela "jogo" compacta, "efetivo === compacto" seguia verdadeiro: saíam ResizeTo + MoveTo com o
+// jogo abrindo. Prova: teste-compacto-lateral.mjs ("corrida ⚙ fechada + GameStart")
+export function geometriaAtiva(e) {
+  return !!e && e.efetivo === 'compacto' && !FASES_JOGO.includes(e.fase);
+}
+
+// algo espera o foco (est.adiado) e a página tem o foco agora -> reavaliar (iniciarCompacto relê a cada FOCO_RELE_MS)
+export const FOCO_RELE_MS = 500;
+export function voltouAoClient(e, foco) {
+  return !!e?.adiado && foco === true;
 }
 
 // info da sessão do gameflow (só o que roteia; nada de identidade)
@@ -205,6 +232,9 @@ export function criarRoteador({
   log = (...a) => console.log('[lol-client] compacto:', ...a), assinar = () => {}, classe = () => {},
   modalAberto = () => null, aceiteManual = () => false, aceiteVivo = () => undefined, aoAplicar = () => {},
   contagemNaTela = () => undefined, // #lc-aceite no DOM? (undefined = não sei: não expande por isso)
+  // a página tem o foco? (document.hasFocus()). Em InProgress, sem foco = o jogo na frente: o roteador não mexe na janela
+  // (ResizeTo/MoveTo/CenterToScreen) até ele voltar ao client (passo 14; o iniciarCompacto relê no evento focus)
+  temFoco = () => true,
   agendar = setTimeout, limpar = clearTimeout, repetir = setInterval, pararRepetir = clearInterval, agora = () => Date.now(),
   // passo 13 (opcionais: sem eles, nada de lateral e nenhuma janela anda). geometria: criarGeometria (prende a janela ao
   // monitor, coluna parada); lateral: {anexar(partes), aoFase(fase), aoEfetivo(efetivo)} (compacto/lateral.js)
@@ -215,10 +245,17 @@ export function criarRoteador({
   // painel (crescem para a direita). Janela = coluna da config + esq + dir; cfg.compacto.larg nunca muda por causa dela
   const est = { fase: null, info: { lida: false }, chave: null, destino: null, override: null, forcado: null,
     efetivo: 'expandido', motivo: 'início', tela: null, pronto: false, lateral: { esq: 0, dir: 0 }, configRiot: false };
-  const extra = () => est.lateral.esq + est.lateral.dir;
+  // partida (passo 14): a lateral fica guardada (decisão 2 do passo 13) e não soma na janela; a lateral.js também zera as larguras
+  const emJogo = () => FASES_JOGO.includes(est.fase);
+  const extra = () => (emJogo() ? 0 : est.lateral.esq + est.lateral.dir);
+  // mexer na janela com o jogo na frente pode trazer o client para cima dele (SetWindowPos sem NOACTIVATE [S]): em InProgress só
+  // com o foco na página. GameStart (~50 ms, antes da janela do jogo) e Reconnect (o jogo caiu) podem
+  const focoOk = () => { try { return temFoco() !== false; } catch { return true; } };
+  const podeMexer = () => est.fase !== 'InProgress' || focoOk();
+  const adiar = oque => { if (est.adiado !== oque) { est.adiado = oque; log(`partida: ${oque} espera o foco no client (jogo na frente)`); } };
   const coluna = () => tamanho(cfg.compacto?.larg, cfg.compacto?.alt)[0];
   const compactar = () => janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt, extra());
-  const porLarguras = () => { try { camada.larguras?.({ esq: est.lateral.esq, col: coluna(), dir: est.lateral.dir }); } catch { /* sem DOM */ } };
+  const porLarguras = () => { try { const j = emJogo(); camada.larguras?.({ esq: j ? 0 : est.lateral.esq, col: coluna(), dir: j ? 0 : est.lateral.dir }); } catch { /* sem DOM */ } };
   const gancho = (nome, ...a) => { try { lateral?.[nome]?.(...a); } catch (e) { log(`lateral: ${nome} falhou`, e); } };
   const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
   const assinadas = new Set();
@@ -250,7 +287,8 @@ export function criarRoteador({
     const quer = est.override || (c.inicioCompacto ? 'compacto' : 'expandido');
     if (d.tipo === 'esperar') return { modo: 'esperar', motivo: d.motivo };
     if (d.tipo === 'expandir') return { modo: 'expandido', motivo: d.motivo, daFase: true };
-    if (d.tipo === 'jogo') return { modo: 'expandido', motivo: 'partida: client normal embaixo do jogo', daFase: true };
+    // 'jogo' desde o passo 14 só sai para partida fora de SR/ARAM (TFT, Arena...): client normal embaixo do jogo, como antes
+    if (d.tipo === 'jogo') return { modo: 'expandido', motivo: d.motivo || 'partida: client normal embaixo do jogo', daFase: true };
     if (est.forcado) return { modo: 'expandido', motivo: est.forcado };
     if (quer !== 'compacto') return { modo: 'expandido', motivo: est.override ? 'expandido por ti' : 'padrão: client normal' };
     if (!janela.disponivel()) return { modo: 'expandido', motivo: 'sem controle da janela (riotInvoke)' };
@@ -318,7 +356,8 @@ export function criarRoteador({
     try { desmontarTela(); } catch { /* segue */ }
     try { camada.remover(); } catch { /* segue */ }
     try { classe(false); } catch { /* segue */ }
-    try { if (janela.ehCompacta()) janela.expandir(); } catch { /* segue */ }
+    // partida com o jogo na frente (revisão adversarial, achado 5): nem a emergência mexe na janela; expande quando ele voltar
+    try { if (janela.ehCompacta()) { if (podeMexer()) janela.expandir(); else adiar('expandir'); } } catch { /* segue */ }
     est.efetivo = 'expandido'; est.motivo = 'erro no roteador'; est.tela = null;
   }
 
@@ -342,43 +381,63 @@ export function criarRoteador({
       if (est.efetivo === 'compacto' && montagem && montagem.nome === a.tela) {
         // a Riot devolveu a janela a 1280×720 com a camada de pé (restore do plugin-runner, ux-show [S]): encolhe de
         // novo; se ela insistir (3 vezes em 10 s), desiste e fica no client normal (camada de 1280 não é compacto)
+        if (podeMexer()) est.adiado = null;
         if (!janela.ehCompacta()) {
+          if (!podeMexer()) { adiar('reencolher a janela'); return; }
           const t = agora();
           while (reencolhidas.length && t - reencolhidas[0] > 10000) reencolhidas.shift();
           if (reencolhidas.length >= 3) { est.forcado = 'a janela voltou ao tamanho normal sozinha'; pendente = true; return; }
           reencolhidas.push(t);
           log('a janela voltou a 1280 sozinha: encolhendo de novo');
           if (!compactar()) { est.forcado = 'a janela não encolheu (riotInvoke)'; pendente = true; return; }
-          geometria?.ajustar();
+          if (!emJogo()) geometria?.ajustar(); // partida: nada de MoveTo (passo 14)
+        } else if (emJogo() && podeMexer() && typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra())) {
+          // tela de jogo montada sem foco numa janela pequena mas do tamanho de antes (a lateral somada: "acertar o tamanho
+          // da janela" adiado): com o foco de volta, só ResizeTo (revisão adversarial, achado 4). Só nas fases de jogo: fora
+          // delas a fila da geometria é dona da ordem CSS → MoveTo → ResizeTo, e um compactar() no meio dela pularia a coluna
+          log('partida: acertando o tamanho da janela (foco no client)');
+          if (!compactar()) { est.forcado = 'a janela não encolheu (riotInvoke)'; pendente = true; return; }
         }
         if (montagem.fase !== est.fase) mudarFase(a);
         return;
+      }
+      // já pequena mas noutro tamanho (recarga do plugin com a janela de 640 de antes): encolhe para o tamanho pedido. Troca
+      // de tela compara com coluna + lateral (passo 13: antes comparava só com a config e toda troca de tela encolhia a lateral)
+      const pequena = janela.ehCompacta();
+      let precisa = !pequena || (typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra()));
+      // partida com o jogo na frente (passo 14): janela grande fica como está até o foco; janela já pequena monta sem ResizeTo
+      if (precisa && !podeMexer()) {
+        if (!pequena) { adiar('encolher a janela'); return; }
+        adiar('acertar o tamanho da janela');
+        precisa = false;
       }
       desmontarTela();
       const entrando = est.efetivo !== 'compacto';
       const partes = camada.montar();
       porLarguras();
-      // já pequena mas noutro tamanho (recarga do plugin com a janela de 640 de antes): encolhe para o tamanho pedido. Troca
-      // de tela compara com coluna + lateral (passo 13: antes comparava só com a config e toda troca de tela encolhia a lateral)
-      const precisa = !janela.ehCompacta() || (typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra()));
       if (precisa && !compactar() && !janela.ehCompacta()) {
         camada.remover();
         est.forcado = 'a janela não encolheu (riotInvoke)';
         est.efetivo = 'expandido'; est.motivo = est.forcado; est.tela = null;
         return;
       }
-      if (precisa || entrando) geometria?.ajustar();
+      if ((precisa || entrando) && !emJogo()) geometria?.ajustar(); // partida: nada de MoveTo (passo 14)
+      if (podeMexer()) est.adiado = null;
       classe(true);
       est.efetivo = 'compacto'; est.motivo = null; est.tela = a.tela;
       gancho('anexar', partes);
       if (entrando) gancho('aoEfetivo', 'compacto');
       // toda montagem vai para o LeagueClientUx.log: sem ela, o log de uma partida só mostrava as saídas do compacto
       // e não provava o que estava na tela (14/10/2026 14:43)
-      log(`tela ${a.tela} (${est.fase})`);
+      // partida: o foco vai junto (prova, no log da partida, de que a janela não mudou com o jogo na frente: passo 14)
+      log(`tela ${a.tela} (${est.fase})${emJogo() ? ` foco=${focoOk()} redimensionou=${precisa}` : ''}`);
       montarTela(a.tela, a.mod, partes);
       return;
     }
     // expandido: sem camada e a janela no tamanho normal (a lateral some junto e volta igual quando o compacto voltar)
+    // partida com o jogo na frente (passo 14): expandir (regra 7, erro) espera o foco; a tela compacta segue de pé até lá
+    if (a.modo === 'expandido' && janela.ehCompacta() && !podeMexer()) { adiar('expandir'); return; }
+    est.adiado = null;
     const saindo = est.efetivo === 'compacto';
     desmontarTela();
     camada.remover();
@@ -397,6 +456,8 @@ export function criarRoteador({
     const novo = { esq: Math.max(0, Math.round(Number(esq) || 0)), dir: Math.max(0, Math.round(Number(dir) || 0)) };
     if (novo.esq === est.lateral.esq && novo.dir === est.lateral.dir) return false;
     est.lateral = novo;
+    // partida (passo 14): a lateral guardada não mexe na janela (extra() é 0 nas fases de jogo); a montagem da tela de jogo acerta
+    if (emJogo()) { porLarguras(); return true; }
     if (est.efetivo === 'compacto' && janela.disponivel() && geometria) {
       // a tarefa da geometria é assíncrona: só redimensiona se o compacto ainda estiver à vista quando ela rodar. As variáveis
       // CSS saem na tarefa, junto do MoveTo (revisão de 14/10/2026: na hora do clique a coluna saía de vista até o ScreenData)
@@ -512,9 +573,22 @@ export function criarRoteador({
   // erro de tela: client normal até a próxima virada de destino (tenta de novo na próxima fase)
   function falhou(e, t) {
     if (t !== undefined && (!montagem || montagem.token !== t)) return; // tela velha: ignora
+    // uma vez por montagem (revisão adversarial, achado 6): na partida sem foco a expansão espera e a montagem fica de pé; sem isto
+    // um tique que lança repetia log e aviso a cada segundo. token++ mata o vivo()/seguro() dela; timers e intervalos param aqui
+    const m = montagem;
+    if (m) {
+      if (m.falhou) return;
+      m.falhou = true;
+      token++;
+      for (const id of m.timers) limpar(id);
+      for (const id of m.intervalos) pararRepetir(id);
+      m.timers.clear(); m.intervalos.clear();
+    }
     log('tela compacta falhou', e);
     est.forcado = `erro na tela compacta (${e?.message || e})`;
-    avisarDepois('a tela compacta falhou: abri o client normal', true);
+    // o texto sai no fim do resolver (pode ser reentrante): só então se sabe se o client normal abriu ou espera o foco
+    avisarDepois(() => (est.adiado === 'expandir' ? 'a tela compacta falhou: o client normal abre quando voltar a ele'
+      : 'a tela compacta falhou: abri o client normal'), true);
     resolver();
   }
 
@@ -522,7 +596,7 @@ export function criarRoteador({
   const avisos = [];
   function avisarDepois(msg, erro = false) { avisos.push([msg, erro]); }
   function despejarAvisos() {
-    while (avisos.length) { const [msg, erro] = avisos.shift(); try { avisar(msg, erro); } catch { /* segue */ } }
+    while (avisos.length) { const [msg, erro] = avisos.shift(); try { avisar(typeof msg === 'function' ? msg() : msg, erro); } catch { /* segue */ } }
   }
 
   function expandirPorTi() {
@@ -548,7 +622,7 @@ export function criarRoteador({
 
   function estado() {
     return { fase: est.fase, info: { ...est.info }, seq: est.seq?.nome ?? null, destino: est.destino, efetivo: est.efetivo, motivo: est.motivo, tela: est.tela,
-      override: est.override, forcado: est.forcado, janelaCompacta: janela.ehCompacta(), camada: !!camada.existe?.(),
+      override: est.override, forcado: est.forcado, adiado: est.adiado || null, janelaCompacta: janela.ehCompacta(), camada: !!camada.existe?.(),
       lateral: { ...est.lateral }, telas: Object.fromEntries([...modulos].map(([k, v]) => [k, v.estado])) };
   }
   // tamanho CSS que a janela compacta deve ter agora (coluna + lateral) e a largura da esquerda (geometria)
@@ -668,7 +742,7 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     mover: (x, y) => janela.mover(x, y),
     medidas: () => rot?.medidasJanela() || null,
     log: (...a) => console.log('[lol-client] compacto:', ...a),
-    ativo: () => rot?.estado().efetivo === 'compacto',
+    ativo: () => geometriaAtiva(rot?.estado()),
   });
   const arrasto = criarArrastoJanela({ geometria, janela, medidas: () => rot?.medidasJanela() || null, win: window, raf: fn => requestAnimationFrame(fn) });
   const camada = criarCamada({
@@ -680,7 +754,9 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     aoFechar: () => janela.sair(),
     avisoFechar: () => (rot?.estado().fase === 'ChampSelect'
       ? 'fechar o client agora é dodge: perde PDL e fica um tempo sem poder buscar. fechar mesmo assim?'
-      : 'fechar o client?'),
+      : FASES_JOGO.includes(rot?.estado().fase)
+        ? 'fechar o client na partida: o jogo segue aberto, mas reconectar e o pós-jogo dependem do client. fechar mesmo assim?'
+        : 'fechar o client?'),
   });
   const botao = criarBotaoModo({ doc, aoClicar: () => rot?.compactar(), raf: fn => requestAnimationFrame(fn) });
   const vigia = criarVigiaModais({ doc, aoModal: d => rot?.aoModal(d) });
@@ -703,8 +779,10 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     aceiteVivo: () => ('aceite' in servicos ? !!servicos.aceite : undefined),
     // contagem do aceite.js (mostrarOverlay põe #lc-aceite no <body>)
     contagemNaTela: () => !!doc.getElementById('lc-aceite'),
-    // botão "▣ modo compacto" só no client normal; na seleção a barra da Riot não aparece: botão flutuante
-    aoAplicar: e => botao.sincronizar(!!cfg.compacto?.ligado && e.efetivo === 'expandido', { flutuante: e.fase === 'ChampSelect' }),
+    // passo 14: com o jogo na frente a página não tem o foco; aí o roteador não mexe na janela (relê no evento focus abaixo)
+    temFoco: () => { try { return typeof doc.hasFocus === 'function' ? doc.hasFocus() : true; } catch { return true; } },
+    // botão "▣ modo compacto" só no client normal; na seleção e na partida a barra da Riot não aparece: botão flutuante
+    aoAplicar: e => botao.sincronizar(!!cfg.compacto?.ligado && e.efetivo === 'expandido', { flutuante: e.fase === 'ChampSelect' || FASES_JOGO.includes(e.fase) }),
   });
 
   // "Configurações da Riot" do painel B1 (passo 13): expande, abre o modal dela (rcp.whenReady('rcp-fe-lol-settings').show(), o
@@ -797,6 +875,12 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
       tResize = setTimeout(() => rot.reavaliar(), 300);
       tResize2 = setTimeout(() => rot.reavaliar(), GRACA_MEDIDA_MS + 200);
     });
+    // passo 14: ele voltou ao client com a partida rodando (alt-tab, barra de tarefas): o que esperava o foco (encolher, expandir
+    // por regra 7) acontece agora, com ele olhando
+    window.addEventListener('focus', () => { if (rot.estado().adiado) rot.reavaliar(); });
+    // ...e por releitura (revisão adversarial, achado 2): com o foco dentro de um iframe (o chat da Riot) a página de cima não
+    // recebe focus/blur (ARMADILHAS § Client; o aceite.js testa hasFocus() a cada 250 ms pelo mesmo motivo). Só estado local, nenhuma chamada à LCU
+    setInterval(() => { try { if (voltouAoClient(rot.estado(), doc.hasFocus?.())) rot.reavaliar(); } catch { /* segue */ } }, FOCO_RELE_MS);
     // janela minimizada ou escondida por outro caminho (barra de tarefas, Win+D): devolve a conversa ativa (revisão de 14/10/2026)
     doc.addEventListener('visibilitychange', () => { if (doc.visibilityState === 'hidden') { try { lateral.aoOculto(); } catch { /* segue */ } } });
     rot.preCarregar();

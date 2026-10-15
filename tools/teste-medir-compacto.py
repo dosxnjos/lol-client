@@ -245,6 +245,8 @@ def principal():
     caso("sessão: nameVisibilityType e temNome por jogador do meu time", se and [p["nameVisibilityType"] for p in se["meuTime"]] == ["UNHIDDEN", "HIDDEN"]
          and all(p["temNome"] for p in se["meuTime"]))
     caso("sessão: o timer que anda não gera linha nova (só as 3 mudanças de troca)", len(evs.get("sessao_cs", [])) == 3, len(evs.get("sessao_cs", [])))
+    caso("sessão: a linha leva a foto do timer (adjustedTimeLeftInPhase e internalNowInEpochMs, passo 14) sem gerar linha a mais",
+         se and isinstance(se["timer"].get("adjustedTimeLeftInPhase"), (int, float)) and "internalNowInEpochMs" in se["timer"], (se or {}).get("timer"))
     caso("sessão: as 2 bandeiras do ban (hasSimultaneousBans, disallowBanningTeammateHoveredChampions) entram no registro",
          se and "hasSimultaneousBans" in se and "disallowBanningTeammateHoveredChampions" in se, sorted(se or {}))
     gf = [ln["dados"] for ln in evs.get("gameflow", [])]

@@ -9,7 +9,7 @@
 // Decisões do Gabriel (sem escolha = a recomendação do protótipo): (1) mensagem nova abre a conversa sozinha só se couber SEM
 // mover a janela e nunca na seleção; (2) a lateral volta depois da partida; (3) configurações num painel (à esquerda).
 // Importável no node (tools/teste-compacto-lateral.mjs): nada de DOM no topo; doc, LCU, relógio e geometria injetáveis.
-import { h, estilo, campeoes as catalogoPadrao } from './comum.js';
+import { h, estilo, campeoes as catalogoPadrao, FASES_JOGO } from './comum.js';
 import { verAmigos, lobbyParaConvite, pedidosRecebidos, criarListaAmigos, criarConversaView, lerConversa, enviarMensagem, ehConversaDireta,
   acharSalaTime, elencoTime, lerSalaTime, linhaSalaTime, CSS_CHAT_LATERAL } from './lateral-chat.js';
 import { criarCoachView, modeloSelo, meuNaSessao, COACH_CADA_MS, CSS_COACH } from './lateral-coach.js';
@@ -56,7 +56,11 @@ export function criarLateral({
   const roteador = () => { try { return rot?.() || null; } catch { return null; } };
   const col = () => roteador()?.medidasJanela?.().col || 420;
   const util = () => { const t = geometria?.tela?.(); return larguraUtilCss(t) ?? Infinity; };
-  const L = () => layout(e, { util: util(), col: col() });
+  // partida (passo 14): a tela compacta de jogo fica de pé, mas a lateral some e guarda o que estava aberto (decisão 2 do passo
+  // 13: volta depois da partida); nada de leitura no relógio nem largura na janela
+  const emJogo = () => FASES_JOGO.includes(st.fase);
+  const VAZIO = { lista: false, config: false, abas: [] };
+  const L = () => layout(emJogo() ? VAZIO : e, { util: util(), col: col() });
   const naSelecao = () => st.fase === 'ChampSelect';
   const compactoAVista = () => st.efetivo === 'compacto';
 
@@ -439,7 +443,7 @@ export function criarLateral({
 
   // relógio da lateral: só com o compacto à vista
   async function volta() {
-    if (st.lendo || !compactoAVista()) return;
+    if (st.lendo || !compactoAVista() || emJogo()) return;
     st.lendo = true;
     try {
       st.volta++;
@@ -472,13 +476,15 @@ export function criarLateral({
     aoFase(fase) {
       const antes = st.fase;
       st.fase = fase;
+      // entrou ou saiu da partida: a largura some (janela só com a coluna) ou volta como estava (passo 14)
+      const virouJogo = FASES_JOGO.includes(antes) !== emJogo();
       if (fase !== 'ChampSelect') {
         if (aba('coach')) e.lembrarCoach = true;
         const tinha = e.abas.length;
         e.abas = e.abas.filter(x => x.tipo !== 'coach' && x.tipo !== 'time');
         if (!aba(e.ativa)) e.ativa = e.abas.length ? e.abas[e.abas.length - 1].k : null;
         st.sala = null; st.salaLinhas = []; st.salaVistas = 0; st.sessao = null;
-        if (tinha !== e.abas.length) render();
+        if (tinha !== e.abas.length || virouJogo) render();
       } else if (antes !== 'ChampSelect' && e.lembrarCoach && !aba('coach')) {
         // ele deixou o coach aberto na seleção anterior: volta aberto, só se couber sem mover a janela (decisão 1 vale aqui)
         const lay0 = L();

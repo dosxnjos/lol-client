@@ -7,7 +7,9 @@
   const mods = ['compacto/comum.js', 'compacto/modo.js', 'compacto/chat-ponte.js', 'compacto/chat-botao.js', 'compacto/index.js',
     'compacto/tela-lobby.js', 'compacto/tela-fila.js', 'compacto/tela-champselect.js', 'compacto/tela-posjogo.js', 'posjogo/index.js',
     // passo 13 (lateral): chat ao lado, configurações à esquerda, coach da seleção, geometria da janela
-    'compacto/geometria.js', 'compacto/lateral.js', 'compacto/lateral-chat.js', 'compacto/lateral-coach.js', 'compacto/lateral-config.js'];
+    'compacto/geometria.js', 'compacto/lateral.js', 'compacto/lateral-chat.js', 'compacto/lateral-coach.js', 'compacto/lateral-config.js',
+    // passo 12 (fim de partida) e passo 14 (partida em andamento)
+    'compacto/tela-honra.js', 'compacto/chat-sala.js', 'compacto/jogador-acoes.js', 'compacto/tela-jogo.js'];
   const out = {};
   for (const m of mods) {
     try { const mod = await import(`${base}${m}?v=${v}`); out[m] = Object.keys(mod).length + (typeof mod.montar === 'function' ? ' montar' : ''); }

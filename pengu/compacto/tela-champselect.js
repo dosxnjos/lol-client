@@ -48,6 +48,20 @@ const MOTIVO = {
 };
 export const RESULTADO_MS = 6000; // quanto tempo "recusou/desistiu/aceitou" fica na linha do aliado
 export const SILENCIO_MS = 3000, RELER_MS = 2000; // sem evento da sessão há SILENCIO_MS: relê por GET (a cada RELER_MS)
+// Relógio da fase (relato de 14/10/2026 ~20:50, "contadores de tempo e a barra bugados"): o timer da sessão é uma FOTO tirada em
+// internalNowInEpochMs, e a LCU repete a mesma foto quando outra coisa da sessão muda (champselect-real.json ev 16/17 e 44/45:
+// mesmo {adjusted 31400, internalNow} 6,2 s depois) e na releitura por GET. Contar o adjusted a partir da chegada do evento
+// fazia o número voltar (25 -> 32) e a barra voltar a 100%; numa FINALIZATION calma a releitura de 2 s prendia o número entre
+// 30 e 28. Conta da Riot (rcp-fe-lol-champ-select 16.20): restante = adjusted - (agora - internalNow), número em floor.
+// FOTO_MAX_MS: internalNow mais longe de agora que isso = relógio torto, conta da chegada (o de antes).
+export const FOTO_MAX_MS = 120000;
+export const _relogio = { agora: () => Date.now() }; // injetável (teste com relógio falso)
+// fim da fase (ms do relógio local) pelo timer lido -> número
+export function fimDaFase(timer, agora = _relogio.agora()) {
+  const foto = Number(timer?.foto);
+  const base = foto > 0 && Math.abs(agora - foto) <= FOTO_MAX_MS ? foto : agora;
+  return base + Math.max(0, Number(timer?.restante) || 0);
+}
 // banir/travar: CONFERIR_MS depois do clique (e da resposta 2xx) a ação ainda aberta = o client não aceitou (aviso com a
 // saída; nunca repete sozinho)
 export const CONFERIR_MS = 3000;
@@ -132,7 +146,8 @@ export function lerSessao(s) {
     me, fase, time, eu, inimigos, nInimigos, banidos, revelado, meuBan, banidosConhecidos, travados,
     modo: { tipo, acao: acao ? { id: acao.id, type: acao.type, championId: num(acao.championId) } : null },
     banindo, vez, fila: num(s.queueId),
-    timer: { restante: Math.max(0, num(t.adjustedTimeLeftInPhase)), total: Math.max(0, num(t.totalTimeInPhase)), infinito: !!t.isInfinite },
+    timer: { restante: Math.max(0, num(t.adjustedTimeLeftInPhase)), total: Math.max(0, num(t.totalTimeInPhase)), infinito: !!t.isInfinite,
+      foto: num(t.internalNowInEpochMs) },
   };
 }
 
@@ -405,18 +420,18 @@ export async function montar(raiz, ctx) {
     hover: null, hoverVoo: null, hoverEnviado: null, fechando: null, armando: false, chaveArmar: null, genArmar: 0,
   };
   atual = st;
-  st.ultimoEvento = Date.now();
+  st.ultimoEvento = _relogio.agora();
   montarEsqueleto(st);
   ctx.observar(`${CS}/session`, msg => { if (msg?.eventType !== 'Delete' && msg?.data) aoSessao(st, msg.data); });
   ctx.intervalo(() => relogio(st), 250);
   // socket mudo (engasgo da LCU, reconexão que não reassina: ARMADILHAS § LCU) deixaria a tela congelada com o
   // relógio andando e a vez errada: sem evento há SILENCIO_MS, relê a sessão por GET
   ctx.intervalo(() => {
-    if (st.relendo || Date.now() - st.ultimoEvento < SILENCIO_MS) return;
+    if (st.relendo || _relogio.agora() - st.ultimoEvento < SILENCIO_MS) return;
     st.relendo = true;
     ctx.lcu('GET', `${CS}/session`).then(ctx.seguro(r => {
       st.relendo = false;
-      st.ultimoEvento = Date.now();
+      st.ultimoEvento = _relogio.agora();
       if (r.ok && r.json && typeof r.json === 'object') aoSessao(st, r.json);
     }));
   }, RELER_MS);
@@ -472,7 +487,7 @@ function montarEsqueleto(st) {
 
 function aoSessao(st, s) {
   const { ctx } = st;
-  st.ultimoEvento = Date.now();
+  st.ultimoEvento = _relogio.agora();
   const l = lerSessao(s);
   if (!l) throw new Error('sessão da seleção sem myTeam');
   // seleção com banco (ARAM), espectador ou sem seleção: a tela é da Riot
@@ -490,7 +505,7 @@ function aoSessao(st, s) {
   // banir/travar clicado: a ação fechou ou mudou na sessão = acabou (o resto, a conferência decide)
   if (st.fechando && l.modo.acao?.id !== st.fechando.acao) st.fechando = null;
   armar(st);
-  st.fim = Date.now() + l.timer.restante;
+  st.fim = fimDaFase(l.timer); // pela foto (internalNow), nunca pela chegada do evento: a foto repetida não volta o relógio
   for (const r of acompanharPedidos(st.mem, s)) {
     if (r.resultado === 'morreu' || r.resultado === 'sumiu') ctx.avisar(textoResultado(r, rotuloDe(l, r.cellId)));
     ctx.tempo(() => pintar(st), RESULTADO_MS + 100);
@@ -781,8 +796,8 @@ function relogio(st) {
   const { partes: p, l } = st;
   if (!l) return;
   if (l.timer.infinito) { p.tempo.textContent = '∞'; p.barra.style.width = '100%'; return; }
-  const resta = Math.max(0, st.fim - Date.now());
-  p.tempo.textContent = String(Math.ceil(resta / 1000));
+  const resta = Math.max(0, st.fim - _relogio.agora());
+  p.tempo.textContent = String(Math.floor(resta / 1000)); // floor como a tela da Riot (timeRemaining)
   p.barra.style.width = (l.timer.total > 0 ? Math.min(100, resta / l.timer.total * 100) : 0) + '%';
   p.barra.classList.toggle('lc-cp-sel-fim', resta < 8000);
 }

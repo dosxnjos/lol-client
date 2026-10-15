@@ -1,13 +1,14 @@
 // Testa a base do client compacto (pengu/compacto/: modo.js, index.js, comum.js + chave compacto do config.js) sem o
 // client: riotInvoke falso (grava os pedidos), DOM mínimo feito aqui, telas falsas e LCU falsa. Prova do plano
 // roadmap/2026-10-13-client-compacto.md, passos 2 e 3: alternar volta ao estado inicial; ResizeTo 420×640 e
-// 1280×720 (+ CenterToScreen); roteador nas 13 fases; ReadyCheck cede ao aceite; Reconnect expande; modal
+// 1280×720 (+ CenterToScreen); roteador nas 13 fases; ReadyCheck cede ao aceite; partida compacta (passo 14), sem mexer na
+// janela com o jogo na frente; FailedToLaunch expande; modal
 // desconhecido expande; erro numa tela expande. uso: node tools/teste-compacto.mjs
 import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada, criarBotaoModo, criarArrasto, ehAtalho, tamanho, CSS_MODO, GRACA_MEDIDA_MS } from '../pengu/compacto/modo.js';
-import { criarRoteador, destinoDaFase, infoDaSessao, classificarCamada, criarVigiaModais, FASES, CLASSE, ESPERA_SESSAO_MS, TELAS, CONTAGEM_MS, MODAL_RC_MS, expandirAntes } from '../pengu/compacto/index.js';
+import { criarRoteador, destinoDaFase, infoDaSessao, classificarCamada, criarVigiaModais, FASES, CLASSE, ESPERA_SESSAO_MS, TELAS, CONTAGEM_MS, MODAL_RC_MS, expandirAntes, geometriaAtiva, voltouAoClient, MAPAS_JOGO } from '../pengu/compacto/index.js';
 import { esc, h, avisar, lcu, campeoes, iconeCampeao, _zerarCatalogo, CSS_BASE } from '../pengu/compacto/comum.js';
 
 // ---------- DOM mínimo ----------
@@ -117,7 +118,7 @@ function telaFalsa(nome, { lancar = false, rejeitar = false, comAtualizar = fals
   return t;
 }
 
-function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, alturaInicial = 720, modal = null, contagemNaTela } = {}) {
+function cenario({ cfg: cfgOver = {}, telas, telasExtra = {}, larguraInicial = 1280, alturaInicial = 720, modal = null, contagemNaTela, foco = true } = {}) {
   const cfg = { compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 }, aceite: { ligado: true }, ...cfgOver };
   const pedidos = [];
   // como o client: o ResizeTo muda a largura que a página mede
@@ -128,8 +129,8 @@ function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, alturaInicia
   const doc = novoDoc();
   const avisos = [], logs = [], subs = new Map(), aplicados = [];
   const ts = telas ?? { lobby: telaFalsa('lobby', { comAtualizar: true }), fila: telaFalsa('fila', { comAtualizar: true }), champselect: telaFalsa('champselect'),
-    posjogo: telaFalsa('posjogo', { comAtualizar: true }), honra: telaFalsa('honra') };
-  const s = { cfg, pedidos, doc, rel, avisos, logs, subs, telas: ts, modal, aplicados, win };
+    posjogo: telaFalsa('posjogo', { comAtualizar: true }), honra: telaFalsa('honra'), jogo: telaFalsa('jogo', { comAtualizar: true }), ...telasExtra };
+  const s = { cfg, pedidos, doc, rel, avisos, logs, subs, telas: ts, modal, aplicados, win, foco, falharClasse: 0 };
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => janela.minimizar(), aoFechar: () => janela.sair(),
     avisoFechar: () => (s.rot.estado().fase === 'ChampSelect' ? 'fechar agora é dodge' : 'fechar o client?') });
   s.rot = criarRoteador({
@@ -137,10 +138,11 @@ function cenario({ cfg: cfgOver = {}, telas, larguraInicial = 1280, alturaInicia
     carregarTela: async nome => { if (ts[nome]) return ts[nome]; throw new Error('404 ' + nome); },
     avisar: (m, e) => avisos.push([m, !!e]), log: (...a) => logs.push(a.join(' ')),
     assinar: (uri, cb) => subs.set(uri, cb),
-    classe: on => doc.documentElement.classList.toggle(CLASSE, on),
+    // falharClasse: quantas chamadas seguidas lançam (erro fora das telas = emergência do roteador)
+    classe: on => { if (s.falharClasse > 0) { s.falharClasse--; throw new Error('classe quebrou'); } doc.documentElement.classList.toggle(CLASSE, on); },
     modalAberto: () => s.modal,
     aceiteManual: () => doc.documentElement.classList.contains('lc-aceite-manual'),
-    aoAplicar: e => aplicados.push(e.efetivo), contagemNaTela,
+    aoAplicar: e => aplicados.push(e.efetivo), contagemNaTela, temFoco: () => s.foco,
     agendar: rel.agendar, limpar: rel.limpar, repetir: rel.repetir, pararRepetir: rel.limpar, agora: rel.agoraMs,
   });
   s.janela = janela;
@@ -191,7 +193,8 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const info = { lida: true, fila: 420, mapa: 11, custom: false, aceiteLigado: true, aceiteManual: false };
   const esperado = {
     None: 'tela:lobby', Lobby: 'tela:lobby', Matchmaking: 'tela:fila', ReadyCheck: 'tela:fila', ChampSelect: 'tela:champselect',
-    GameStart: 'jogo:', InProgress: 'jogo:', Reconnect: 'expandir:', FailedToLaunch: 'expandir:', TerminatedInError: 'expandir:',
+    // passo 14 (14/10/2026): a partida tem tela compacta (antes: GameStart/InProgress 'jogo:' tiravam a camada e Reconnect expandia)
+    GameStart: 'tela:jogo', InProgress: 'tela:jogo', Reconnect: 'tela:jogo', FailedToLaunch: 'expandir:', TerminatedInError: 'expandir:',
     // PreEndOfGame sem a etapa lida espera (passo 12: a honra é compacta, as celebrações expandem; ver os casos abaixo)
     WaitingForStats: 'tela:posjogo', PreEndOfGame: 'esperar:', EndOfGame: 'tela:posjogo',
   };
@@ -264,8 +267,8 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   s.rot.marcarPronto();
   const passos = [
     ['None', null, 'compacto', 'lobby'], ['Lobby', null, 'compacto', 'lobby'], ['Matchmaking', null, 'compacto', 'fila'],
-    ['ReadyCheck', null, 'compacto', 'fila'], ['ChampSelect', sessao(420), 'compacto', 'champselect'], ['GameStart', null, 'expandido', null],
-    ['InProgress', null, 'expandido', null], ['Reconnect', null, 'expandido', null], ['FailedToLaunch', null, 'expandido', null],
+    ['ReadyCheck', null, 'compacto', 'fila'], ['ChampSelect', sessao(420), 'compacto', 'champselect'], ['GameStart', null, 'compacto', 'jogo'],
+    ['InProgress', null, 'compacto', 'jogo'], ['Reconnect', null, 'compacto', 'jogo'], ['FailedToLaunch', null, 'expandido', null],
     ['TerminatedInError', null, 'expandido', null], ['WaitingForStats', null, 'compacto', 'posjogo'], ['PreEndOfGame', null, 'compacto', 'honra'],
     ['EndOfGame', null, 'compacto', 'posjogo'],
   ];
@@ -283,6 +286,8 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   }
   caso('roteador: as 13 fases em sequência levam ao destino esperado', !erros.length, erros.join(' | '));
   caso('None -> Lobby (mesma tela) chama atualizar, não remonta', s.telas.lobby.montadas === 1 && s.telas.lobby.atualizadas === 1);
+  caso('partida: GameStart -> InProgress -> Reconnect é a mesma tela (monta 1 vez, atualiza 2)',
+    s.telas.jogo.montadas === 1 && s.telas.jogo.atualizadas === 2, JSON.stringify([s.telas.jogo.montadas, s.telas.jogo.atualizadas]));
   caso('WaitingForStats -> PreEndOfGame (honra) -> EndOfGame: honra monta uma vez, pós-jogo remonta depois dela',
     s.telas.posjogo.montadas === 2 && s.telas.honra.montadas === 1 && s.telas.honra.desmontadas === 1, JSON.stringify([s.telas.posjogo.montadas, s.telas.honra.montadas]));
   const z = Number(CSS_MODO.match(/#lc-compacto \{[^}]*z-index:(\d+)/)?.[1]);
@@ -478,15 +483,156 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('ready check expandido por falta de contagem: a volta à busca é compacta', d.foto().efetivo === 'compacto' && d.foto().tela === 'fila');
 }
 
-{ // Reconnect
+{ // Reconnect (passo 14: tela compacta com RECONECTAR; antes expandia) e as fases sem ação segura
   const s = cenario();
   s.rot.marcarPronto();
   await s.ir('ChampSelect', sessao(420));
+  const antes = s.pedidos.length;
   await s.ir('Reconnect');
-  caso('Reconnect: camada sai e o client volta ao normal (1280×720 centralizado)', igual(s.foto(), { efetivo: 'expandido', tela: null, janelaCompacta: false, camada: false, classe: false })
-    && s.nomes().slice(-2).join() === 'Window.ResizeTo 1280x720,Window.CenterToScreen' && s.telas.champselect.desmontadas === 1);
+  caso('Reconnect: tela compacta "jogo" (o RECONECTAR mora nela), sem mexer na janela já pequena',
+    igual(s.foto(), { efetivo: 'compacto', tela: 'jogo', janelaCompacta: true, camada: true, classe: true }) && s.pedidos.length === antes
+    && s.telas.champselect.desmontadas === 1, JSON.stringify([s.foto(), s.nomes().slice(antes)]));
+  await s.ir('FailedToLaunch');
+  caso('FailedToLaunch: client normal (modal de crash report da Riot; sem ação segura para um botão nosso)',
+    s.foto().efetivo === 'expandido' && !s.foto().camada && s.nomes().slice(-2).join() === 'Window.ResizeTo 1280x720,Window.CenterToScreen');
   s.rot.compactar();
-  caso('Reconnect: pedir o compacto não encolhe e avisa o motivo', s.foto().efetivo === 'expandido' && s.avisos.some(([m]) => /reconectar/.test(m)));
+  caso('FailedToLaunch: pedir o compacto não encolhe e avisa o motivo', s.foto().efetivo === 'expandido' && s.avisos.some(([m]) => /não abriu ou caiu/.test(m)));
+  await s.ir('TerminatedInError');
+  caso('TerminatedInError: client normal', s.foto().efetivo === 'expandido' && !s.foto().janelaCompacta);
+}
+
+{ // partida e foco (passo 14): com o jogo na frente (InProgress sem foco na página) o roteador não mexe na janela
+  const chamadas = (s, i) => s.nomes().slice(i);
+  // 1) seleção -> GameStart -> InProgress: só ResizeTo, nunca CenterToScreen/MoveTo/Minimize
+  const a = cenario(); a.rot.marcarPronto();
+  await a.ir('ChampSelect', sessao(420));
+  a.cfg.compacto.larg = 440; // tamanho mudou na seleção: a montagem da partida acerta a janela
+  const i0 = a.pedidos.length;
+  await a.ir('GameStart');
+  a.foco = false; // a janela do jogo abriu na frente
+  await a.ir('InProgress');
+  const ch = chamadas(a, i0);
+  caso('partida: GameStart monta "jogo" e a janela só recebe ResizeTo (nada de CenterToScreen, MoveTo, Minimize)',
+    a.foto().tela === 'jogo' && a.foto().efetivo === 'compacto' && ch.length >= 1 && ch.every(n => n.startsWith('Window.ResizeTo')), ch.join(','));
+  // 2) InProgress sem foco: a Riot devolve a janela a 1280 -> não reencolhe; volta o foco -> reencolhe
+  a.win.innerWidth = 1280; a.win.innerHeight = 720; a.rel.avancar(5000);
+  const i1 = a.pedidos.length;
+  a.rot.reavaliar(); a.rot.reavaliar();
+  caso('partida sem foco: janela devolvida a 1280 não é reencolhida com o jogo na frente', a.pedidos.length === i1 && a.rot.estado().adiado,
+    JSON.stringify([chamadas(a, i1), a.rot.estado().adiado]));
+  caso('partida sem foco: o adiamento vai ao log uma vez só', a.logs.filter(l => /espera o foco/.test(l)).length === 1,
+    a.logs.filter(l => /espera o foco/.test(l)).join(' | '));
+  a.foco = true; a.rot.reavaliar();
+  caso('partida: com o foco de volta (ele no client) reencolhe', chamadas(a, i1).join() === 'Window.ResizeTo 440x640' && a.foto().janelaCompacta && !a.rot.estado().adiado,
+    chamadas(a, i1).join());
+  // 3) regra 7 com o jogo na frente: a tela compacta segue até o foco; com o foco, expande
+  a.foco = false; a.modal = 'modal';
+  const i2 = a.pedidos.length;
+  a.rot.aoModal('modal');
+  caso('partida sem foco: modal da Riot não expande com o jogo na frente (nenhuma chamada, tela de pé)',
+    a.pedidos.length === i2 && a.foto().tela === 'jogo' && a.foto().camada, JSON.stringify([chamadas(a, i2), a.foto()]));
+  a.foco = true; a.rot.reavaliar();
+  caso('partida: modal + foco de volta = client normal', a.foto().efetivo === 'expandido' && chamadas(a, i2).join() === 'Window.ResizeTo 1280x720,Window.CenterToScreen',
+    chamadas(a, i2).join());
+  // 4) ⤢ dele na partida vale até o fim da partida (mesma chave nas 3 fases); o pós-jogo volta ao compacto
+  const b = cenario(); b.rot.marcarPronto();
+  await b.ir('GameStart'); await b.ir('InProgress');
+  b.rot.expandir();
+  await b.ir('Reconnect');
+  caso('partida: "⤢ expandir" dele segue no Reconnect (mesma tela)', b.foto().efetivo === 'expandido');
+  await b.ir('InProgress'); await b.ir('WaitingForStats');
+  caso('partida: depois do jogo o pós-jogo volta ao compacto', b.foto().efetivo === 'compacto' && b.foto().tela === 'posjogo');
+  // 5) plugin recarregado no meio da partida, janela normal e jogo na frente: não encolhe; encolhe quando ele vier ao client
+  const c = cenario({ foco: false }); c.rot.marcarPronto();
+  await c.ir('InProgress');
+  caso('boot no meio da partida sem foco: nenhuma chamada à janela, sem camada de 1280', c.pedidos.length === 0 && !c.foto().camada && c.rot.estado().adiado,
+    JSON.stringify([c.nomes(), c.foto()]));
+  c.foco = true; c.rot.reavaliar();
+  caso('boot no meio da partida: com o foco encolhe e monta a tela de jogo', c.foto().tela === 'jogo' && c.nomes().join() === 'Window.ResizeTo 420x640', c.nomes().join());
+  // 6) janela já pequena no tamanho certo e sem foco: monta sem chamar nada
+  const d = cenario({ larguraInicial: 420, alturaInicial: 640, foco: false }); d.rot.marcarPronto();
+  await d.ir('InProgress');
+  caso('boot no meio da partida com a janela já compacta: monta a tela de jogo sem chamar a janela', d.foto().tela === 'jogo' && d.pedidos.length === 0,
+    JSON.stringify([d.nomes(), d.foto()]));
+  // 7) Reconnect não depende do foco (o jogo caiu, nada na frente)
+  const e = cenario({ foco: false }); e.rot.marcarPronto();
+  await e.ir('Reconnect');
+  caso('Reconnect sem foco: monta e encolhe (o jogo caiu, nada na frente)', e.foto().tela === 'jogo' && e.nomes().join() === 'Window.ResizeTo 420x640', e.nomes().join());
+  // 8) log da montagem da partida leva o foco (prova no LeagueClientUx.log)
+  caso('log: "tela jogo (GameStart) foco=..." na montagem da partida', a.logs.some(l => /tela jogo \(GameStart\) foco=true/.test(l)),
+    a.logs.filter(l => /tela jogo/.test(l)).join(' | '));
+}
+
+{ // revisão adversarial do passo 14 (14/10/2026): achados 1, 2, 4, 5, 6 e 10
+  // achado 4: tela de jogo montada sem foco numa janela pequena da largura de antes (lateral somada): com o foco, acerta (ResizeTo)
+  const a = cenario({ larguraInicial: 780, alturaInicial: 640, foco: false }); a.rot.marcarPronto();
+  await a.ir('InProgress');
+  const montouSemChamar = a.foto().tela === 'jogo' && a.pedidos.length === 0 && a.rot.estado().adiado === 'acertar o tamanho da janela';
+  a.foco = true; a.rot.reavaliar();
+  caso('achado 4: jogo montado sem foco em 780 de largura; com o foco de volta a janela vai a 420 (só ResizeTo) e nada fica adiado',
+    montouSemChamar && a.nomes().join() === 'Window.ResizeTo 420x640' && !a.rot.estado().adiado, JSON.stringify([montouSemChamar, a.nomes(), a.rot.estado().adiado]));
+  a.rot.reavaliar(); a.rot.reavaliar();
+  caso('achado 4: no tamanho certo, reavaliar de novo não pede outro ResizeTo', a.nomes().length === 1, a.nomes().join());
+  // fora da partida o ramo "mesma tela" não acerta tamanho (a fila da geometria é dona da ordem)
+  const b = cenario({ larguraInicial: 780, alturaInicial: 640 }); b.rot.marcarPronto();
+  await b.ir('Lobby');
+  const nb = b.pedidos.length;
+  b.win.innerWidth = 700; b.rot.reavaliar();
+  caso('achado 4: no lobby, "mesma tela" numa largura diferente não chama a janela (só na partida)', b.pedidos.length === nb, b.nomes().join());
+
+  // achado 5: erro do roteador (fora das telas) em InProgress com o jogo na frente: a emergência não expande; com o foco, segue
+  const c = cenario({ larguraInicial: 420, alturaInicial: 640, foco: false }); c.rot.marcarPronto();
+  c.falharClasse = 1;
+  await c.ir('InProgress');
+  const semChamada = c.pedidos.length === 0 && c.rot.estado().adiado === 'expandir' && c.logs.some(l => /roteador falhou/.test(l));
+  caso('achado 5: emergência em InProgress sem foco não chama a janela (adia "expandir")', semChamada, JSON.stringify([c.nomes(), c.rot.estado().adiado]));
+  c.foco = true; c.rot.reavaliar();
+  caso('achado 5: com o foco de volta o roteador segue (tela de jogo de pé, nada adiado, nenhum CenterToScreen)',
+    c.foto().tela === 'jogo' && !c.rot.estado().adiado && !c.nomes().some(n => /CenterToScreen|MoveTo/.test(n)), JSON.stringify([c.nomes(), c.foto()]));
+  const c2 = cenario({ larguraInicial: 420, alturaInicial: 640 }); c2.rot.marcarPronto();
+  c2.falharClasse = 1;
+  await c2.ir('Lobby');
+  caso('achado 5: emergência fora da partida expande como antes', c2.nomes().join() === 'Window.ResizeTo 1280x720,Window.CenterToScreen', c2.nomes().join());
+
+  // achado 6: tela de jogo cujo tique lança, em InProgress sem foco: um log, um aviso com o texto certo, nada na janela
+  const tiqueQuebrado = { montadas: 0, montar(raiz, ctx) { this.montadas++; ctx.intervalo(() => { throw new Error('tique quebrou'); }, 1000); }, atualizar() {} };
+  const d = cenario({ larguraInicial: 420, alturaInicial: 640, foco: false, telasExtra: { jogo: tiqueQuebrado } }); d.rot.marcarPronto();
+  await d.ir('InProgress');
+  d.rel.avancar(5500);
+  const falhas = d.logs.filter(l => /tela compacta falhou/.test(l)).length;
+  const avisosF = d.avisos.filter(([m]) => /tela compacta falhou/.test(m));
+  caso('achado 6: tique que lança sem foco = 1 log e 1 aviso ("abre quando voltar"), nenhuma chamada à janela',
+    falhas === 1 && avisosF.length === 1 && /quando voltar/.test(avisosF[0][0]) && d.pedidos.length === 0 && d.rot.estado().adiado === 'expandir',
+    JSON.stringify([falhas, avisosF, d.nomes(), d.rot.estado().adiado]));
+  d.foco = true; d.rot.reavaliar();
+  caso('achado 6: com o foco, o client normal abre (ResizeTo 1280 + CenterToScreen, ele no client)',
+    d.foto().efetivo === 'expandido' && d.nomes().join() === 'Window.ResizeTo 1280x720,Window.CenterToScreen', d.nomes().join());
+  const e = cenario({ telasExtra: { jogo: tiqueQuebrado } }); e.rot.marcarPronto();
+  await e.ir('Lobby'); await e.ir('GameStart');
+  e.rel.avancar(1500);
+  caso('achado 6: com o foco o texto segue "abri o client normal"', e.avisos.some(([m]) => /abri o client normal/.test(m)) && e.foto().efetivo === 'expandido',
+    JSON.stringify(e.avisos));
+
+  // achado 10: TFT/Arena não montam a tela de jogo (sem "teu time × inimigos"); mapa não lido segue na tela de jogo
+  const inf = mapa => ({ lida: true, fila: 1700, mapa, custom: false });
+  caso('achado 10: SR e ARAM = tela de jogo; Arena (30) e TFT (22) = client normal como antes; mapa não lido = tela de jogo',
+    MAPAS_JOGO.join() === '11,12' && ['GameStart', 'InProgress', 'Reconnect'].every(f => destinoDaFase(f, inf(11)).tela === 'jogo' && destinoDaFase(f, inf(12)).tela === 'jogo'
+      && destinoDaFase(f, inf(30)).tipo === 'jogo' && destinoDaFase(f, inf(22)).tipo === 'jogo' && destinoDaFase(f, { lida: false }).tela === 'jogo'
+      && destinoDaFase(f, inf(null)).tela === 'jogo'));
+  const f = cenario(); f.rot.marcarPronto();
+  await f.ir('Lobby');
+  f.rot.aoSessao(sessao(1700, 30));
+  await f.ir('GameStart');
+  caso('achado 10: Arena no GameStart abre o client normal (o de antes do passo 14)', f.foto().efetivo === 'expandido' && !f.foto().camada, JSON.stringify(f.foto()));
+
+  // achado 1 (guarda da geometria) e achado 2 (releitura do foco): puros
+  caso('achado 1: geometriaAtiva só com o compacto à vista e fora das fases de jogo',
+    geometriaAtiva({ efetivo: 'compacto', fase: 'ChampSelect' }) && !geometriaAtiva({ efetivo: 'compacto', fase: 'GameStart' })
+      && !geometriaAtiva({ efetivo: 'compacto', fase: 'InProgress' }) && !geometriaAtiva({ efetivo: 'compacto', fase: 'Reconnect' })
+      && !geometriaAtiva({ efetivo: 'expandido', fase: 'Lobby' }) && !geometriaAtiva(null));
+  caso('achado 2: voltouAoClient só com algo adiado e o foco na página',
+    voltouAoClient({ adiado: 'expandir' }, true) && !voltouAoClient({ adiado: 'expandir' }, false) && !voltouAoClient({ adiado: null }, true)
+      && !voltouAoClient({ adiado: 'x' }, undefined));
 }
 
 { // boot da Riot tira a camada do <body> e põe uma cópia sem ouvintes (14/10/2026: "lendo o lobby" para sempre)

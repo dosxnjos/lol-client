@@ -88,6 +88,22 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Tela compacta que não muda entre fases remonta no client e não no teste** → o roteador carrega a tela por `import()` e
   procura `atualizar` no MÓDULO; teste que monta `criarTelaX()` direto passa sem o `export const atualizar`. Conferir o
   export no módulo (`teste-compacto-lobby.mjs`, 14/10/2026).
+- **Compacto que mexe na janela com o jogo na frente** (passo 14, 14/10/2026: a partida passou a ter tela compacta) →
+  `ResizeTo`/`MoveTo`/`CenterToScreen` numa janela de fundo pode trazê-la para cima do jogo [S] (SetWindowPos sem
+  `NOACTIVATE`). Nas fases de jogo o roteador nunca chama a geometria (`MoveTo`) e em `InProgress` sem `document.hasFocus()`
+  não chama nada (reencolher, expandir por regra 7, montar precisando de `ResizeTo`): espera o evento `focus` (`podeMexer`,
+  log `partida: … espera o foco`). A montagem loga `tela jogo (<fase>) foco=… redimensionou=…`. A lateral some na partida
+  (`extra` 0) e volta depois. Nunca `ux-show` nem `SetForegroundWindow` fora do `ChampSelect` do `aceite.js`.
+  Revisão adversarial (14/10/2026): (a) a tarefa da geometria é assíncrona e atravessa a troca de fase: fechar ⚙ nos últimos
+  ms da seleção saía `MoveTo` no GameStart, porque a guarda só olhava `efetivo === 'compacto'` e a tela de jogo também é
+  compacta; a guarda é `geometriaAtiva` (compacto **e** fora das fases de jogo), a mesma no client e no teste;
+  (b) o `focus` não chega com o foco dentro do iframe do chat da Riot: o adiado também é relido a cada 500 ms por
+  `hasFocus()` (`voltouAoClient`); (c) a emergência do roteador e o erro de tela também esperam o foco.
+- **`Reconnect` não é só "o jogo caiu"** (medição de 14/10/2026, `dados/medicao-compacto-2026-10-14.jsonl`) → numa partida
+  normal a fase foi `InProgress → Reconnect` às 19:33:01 e `Reconnect → PreEndOfGame` às 19:33:12, seguida do `EndOfGame` com
+  `GAME_END`: o processo do jogo fecha antes de a Riot sair da partida. Texto do compacto neutro ("o jogo fechou: se a partida
+  ainda está rolando, reconecta") e o bloco do RECONECTAR some pelo relógio da tela quando a fase sai do `Reconnect`, mesmo
+  sem `atualizar` (no `PreEndOfGame` o roteador espera a etapa). O clique tem guarda de fase.
 - **Animação CSS reinicia a cada repintura** (anel da fila, 14/10/2026: "reinicia sempre que conta um segundo") → o client
   manda o evento da busca a cada ~1 s e `replaceChildren` recriava o anel: elemento novo (ou solto e reposto) = o
   `::after` gira do zero. Elemento animado vive a montagem inteira e só muda classe e miolo (`tela-fila.anelDe`).
@@ -384,6 +400,13 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   mudou = aceita; `acompanharPedidos`).
 - **Socket do Pengu mudo no champ select** → a tela que só ouve eventos congela com o relógio andando (vez errada,
   tempo acaba = dodge). A tela 3 relê `GET session` a cada 2 s depois de 3 s sem evento.
+- **Relógio da seleção volta para trás e a barra reinicia** (relato de 14/10/2026 ~20:50) → o `timer` da sessão é uma foto
+  tirada em `internalNowInEpochMs`; a LCU repete a mesma foto quando outra coisa da sessão muda (`champselect-real.json` ev
+  16/17 e 44/45: `{adjusted 31400, internalNow}` iguais 6,2 s depois; a fixture é de GET a cada ~0,5 s, então o `GET` também
+  devolve foto velha). Contar `adjustedTimeLeftInPhase` a partir
+  da chegada do evento voltava 25 → 32 e a barra a 100%; com o socket mudo a releitura de 2 s prendia o número. Conta da Riot
+  (`rcp-fe-lol-champ-select` 16.20): `adjusted − (agora − internalNow)`, número em `floor` (`tela-champselect.fimDaFase`).
+  A fixture ranqueada de 14/10 não tem os dois campos (o medidor só passou a gravá-los depois): prova com `champselect-real.json`.
 - **Gravação não diz se o champ select da normal é anônimo** → o gravador passa a sessão por
   `limpar_sessao()`, que apaga `nameVisibilityType` junto com a identidade. Para responder, gravar
   só sinais (`bool(valor)` e o enum) antes de limpar.

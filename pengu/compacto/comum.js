@@ -3,6 +3,10 @@
 // Regra da casa: texto da LCU (nome de campeão, título, mensagem) nunca vai cru para innerHTML. Montar DOM com h()
 // (textContent) ou, se for string HTML, passar cada valor por esc().
 
+// fases da partida (passo 14): a tela compacta "partida em andamento" (tela-jogo.js) fica atrás do jogo; a lateral fica guardada
+// (decisão 2 do passo 13) e o roteador não mexe na janela com o jogo na frente (compacto/index.js podeMexer)
+export const FASES_JOGO = ['GameStart', 'InProgress', 'Reconnect'];
+
 // escapa texto para HTML (atributo ou corpo)
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);

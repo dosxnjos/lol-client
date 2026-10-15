@@ -97,7 +97,10 @@ def sessao_cs(s):
     t = s.get("timer") or {}
     acoes = [a for turno in (s.get("actions") or []) for a in (turno if isinstance(turno, list) else [turno])]
     return {
-        "timer": {"phase": t.get("phase"), "totalTimeInPhase": t.get("totalTimeInPhase"), "isInfinite": t.get("isInfinite")},
+        # adjustedTimeLeftInPhase + internalNowInEpochMs (só números): a foto do timer, para provar o relógio da tela 3 com dado
+        # dele (passo 14 do plano: a LCU repete a foto em evento e GET); a comparação abaixo ignora os dois (não gera linha)
+        "timer": {"phase": t.get("phase"), "totalTimeInPhase": t.get("totalTimeInPhase"), "isInfinite": t.get("isInfinite"),
+                  "adjustedTimeLeftInPhase": t.get("adjustedTimeLeftInPhase"), "internalNowInEpochMs": t.get("internalNowInEpochMs")},
         "localPlayerCellId": s.get("localPlayerCellId"), "isCustomGame": s.get("isCustomGame"),
         "allowSkinSelection": s.get("allowSkinSelection"), "benchEnabled": s.get("benchEnabled"),
         "allowRerolling": s.get("allowRerolling"), "rerollsRemaining": s.get("rerollsRemaining"),
@@ -410,7 +413,7 @@ class Medidor:
         s = self.get("/lol-champ-select/v1/session", timeout=5)
         if s:
             d = sessao_cs(s)
-            self.gravar_se_mudou("sessao_cs", d, comparar=sem_relogio(d, ("totalTimeInPhase",)))
+            self.gravar_se_mudou("sessao_cs", d, comparar=sem_relogio(d, ("totalTimeInPhase", "adjustedTimeLeftInPhase", "internalNowInEpochMs")))
             # trocas: estado × momento (a tabela do plano), uma linha a cada mudança, com a fase do timer
             self.gravar_se_mudou("trocas", {"timerPhase": d["timer"]["phase"], **d["trocas"]}, comparar=d["trocas"])
         if self.vez("summoners", 1):
