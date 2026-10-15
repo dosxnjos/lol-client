@@ -221,15 +221,16 @@ def gravar_ultima(d):
 
 
 def descrever_conclusao(prog):
-    """o "100%" honesto (revisão 13/10, item 4): suspeitas (regra delas: só --refazer-suspeitas) e presas
-    (recusadas no alvo em MAX_TENTATIVAS_ALVO dias) ficam fora do critério de desligar, e aparecem aqui"""
+    """o "100%" honesto (revisão 13/10, item 4): presas (recusadas no alvo em MAX_TENTATIVAS_ALVO dias, inclusive
+    suspeita presa, que segue na Maria) ficam fora do critério de desligar, e aparecem aqui. Suspeita refazível não
+    deixa concluir (a fase b a refaz no alvo; passo 6c)"""
     alvo = prog.get("modelo_alvo")
     presas, susp = prog.get("presas") or 0, prog.get("suspeitas") or 0
     if not presas and not susp:
         return f"completo e 100% no modelo-alvo {alvo}"
     return (f"completo; {prog.get('no_alvo')} de {prog.get('total')} no modelo-alvo {alvo} (100% do que o alvo "
-            f"aceitou: {presas} presa(s) no modelo antigo, {susp} suspeita(s) na Maria; refazer: gerador com "
-            f"--refazer-suspeitas ou --modelo-alvo)")
+            f"aceitou: {presas} presa(s), {susp} suspeita(s) na Maria; refazer: gerador com --refazer-suspeitas ou "
+            f"--modelo-alvo)")
 
 
 def rodar(log, aberto=jogo_aberto, fase=None, executar_fn=executar, progresso_fn=ler_progresso,
@@ -421,8 +422,8 @@ def estado(saida=print):
     saida(f"pacote {VOZ} ({PACOTE})")
     saida(f"  falas no pacote: {p['no_pacote']} de {p['total']} (faltam {p['faltam']}; os dois tons)")
     saida(f"  modelo-alvo: {alvo or '(definido na 1ª rodada com a API)'}; no alvo {p['no_alvo']}; fora do alvo a "
-          f"refazer {p['fora_do_alvo']}; presas no modelo antigo {p['presas']}")
-    saida(f"  suspeitas (tocam na Maria; --refazer-suspeitas): {p['suspeitas']}")
+          f"refazer {p['fora_do_alvo']} (inclui suspeitas); presas {p['presas']}")
+    saida(f"  suspeitas (tocam na Maria até a fase b refazer no alvo): {p['suspeitas']}")
     saida("  por modelo: " + (", ".join(f"{m} {n}" for m, n in modelos.most_common()) or "nenhum"))
     falhas = [f for f in (ind.get("falhas") or {}) if f in set(todas)]
     if falhas:

@@ -108,8 +108,9 @@ o coach toca o arquivo e cai na Maria só no que faltar (anotado em `dados\voz-f
 o pacote, **com o jogo fechado**: `%LOCALAPPDATA%\lol-client\voz\venv\Scripts\python.exe tools\gerar-pacote-voz.py
 --voz aoede --tom serio` (retoma de onde parou; a cota grátis do Gemini acaba no dia, ele para dizendo quantas
 faltam e renova às ~04:00, meia-noite do Pacífico; `--seco` só conta). Fala editada no `docs\LICOES.md` só vira
-áudio depois de rodar o gerador de novo. Fala que o Whisper ouviu errado fica `suspeita` e toca na Maria:
-`--refazer-suspeitas` pede de novo. **Regerar** do zero: apagar a pasta `pacotes\aoede\` e rodar de novo.
+áudio depois de rodar o gerador de novo. Fala que o Whisper ouviu errado fica `suspeita` e toca na Maria até a tarefa
+`lol-client-voz` refazer no modelo-alvo (1 vez por dia; `--refazer-suspeitas` pede já, com qualquer modelo); áudio que
+"diz outra coisa": `python tools\auditar-pacote-voz.py --refazer "frase"` marca na hora. **Regerar** do zero: apagar a pasta `pacotes\aoede\` e rodar de novo.
 **Trocar de voz:** outra voz do Gemini entra em `VOZES_GEMINI` (`tools\gerar-pacote-voz.py`), gera com `--voz <id>`
 e o coletor usa com `LOL_VOZ_PACOTE=<id>` (reiniciar o coletor fora de partida). Voltar à Maria: apagar a pasta do
 pacote ou `LOL_VOZ_PACOTE=` vazio no ambiente do coletor.
@@ -146,6 +147,8 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | ensaio ponta a ponta sem o client (banco copiado, portas 8766/2996) | `python tools\ensaio-coach.py` |
 | simulador da Live Client (porta 2998) | `python tools\simular-liveclient.py` |
 | registro de queda e vigia do coletor (`--real`: pela tarefa agendada, com tarefas de teste de outro nome, removidas no fim) | `python tools\teste-vida.py` · `python tools\teste-vigia.py` |
+| quais telas da Riot tiraram o compacto e por quanto tempo (cada saída automática ou pedida, gravada pelo coletor em `dados\expansoes-compacto.jsonl`; [COLETOR](docs/COLETOR.md) § Registro das expansões) | `python tools\relatorio-expansoes.py` |
+| auditoria do pacote de voz (cada `.wav` pelo Whisper contra o catálogo inteiro; o que não bate vira suspeita, toca na Maria e a tarefa `lol-client-voz` refaz no modelo-alvo; só com o jogo fechado, retoma) | `python tools\auditar-pacote-voz.py` (`--so-indice`, `--relatorio`, `--refazer "frase"`) |
 | medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
 | chat em janelas fora do client (tela 5 do compacto: lista de amigos e uma janela por conversa, LCU e janelas falsas; `--prints` tira o print das 2 páginas sem abrir janela; `--real` abre 2 janelas do Edge e mede foco e posição, só com o jogo fechado) | `python tools\teste-chat-janelas.py` |
 

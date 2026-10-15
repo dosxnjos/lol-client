@@ -491,6 +491,21 @@ def _sinal_aceite(coach):
         return None
 
 
+def _registro_expansoes(coach):
+    """POST /compacto/expansoes (registro das saídas do client compacto, passo 15 do plano do compacto) pendurado no
+    servidor do coach. Sem servidor: o plugin guarda em memória e reenvia. Falha aqui nunca derruba o coletor."""
+    srv = getattr(coach, "srv", None)
+    if srv is None:
+        return False
+    try:
+        import expansoes
+        srv.rotas_post["/compacto/"] = expansoes.rota_expansoes()
+        return True
+    except Exception as e:
+        log.warning("registro das expansões do compacto fora: %s: %s", type(e).__name__, e)
+        return False
+
+
 def _chat_padrao(coach, lcu):
     """janelas do chat fora do client nas rotas /chat/* do servidor do coach; falha aqui nunca derruba o coletor"""
     srv = getattr(coach, "srv", None)
@@ -513,6 +528,7 @@ class Coletor:
         self.fab_aviso = fab_aviso or _aviso_padrao
         self.aviso = None
         self.sinal = _sinal_aceite(coach)   # "não aceitar" e diagnóstico do plugin (POST /aceite/plugin)
+        _registro_expansoes(coach)          # saídas do client compacto (POST /compacto/expansoes)
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)

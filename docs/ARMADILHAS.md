@@ -302,6 +302,13 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   no meio da digitação (a tecla seguinte vai para os atalhos da Riot) e botão recriado a cada 500 ms engole o clique que
   começa num e termina no outro. Campo, botão de envio e botão de baixo nascem uma vez por montagem e só mudam texto e
   `disabled` (`compacto/chat-sala.js`, `compacto/tela-honra.js`); `replaceChildren` só no que não tem foco nem clique.
+- **`ctx.expandir()` não diz se foi clique dele** (15/10/2026) → as telas chamam o mesmo `ctx.expandir()` num botão e
+  sozinhas (lobby personalizado, seleção com banco, chat sem coletor, pós-jogo sem saída). O registro das expansões
+  separa pelo último `pointerdown` ou Enter/Espaço da página, medido no pedido (`GESTO_MS`, 1,5 s): sem gesto = `tela-sozinha`.
+  Expansão que não passa pelo `resolver()` (mudar `est.efetivo` direto) some do registro; `est.forcado` sem `forcar()` sai sem origem.
+- **POST ao coletor com mais de 64 KiB volta 400 e, reenviado igual, trava a fila** (15/10/2026) → o `servidor_local.do_POST`
+  lê no máximo 65536 bytes e corta o resto (JSON torto). Lote do plugin ao coletor vai por tamanho (`expansoes.LOTE_BYTES`),
+  nunca só por contagem, e 400/413 tira o lote da fila em vez de repetir.
 
 ## LCU API
 
@@ -939,8 +946,16 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   pedaço é de qual frase); `--sem-conferir` volta ao corte só pelo silêncio. Os 3 lotes recusados alinharam 3/3.
 - **Cota grátis renova à meia-noite do Pacífico (~04:00 em Brasília)** e cada modelo de TTS tem a sua; o gerador
   passa de um para o outro, então o pacote mistura modelos (o `indice.json` grava o modelo de cada fala).
-- **Fala `suspeita` no pacote tocando errado** → o tocador pula `suspeita` (Maria ao vivo) e o gerador não a refaz
-  sozinho (gastaria cota toda rodada): `--refazer-suspeitas`. Conferência que morre para a rodada sem gravar.
+- **Fala `suspeita` no pacote tocando errado** → o tocador pula `suspeita` (Maria ao vivo). Até 15/10/2026 o gerador não
+  a refazia sozinho e a tarefa desligava com ela na Maria; hoje a fase (b) a refaz no alvo, primeiro e 1 vez por dia
+  (3 recusas = presa). Conferência que morre para a rodada sem gravar.
+- **Corte que caiu na frase parecida de outro lote passa na conferência** → `julgar_lote` só compara com as vizinhas do
+  lote. A auditoria (`tools\auditar-pacote-voz.py`) compara com o catálogo inteiro. Ao ler a transcrição: o Whisper small
+  escreve "no rio top" como "no Hilltop", "mid" como "midi"/"médio" e "cinco" como "Simco" (`ALIASES_WHISPER`), e engole
+  palavra solta no fim ("arauto" → "lhe"): suspeita de auditoria pode ser o ouvido, não o áudio; empate com outra frase
+  não marca (15/10/2026). Frase cujo começo é outra frase do catálogo ("teleporte do jungler" × "… marcado") vira "soa
+  como outra" sempre que o Whisper engole a última palavra: refeita no alvo, a fase (b) troca a entrada inteira e a marca
+  sai, mas uma auditoria manual depois pode marcar de novo.
 - **Teste seco tocando som de verdade** → `Voz(saida=...)` não abre o pacote padrão; com pacote explícito e sem
   `tocar`, o .wav também vai para a `saida`. Nunca rodar teste que toque `winsound` com o Gabriel jogando.
 - **"A cota de todos acabou" não vale para a noite toda** (13/10/2026) → o `gemini-3.8-flash-tts` deu 429 diário por

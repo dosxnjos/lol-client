@@ -37,6 +37,8 @@ TESTES = [
     ["node", "tools/teste-compacto-fim-de-partida.mjs"],
     ["node", "tools/teste-compacto-lateral.mjs"],
     ["node", "tools/teste-compacto-jogo.mjs"],   # partida em andamento (passo 14)
+    ["node", "tools/teste-compacto-expansoes.mjs"],   # registro das saídas do compacto (passo 15)
+    [PY, "tools/teste-expansoes.py"],      # rota /compacto/expansoes (porta 8798), jsonl com rotação e relatório
     [PY, "tools/teste-medir-compacto.py"],
     [PY, "tools/teste-chat-janelas.py"],   # sem janela de verdade (o --real abre o Edge: só à mão, jogo fechado)
     [PY, "tools/teste-coach.py"],

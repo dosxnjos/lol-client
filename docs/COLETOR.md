@@ -328,7 +328,7 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   `/estado`, `/config` GET/POST (`dados\config.json`; chaves em § Coach na partida), `/mentor/...`
   (encaminha ao `Mentor.rota_http`), `/contexto/<gameId>` e `/licoes/<gameId>` (`coach.py`), e as rotas
   que o coach pendura (`/draft`, `/revisao/<gameId>`) e o coletor (`/chat/...`, `POST /aceite/plugin`: § Sinal e
-  diagnóstico do plugin). CORS só para origem local (`127.0.0.1`,
+  diagnóstico do plugin; `POST /compacto/expansoes`: § Registro das expansões do compacto). CORS só para origem local (`127.0.0.1`,
   `localhost`, `plugins`, `riot`; preflight responde `Access-Control-Allow-Private-Network`); `Host` de
   fora → 403. O plugin chama `http://127.0.0.1:8765` (por IP: loopback não é conteúdo misto).
 - **`painel\`**: HTML/CSS/JS sem build, 4 blocos fixos + faixa de 1 aviso, consulta `/estado` 1/s. O que
@@ -486,12 +486,14 @@ versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Mar
   `League of Legends.exe` aberto, mata o gerador na hora. O Whisper só sobe no 1º áudio (cota morta = 1 pedido e
   sai). O gerador faz (a) as falas que faltam, com a
   fila de modelos inteira e o **modelo-alvo** na frente (`modelo_alvo` no `indice.json`: o 1º da fila na 1ª rodada,
-  fixo depois; `--modelo-alvo` troca); (b) só se (a) esvaziou, refaz no alvo as falas de outro modelo, **só com o
-  alvo**. Fala refeita ganha `<hash>-<n>.wav` e entra no índice só depois de passar na conferência; o `.wav` antigo
+  fixo depois; `--modelo-alvo` troca); (b) só se (a) esvaziou, refaz no alvo as falas `suspeita` (primeiro; de qualquer
+  modelo, desde 15/10/2026) e as de outro modelo, **só com o alvo**. Fala refeita ganha `<hash>-<n>.wav` e entra no índice só depois de passar na conferência; o `.wav` antigo
   sai depois do índice; recusada, a antiga fica (`tentativas_alvo`, no máximo 1 por dia; 3 recusas = presa; trocar o
   alvo zera). Fala com duração absurda (`falhas`) também volta só 1 vez por dia. `progresso_alvo` no índice;
-  completo e no alvo → a tarefa se desativa (`schtasks /change /disable`) e registra; presas e suspeitas ficam fora
-  desse critério e o log diz quantas ("100% do que o alvo aceitou"). O tocador pega fala nova
+  completo e no alvo → a tarefa se desativa (`schtasks /change /disable`) e registra; suspeita refazível impede
+  desligar, presas (inclusive suspeita presa, que segue na Maria) ficam fora e o log diz quantas ("100% do que o alvo
+  aceitou"). Auditoria do pacote inteiro (Whisper contra o catálogo todo, marca `suspeita`):
+  `python tools\auditar-pacote-voz.py` (só com o jogo fechado; retoma). O tocador pega fala nova
   sem reiniciar o coletor: um `Voz` novo por partida abre o pacote de novo e o `Pacote.relido()` relê o índice que
   mudou antes de cada fala (nunca no meio). Log: `dados\voz-agendada.log` (rotação 256 KB × 3); última rodada em
   `dados\voz-agendada.json`.
@@ -754,6 +756,30 @@ o Pengu (`https://plugins`) ou sem `Origin`; as páginas do próprio coletor e o
 | ver a janelinha com um ready check falso | `python coletor\aviso_partida.py --demo [--atraso 10 \| -1] [--segundos 12]` |
 | prova (contagem, config, `Coletor.fase`, reserva, rota `/aceite/plugin`, janela real; a janela é pulada com o jogo aberto) | `python tools\teste-aviso-partida.py [--sem-janela]` |
 | prova do lado do plugin (decisão, foco, som, popup, aviso ao coletor injetado) | `node tools\teste-aceite.mjs` |
+
+### Registro das expansões do compacto (`POST /compacto/expansoes`, 15/10/2026)
+
+Cada saída do client compacto para o client normal (sozinha ou por clique dele) vira um evento `inicio` e a volta um `fim`
+com o mesmo `id` ([plano do compacto](../roadmap/2026-10-13-client-compacto.md), passo 15). Quem monta é o plugin
+(`pengu/compacto/expansoes.js`; o roteador compara o efetivo antes e depois de cada `resolver()`): `origem` (`modal` da regra
+7, `fase`, `jogo-fora`, `erro-tela`, `erro-roteador`, `janela-voltou`, `sem-riotinvoke`, `sem-tela`, `tela-sozinha`; pedidas por
+ele: `por-ele`, `config-riot`, `desligado`, `padrao` ("iniciar no compacto" desligado), com `porEle` e `gatilho`; botão de
+uma tela só conta como dele com clique ou Enter/Espaço até 1,5 s antes do pedido), `motivo` (o de erro de tela só com
+vocabulário de interface), `fase`, `seq` (etapa do fim de partida), `fila`,
+`mapa`, a camada da Riot (`gatilhoCamada` e `camadas`: tag, id, classes, filhos e título/botões só com vocabulário de
+interface), janela antes e depois, `esperouFocoMs`; no `fim`, `duracaoMs`, `como` voltou e a `trilha` de motivos. O coletor
+(`coletor/expansoes.py`) saneia de novo e grava `dados\expansoes-compacto.jsonl` (1 MB × 3 rotações). Origem igual à do
+`/aceite/` (`origem_aceite_ok`, `ROTAS_SO_PLUGIN`). Coletor fora ou anterior à rota (404): o plugin guarda até 100 eventos em
+memória e reenvia a cada 60 s, em lotes de até 40 000 bytes (o servidor lê só 64 KiB de corpo; evento gordo demais perde as
+camadas, `camadasCortadas`; 400/413 descarta o lote em vez de repetir); recarga do client com a fila cheia perde a fila.
+Ao vivo, `window.__lolClient.compacto.expansoes()` pelo `tools\cdp.mjs eval`. O relatório mostra a hora local (o plugin
+carimba em UTC).
+
+| o quê | comando |
+| --- | --- |
+| quais telas da Riot tiram o compacto (grupos por origem/motivo/camada, contagem, duração, como voltou, exemplos) | `python tools\relatorio-expansoes.py [--desde AAAA-MM-DD] [--json]` |
+| prova (rota, origem, saneamento, rotação, relatório) | `python tools\teste-expansoes.py` |
+| prova do lado do plugin (cada caminho de saída, volta, privacidade, fila sem coletor) | `node tools\teste-compacto-expansoes.mjs` |
 
 ## Segurança: token da LCU no log Security
 

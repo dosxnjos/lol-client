@@ -24,7 +24,8 @@ largando até 2 pedaços soltos no começo/fim (o modelo põe um "E aí" no fim)
 pausa entre frases 0,41-0,88 s e de vírgula 0,39-0,53 s se sobrepõem, então o silêncio sozinho não decide.
 Trecho que soa mais como OUTRA frase do lote ou com texto a mais (frases grudadas) recusa o lote inteiro (é
 dividido ao meio e pedido de novo); nota abaixo de NOTA_MIN refaz a frase sozinha uma vez e, se continuar,
-marca `suspeita` (o tocador pula: Maria ao vivo; `--refazer-suspeitas` pede de novo). Conferência que falha
+marca `suspeita` (o tocador pula: Maria ao vivo; a fase (b) refaz no alvo, 1 vez por dia, e `--refazer-suspeitas`
+pede de novo já na fase (a) com a fila inteira). Conferência que falha
 (processo morto, resposta curta) para a rodada sem gravar o lote (saída 1). Com `--sem-conferir` sobra o
 corte só pelo silêncio (`segmentar`: n-1 maiores pausas, claramente maiores que as de dentro), que recusa
 muito lote. Frase sozinha com duração absurda fica fora do pacote, em `falhas` no índice (cai na Maria).
@@ -40,7 +41,8 @@ esvaziou a fila, refaz no alvo as falas de outro modelo, SÓ com o alvo (o 429 d
 refeita ganha arquivo novo (`<hash>-<n>.wav`) e só troca no índice depois de passar na mesma conferência; o arquivo
 antigo é apagado depois do índice. Recusada, a antiga fica (e ganha `tentativas_alvo`; no máximo 1 tentativa por
 dia, e com MAX_TENTATIVAS_ALVO sai da convergência: "presa"; trocar o alvo zera). Fala com duração absurda
-(`falhas`) também volta só 1 vez por dia. Suspeitas ficam fora da convergência (regra delas acima). O Whisper só
+(`falhas`) também volta só 1 vez por dia. Suspeitas (do gerador ou da auditoria, `tools/auditar-pacote-voz.py`) entram
+na convergência primeiro, de qualquer modelo, com a mesma regra de recusa e presa (passo 6c). O Whisper só
 sobe no 1º áudio; as esperas da API olham o `--parar-se`. `progresso_alvo` no índice.
 Quem roda isso todo dia: `tools/voz-agendada.py` (tarefa `lol-client-voz`).
 Saída do processo: 0 nada mais a fazer hoje, 2 parou antes do fim (cota, --max-pedidos ou a API caiu 4 vezes
@@ -586,7 +588,7 @@ def gravar_indice(pasta, indice):
 
 def suspeitas(frases, indice):
     """falas do pacote marcadas `suspeita` (o Whisper ouviu outra coisa, mesmo refeita sozinha): o tocador
-    pula (Maria ao vivo); só voltam à fila com --refazer-suspeitas (refazer toda rodada gastaria a cota)"""
+    pula (Maria ao vivo); a fase (b) as refaz no alvo, 1 tentativa por dia (para_convergir; passo 6c)"""
     fs = indice.get("frases") or {}
     return [f for f in frases if (fs.get(f) or {}).get("suspeita")]
 
@@ -612,27 +614,29 @@ def tentativas_no_alvo(v, alvo):
 
 
 def para_convergir(frases, pasta, indice, alvo, max_tentativas=MAX_TENTATIVAS_ALVO, hoje=None):
-    """falas do pacote gravadas por outro modelo que não o alvo: entram na fase (b), só com o alvo. Fora:
-    `suspeita` (regra delas: só --refazer-suspeitas) e as presas (recusadas no alvo max_tentativas vezes). Com
-    `hoje` (a fila da rodada): a recusada no alvo hoje fica para amanhã, então 3 recusas = 3 dias, não um dia
-    ruim (revisão 13/10, item 4); sem `hoje` (o critério de concluir) ela conta."""
+    """falas da fase (b), só com o alvo: as `suspeita` (de qualquer modelo, inclusive o alvo; PRIMEIRO na fila: tocam
+    na Maria até serem refeitas; passo 6c, 15/10/2026) e as gravadas por outro modelo que não o alvo. Fora: as presas
+    (recusadas no alvo max_tentativas vezes). Com `hoje` (a fila da rodada): a recusada no alvo hoje fica para amanhã,
+    então 3 recusas = 3 dias, não um dia ruim (revisão 13/10, item 4); sem `hoje` (o critério de concluir) ela conta."""
     if not alvo:
         return []
     fs = indice.get("frases") or {}
-    return [f for f in frases if _tem_arquivo(pasta, fs.get(f)) and fs[f].get("modelo") != alvo
-            and not fs[f].get("suspeita") and tentativas_no_alvo(fs[f], alvo) < max_tentativas
-            and not (hoje and fs[f].get("alvo_tentado", alvo) == alvo and (fs[f].get("tentado_em") or "")[:10] == hoje)]
+    ok = [f for f in frases if _tem_arquivo(pasta, fs.get(f)) and (fs[f].get("suspeita") or fs[f].get("modelo") != alvo)
+          and tentativas_no_alvo(fs[f], alvo) < max_tentativas
+          and not (hoje and fs[f].get("alvo_tentado", alvo) == alvo and (fs[f].get("tentado_em") or "")[:10] == hoje)]
+    return [f for f in ok if fs[f].get("suspeita")] + [f for f in ok if not fs[f].get("suspeita")]
 
 
 def progresso(frases, pasta, indice, alvo):
-    """meta do agendador e do estado: falas no alvo / total do catálogo. concluido = nada falta e nada fora do
-    alvo para refazer. Suspeitas (regra delas: só --refazer-suspeitas) e presas (MAX_TENTATIVAS_ALVO recusas no
-    alvo, em dias diferentes) ficam fora do critério e saem contadas, para o log e o estado não dizerem "100%"."""
+    """meta do agendador e do estado: falas no alvo / total do catálogo. concluido = nada falta e nada para refazer
+    no alvo (fora do alvo ou suspeita refazível: desde o passo 6c a suspeita é refeita na fase b). Presas
+    (MAX_TENTATIVAS_ALVO recusas no alvo, em dias diferentes; suspeita presa segue na Maria) ficam fora do critério
+    e saem contadas, junto das suspeitas, para o log e o estado não dizerem "100%"."""
     fs = indice.get("frases") or {}
     com = [f for f in frases if _tem_arquivo(pasta, fs.get(f))]
     boas = [f for f in com if not fs[f].get("suspeita")]
     no_alvo = sum(1 for f in boas if alvo and fs[f].get("modelo") == alvo)
-    presas = sum(1 for f in boas if alvo and fs[f].get("modelo") != alvo
+    presas = sum(1 for f in com if alvo and (fs[f].get("modelo") != alvo or fs[f].get("suspeita"))
                  and tentativas_no_alvo(fs[f], alvo) >= MAX_TENTATIVAS_ALVO)
     falta = len(pendentes(frases, pasta, indice))
     fora = len(para_convergir(frases, pasta, indice, alvo))
@@ -935,7 +939,8 @@ def main():
     ap.add_argument("--seco", action="store_true", help="só conta e mostra os lotes; sem chave nem rede")
     ap.add_argument("--sem-conferir", action="store_true", help="não transcreve os trechos pelo Whisper")
     ap.add_argument("--refazer-suspeitas", action="store_true",
-                    help="pede de novo as falas marcadas suspeita (padrão: ficam na Maria, sem gastar cota)")
+                    help="pede de novo as falas marcadas suspeita já na fase (a), com a fila inteira (padrão: a fase b as "
+                         "refaz só no alvo, 1 vez por dia)")
     ap.add_argument("--modelo-alvo", help="troca o modelo-alvo da convergência (padrão: o do índice; na 1ª rodada, "
                                           "o 1º da fila da API)")
     ap.add_argument("--parar-se", help="arquivo que, se existir, para a rodada limpo antes do próximo pedido "
@@ -961,7 +966,7 @@ def main():
     log(f"catálogo {versao} ({fonte}): {len(frases)} falas no(s) tom(ns) {', '.join(tons)}; no pacote "
         f"{len(frases) - len(falta)}; faltam {len(falta)} (~{-(-len(falta) // max(1, a.lote))} pedido(s) de {a.lote})"
         + (f", {len(falta) - len(falta_hoje)} já tentada(s) hoje (amanhã de novo)" if len(falta_hoje) < len(falta) else "")
-        + (f"; {len(susp)} suspeita(s) na Maria (--refazer-suspeitas)" if susp else ""))
+        + (f"; {len(susp)} suspeita(s) na Maria (a convergência refaz no alvo primeiro)" if susp else ""))
     log(f"modelo-alvo {alvo_visto or '(definido na 1ª rodada com a API: o 1º da fila)'}: {prog['no_alvo']} de "
         f"{prog['total']} falas no alvo; {prog['fora_do_alvo']} a refazer nele ({len(conv)} hoje)"
         + (f"; {prog['presas']} presa(s)" if prog["presas"] else ""))

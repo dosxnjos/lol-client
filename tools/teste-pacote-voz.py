@@ -12,11 +12,15 @@ tocador relê o índice trocado; o agendador recusa com o jogo aberto ou fora do
 concluir, pede parada quando o client entra em fila e não deixa chave no log (sem tarefa real, rede, cota nem som).
 Revisão do 6b: alvo inválido fora do índice, jogo aberto mata na hora, espera da API para, índice ocupado tenta de
 novo, 1 tentativa por dia (recusa e falha), alvo novo zera recusas, órfãos com o índice da hora, Whisper sob demanda.
+Passo 6c (15/10/2026): suspeita entra na convergência primeiro (qualquer modelo) e impede concluir até refeita ou presa;
+auditoria (tools/auditar-pacote-voz.py): régua contra o catálogo inteiro, aliases do Whisper, para com o jogo aberto e
+retoma, marca com a trava e só onde o arquivo não mudou, --refazer à mão.
 uso: python tools/teste-pacote-voz.py
 """
 import importlib.util
 import json
 import math
+import os
 import struct
 import subprocess
 import sys
@@ -198,14 +202,40 @@ def casos_convergencia(d, frases):
     caso("presa (3 recusas no alvo) sai da convergência; progresso conclui",
          G.para_convergir(seis[:2], pasta3, ind4, "alvo") == [] and prog["presas"] == 1 and prog["no_alvo"] == 1
          and prog["concluido"] and prog["faltam"] == 0, str(prog))
-    # suspeita de outro modelo fica fora da convergência (regra delas: só --refazer-suspeitas)
+    # passo 6c (15/10/2026): suspeita entra na convergência, de qualquer modelo (inclusive o alvo), PRIMEIRO na fila, e
+    # impede concluir até ser refeita ou ficar presa (antes: ficava fora e a tarefa desligava com ela na Maria)
     velha = G.ler_indice(pasta)["frases"][seis[2]]           # ainda "falso-tts", arquivo no disco
     ind_s = {"frases": {seis[2]: {**velha, "suspeita": True}}}
     prog_s = G.progresso([seis[2]], pasta, ind_s, "alvo")
-    caso("suspeita de outro modelo fica fora da convergência e do 'no alvo' (não impede concluir)",
-         velha["modelo"] == "falso-tts" and G.para_convergir([seis[2]], pasta, ind_s, "alvo") == []
-         and G.para_convergir([seis[2]], pasta, {"frases": {seis[2]: velha}}, "alvo") == [seis[2]]
-         and prog_s["suspeitas"] == 1 and prog_s["no_alvo"] == 0 and prog_s["concluido"], str(prog_s))
+    no_alvo_s = {"frases": {seis[0]: {**fs[seis[0]], "suspeita": True}, seis[2]: velha, seis[3]: {**fs[seis[3]], "suspeita": True}}}
+    presa_s = {"frases": {seis[2]: {**velha, "suspeita": True, "tentativas_alvo": G.MAX_TENTATIVAS_ALVO, "alvo_tentado": "alvo"}}}
+    prog_p = G.progresso([seis[2]], pasta, presa_s, "alvo")
+    caso("6c: suspeita (de outro modelo ou do alvo) entra na convergência antes das outras e não deixa concluir; presa sai",
+         velha["modelo"] == "falso-tts" and G.para_convergir([seis[2]], pasta, ind_s, "alvo") == [seis[2]]
+         and G.para_convergir([seis[0], seis[2], seis[3]], pasta, no_alvo_s, "alvo") == [seis[0], seis[3], seis[2]]
+         and prog_s["suspeitas"] == 1 and prog_s["no_alvo"] == 0 and not prog_s["concluido"] and prog_s["fora_do_alvo"] == 1
+         and G.para_convergir([seis[2]], pasta, presa_s, "alvo") == [] and prog_p["presas"] == 1 and prog_p["concluido"],
+         f"{prog_s} {prog_p}")
+
+    # 6c ponta a ponta: pacote completo com 2 suspeitas (uma já no alvo) e 1 boa fora do alvo; a rodada (sem nada faltando)
+    # refaz as suspeitas primeiro, só no alvo. Ouvida certo = sai da Maria; ouvida errado = fica suspeita, +1 tentativa
+    pasta_s = d / "suspeitas"
+    G.gerar(seis[:3], pasta_s, Falso(), lote=3, aberto=lambda: False, brutos=brutos)
+    ind_x = G.ler_indice(pasta_s)
+    ind_x["frases"][seis[0]].update(modelo="alvo", suspeita=True)
+    ind_x["frases"][seis[1]]["suspeita"] = True
+    G.gravar_indice(pasta_s, ind_x)
+    tts_s = FalsoFila({"alvo": 9, "outro": 9})
+    out_s = G.rodada(seis[:3], pasta_s, tts_s, "alvo", lote=2, aberto=lambda: False, brutos=brutos,
+                     conferir=tts_s.ouvir({seis[1]: "o banco caiu na rua"}))
+    fx = G.ler_indice(pasta_s)["frases"]
+    caso("6c: rodada refaz as suspeitas primeiro, só no alvo; certa sai da Maria, errada fica suspeita com +1 tentativa",
+         out_s["a"]["pedidos"] == 0 and tts_s.por_modelo[0] == ("alvo", [seis[0], seis[1]])
+         and all(m == "alvo" for m, _ in tts_s.por_modelo)
+         and not fx[seis[0]].get("suspeita") and fx[seis[0]]["modelo"] == "alvo"
+         and fx[seis[1]].get("suspeita") and fx[seis[1]].get("tentativas_alvo") == 1
+         and fx[seis[2]]["modelo"] == "alvo" and not fx[seis[2]].get("suspeita"),
+         f"{tts_s.por_modelo} {out_s['status']} {[(f, fx[f].get('modelo'), fx[f].get('suspeita')) for f in seis[:3]]}")
 
     # (4) modelo-alvo fixo no índice: 1ª rodada = 1º da fila; depois o do índice, mesmo com a lista mudada
     pasta5 = d / "alvo"
@@ -284,6 +314,65 @@ def casos_convergencia(d, frases):
     r7 = G.gerar(seis[:2], pasta7, RedeCaiu(), lote=2, aberto=lambda: False, brutos=brutos)
     caso("gerar: RedeFalhou para a rodada limpo (status rede), nada gravado, as falas seguem faltando",
          r7["status"] == "rede" and r7["faltam"] == 2 and r7["geradas"] == 0, str(r7))
+
+
+def casos_auditoria(d, frases):
+    """passo 6c: tools/auditar-pacote-voz.py (régua do gerador contra o catálogo inteiro; marca com a trava e só onde o
+    arquivo ainda é o transcrito; para com o jogo aberto e retoma)"""
+    spec_a = importlib.util.spec_from_file_location("auditar_pacote_voz", RAIZ / "tools" / "auditar-pacote-voz.py")
+    A = importlib.util.module_from_spec(spec_a)
+    spec_a.loader.exec_module(A)
+    cat = ["o mid chegando no top", "o mid chegando no bot", "o top chegando no mid", "o atirador chegou no nível 11",
+           "o atirador chegou no nível 11, respeita", "jungler no rio top", "jungler no top", "5 vindo no top, recua",
+           "2 vindo no top, recua"]
+    j = lambda f, t: A.julgar(f, t, cat)[0]  # noqa: E731
+    caso("auditoria: certa passa; outra frase do catálogo (fora do lote) marca; sem o 'respeita' marca; nota baixa marca",
+         not j("o mid chegando no top", "o mid chegando no top.") and j("o mid chegando no top", "o mid chegando no bot.")
+         and j("o atirador chegou no nível 11, respeita", "O atirador chegou no nível 11.")
+         and j("o mid chegando no top", "o banco caiu na rua"))
+    caso("auditoria: o que o Whisper erra sempre não marca ('Hilltop' = rio top, 'midi', 'Simco' = 5); empate não marca",
+         not j("jungler no rio top", "Jungler no Hilltop.") and not j("o top chegando no mid", "o top chegando no midi.")
+         and not j("5 vindo no top, recua", "Simco vindo no top, recua.")
+         and A.julgar("5 vindo no top, recua", "vindo no top, recua", cat)[0] is False)
+    todas = avisos.catalogo()
+    caso("auditoria: nenhuma frase do catálogo tem as palavras trocadas pelos aliases do Whisper",
+         not [f for f in todas if set(G._norm(f).split()) & (set(A.ALIASES_WHISPER) | {"hill"})])
+
+    # pacote real em miniatura (gerador falso) + Whisper falso; a 2ª fala diz outra frase do pacote
+    pasta = d / "pacote"
+    tres = frases[:3]
+    G.gerar(tres, pasta, Falso(), lote=3, aberto=lambda: False, brutos=d / "brutos")
+    fs = G.ler_indice(pasta)["frases"]
+    pelo_arquivo = {fs[f]["arquivo"]: (tres[0] if f == tres[1] else f) for f in tres}
+    ouvidos = []
+
+    def whisper(caminhos):
+        ouvidos.append(len(caminhos))
+        return [pelo_arquivo[Path(c).name] for c in caminhos]
+    prog, abre = {}, iter([False, True])
+    st1 = A.transcrever(pasta, fs, prog, whisper, lote=2, aberto=lambda: next(abre), gravar=lambda p: None, log=lambda m: None)
+    st2 = A.transcrever(pasta, fs, prog, whisper, lote=2, aberto=lambda: False, gravar=lambda p: None, log=lambda m: None)
+    caso("auditoria: jogo abre entre lotes = para (jogo_aberto) e a chamada seguinte retoma só o que faltou",
+         st1 == "jogo_aberto" and st2 == "completo" and ouvidos == [2, 1] and sorted(prog) == sorted(tres), f"{st1} {st2} {ouvidos}")
+    av = A.avaliar(prog, fs, tres)
+    # o gerador troca o arquivo da 3ª no meio (rodada agendada): a auditoria não marca nada nela
+    ind = G.ler_indice(pasta)
+    ind["frases"][tres[2]]["arquivo"] = "trocado-2.wav"
+    G.gravar_indice(pasta, ind)
+    novas, n = A.marcar(pasta, av, log=lambda m: None)
+    fx = G.ler_indice(pasta)["frases"]
+    caso("auditoria: marca suspeita só a que não bate, grava a auditoria e pula a fala cujo arquivo mudou",
+         novas == [tres[1]] and n == 2 and fx[tres[1]].get("suspeita") and fx[tres[1]]["auditoria"]["parecida"] == tres[0]
+         and not fx[tres[0]].get("suspeita") and "auditoria" in fx[tres[0]] and "auditoria" not in fx[tres[2]],
+         f"{novas} {n}")
+    trava = G.travar(pasta)
+    r_ocupado = A.marcar(pasta, av, espera_s=0, log=lambda m: None)
+    trava.close()
+    caso("auditoria: índice com a trava de um gerador -> não grava (None) e o progresso fica",
+         r_ocupado is None or os.name != "nt", str(r_ocupado))
+    caso("auditoria: --refazer marca à mão (Maria até a fase b refazer no alvo)",
+         A.refazer_a_mao(pasta, tres[0], log=lambda m: None) and G.ler_indice(pasta)["frases"][tres[0]].get("suspeita")
+         and not A.refazer_a_mao(pasta, "frase que não existe", log=lambda m: None))
 
 
 def casos_tocador_relido(d):
@@ -714,6 +803,7 @@ def main():
         caso("o pacote gerado toca no voz.Voz", tocados == [G.nome_arquivo(frases[0])], str(tocados))
 
         casos_convergencia(d / "conv", frases)
+        casos_auditoria(d / "auditoria", frases)
         casos_tocador_relido(d / "relido")
         casos_agendador(d / "agendador")
         casos_revisao(d / "revisao", frases)

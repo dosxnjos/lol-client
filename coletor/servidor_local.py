@@ -12,6 +12,7 @@
 #   GET  <rotas extras>    o coletor pendura outras (ex.: /draft, /revisao/<gameId>)
 #   GET/POST /chat/...     janelas do chat fora do client (coletor/chat_janelas.py pendura em rotas_get/rotas_post)
 #   POST /aceite/plugin    sinal e diagnóstico do aceite do plugin (aviso_partida.rota_aceite; coletor.py pendura)
+#   POST /compacto/expansoes registro das saídas do client compacto (expansoes.rota_expansoes; coletor.py pendura)
 # CORS: só origem local (o client roda em https://127.0.0.1:<porta da LCU>; o Pengu em
 # https://plugins); site qualquer no navegador não lê nem muda nada. Host fora de 127.0.0.1/localhost
 # é recusado (rebinding de DNS).
@@ -190,8 +191,13 @@ def origem_chat_ok(rota, origem, porta):
 # reserva do coletor aceita a partida sozinha com base nisso. Inverso do /chat/: só a página do client (https em
 # 127.0.0.1/localhost, a porta da LCU), o Pengu (https://plugins, riot) ou pedido sem Origin. As páginas do próprio
 # coletor (http://127.0.0.1:<esta porta>) e qualquer outra página local em http não escrevem aqui.
+# /compacto/*: registro das expansões do client compacto (expansoes.rota_expansoes, passo 15 do plano do compacto): a
+# mesma regra (só quem roda dentro do client escreve no registro).
+ROTAS_SO_PLUGIN = ("/aceite/", "/compacto/")
+
+
 def origem_aceite_ok(rota, origem):
-    if not rota.startswith("/aceite/") or not origem:
+    if not rota.startswith(ROTAS_SO_PLUGIN) or not origem:
         return True
     try:
         u = urlsplit(origem)

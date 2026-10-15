@@ -250,6 +250,35 @@
    alvo); o 2º pedido caiu com "Server disconnected without sending a response" (traceback, rc 1). Corrigido depois:
    falha passageira tenta de novo e para limpo (rc 2), progresso regravado num `finally`; provado só no teste (a
    rodada real seguinte é a das 05:15). Console oculto medido à parte: `GetConsoleWindow()` = 0 no filho e nos netos.
+6c. [ ] **Auditoria do pacote inteiro e suspeitas refeitas no alvo** (pedido do Gabriel, 15/10/2026 ~04:40: "o áudio
+   dizendo 'mid foi pro top' precisa ser refeito. Esse áudio é só um com essas palavras, né? Não tem outro, né?").
+   **Entendimento:** cada fala do catálogo é um `.wav` próprio (`indice.json` → `arquivo`). Não existe a frase "mid foi pro
+   top"; as faladas nas partidas de 15/10 com mid e top foram `intruso` "o mid chegando no top" (4 vezes entre 01:55 e 03:56;
+   `5cd49223252028c3.wav`, `gemini-3.1-flash-tts-preview`) e "o top chegando no mid", e `mid_indo` "o mid saiu da rota: no
+   rio top"/"na selva top deles" (coletor.log). A conferência do gerador só comparava o trecho com as frases do **mesmo
+   lote**: corte que caiu numa frase parecida fora do lote passava.
+   **Como:** `tools/auditar-pacote-voz.py` (Python do coletor; o Whisper é o mesmo `Conferidor` do gerador,
+   `py -3.14 tools/conferir-trechos.py`, prioridade baixa). Passo 0 (`--so-indice`, não transcreve): a regra do gerador contra
+   o **catálogo inteiro** sobre o texto já guardado na conferência. Passo 1: transcreve o `.wav` atual de cada fala, em lotes,
+   só com `League of Legends.exe` fechado (confere antes de cada lote; abriu = para com rc 3 e retoma de onde parou pelo
+   progresso em `temp/auditoria-voz/`). Fala que não bate (nota < `NOTA_MIN` ou outra frase do catálogo soa igual ou mais)
+   vira `suspeita` no índice (o tocador cai na Maria) com `auditoria {texto, nota, parecida, em}`; a gravação no índice é
+   no fim, com a trava do gerador e só onde o `arquivo` ainda é o transcrito. `--refazer "frase"` marca à mão.
+   **Mudança no gerador (reverte a decisão "suspeitas fora da convergência" do 6b, como ele mesmo previa):** as suspeitas
+   entram na fase (b), **primeiro da fila**, só no modelo-alvo, 1 tentativa por dia; passou na conferência = sai da Maria;
+   3 recusas = presa (conta no `progresso`). A tarefa `lol-client-voz` não desliga com suspeita refazível.
+   — **prova:** `python tools/teste-pacote-voz.py` (casos novos de suspeita na fase b e da auditoria); relatório da auditoria
+   (conferidas, suspeitas com esperada × ouvida, a de "o mid chegando no top" em especial) no relatório deste passo.
+   **Feito em 15/10/2026 (05:05–05:40, jogo fechado; parou sozinho com rc 3 quando o jogo abriu às 05:28 e retomou):**
+   `teste-pacote-voz.py` 56/56 (9 casos novos). **476 de 476 conferidas, 3 suspeitas no total:** "2 mortos, bora arauto"
+   e "5 mortos, bora arauto" (ouvidas "Bora-lhe", `gemini-2.5-flash-preview-tts`) e "teleporte do jungler marcado" (ouvida
+   "Teleporte do Jungler", sem o "marcado", `4422d6a856c3e44b.wav`, `gemini-2.5-flash-preview-tts`, segue na Maria). As duas do
+   arauto foram **refeitas no alvo pela rodada agendada das 05:15 com o código novo** (primeiras da fila b; ouvidas "Bora-ar
+   alto", 0,93) = prova real do 6c. "o mid chegando no top": a gravação que ele ouviu (`5cd49223252028c3.wav`,
+   `gemini-3.1-flash-tts-preview`, conferida "o mid chegando no top." 1,0 no corte) foi trocada pela convergência às 05:16
+   (`5cd49223252028c3-2.wav`, `gemini-3.8-flash-tts`, ouvida "O Mi de chegando no top", 0,95, bate); a antiga já tinha sido
+   apagada, então o que ela dizia não tem prova além da conferência do corte. Passo 0 (texto guardado) marcava 5 e 3 eram
+   falso positivo (o trecho do corte sem o "respeita"; o arquivo inteiro diz "Respeita!"): só o passo 1 vale.
 7. [x] **Feito e provado em 13/10/2026** (`teste-coach.py` 26/26 com pacote falso: toca do pacote, cai na Maria,
    registra a falta, urgente corta e fura, validade, `suspeita` fica na Maria, `.wav` que falha cai na Maria;
    `ensaio-coach.py` a 20x: 0 falhas, 26 de 26 falas no catálogo). Pendente fora do passo: reiniciar o coletor fora

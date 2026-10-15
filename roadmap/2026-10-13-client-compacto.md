@@ -1104,6 +1104,61 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     monitor até o `MoveTo` (na 2ª tela, visível por 1+ quadro); `windowWidth` físico confirmado no `centerWithinMainWindow` da Riot.
     Fica de risco aceito: uma troca de tela da Riot exatamente na espera do `resize` (≤ 250 ms) de um clique na ⚙ ainda pode pôr
     o CSS novo antes do `MoveTo` (raro; a montagem com `entrando` segue com `porLarguras`).
+15. [ ] **Registro das expansões (pedido de 15/10/2026 ~04:40).** Palavras dele: "sempre que o modo compacto saísse de
+    maneira automática para o modo estendido, fosse computado e logado as informações pertinentes, motivo, janelas etc, pra
+    gente tentar depois transformar o que faz sentido em tela do modo compacto também."
+    **Entendimento:** cada vez que o efetivo do roteador vira `compacto → expandido` sai um evento estruturado; a volta
+    (`expandido → compacto`) fecha o mesmo evento com a duração e o "como voltou". Serve para decidir, com contagem, quais
+    telas da Riot merecem tela compacta. Expansão pedida por ele (⤢, Ctrl+Shift+M, botão de uma tela, Ctrl+K, Configurações
+    da Riot pelo painel, compacto desligado) também entra, marcada `porEle`.
+    **Como (construído em 15/10/2026):**
+    - plugin: `pengu/compacto/expansoes.js` (sem DOM): `descreverCamadas(doc)` (filhos do `#lol-uikit-layer-manager-wrapper`
+      menos o chat: tag, id, classes, filhos de 1º nível; texto só de título/botão e só com palavras de uma lista de vocabulário
+      de interface, o resto vira `…`: nome de jogador nunca passa, por construção) e `criarRegistroExpansoes` (fila em memória
+      de até 100 eventos, manda em lote ao coletor, reenvia a cada 60 s; coletor fora ou sem a rota (404) = guarda).
+    - roteador (`index.js`): **um ponto só**, o `resolver()` compara o efetivo antes e depois do laço do `aplicar` (pega
+      emergência, expansão adiada pelo foco, todos os caminhos). Origem da expansão: `est.forcadoTipo` gravado onde
+      `est.forcado` nasce (`modal`, `erro-tela`, `janela-voltou`, `sem-riotinvoke`, `config-riot`) ou o destino da fase
+      (`fase`, `jogo-fora`), `por-ele`, `desligado`, `sem-tela`, `erro-roteador`. Janela antes (na hora) e depois (lida
+      `GRACA_MEDIDA_MS` + 100 ms depois); fase, etapa do fim de partida (`currentSequenceEvent`), fila, mapa, espera do foco.
+    - coletor: `POST /compacto/expansoes` (mesma regra de origem do `/aceite/plugin`: só o Pengu e a página do client),
+      `coletor/expansoes.py` saneia de novo (chaves conhecidas, texto cortado, Riot ID fora) e grava
+      `dados/expansoes-compacto.jsonl` (rotação 1 MB × 3). Relatório: `python tools/relatorio-expansoes.py [--desde AAAA-MM-DD]
+      [--json]` agrupa por origem/motivo/camada com contagem, duração (mediana, máximo), como voltou e 3 exemplos.
+    **Decisões técnicas (fable, 15/10/2026, a mais reversível):** (xvii) texto da camada só com vocabulário de interface
+    (lista fixa; palavra fora vira `…`): confiança alta na privacidade, média na utilidade; reverte ampliando a lista, nunca
+    passando texto livre; (xviii) diff no `resolver` e não um gancho por caminho: alta; o que fica de fora é uma ida e volta
+    inteira dentro do mesmo `resolver` (até 5 voltas), que não muda a janela; (xix) dois registros por expansão (`inicio`,
+    `fim`) com o mesmo `id`: expansão que nunca voltou (client fechado) aparece no relatório como "sem volta".
+    — **prova:** `node tools/teste-compacto-expansoes.mjs` (regra 7, fase, celebração, erro de tela, janela que volta, sem
+    riotInvoke, por ele, Configurações da Riot, duração e volta, fila sem coletor e com 404, privacidade da camada);
+    `python tools/teste-expansoes.py` (origem, saneamento, rotação, relatório); as suítes do compacto verdes.
+    **Feito offline em 15/10/2026:** `teste-compacto-expansoes.mjs` 34/34 (sem o `notarExpansao` no `resolver`: 13/34),
+    `teste-expansoes.py` 18/18, `teste-aviso-partida.py --sem-janela` 81/81 (rota `/aceite/` igual), `teste-compacto` 175,
+    `lobby` 136, `selecao` 215, `posjogo` 124, `fim-de-partida` 90, `lateral` 118, `jogo` 47, `chat-posjogo` 45. O guarda
+    "base do compacto sem `'POST'`" pegou o envio no `index.js`: o POST ao coletor mora em `expansoes.enviarAoColetor`.
+    Achado na construção: as telas chamam `ctx.expandir()` sozinhas (lobby personalizado, seleção com banco, chat sem
+    coletor, pós-jogo sem saída): sem o gesto elas contariam como "por ele"; viram `tela-sozinha` (ARMADILHAS § Client).
+    **Só o client prova:** a rota no ar depois do coletor reiniciado (orquestrador, no lobby) e as primeiras linhas reais
+    (`window.__lolClient.compacto.expansoes()` pelo `tools/cdp.mjs eval` mostra a fila e o último envio).
+    **Revisão adversarial (15/10/2026, corrigido com teste):**
+    - **lote acima de 64 KiB travava a fila:** o `servidor_local.do_POST` lê no máximo 65536 bytes de corpo; 50 eventos com
+      camadas (~1,2 KB cada, a fila cheia enquanto o coletor velho responde 404) cortavam o JSON, o coletor dava 400 e o plugin
+      reenviava o mesmo lote para sempre. Agora o lote vai até `LOTE_BYTES` (40 000 bytes UTF-8); evento sozinho maior perde
+      as camadas (fica a que expande, `camadasCortadas`) e, se ainda não couber, sai como descartado; 400/413 tira o lote da
+      fila (descartado, um log) em vez de repetir. Prova: 45 expansões com 6 camadas na fila → 90 eventos entregues em lotes
+      ≤ 64 KiB, nenhum 400.
+    - **motivo de erro de tela levava `e.message` cru** (texto livre, podia trazer dado da LCU) ao jsonl e ao `coletor.log`:
+      no registro o parêntese passa pelo `textoSeguro` (`motivoSeguro`); na tela dele o motivo segue inteiro.
+    - **`origem: 'padrao'`** ("iniciar no compacto" desligado: o ▣ dele vale até a fase virar) contava como automática; é
+      escolha dele: `porEle`, gatilho "config: iniciar no compacto desligado".
+    - **gesto:** tecla vale só Enter/Espaço (digitar no chat do compacto não é pedido de expandir); o gesto é medido no pedido
+      (`ctx.expandir()`), não na expansão que esperou o foco, e o gatilho não se perde num `resolver()` no meio da espera.
+    - **relatório na hora local:** o plugin carimba em UTC; `--desde` e os exemplos usam a hora de Brasília (`hora_local`).
+    - Conferido e sem mudança: `geometria.tela()` é cache (nada de `riotInvoke` por `resolver`); `seq` vem de `est.seq.nome`.
+    Fica de risco aceito: apelido de jogador feito só de palavras do vocabulário ("Novo Time") passaria no título de uma
+    camada; Enter no chat do compacto até 1,5 s antes de uma tela expandir sozinha conta como dele.
+    Provas depois da revisão: `teste-compacto-expansoes.mjs` 39/39, `teste-expansoes.py` 20/20.
 16. [ ] **Posição em destaque na seleção (relato de 15/10/2026 ~04:15).** Palavras dele: "assim que eu entrar numa seleção
     de campeões, eu gostaria que por alguns segundos aparecesse um ícone representando a minha role. Poderia ser um ícone no
     lugar de todos os campeões ali [...] essa seção toda poderia ficar limpa e mostrando só a minha role. De repente, já que na
