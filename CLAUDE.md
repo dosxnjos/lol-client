@@ -12,7 +12,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - Client compacto (`pengu/compacto/`): erro, campo ausente ou modal desconhecido → expandir ou botão cinza com motivo,
   nunca decidir pelo jogador; rota [S] ainda sem medição nunca é premissa ([plano](roadmap/2026-10-13-client-compacto.md) passo 1).
   Travar/banir = `PATCH session/actions/{id} {completed:true, championId}`; nunca `POST .../complete` (ARMADILHAS § LCU).
-  Fim de partida (voto, prosseguir, adicionar, denunciar, sala): só clique dele, rota e corpo do front da Riot (ARMADILHAS § LCU).
+  Fim de partida (voto, prosseguir, adicionar, denunciar, sala, replay): só clique dele, rota e corpo do front da Riot (ARMADILHAS § LCU).
   Partida (`tela-jogo.js`): sozinho nada de `MoveTo`/`ux-show` (geometria só com `geometriaAtiva`); em `InProgress` sem foco nada mexe na janela, nem `CenterToScreen` (`podeMexer`, ARMADILHAS § Client).
   Lateral (chat, ⚙, 📊): largura só pelo `est.lateral` do roteador, posição só pela `compacto/geometria.js` (px físicos; `MoveTo` fora dela = `anotarPosicao`; abertura sozinha = `soSemMover`); provar com `teste-compacto-lateral.mjs`.
   Ordem CSS/`ResizeTo`/`MoveTo` só pela fila da geometria, partindo da esquerda pintada (ARMADILHAS § Client, "Pisca ao abrir ⚙").

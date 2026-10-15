@@ -150,8 +150,9 @@ function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus,
   globalThis.fetch = falsa.fetch;
   const pedidos = [];
   const win = { innerWidth: 1280, riotInvoke: arg => { const p = JSON.parse(arg.request); pedidos.push(p); if (p.name === 'Window.ResizeTo') win.innerWidth = p.params[0]; } };
-  const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => [win.innerWidth, 720] });
-  const s = { rel, doc, est, falsa, pedidos, avisos: [], subs: new Map(), abertos: [], coletorPedidos: [], locaisPedidos: [], mentorPedidos: [] };
+  // relógio da janela = o falso (a folga do ResizeTo, GRACA_MEDIDA_MS, anda com rel.avancar; o caso "fim do replay" depende disso)
+  const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => [win.innerWidth, 720], agora: () => rel.agora });
+  const s = { rel, doc, est, falsa, pedidos, avisos: [], subs: new Map(), abertos: [], coletorPedidos: [], locaisPedidos: [], mentorPedidos: [], janelaWin: win };
   const coletor = async (caminho, opcoes = {}) => {
     // mentor (passo 12) à parte: coletorPedidos segue contando só as lições
     if (caminho.startsWith('/mentor')) {
@@ -255,10 +256,11 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
     ['DERROTA', 'Zac', '8/9/6', '6,2', 'Normal', '33:22'].every(x => faixa.includes(x)) && t.includes('Normal (escolha)'), faixa);
   const pdlCel = s.camada().querySelector('.lc-cp-pdl');
   caso('EndOfGame: PDL "–" fora da ranqueada, motivo no title', pdlCel?.querySelector('b')?.textContent === '– PDL' && pdlCel.getAttribute('title') === 'sem PDL nesta fila', pdlCel?.textContent);
-  caso('EndOfGame: abas resumo/detalhes, chat da sala acima dos botões, IR PARA O LOBBY e JOGAR DE NOVO lado a lado (ajuste de 14/10 ~20:00)',
+  // entre o chat e os botões, só a linha do replay (pedido de 15/10/2026)
+  caso('EndOfGame: abas resumo/detalhes, chat da sala acima dos botões (com a linha do replay no meio), IR PARA O LOBBY e JOGAR DE NOVO lado a lado (ajuste de 14/10 ~20:00)',
     !!s.botao('aba-resumo') && !!s.botao('aba-detalhes') && s.botao('lobby')?.textContent === 'IR PARA O LOBBY'
     && s.botao('lobby')?.parentNode === s.botao('jogar')?.parentNode
-    && (() => { const c = s.camada().querySelector('.lc-cp-fp').children; const i = c.findIndex(x => x.classList.contains('lc-cp-dock')); return i > 0 && c[i + 1]?.classList.contains('lc-cp-base'); })());
+    && (() => { const c = s.camada().querySelector('.lc-cp-fp').children; const i = c.findIndex(x => x.classList.contains('lc-cp-dock')); return i > 0 && c[i + 1]?.classList.contains('lc-cp-replay') && c[i + 2]?.classList.contains('lc-cp-base'); })());
   caso('lições: coletor ainda sem a partida → "…" e nova tentativa agendada', s.coletorPedidos.length === 1 && s.camada().querySelector('.lc-cp-lic')?.classList.contains('lc-cp-carregando'));
   await s.rel.avancar(5000);
   const lis = s.camada().querySelectorAll('li');
@@ -581,6 +583,72 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
   const s = cenario({ eog });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   caso('eog torto no client: a tela não quebra (fica compacta, "FIM DE PARTIDA" com –)', s.foto().efetivo === 'compacto' && s.texto().includes('FIM DE PARTIDA') && s.avisos.every(([, e]) => !e), s.texto());
+}
+
+// ---------- 6b. replay (pengu/replay.js; pedido de 15/10/2026): linha entre o chat e os botões, só GET sem clique ----------
+{
+  tela._esquecer();
+  // sem registro do replay (404, como o client responde antes do create; medido em 15/10)
+  const s = cenario();
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.rel.avancar(6000);
+  const linha = s.camada().querySelector('[data-a="replay"]');
+  const ordem = linha ? [...s.camada().querySelector('.lc-cp-pj').children].map(c => c.className) : [];
+  caso('replay: linha na tela B, entre a sala e os botões; "baixar replay" pode; nada escrito sem clique (relido a cada 2 s, só GET)',
+    !!linha && ordem.indexOf('lc-cp-replay') === ordem.indexOf('lc-cp-base') - 1 && s.botao('replay-baixar')?.disabled === false && s.falsa.escritas().length === 0
+    && s.falsa.chamadas.filter(c => c.url === `/lol-replays/v1/metadata/${GID}`).length >= 3, JSON.stringify({ ordem, n: s.falsa.escritas().length }));
+  await s.clicar('replay-baixar');
+  caso('replay: clique em "baixar" sem registro = create com o corpo do fim de partida (fila da sessão, tipo do eog) e nada mais (o 404 falso não vira download)',
+    igual(s.falsa.escritas().map(c => [c.url, c.corpo]), [[`/lol-replays/v2/metadata/${GID}/create`, { gameVersion: 'unknown_version', gameType: 'NORMAL', queueId: 400 }]]),
+    JSON.stringify(s.falsa.escritas()));
+}
+{
+  tela._esquecer();
+  const sessao = { ...FX.sessao, gameData: { ...FX.sessao.gameData, queue: { ...FX.sessao.gameData.queue, type: 'NORMAL_DRAFT' } } };
+  const est = { meta: { state: 'download', downloadProgress: 0, gameId: GID } };
+  const s = cenario({ sessao, rotasExtras: {
+    [`GET /lol-replays/v1/metadata/${GID}`]: () => est.meta,
+    'GET /lol-replays/v1/configuration': { isReplaysEnabled: true, isReplaysForEndOfGameEnabled: true, isPatching: false, isPlayingGame: false, isPlayingReplay: false },
+    [`POST /lol-replays/v1/rofls/${GID}/download/graceful`]: () => { est.meta = { state: 'downloading', downloadProgress: 40 }; return { status: 204 }; },
+    [`POST /lol-replays/v1/rofls/${GID}/watch`]: () => { est.assistiu = true; return { status: 204 }; } } });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.rel.avancar(2100);
+  await s.clicar('replay-baixar');
+  await s.rel.avancar(2100);
+  caso('replay: "baixar" = POST download/graceful {componentType do fim de partida}; a linha mostra o progresso',
+    igual(s.falsa.escritas().map(c => [c.url, c.corpo]), [[`/lol-replays/v1/rofls/${GID}/download/graceful`, { componentType: 'replay-button_end-of-game' }]])
+    && /baixando o replay… 40%/.test(s.camada().querySelector('[data-a="replay-estado"]')?.textContent || '') && s.botao('replay-baixar')?.disabled === true,
+    s.camada().querySelector('[data-a="replay-estado"]')?.textContent);
+  est.meta = { state: 'watch', downloadProgress: 100, gameId: GID };
+  await s.rel.avancar(2100);
+  const n0 = s.falsa.escritas().length;
+  await s.clicar('replay-assistir');
+  const armou = s.falsa.escritas().length === n0 && s.avisos.some(([m]) => /abre o jogo/.test(m) && /minimiza/.test(m));
+  await s.rel.avancar(1500);
+  await s.clicar('replay-assistir');
+  caso('replay: assistir = aviso no 1º clique, POST watch só no 2º', armou && est.assistiu === true
+    && s.falsa.escritas().slice(n0).map(c => c.url).join() === `/lol-replays/v1/rofls/${GID}/watch`, JSON.stringify(s.avisos));
+  // a Riot minimiza o client (MinimizeAll) e, no fim do replay, ShowMain pode devolver 1280: a fase segue EndOfGame (LeagueClient.log
+  // de 15/10) e o roteador encolhe de novo, sem sair da tela do pós-jogo
+  const p0 = s.pedidos.length;
+  await s.rel.avancar(5000);
+  caso('replay rodando (fase segue EndOfGame): o assistir não manda ordem de janela nenhuma; a tela do pós-jogo fica',
+    s.pedidos.length === p0 && s.rot.estado().fase === 'EndOfGame' && s.foto().tela === 'posjogo', JSON.stringify(s.pedidos.slice(p0)));
+}
+{
+  tela._esquecer();
+  // fim do replay: a Riot devolve a janela a 1280 (ShowMain) -> o roteador encolhe de volta e a tela B segue
+  const s = cenario({ rotasExtras: { [`GET /lol-replays/v1/metadata/${GID}`]: { state: 'watch', downloadProgress: 100, gameId: GID } } });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.rel.avancar(3000);
+  const larg0 = s.pedidos.filter(p => p.name === 'Window.ResizeTo').at(-1)?.params?.[0];
+  s.janelaWin.innerWidth = 1280;
+  await s.rel.avancar(2000);
+  s.rot.reavaliar(); await tick(12);
+  const ult = s.pedidos.filter(p => p.name === 'Window.ResizeTo').at(-1)?.params?.[0];
+  caso('fim do replay: janela devolvida a 1280 volta ao tamanho compacto e a tela do pós-jogo fica (não fica presa no client grande)',
+    larg0 === 420 && ult === 420 && s.janelaWin.innerWidth === 420 && s.foto().efetivo === 'compacto' && s.foto().tela === 'posjogo' && !!s.botao('replay-assistir'),
+    JSON.stringify({ larg0, ult, w: s.janelaWin.innerWidth, foto: s.foto() }));
 }
 
 // ---------- 7. pengu/posjogo/index.js de verdade: o painel não abre sozinho com a camada compacta à vista ----------

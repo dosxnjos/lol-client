@@ -9,7 +9,7 @@
 //   coletor: veredito, mandou bem, próxima partida, o essencial, perguntar; lições do coach recolhidas quando o veredito
 //   chegou: GET /licoes/<gameId>, sem o coletor as do motor local, posjogo/index.js licoesLocais, passo 11 b5) e
 //   "detalhes" (tu × adversário direto e os 10 com Riot ID, campeão, "+" e "⚑"); chat da sala embaixo (chat-sala.js,
-//   tela C); IR PARA O LOBBY (play-again, senão dismiss-stats; nunca busca) e JOGAR DE NOVO (fila-rapida.js jogarDeNovo:
+//   tela C); linha do replay (baixar/assistir só por clique, assistir com 2 cliques: ../replay.js, pedido de 15/10/2026); IR PARA O LOBBY (play-again, senão dismiss-stats; nunca busca) e JOGAR DE NOVO (fila-rapida.js jogarDeNovo:
 //   mesma fila, freios de freios.js, em grupo só volta ao lobby); análise completa (expande e abre o #lc-posjogo) e
 //   fechar (dismiss-stats).
 // Fontes: eog-stats-block (Riot ID dos outros só como o pós-jogo da Riot mostra, por textContent, nunca no log), sessão do
@@ -24,6 +24,7 @@ import { partesMentor } from '../posjogo/abas.js';
 import { botaoChat } from './chat-botao.js';
 import { criarSala } from './chat-sala.js';
 import { jogadoresDoEog, adversarioDireto, criarSocial, botoesJogador, abrirDenuncia, abrirJogador, CSS_JOGADORES } from './jogador-acoes.js';
+import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
 
 export const NOMES_FILA = { 420: 'Ranqueada Solo/Duo', 440: 'Ranqueada Flex', 400: 'Normal (escolha)', 430: 'Normal (às cegas)',
   450: 'ARAM', 490: 'Partida rápida' };
@@ -79,8 +80,10 @@ export function resumoDoEog(eog) {
 export function infoDaPartida(s) {
   const gd = s?.gameData && typeof s.gameData === 'object' ? s.gameData : {};
   const gid = num(gd.gameId), fila = num(gd.queue?.id), mapa = num(s?.map?.id ?? gd.queue?.mapId);
+  // tipoFila (queue.type, ex. RANKED_SOLO_5x5): o gameType que o botão de replay da Riot manda ao registrar o replay
   return { gameId: gid > 0 ? gid : null, fila: fila > 0 ? fila : null, mapa: mapa > 0 ? mapa : null,
-    custom: typeof gd.isCustomGame === 'boolean' ? gd.isCustomGame : null };
+    custom: typeof gd.isCustomGame === 'boolean' ? gd.isCustomGame : null,
+    tipoFila: typeof gd.queue?.type === 'string' && gd.queue.type ? gd.queue.type : null };
 }
 
 // player-status -> true (grupo ou não-líder: só volta ao lobby) | false (sozinho e líder) | null (não sei)
@@ -205,6 +208,7 @@ const estados = new WeakMap(); // ctx -> estado da montagem
 export function montar(raiz, ctx) {
   estilo('lc-cp-posjogo-estilo', CSS_POSJOGO);
   estilo('lc-cp-jogadores-estilo', CSS_JOGADORES);
+  estilo('lc-replay-estilo', CSS_REPLAY);
   const est = {
     gameId: null, fila: null, mapa: null, custom: null, resumo: null, eogDesde: null, ultimoEog: 0, eogEmVoo: false,
     fimEm: null, licoes: { estado: 'carregando', lista: [] }, licoesInicio: 0, licoesEmVoo: false, licoesAgendada: false,
@@ -228,6 +232,8 @@ export function montar(raiz, ctx) {
     if (p) { est.pdl = { estado: 'ok', ...p }; pintar(ctx, est); }
   });
   ctx.intervalo(() => tique(ctx, est), PRAZOS.tiqueMs);
+  // replay: estado relido a cada 2 s com a tela B à vista (só GET; baixar/assistir só pelo clique dele, ../replay.js)
+  ctx.intervalo(() => { if (ctx.fase === 'EndOfGame' && est.replay && est.partes) est.replay.ler(); }, REPLAY.cadaMs);
   return carregar(ctx, est);
 }
 
@@ -256,6 +262,7 @@ async function carregar(ctx, est) {
   est.fila = p.fila ?? (num(info.fila) > 0 ? num(info.fila) : null);
   est.mapa = p.mapa ?? (num(info.mapa) > 0 ? num(info.mapa) : null);
   est.custom = p.custom ?? (typeof info.custom === 'boolean' ? info.custom : null);
+  est.tipoFila = p.tipoFila;
   if (eu.ok && eu.json && typeof eu.json === 'object') {
     const nome = typeof eu.json.gameName === 'string' && eu.json.gameName ? eu.json.gameName : (typeof eu.json.displayName === 'string' ? eu.json.displayName : '');
     est.eu = { nome, icone: num(eu.json.profileIconId) };
@@ -288,6 +295,7 @@ function receberEog(ctx, est, eog) {
   est.gameId = r.gameId;
   est.resumo = r; // o client manda o mesmo eog até 3 vezes em ~100 ms (ARMADILHAS § LCU): vale o último
   est.jogadores = jogadoresDoEog(eog);
+  if (typeof eog.queueType === 'string' && eog.queueType) est.tipoFilaEog = eog.queueType; // reserva do gameType do replay
   pintar(ctx, est);
   if (novo) { lerPdl(ctx, est); lerLicoes(ctx, est); }
   aoFimDePartida(ctx, est);
@@ -588,9 +596,13 @@ function pintarCarregando(ctx, est) {
 function montarPartes(ctx, est) {
   est.chaveCont = '';
   if (!est.sala) est.sala = criarSala(ctx, { jogadores: () => est.jogadores, gameId: () => est.gameId, tamanho: 'normal', aoNome: j => abrirJogador(ctx, est.social, j, { raiz: ctx.raiz }) });
+  // replay (pedido de 15/10/2026): uma linha só por montagem, entre o chat e os botões; botões nascem uma vez (../replay.js)
+  if (!est.replay) est.replay = criarReplay({ lcu: ctx.lcu, gameId: () => est.gameId, fim: true, vivo: () => ctx.vivo(), avisar: (m, e) => ctx.avisar(m, e),
+    corpo: () => ({ gameType: est.tipoFila || est.tipoFilaEog, queueId: est.fila }), agora: () => _relogio.agora(), tempo: (fn, ms) => ctx.tempo(fn, ms) });
   est.partes = { faixa: h('div', { class: 'lc-cp-faixa' }), abas: h('div', { class: 'lc-cp-pj-abas' }), cont: h('div', { class: 'lc-cp-pj-cont' }),
-    base: h('div', { class: 'lc-cp-base' }) };
-  est.corpo.replaceChildren(est.partes.faixa, est.partes.abas, est.partes.cont, est.sala.el, est.partes.base);
+    replay: h('div', { class: 'lc-cp-replay' }, est.replay.el), base: h('div', { class: 'lc-cp-base' }) };
+  est.corpo.replaceChildren(est.partes.faixa, est.partes.abas, est.partes.cont, est.sala.el, est.partes.replay, est.partes.base);
+  est.replay.ler();
 }
 
 function pintarFaixa(ctx, est) {
@@ -864,6 +876,7 @@ export const CSS_POSJOGO = `
 #lc-compacto .lc-cp-pj .lc-cp-jg-h span:nth-child(3) { text-align:center; }
 #lc-compacto .lc-cp-pj .lc-cp-jg-h span:nth-child(4), #lc-compacto .lc-cp-pj .lc-cp-jg-h span:nth-child(6) { text-align:right; }
 #lc-compacto .lc-cp-pj .lc-cp-centro { text-align:center; padding:4px 0 2px; }
+#lc-compacto .lc-cp-pj .lc-cp-replay { flex:none; padding:5px 12px; border-top:1px solid var(--lc-linha2); background:rgba(1,10,19,.9); }
 #lc-compacto .lc-cp-pj .lc-cp-base { flex:none; padding:7px 12px 9px; display:flex; flex-direction:column; gap:6px; border-top:1px solid var(--lc-linha2); background:rgba(1,10,19,.9); }
 #lc-compacto .lc-cp-pj .lc-cp-linha-jogar { display:flex; gap:6px; }
 #lc-compacto .lc-cp-pj .lc-cp-lobby { flex:1; font-size:13px; letter-spacing:.08em; padding:6px 6px; }

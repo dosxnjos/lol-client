@@ -30,7 +30,7 @@ export function acharSala(conversas, gameId) {
   return c ? { id: c.id, type: c.type } : null;
 }
 
-// mensagens -> {linhas (chat, na ordem, só as MSGS_MAX últimas), naSala (null = não sei), sairam: Set(puuid)}
+// mensagens -> {linhas (chat/groupchat, na ordem, só as MSGS_MAX últimas), naSala (null = não sei), sairam: Set(puuid)}
 export function lerMensagens(msgs) {
   const lista = Array.isArray(msgs) ? msgs.filter(m => m && typeof m === 'object') : [];
   const dentro = new Set(), sairam = new Set();
@@ -40,7 +40,9 @@ export function lerMensagens(msgs) {
     if (m.body === 'joined_room') { viuEntrada = true; dentro.add(m.fromPuuid); sairam.delete(m.fromPuuid); }
     else if (m.body === 'left_room') { dentro.delete(m.fromPuuid); sairam.add(m.fromPuuid); }
   }
-  const linhas = lista.filter(m => m.type === 'chat' && typeof m.body === 'string').slice(-SALA.msgsMax)
+  // a sala é MUC: a mensagem (a dele também, enviada com type 'chat') volta 'groupchat' (sonda de 14/10; o filtro só 'chat'
+  // deixava a sala vazia, relato de 15/10/2026). Os dois tipos, como o isChatMessage do rcp-fe-lol-social
+  const linhas = lista.filter(m => (m.type === 'chat' || m.type === 'groupchat') && typeof m.body === 'string').slice(-SALA.msgsMax)
     .map(m => ({ id: String(m.id ?? ''), puuid: m.fromPuuid || null, texto: m.body, quando: m.timestamp || '' }));
   return { linhas, naSala: viuEntrada ? dentro.size : null, sairam };
 }

@@ -185,6 +185,9 @@ caso('restricaoDura: canStartActivity false sem restrição -> null (não recusa
   const com = htmlTopo(r, () => 'Renekton', { jogarDeNovo: true }), sem = htmlTopo(r, () => 'Renekton');
   caso('htmlTopo: botão "jogar de novo" só com a chave', com.includes('data-acao="jogar-de-novo"') && !sem.includes('jogar-de-novo'));
   caso('htmlTopo: o botão não tem a classe lc-fechar', !/class="[^"]*lc-fechar[^"]*"[^>]*data-acao="jogar-de-novo"/.test(com));
+  // replay (15/10/2026): o lugar da linha (pengu/replay.js) existe com e sem o jogar de novo, antes dele e do fechar
+  caso('htmlTopo: lugar do replay [data-replay] antes do "jogar de novo" e do fechar', [com, sem].every(x => x.includes('data-replay') && x.indexOf('data-replay') < x.indexOf('class="lc-fechar"'))
+    && com.indexOf('data-replay') < com.indexOf('data-acao="jogar-de-novo"'));
 }
 
 // ---- freios (decisão do Gabriel, 13/10/2026: tilt 2 e madrugada) ----

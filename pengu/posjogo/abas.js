@@ -128,7 +128,8 @@ const nomeObjetivo = o => {
   return OBJETIVO[o.tipo] || o.tipo;
 };
 
-// opcoes.jogarDeNovo: botão "jogar de novo e buscar" (fila-rapida.js jogarDeNovo; só por clique)
+// opcoes.jogarDeNovo: botão "jogar de novo e buscar" (fila-rapida.js jogarDeNovo; só por clique). [data-replay]: lugar da linha do
+// replay (baixar/assistir), montada por DOM em posjogo/index.js (../replay.js)
 export function htmlTopo(r, nome, opcoes = {}) {
   const min = Math.floor(r.duracaoS / 60), seg = String(r.duracaoS % 60).padStart(2, '0');
   const adv = r.adversario ? `${r.adversario.incerto ? 'adversário provável' : 'contra'} ${esc(nome(r.adversario.campeao))} · ${PAPEL[r.papel] || r.papel}` : 'sem adversário de rota';
@@ -136,6 +137,7 @@ export function htmlTopo(r, nome, opcoes = {}) {
     <h2>${esc(nome(r.campeao))}</h2>
     <span class="${r.vitoria ? 'lc-vitoria' : 'lc-derrota'}">${r.vitoria ? 'vitória' : 'derrota'}</span>
     <span>${min}:${seg} · ${adv} · partida ${esc(r.gameId)}</span>
+    <span class="lc-replay-slot" data-replay></span>
     ${opcoes.jogarDeNovo ? '<button class="lc-jogar-de-novo" data-acao="jogar-de-novo" title="volta ao lobby da mesma fila e busca partida">jogar de novo e buscar</button>' : ''}
     <button class="lc-fechar">fechar (Esc)</button>
   </div>

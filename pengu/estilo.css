@@ -93,6 +93,10 @@ html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual) #lol-uikit-layer-manager
 #lc-posjogo .lc-jogar-de-novo.lc-confirmar { border-color: #e84057; color: #e84057; }
 #lc-posjogo .lc-jogar-de-novo[disabled] { opacity: .6; pointer-events: none; }
 #lc-posjogo .lc-jogar-de-novo + .lc-fechar { margin-left: 0; }
+/* replay (pengu/replay.js): empurra o resto para a direita; com ele, jogar de novo e fechar encostam */
+#lc-posjogo .lc-replay-slot { margin-left: auto; align-self: center; }
+#lc-posjogo .lc-replay-slot:empty { display: none; }
+#lc-posjogo .lc-replay-slot:not(:empty) ~ .lc-jogar-de-novo, #lc-posjogo .lc-replay-slot:not(:empty) ~ .lc-fechar { margin-left: 0; }
 #lc-posjogo .lc-mapa { position: relative; align-self: start; }
 #lc-posjogo .lc-mapa svg { width: 330px; height: 330px; display: block; background: #0a1a14; border: 1px solid #1e2328; }
 #lc-posjogo .lc-legenda { margin-top: 6px; font-size: 11px; display: flex; gap: 10px; flex-wrap: wrap; }

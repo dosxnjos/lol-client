@@ -476,6 +476,21 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Sala do pós-jogo da partida anterior segue em `GET /lol-chat/v1/conversations`** (revisão de 14/10/2026) → a 1ª
   `type:"postGame"` pode ser a velha e a mensagem iria para os 9 de lá. Escolher só id `<gameId>-…` desta partida
   (`acharSala` de `compacto/chat-sala.js`); sem gameId, nenhuma. O `chat-posjogo.js` (só leitura) ainda pega a 1ª.
+- **Sala do pós-jogo vazia com as mensagens chegando** (relato de 15/10/2026: "envio as mensagens mas a seção de chat não lista
+  nenhuma") → a sala é MUC: em `.../messages` toda fala volta `type:"groupchat"` (a dele também, enviada com `type:"chat"`;
+  sonda de 14/10: 21 `groupchat`, 0 `chat`, `fromSummonerId` 0). O `lerMensagens` filtrava só `chat`. Mensagem de sala =
+  `chat` ou `groupchat` (o `isChatMessage` do rcp-fe-lol-social); a 1:1 segue `chat` (medido 15/10). Fixture de teste de sala
+  sempre em `groupchat` (`tests/fixtures/fim-de-partida-3293137136.json`).
+- **Replay: rotas e estados** (rcp-fe-lol-shared-components 16.20, ReplayButton, lido 15/10/2026; GETs medidos, nenhum POST
+  enviado por teste) → `GET /lol-replays/v1/metadata/{id}` dá 404 ("Try using the POST metadata create endpoint first") até
+  `POST /lol-replays/v2/metadata/{id}/create {gameVersion, gameType, queueId[, gameEnd]}` (o botão da Riot cria ao aparecer);
+  `state` ∈ checking/found/download/downloading/retryDownload/watch/incompatible/missingOrExpired/lost/error/unsupported e
+  `downloadProgress` só vale em 0–100 (no `download` veio 282790429). Baixar = `POST .../rofls/{id}/download/graceful` (fim de
+  partida) ou `/download` (histórico), assistir = `.../watch`, corpo `{componentType}`. Assistir não muda a fase (segue
+  `EndOfGame`): a Riot faz `MinimizeAll` e, no fim do replay, `ShowMain` (LeagueClient.log: replay 3293377251 aberto em
+  `022583`, `ShowMain` em `022656`, fase `EndOfGame` o tempo todo). Por isso o coach ao vivo (liga só em
+  `InProgress`/`Reconnect`, `coletor/coach_vivo.py`) fica calado no replay, mesmo com a 2999 de pé. O `found` também é
+  cinza no botão da Riot (`_updateButtonToFound`). `pengu/replay.js`.
 
 ## Live Client Data API (`127.0.0.1:2999`, medido na partida 3292746609, 13/10/2026)
 

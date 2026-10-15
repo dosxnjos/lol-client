@@ -629,28 +629,28 @@
   },
   {
    "id": "m2",
-   "type": "chat",
+   "type": "groupchat",
    "body": "gg",
    "fromPuuid": "puuid-2",
-   "fromSummonerId": 1002,
+   "fromSummonerId": 0,
    "isHistorical": false,
    "timestamp": "2026-10-14T16:05:02.000Z"
   },
   {
    "id": "m3",
-   "type": "chat",
+   "type": "groupchat",
    "body": "gg wp",
    "fromPuuid": "puuid-5",
-   "fromSummonerId": 1005,
+   "fromSummonerId": 0,
    "isHistorical": false,
    "timestamp": "2026-10-14T16:05:04.000Z"
   },
   {
    "id": "m4",
-   "type": "chat",
+   "type": "groupchat",
    "body": "boa top, segurou bem",
    "fromPuuid": "puuid-3",
-   "fromSummonerId": 1003,
+   "fromSummonerId": 0,
    "isHistorical": false,
    "timestamp": "2026-10-14T16:05:06.000Z"
   },

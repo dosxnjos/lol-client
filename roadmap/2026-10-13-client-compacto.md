@@ -666,7 +666,12 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     - tela C `compacto/chat-sala.js`: só a conversa `type:"postGame"` (da conversa ficam só `id`/`type`), mensagens a cada
       1,5 s, "entrou/saiu" some, contador de quem está, foto do campeão e nome pelo `cfg.chatPosjogo.nomes`, envio só por
       Enter/clique com o corpo do client (`sendMessage` do rcp-fe-lol-social), `isSystemMuted` → campo cinza; clique no
-      nome abre o cartão do jogador.
+      nome abre o cartão do jogador. Correção de 15/10/2026: as falas da sala voltam `type:"groupchat"` e o filtro só
+      `chat` deixava a sala vazia (ARMADILHAS § LCU); hoje aceita os dois. Replay (baixar/assistir) na tela B e no painel
+      grande: `pengu/replay.js` (pedido de 15/10, prova `tools/teste-replay.mjs`). Revisão adversarial de 15/10: `found`
+      cinza e `gameType` do histórico (`MATCHED_GAME` da partida) batem com o JS da Riot; replay aberto mantém `EndOfGame`
+      (coach calado); sem achado de código. Falta prova real: POSTs saindo, janela depois do replay, a mensagem dele
+      aparecendo uma vez só (eco `groupchat` × cópia do POST, não medido).
     - `compacto/jogador-acoes.js`: "+" = `POST /lol-chat/v2/friend-requests {direction:"out", puuid}` (só para quem não é
       amigo nem tem pedido em `v2/friend-requests`); "⚑" abre o formulário da Riot (mesmas 3 seções, 7 categorias, 8 com a
       voz do time em `lol.client_settings.team_voice.enabled`, até 3, comentário até 255, textos pt-BR do trans.json) e só

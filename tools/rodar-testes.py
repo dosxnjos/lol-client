@@ -33,6 +33,7 @@ TESTES = [
     ["node", "tools/teste-compacto-lobby.mjs"],
     ["node", "tools/teste-compacto-selecao.mjs"],
     ["node", "tools/teste-compacto-posjogo.mjs"],
+    ["node", "tools/teste-replay.mjs"],   # baixar/assistir replay no pós-jogo (pengu/replay.js, 15/10/2026)
     ["node", "tools/teste-compacto-fim-de-partida.mjs"],
     ["node", "tools/teste-compacto-lateral.mjs"],
     ["node", "tools/teste-compacto-jogo.mjs"],   # partida em andamento (passo 14)

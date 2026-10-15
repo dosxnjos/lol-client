@@ -3,7 +3,7 @@
 // no pós-jogo (tela-posjogo.js), sem o client: roteador de verdade (compacto/index.js) com riotInvoke falso, DOM mínimo
 // feito aqui e LCU falsa (tools/lcu-falsa.mjs: nem a tela nem o teste falam com o client). Partida 3293137136
 // (tests/fixtures/fim-de-partida-3293137136.json: eog real recortado, identidade dos 10 trocada; ballot no formato da sonda;
-// chat inventado). Regras que o teste segura: nada escrito sem clique (voto, prosseguir, pular, adicionar, denunciar,
+// chat inventado no formato medido da sala: type 'groupchat', fromSummonerId 0, sonda de 14/10). Regras que o teste segura: nada escrito sem clique (voto, prosseguir, pular, adicionar, denunciar,
 // mensagem); corpos iguais aos do front da Riot; 405 no pedido de amizade não desbloqueia ninguém; até 3 categorias e 255
 // letras; personalizada não denuncia; sala do champ select nunca lida; da sala só id e type ficam; nome nunca no log.
 // uso: node tools/teste-compacto-fim-de-partida.mjs
@@ -172,7 +172,8 @@ function cenario({ ballot = FX.ballot, amigos = [], pedidos = [], denunciados = 
       { id: SALA_ID, type: 'postGame', extra: { campo: 'nunca guardar' } }],
     [`GET ${MSGS}`]: () => est.chat,
     [`GET ${MSGS_CS}`]: [{ id: 'x', type: 'chat', body: 'mensagem da seleção', fromPuuid: 'puuid-1' }],
-    [`POST ${MSGS}`]: c => { est.chat.push({ id: 'n' + est.chat.length, ...c, fromPuuid: 'puuid-eu' }); return { status: 200, json: {} }; },
+    // a sala é MUC: a mensagem enviada com type 'chat' volta da LCU como 'groupchat' (sonda de 14/10: 21 groupchat, 0 chat; 15/10)
+    [`POST ${MSGS}`]: c => { est.chat.push({ id: 'n' + est.chat.length, ...c, type: 'groupchat', fromSummonerId: 0, fromPuuid: 'puuid-eu' }); return { status: 200, json: {} }; },
     'GET /lol-chat/v1/me': { id: 'eu@br1.pvp.net', summonerId: 111, puuid: 'puuid-eu' },
     'GET /lol-chat/v1/player-mutes': mudo ? { 'puuid-eu': { isSystemMuted: true } } : {},
     'POST /lol-lobby/v2/play-again': { status: 204 },
@@ -259,6 +260,15 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   const lm = sala.lerMensagens(FX.chat);
   caso('sala: "entrou/saiu" some; contador de quem está; quem saiu marcado', lm.linhas.length === 3 && lm.linhas.every(l => l.texto !== 'joined_room')
     && lm.naSala === 1 && lm.sairam.has('puuid-6'), JSON.stringify({ n: lm.linhas.length, naSala: lm.naSala }));
+  // formato medido (sonda do pós-jogo de 14/10, temp/posjogo-sonda-2026-10-14.jsonl): mensagem da sala = type 'groupchat', as 11
+  // chaves de /messages, fromSummonerId 0. O filtro só 'chat' deixava a sala vazia com as mensagens chegando (relato de 15/10/2026)
+  const real = [{ body: 'gg', fromId: 'x@lol-post-game', fromObfuscatedPuuid: '', fromObfuscatedSummonerId: 0, fromPid: 'x@lol-post-game', fromPuuid: 'puuid-2',
+    fromSummonerId: 0, id: '1792044882211:17', isHistorical: false, timestamp: '2026-10-15T06:14:42.211Z', type: 'groupchat' },
+  { body: 'joined_room', fromPuuid: 'puuid-4', id: 's1', type: 'system', timestamp: '' },
+  { body: 'oi', fromPuuid: 'puuid-3', id: 'c1', type: 'chat', timestamp: '' }, { body: 'x', fromPuuid: 'puuid-3', id: 'c2', type: 'celebration', timestamp: '' }];
+  const lr = sala.lerMensagens(real);
+  caso('sala: mensagem real da sala (type groupchat) aparece; chat também (como o isChatMessage da Riot); system e celebration não',
+    igual(lr.linhas.map(l => [l.id, l.puuid, l.texto]), [['1792044882211:17', 'puuid-2', 'gg'], ['c1', 'puuid-3', 'oi']]), JSON.stringify(lr.linhas));
   const jj = por('puuid-2');
   caso('sala: nome pelo modo do chat do pós-jogo (ambos / só campeão / só jogador)',
     igual(sala.nomeNaSala(jj, 'ambos').map(p => p.texto), ['Jogador2', `(${jj.campeao})`]) && igual(sala.nomeNaSala(jj, 'campeao').map(p => p.texto), [jj.campeao])
@@ -576,12 +586,12 @@ const MSGS_VELHA = `/lol-chat/v1/conversations/${encodeURIComponent(VELHA)}/mess
   caso('honra: ballot "lendo" relê sozinho (só GET) até a lista chegar', s2.qq('.lc-cp-hj').length === 9 && s2.escritas().length === 0, s2.texto());
 }
 { // 4 e 11: o campo de texto da sala sobrevive a mensagem nova; 100+ mensagens seguem mostrando a última
-  const muitas = [...clone(FX.chat), ...Array.from({ length: 105 }, (_, i) => ({ id: 'm' + i, type: 'chat', body: 'msg ' + i, fromPuuid: 'puuid-2', timestamp: '' }))];
+  const muitas = [...clone(FX.chat), ...Array.from({ length: 105 }, (_, i) => ({ id: 'm' + i, type: 'groupchat', body: 'msg ' + i, fromPuuid: 'puuid-2', timestamp: '' }))];
   const s = cenario({ chat: muitas });
   await s.honra(); await s.ir('EndOfGame');
   const input = s.q('[data-a="sala-texto"]');
   input.value = 'digitando'; input.disparar('input');
-  s.est.chat.push({ id: 'nova', type: 'chat', body: 'mensagem nova', fromPuuid: 'puuid-3', timestamp: '' });
+  s.est.chat.push({ id: 'nova', type: 'groupchat', body: 'mensagem nova', fromPuuid: 'puuid-3', timestamp: '' });
   await s.rel.avancar(1600);
   caso('sala: mensagem nova não recria o campo (o mesmo <input>, com o que ele digitava)', s.q('[data-a="sala-texto"]') === input && input.value === 'digitando');
   caso('sala com 100+ mensagens: a nova aparece (repinta pelo id da última, não pelo tamanho)', s.q('.lc-cp-ms').textContent.includes('mensagem nova')

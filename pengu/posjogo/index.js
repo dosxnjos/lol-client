@@ -8,6 +8,8 @@ import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPar
 import regrasMd from './licoes.md?raw';
 import { jogarDeNovo } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
+import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
+import { estilo } from '../compacto/comum.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -61,6 +63,7 @@ export async function analisarPartida(gameId, { aoEsperar, vivo } = {}) {
   r.esta = {
     gameId: partida.gameId, criacao: partida.gameCreation, duracao: partida.gameDuration, vitoria: r.vitoria,
     campeao: meu.championId, k: meu.stats.kills, d: meu.stats.deaths, a: meu.stats.assists, fila: partida.queueId,
+    versao: partida.gameVersion, tipo: partida.gameType, // registro do replay (o mesmo que o histórico da Riot manda)
   };
   r.trajeto = trajeto(linha, r.participantId);
   r.campeoes = Object.fromEntries(partida.participants.map(p => [p.participantId, p.championId]));
@@ -376,6 +379,20 @@ function ligarEventos(p) {
   }, true);
 }
 
+// replay (baixar/assistir, pedido de 15/10/2026; ../replay.js): estado relido a cada 2 s com o painel aberto, escrita só por clique.
+// No fim de partida baixa pelo /download/graceful (o do pós-jogo da Riot); aberto pelo Ctrl+K, pelo /download do histórico
+function montarReplay(p, r, vivo, fimDePartida) {
+  const slot = p.el.querySelector?.('[data-replay]');
+  if (!slot || !(Number(r.gameId) > 0)) return;
+  estilo('lc-replay-estilo', CSS_REPLAY);
+  p.replay = criarReplay({ gameId: () => r.gameId, fim: !!fimDePartida, vivo, avisar: avisarToast,
+    corpo: () => ({ gameVersion: r.esta?.versao, gameType: r.esta?.tipo, queueId: r.esta?.fila, gameCreation: r.criacao, gameDuration: r.esta?.duracao }) });
+  slot.append(p.replay.el);
+  p.replay.ler();
+  const t = setInterval(() => { if (!vivo()) { clearInterval(t); return; } p.replay.ler(); }, REPLAY.cadaMs);
+}
+export const _montarReplay = montarReplay; // só teste (tools/teste-replay.mjs)
+
 // fimDePartida: painel aberto pelo EndOfGame (só ele tem o "jogar de novo": o do Ctrl+K pode ser de partida antiga)
 function montar(r, cfg, coletor, vivo, fimDePartida = false) {
   const p = { r, cfg, coletor: coletor || (async () => ({ status: 0, dados: null })), temColetor: !!coletor, vivo, aba: 'resumo',
@@ -394,6 +411,7 @@ function montar(r, cfg, coletor, vivo, fimDePartida = false) {
   trocarAba(p, 'resumo');
   ligarEventos(p);
   pintar(p, ['mentor']);
+  montarReplay(p, r, vivo, fimDePartida);
   return p;
 }
 
