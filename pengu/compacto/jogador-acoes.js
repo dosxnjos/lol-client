@@ -88,8 +88,13 @@ export function jogadoresDoEog(eog) {
   if (!eog || typeof eog !== 'object' || !Array.isArray(eog.teams)) return [];
   const dur = num(eog.gameLength);
   const out = [];
+  // sem isPlayerTeam em nenhum time: o aliado é o time do jogador atual (a mesma regra do chat expandido, chat-posjogo.js
+  // elencoDoEog), senão todo mundo sairia vermelho na sala e na tabela
+  const semFlag = !eog.teams.some(t => t?.isPlayerTeam === true);
+  const meuTime = t => Array.isArray(t?.players) && t.players.some(p => p?.isLocalPlayer === true);
   for (const t of eog.teams) {
     if (!t || !Array.isArray(t.players)) continue;
+    const aliado = t.isPlayerTeam === true || (semFlag && meuTime(t));
     for (const p of t.players) {
       if (!p || typeof p !== 'object') continue;
       const s = p.stats || {};
@@ -107,7 +112,7 @@ export function jogadoresDoEog(eog) {
         nome, tag: typeof p.riotIdTagLine === 'string' ? p.riotIdTagLine : '',
         campeaoId: id > 0 ? id : null, campeao: typeof p.championName === 'string' ? p.championName : '',
         posicao: POSICOES_PT[pos] ? pos : POSICOES_PT[det] ? det : '',
-        aliado: t.isPlayerTeam === true, venceu: typeof t.isWinningTeam === 'boolean' ? t.isWinningTeam : null,
+        aliado, venceu: typeof t.isWinningTeam === 'boolean' ? t.isWinningTeam : null,
         eu: p.isLocalPlayer === true, bot: p.botPlayer === true,
         k, d, a, kda: k !== null && d !== null && a !== null ? [k, d, a] : null,
         farmMin: (tropas !== null || monstros !== null) && dur > 0 ? ((tropas || 0) + (monstros || 0)) / (dur / 60) : null,
@@ -143,9 +148,9 @@ export function podeAdicionar(j, social) {
   if (!j || j.eu) return { ok: false, motivo: 'é você' };
   if (j.bot) return { ok: false, motivo: 'bot' };
   if (!j.puuid || !(j.summonerId > 0)) return { ok: false, motivo: 'o client não mandou quem é este jogador' };
-  if (!social?.lido) return { ok: false, motivo: social?.falhou ? 'não consegui ler a lista de amigos: adicione pelo client normal' : 'lendo a lista de amigos…' };
+  if (!social?.lido) return { ok: false, motivo: social?.falhou ? 'não foi possível ler a lista de amigos: adicione pelo client normal' : 'lendo a lista de amigos…' };
   const e = estadoAmizade(social, j.puuid);
-  if (e === 'amigo') return { ok: false, motivo: 'já é teu amigo' };
+  if (e === 'amigo') return { ok: false, motivo: 'já é seu amigo' };
   if (e === 'pendente') return { ok: false, motivo: 'pedido de amizade pendente' };
   if (e === 'enviado') return { ok: false, motivo: 'pedido de amizade enviado' };
   return { ok: true };
@@ -199,7 +204,7 @@ export function criarSocial(ctx, { gameId = () => null, custom = () => null } = 
     // só o campeão no aviso: sem camada e sem Toast, o avisar cai no console.log (nome de terceiro nunca no log)
     if (r.ok) { s.enviados.add(j.puuid); ctx.avisar(`pedido de amizade enviado (${j.campeao || 'jogador'})`); }
     else if (r.status === 405) ctx.avisar('esse jogador está bloqueado: desbloquear e adicionar fica no client normal (⤢ expandir)', true);
-    else ctx.avisar(`não consegui mandar o pedido de amizade (${r.status}${r.json?.message ? ': ' + String(r.json.message).slice(0, 80) : ''}): use o client normal`, true);
+    else ctx.avisar(`não foi possível enviar o pedido de amizade (${r.status}${r.json?.message ? ': ' + String(r.json.message).slice(0, 80) : ''}): use o client normal`, true);
     mudou();
     return { ok: r.ok, status: r.status };
   };

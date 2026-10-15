@@ -29,6 +29,7 @@ clash torneio torneios ingresso equipe inscricao dodge abandonou abandono saiu d
 voce sua seu esta estao foi foram sera ser ter tem tens pode podem deve precisa precisam quer deseja tens
 personalizado personalizada banco espectador cliente client abri normal selecao indisponivel coletor fora consegui
 deixou inicio painel analise desconhecida janela propria tela compacta compacto modo expandido daqui aqui la
+abrindo indo possivel permitiu aguarde use clique tente confira busque cancele escolha identificada identificado desconhecido
 accept decline ok yes no cancel confirm continue close exit back play join open view save apply send skip
 error warning failed failure connection server update version match game queue ranked custom lobby party team
 mission missions challenge challenges reward rewards gift level up rank honor mastery champion settings

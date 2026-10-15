@@ -555,7 +555,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
     l1.estreito && l1.painel && !l1.lista && l2.lista && !l2.painel && p.win.w === 720, JSON.stringify([l1, l2, p.win.w]));
   await p.passo(() => p.lat.alternarConfig());
   caso('monitor pequeno: abrir as configurações quando não cabe com o chat fecha o chat (o que ele abriu por último vence) e avisa',
-    p.lat.estado().config && !p.lat.estado().lista && p.lat.estado().abas.length === 0 && p.win.w === 780 && p.avisos.some(([m]) => /fechei o chat/.test(m)), JSON.stringify([p.lat.estado(), p.avisos]));
+    p.lat.estado().config && !p.lat.estado().lista && p.lat.estado().abas.length === 0 && p.win.w === 780 && p.avisos.some(([m]) => /o chat fechou/.test(m)), JSON.stringify([p.lat.estado(), p.avisos]));
   globalThis.document = ANTES.document;
 }
 
@@ -811,14 +811,14 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
     lobby: lobbyParaConvite({ ok: true, status: 200, json: { localMember: { isLeader: false, allowedInviteOthers: false }, members: [] } }) });
   caso('verAmigos: sala de grupo não conta como não lida; não-líder vê "convidar" cinza com o motivo; em partida sem convidar',
     v.naoLidas === 3 && v.online[0].convidar.ok === false && /só o líder/.test(v.online[0].convidar.motivo) && v.online[1].convidar.mostra === false, JSON.stringify(v));
-  caso('lobby: sem lobby = "abre o lobby antes"; erro = não sei (nunca convida)', lobbyParaConvite({ ok: false, status: 404 }).tem === false && lobbyParaConvite({ ok: false, status: 0 }).tem === null);
+  caso('lobby: sem lobby = "abra o lobby antes"; erro = não sei (nunca convida)', lobbyParaConvite({ ok: false, status: 404 }).tem === false && lobbyParaConvite({ ok: false, status: 0 }).tem === null);
   caso('status: no celular, ausente, na fila, no lobby', statusAmigo({ availability: 'mobile' }).txt === 'no celular' && statusAmigo({ availability: 'away' }).txt === 'ausente'
     && statusAmigo({ availability: 'chat', lol: { gameStatus: 'inQueue', queueId: 440 } }).txt === 'na fila · Flex' && statusAmigo({ availability: 'chat', lol: { gameStatus: 'hosting_RANKED_SOLO_5x5' } }).txt === 'no lobby · Solo/Duo');
   caso('pedidos de amizade: só os recebidos', pedidosRecebidos([{ direction: 'in' }, { direction: 'out' }, { direction: 'IN' }]) === 2 && pedidosRecebidos(null) === 0);
   caso('sala do time: só type championSelect, e só id/type saem', igual(acharSalaTime([{ id: 'x', type: 'chat' }, { id: SALA_CS, type: 'championSelect', extra: NUNCA }]), { id: SALA_CS, type: 'championSelect' }));
   const linhas = lerSalaTime([{ id: '1', type: 'groupchat', body: 'oi', fromSummonerId: 900 }, { id: '2', type: 'chat', body: 'eu', fromId: 'eu@br1.pvp.net' }, { id: '3', type: 'system', body: 'joined_room' }],
     elencoTime(sessaoCS(58)), { id: 'eu@br1.pvp.net', puuid: 'puuid-eu' });
-  caso('sala do time: remetente casado pelo summonerId vira campeão/posição; eu = "tu"; sistema some; nenhum nome na saída',
+  caso('sala do time: remetente casado pelo summonerId vira campeão/posição; eu = "você"; sistema some; nenhum nome na saída',
     linhas.length === 2 && linhas[0].quem.posicao === 'JUNGLE' && linhas[0].quem.campeao === 64 && linhas[1].quem.eu && !JSON.stringify(linhas).includes(NOME_OCULTO), JSON.stringify(linhas));
   caso('elenco do time: guarda campeão/posição e as chaves só em Set (nenhum gameName)', !JSON.stringify(elencoTime(sessaoCS(58)).map(x => ({ ...x, chaves: [...x.chaves] }))).includes(NOME_OCULTO));
   caso('conversa: mensagens minhas por fromId, sistema separado', igual(lerConversa([{ id: 1, body: 'a', fromId: 'eu' }, { id: 2, body: 'b', fromId: 'x', type: 'system' }], { id: 'eu' }).map(m => [m.eu, m.sis]), [[true, false], [false, true]]));
@@ -831,7 +831,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   const m1 = modeloSelo({ sessao: sessaoCS(58, 58, 24), est, histN: 200, coach, nome, fila: 420 });
   caso('coach travado: selo com geral e posição, matchup contra o adversário travado, trauma e draft com a barra',
     m1.travado && m1.linhas.length === 2 && /contra Jax: 2V\/4D · ouro10 −441/.test(m1.rota?.texto) && /Jax é trauma: 2V\/4D/.test(m1.trauma) && m1.draft?.faixa === 'draft: leve vantagem' && m1.draft.p === 0.56
-      && m1.sub === 'tu · Topo · Solo/Duo', JSON.stringify(m1));
+      && m1.sub === 'você · Topo · Solo/Duo', JSON.stringify(m1));
   const m2 = modeloSelo({ sessao: sessaoCS(0, 58, 0), est, coach, nome, traumas: false });
   caso('coach em hover, adversário ainda não travou: sem linha de matchup; trauma desligado não aparece', !m2.travado && !m2.rota && !m2.trauma, JSON.stringify(m2));
   const m3 = modeloSelo({ sessao: sessaoCS(58), est: null, coach: { campeao: 58, fora: true, dados: null }, nome });

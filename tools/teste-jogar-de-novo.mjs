@@ -114,7 +114,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
 {
   const c = await cenario({ lerAteVoltar: 1e9 });
   caso('timeout: a fase não sai do EndOfGame em 15 s -> recusa e nada mais', c.res.status === 'recusa' && /a tempo/.test(c.res.motivo) && igual(c.w, ['POST /lol-lobby/v2/play-again']) && c.t - 1_000_000 >= 15000, JSON.stringify([c.res, c.w, c.t]));
-  caso('timeout: o texto diz o que foi feito (saiu da tela) e o que não (busca)', /saí da tela de fim de partida/.test(c.res.motivo) && /não busquei/.test(c.res.motivo) && !/nada foi feito/.test(c.res.motivo), c.res.motivo);
+  caso('timeout: o texto diz o que foi feito (saiu da tela) e o que não (busca)', /tela de fim de partida fechou/.test(c.res.motivo) && /a busca não começou/.test(c.res.motivo) && !/nada foi feito/.test(c.res.motivo), c.res.motivo);
 }
 {
   const c = await cenario({ lobby: { canStartActivity: false, restrictions: [] } });
@@ -191,8 +191,8 @@ caso('restricaoDura: canStartActivity false sem restrição -> null (não recusa
 }
 
 // ---- freios (decisão do Gabriel, 13/10/2026: tilt 2 e madrugada) ----
-const TEXTO_TILT_2 = '2 derrotas seguidas: depois disso teu winrate cai para 44%. buscar mesmo assim?';
-const TEXTO_MADRUGADA = 'de madrugada teu winrate cai: 47% contra 58% de dia. buscar mesmo assim?';
+const TEXTO_TILT_2 = '2 derrotas seguidas: depois disso o seu winrate cai para 44%. Buscar mesmo assim?';
+const TEXTO_MADRUGADA = 'de madrugada o seu winrate cai: 47% contra 58% de dia. Buscar mesmo assim?';
 caso('números da medição num lugar só, com a data', MEDICAO.data === '13/10/2026' && MEDICAO.wrDepoisDe2 === 44 && MEDICAO.wrMadrugada === 47 && MEDICAO.wrDia === 58);
 caso('janela do 2º clique: 8 s', JANELA_MS === 8000);
 caso('madrugada: 01:00 e 05:59 sim; 00:59 e 06:00 não',
@@ -200,8 +200,8 @@ caso('madrugada: 01:00 e 05:59 sim; 00:59 e 06:00 não',
 caso('texto do tilt cita as derrotas e os 44%', textoFreios([{ tipo: 'tilt', derrotas: 2 }]) === TEXTO_TILT_2, textoFreios([{ tipo: 'tilt', derrotas: 2 }]));
 caso('texto da madrugada cita 47% contra 58%', textoFreios([{ tipo: 'madrugada' }]) === TEXTO_MADRUGADA, textoFreios([{ tipo: 'madrugada' }]));
 caso('3 derrotas: cita as 3 e o número medido (o de 2), não inventa outro',
-  /^3 derrotas seguidas: depois de 2 teu winrate já cai para 44%\. buscar mesmo assim\?$/.test(textoFreios([{ tipo: 'tilt', derrotas: 3 }])));
-caso('sequência incerta tem frase própria', /não sei quantas derrotas/.test(textoFreios([{ tipo: 'tilt', derrotas: null }])));
+  /^3 derrotas seguidas: depois de 2, o seu winrate já cai para 44%\. Buscar mesmo assim\?$/.test(textoFreios([{ tipo: 'tilt', derrotas: 3 }])));
+caso('sequência incerta tem frase própria', /sequência de derrotas desconhecida/.test(textoFreios([{ tipo: 'tilt', derrotas: null }])));
 caso('avaliarFreios: madrugada desligada não pede', avaliarFreios({ freioTilt: 0, freioMadrugada: false }, { derrotasSeguidas: 0, data: as(3)() }).length === 0);
 for (const [h, m, pede] of [[1, 0, true], [5, 59, true], [6, 0, false], [0, 59, false]]) {
   const c = await cenario({ cfgFila: { freioMadrugada: true }, opcoes: { relogio: as(h, m) } });
@@ -275,7 +275,7 @@ async function cliquesFila(cfg, cliques, opcoes) {
   const g = await cliquesFila(cfgFR({ freioTilt: 0, freioMadrugada: false }), [0], { derrotasSeguidas: async () => { lidas++; return 9; }, relogio: as(3) });
   caso('fila rápida com os freios desligados: busca direto e nem lê a sequência', g.res[0].status === 'buscando' && lidas === 0 && buscas(g.falsa) === 1);
   const h = await cliquesFila(cfgFR({ freioMadrugada: false }), [0], { derrotasSeguidas: async () => null, relogio: TARDE });
-  caso('fila rápida: sequência incerta (histórico não carregou) pede confirmação', h.res[0].status === 'confirmar' && /não sei/.test(h.res[0].texto) && h.escritas[0] === 0);
+  caso('fila rápida: sequência incerta (histórico não carregou) pede confirmação', h.res[0].status === 'confirmar' && /desconhecida/.test(h.res[0].texto) && h.escritas[0] === 0);
   lidas = 0;
   const i = await cliquesFila(cfgFR(), [0, 1000], { derrotasSeguidas: async () => { lidas++; return 2; }, relogio: TARDE });
   caso('fila rápida: o clique que confirma não relê a sequência', lidas === 1 && i.res[1].status === 'buscando');

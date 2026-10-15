@@ -220,7 +220,7 @@ function esqueleto(s) {
 function pintarCampeao(s) {
   const { refs: r } = s;
   const nome = s.campeao ? (s.cat?.get?.(s.campeao)?.nome || `campeão ${s.campeao}`) : '';
-  if (r.campeao.textContent !== (nome || 'teu campeão')) r.campeao.textContent = nome || 'teu campeão';
+  if (r.campeao.textContent !== (nome || 'seu campeão')) r.campeao.textContent = nome || 'seu campeão';
   const chave = String(s.campeao || 0);
   if (r.foto.dataset.c !== chave) { r.foto.dataset.c = chave; r.foto.replaceChildren(fotoCampeao(s.campeao, { tam: 64, nome, doc: s.raiz.ownerDocument || s.raiz.doc })); }
 }
@@ -257,7 +257,7 @@ function tique(s) {
   if (r.rotulo.textContent !== t.rotulo) r.rotulo.textContent = t.rotulo;
   const fresco = s.coletor && idadeColetor(s.coletor, s.lidoEm, agora) <= COLETOR_VELHO_MS;
   const p = fresco && !s.coletor.carregando ? s.coletor.placar : null;
-  const txtPlacar = p ? `teu time ${p.nosso} × ${p.deles} inimigos` : '';
+  const txtPlacar = p ? `seu time ${p.nosso} × ${p.deles} inimigos` : '';
   if (r.placar.textContent !== txtPlacar) r.placar.textContent = txtPlacar;
   r.placar.style.display = p ? '' : 'none';
   const fonte = s.ctx.fase === 'Reconnect' ? ''
@@ -279,8 +279,8 @@ async function reconectar(s, e) {
   if (!ctx.vivo()) return;
   if (res.ok) { r.motivoRec.textContent = 'pedido enviado: o jogo vai abrir'; return; }
   s.reconectando = false; s.reconectaEm = 0;
-  r.motivoRec.textContent = `não consegui reconectar (${res.status || 'sem resposta'}): usa o RECONECTAR do client normal (⤢ abaixo)`;
-  ctx.avisar(`não consegui reconectar (${res.status || 'sem resposta'}): abre o client normal e usa o botão da Riot`, true);
+  r.motivoRec.textContent = `não foi possível reconectar (${res.status || 'sem resposta'}): use o RECONECTAR do client normal (⤢ abaixo)`;
+  ctx.avisar(`não foi possível reconectar (${res.status || 'sem resposta'}): abra o client normal e use o botão da Riot`, true);
   pintar(s);
 }
 

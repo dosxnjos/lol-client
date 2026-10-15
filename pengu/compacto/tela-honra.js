@@ -205,7 +205,7 @@ async function clicarBase(ctx, est, e) {
   est.enviando = false;
   if (!ctx.vivo()) return;
   if (r.ok) est.enviado = true;
-  else ctx.avisar(`${b.acao === 'pular' ? 'pular a espera' : 'enviar a honra'} não foi (${r.status}): a Riot pode ter fechado a fase`, true);
+  else ctx.avisar(`${b.acao === 'pular' ? 'pular a espera' : 'enviar a honra'} falhou (${r.status}): a Riot pode ter fechado a fase`, true);
   pintar(ctx, est);
 }
 
@@ -264,7 +264,7 @@ function pintarLista(ctx, est) {
   }
   if (b.estado === 'lendo' || b.estado === 'vazia') {
     est.lista.replaceChildren(h('div', { class: 'lc-cp-hn-vazio' }, h('b', {}, b.estado === 'lendo' ? 'lendo a honra…' : 'buscando quem pode ser honrado…'),
-      b.estado === 'vazia' ? 'a Riot repete a busca sozinha; a lista aparece quando chegar. Passados 5 s, dá para pular a espera.' : ''));
+      b.estado === 'vazia' ? 'a Riot repete a busca sozinha; a lista aparece quando chegar. Depois de 5 s, a espera pode ser pulada.' : ''));
     return;
   }
   const sobra = b.votos - b.usados.size - est.votando.size;
@@ -286,7 +286,7 @@ function pintarLista(ctx, est) {
   const honradosAli = b.aliados.filter(c => b.usados.has(c.puuid)).length;
   // replaceChildren(null) escreveria "null" na tela: só elementos
   est.lista.replaceChildren(...[
-    h('div', { class: 'lc-cp-hn-sec' }, h('span', {}, 'teu time'), h('span', {}, `${honradosAli} de ${b.aliados.length} honrados`)),
+    h('div', { class: 'lc-cp-hn-sec' }, h('span', {}, 'seu time'), h('span', {}, `${honradosAli} de ${b.aliados.length} honrados`)),
     ...b.aliados.map(linha),
     b.oponentes.length ? h('div', { class: 'lc-cp-hn-sec' }, h('span', {}, 'adversários'), h('span', {}, 'a Riot deixa honrar')) : null,
     ...b.oponentes.map(linha)].filter(Boolean));

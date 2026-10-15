@@ -610,7 +610,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const e = cenario({ telasExtra: { jogo: tiqueQuebrado } }); e.rot.marcarPronto();
   await e.ir('Lobby'); await e.ir('GameStart');
   e.rel.avancar(1500);
-  caso('achado 6: com o foco o texto segue "abri o client normal"', e.avisos.some(([m]) => /abri o client normal/.test(m)) && e.foto().efetivo === 'expandido',
+  caso('achado 6: com o foco o texto segue "abrindo o client normal"', e.avisos.some(([m]) => /abrindo o client normal/.test(m)) && e.foto().efetivo === 'expandido',
     JSON.stringify(e.avisos));
 
   // achado 10: TFT/Arena não montam a tela de jogo (sem "teu time × inimigos"); mapa não lido segue na tela de jogo
@@ -946,7 +946,8 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   const s = cenario();
   s.rot.marcarPronto(); await s.ir('Lobby');
   avisar('teste', true, s.doc);
-  caso('avisar(): com a camada à vista o aviso aparece dentro dela', s.doc.getElementById('lc-compacto').querySelector('.lc-cp-aviso')?.textContent === 'teste');
+  // frase de aviso sai com maiúscula inicial (docs/TEXTOS-DA-INTERFACE.md, 15/10/2026)
+  caso('avisar(): com a camada à vista o aviso aparece dentro dela, com maiúscula inicial', s.doc.getElementById('lc-compacto').querySelector('.lc-cp-aviso')?.textContent === 'Teste');
 }
 
 // ---------- 7. fiação no client (iniciarCompacto) com window/document/socket/LCU falsos ----------

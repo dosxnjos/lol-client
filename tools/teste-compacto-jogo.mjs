@@ -188,7 +188,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   await tick();
   caso('InProgress: campeão (Renekton), fila (Ranqueada Solo/Duo), tempo de jogo do coletor, placar do time',
     t.texto('b.lc-cp-jg-camp') === 'Renekton' && t.raiz.textContent.includes('Ranqueada Solo/Duo') && t.texto('div[data-a="tempo"]') === '02:05'
-    && t.texto('div[data-a="placar"]') === 'teu time 7 × 4 inimigos', visivel(t.raiz));
+    && t.texto('div[data-a="placar"]') === 'seu time 7 × 4 inimigos', visivel(t.raiz));
   caso('InProgress: fonte "coletor (Live Client)" e "em andamento" no título', t.raiz.textContent.includes('tempo e placar: coletor (Live Client)') && /em andamento/.test(t.titulo.textContent));
   const tudo = visivel(t.raiz) + visivel(t.titulo);
   caso('nada de terceiro na tela: sem nome de jogador, sem puuid, sem campeão inimigo, sem item/ouro/"visto"',
@@ -269,7 +269,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const u = await montarTela({ fase: 'Reconnect', rotas: { [`POST ${ROTA_RECONECTAR}`]: { status: 500, json: { message: 'x' } } } });
   const b2 = u.achar('button[data-a="reconectar"]');
   b2.click(); await tick();
-  caso('falha (500): motivo na tela, aviso com a saída (client normal) e botão de volta', /não consegui reconectar \(500\)/.test(u.raiz.textContent)
+  caso('falha (500): motivo na tela, aviso com a saída (client normal) e botão de volta', /não foi possível reconectar \(500\)/.test(u.raiz.textContent)
     && u.avisos.some(([m, e]) => e && /client normal/.test(m)) && !b2.disabled, visivel(u.raiz));
   b2.click(); await tick();
   caso('falha: novo clique dele tenta de novo (2 POSTs, nenhum sozinho)', u.escritas().length === 2 && u.escritas().every(c => c.url === ROTA_RECONECTAR));

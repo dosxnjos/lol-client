@@ -16,7 +16,7 @@
 import { h, estilo, fotoCampeao } from './comum.js';
 import { nomeCompleto } from './jogador-acoes.js';
 
-export const SALA = { cadaMs: 1500, textoMax: 500, msgsMax: 100 };
+export const SALA = { cadaMs: 1500, textoMax: 500, msgsMax: 100, participantesCada: 4 };
 export const ALTURAS = { normal: 168, alto: 300, recolhido: 26 };
 const rascunhos = new Map(); // id da sala -> texto não enviado (a honra e o pós-jogo são telas diferentes)
 export const _esquecerRascunhos = () => rascunhos.clear(); // só teste
@@ -30,31 +30,68 @@ export function acharSala(conversas, gameId) {
   return c ? { id: c.id, type: c.type } : null;
 }
 
-// mensagens -> {linhas (chat/groupchat, na ordem, só as MSGS_MAX últimas), naSala (null = não sei), sairam: Set(puuid)}
+// mensagens -> {linhas (chat/groupchat, na ordem, só as MSGS_MAX últimas), naSala (null = não sei), sairam: Set(puuid),
+// eventos: Map(puuid -> 'dentro'|'saiu') pelo último sinal: joined_room ou fala = dentro, left_room = saiu}
 export function lerMensagens(msgs) {
   const lista = Array.isArray(msgs) ? msgs.filter(m => m && typeof m === 'object') : [];
-  const dentro = new Set(), sairam = new Set();
+  const dentro = new Set(), sairam = new Set(), eventos = new Map();
   let viuEntrada = false;
   for (const m of lista) {
-    if (m.type !== 'system' || !m.fromPuuid) continue;
-    if (m.body === 'joined_room') { viuEntrada = true; dentro.add(m.fromPuuid); sairam.delete(m.fromPuuid); }
-    else if (m.body === 'left_room') { dentro.delete(m.fromPuuid); sairam.add(m.fromPuuid); }
+    if (!m.fromPuuid) continue;
+    if ((m.type === 'chat' || m.type === 'groupchat') && typeof m.body === 'string') { eventos.set(m.fromPuuid, 'dentro'); continue; }
+    if (m.type !== 'system') continue;
+    if (m.body === 'joined_room') { viuEntrada = true; dentro.add(m.fromPuuid); sairam.delete(m.fromPuuid); eventos.set(m.fromPuuid, 'dentro'); }
+    else if (m.body === 'left_room') { dentro.delete(m.fromPuuid); sairam.add(m.fromPuuid); eventos.set(m.fromPuuid, 'saiu'); }
   }
   // a sala é MUC: a mensagem (a dele também, enviada com type 'chat') volta 'groupchat' (sonda de 14/10; o filtro só 'chat'
   // deixava a sala vazia, relato de 15/10/2026). Os dois tipos, como o isChatMessage do rcp-fe-lol-social
   const linhas = lista.filter(m => (m.type === 'chat' || m.type === 'groupchat') && typeof m.body === 'string').slice(-SALA.msgsMax)
     .map(m => ({ id: String(m.id ?? ''), puuid: m.fromPuuid || null, texto: m.body, quando: m.timestamp || '' }));
-  return { linhas, naSala: viuEntrada ? dentro.size : null, sairam };
+  return { linhas, naSala: viuEntrada ? dentro.size : null, sairam, eventos };
 }
 
-// nome de quem falou, pelo modo do chat do pós-jogo -> [{texto, classe}]
+// GET .../{id}/participants ([S]: rota que o rcp-fe-lol-social lê em toda conversa, LolChatParticipant com puuid no /help;
+// o JS da Riot espera array) -> [{puuid, summonerId, gameName, gameTag}] | null (formato inesperado = não usa)
+export function lerParticipantes(json) {
+  const lista = Array.isArray(json) ? json : Array.isArray(json?.participants) ? json.participants : null;
+  if (!lista) return null;
+  return lista.filter(p => p && typeof p === 'object').map(p => ({
+    puuid: typeof p.puuid === 'string' && p.puuid ? p.puuid : null,
+    summonerId: Number(p.summonerId) > 0 ? Number(p.summonerId) : null,
+    gameName: String(p.gameName ?? p.game_name ?? '').toLowerCase(), gameTag: String(p.gameTag ?? p.game_tag ?? '').toLowerCase() }));
+}
+
+// quem do eog está na sala (pedido de 15/10/2026 ~12:45: "mostrasse um ícone [...] quais campeões estão na sala ainda").
+// jogadores (jogadoresDoEog, sem bot) + eventos (lerMensagens) + participantes (lerParticipantes | null) ->
+// [{puuid, campeao, campeaoId, nome, tag, aliado, eu, estado: 'dentro'|'saiu'}], na ordem do eog.
+// Sem participants que case com alguém: o último evento de cada um, e sem evento = dentro (sonda de 14/10: left_room de quem
+// nunca teve joined_room; os 10 entram na sala no fim da partida e joined_room só vem de quem chega depois dele).
+// Com participants que casa: quem está nela ou falou/entrou por último está; o resto saiu. Eu: sempre dentro.
+export function presencaNaSala(jogadores, eventos = new Map(), participantes = null) {
+  const js = (Array.isArray(jogadores) ? jogadores : []).filter(j => j && !j.bot);
+  const casa = (j, p) => (!!p.puuid && p.puuid === j.puuid) || (!!p.summonerId && Number(j.summonerId) === p.summonerId)
+    || (!!p.gameName && !!j.nome && p.gameName === String(j.nome).toLowerCase() && (!p.gameTag || !j.tag || p.gameTag === String(j.tag).toLowerCase()));
+  const lista = Array.isArray(participantes) ? participantes : [];
+  const casados = new Set(js.filter(j => !j.eu && lista.some(p => casa(j, p))));
+  const pelaLista = casados.size > 0;
+  return js.map(j => {
+    const ev = j.puuid ? eventos.get(j.puuid) : undefined;
+    const estado = j.eu ? 'dentro' : pelaLista ? (casados.has(j) || ev === 'dentro' ? 'dentro' : 'saiu') : ev || 'dentro';
+    return { puuid: j.puuid || null, campeao: j.campeao || '', campeaoId: j.campeaoId || null, nome: j.nome || '', tag: j.tag || '',
+      aliado: !!j.aliado, eu: !!j.eu, estado };
+  });
+}
+
+// nome de quem falou, pelo modo do chat do pós-jogo -> [{texto, classe}]. O "(Campeão)" leva a cor do lado, como o nick (no chat
+// expandido o chat-posjogo.js pinta o .message-name inteiro pelo time; pedido de 15/10/2026 ~12:45)
 export function nomeNaSala(j, modo) {
   if (!j) return [{ texto: 'alguém', classe: 'lc-cp-nm' }];
-  const lado = j.eu ? 'lc-cp-nm lc-cp-nm-eu' : j.aliado ? 'lc-cp-nm lc-cp-nm-al' : 'lc-cp-nm lc-cp-nm-in';
+  const cor = j.eu ? 'lc-cp-nm-eu' : j.aliado ? 'lc-cp-nm-al' : 'lc-cp-nm-in';
+  const lado = `lc-cp-nm ${cor}`;
   const nome = j.nome || '', camp = j.campeao || '';
   if (modo === 'campeao' && camp) return [{ texto: camp, classe: lado }];
   if (modo === 'jogador' && nome) return [{ texto: nome, classe: lado }];
-  if (nome && camp) return [{ texto: nome, classe: lado }, { texto: `(${camp})`, classe: 'lc-cp-camp' }];
+  if (nome && camp) return [{ texto: nome, classe: lado }, { texto: `(${camp})`, classe: `lc-cp-camp ${cor}` }];
   return [{ texto: nome || camp || '?', classe: lado }];
 }
 
@@ -70,16 +107,17 @@ export function corpoMensagem(texto, eu, agora = new Date()) {
 // a cada mensagem nova tirava o foco dele no meio da digitação e o Enter seguinte ia para a Riot; revisão de 14/10/2026).
 export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nomes = () => ctx.cfg?.chatPosjogo?.nomes, tamanho = 'normal', aoNome = null, doc } = {}) {
   estilo('lc-cp-sala-estilo', CSS_SALA, ctx.raiz?.ownerDocument || ctx.raiz?.doc || globalThis.document);
-  const est = { sala: null, linhas: [], naSala: null, sairam: new Set(), eu: null, mudo: false, tam: tamanho, vistas: 0, enviando: false,
-    lendo: false, procurou: false, semPartida: false };
+  const est = { sala: null, linhas: [], naSala: null, sairam: new Set(), eventos: new Map(), participantes: null, voltas: 0, eu: null, mudo: false,
+    tam: tamanho, vistas: 0, enviando: false, lendo: false, procurou: false, semPartida: false };
   const el = h('div', { doc, class: 'lc-cp-dock', dataset: { tam: est.tam } });
   let rolarFim = true, estrutura = null, assinatura = '';
 
   const porPuuid = () => new Map(jogadores().filter(j => j.puuid).map(j => [j.puuid, j]));
   const naoLidas = () => Math.max(0, est.linhas.length - est.vistas);
   // o que muda a tela: repinta só quando isto muda (comparar só o tamanho da lista parava em 100 mensagens)
+  const presenca = () => presencaNaSala(jogadores(), est.eventos, est.participantes);
   const assinar = () => [est.linhas.length, est.linhas[est.linhas.length - 1]?.id ?? '', est.naSala, est.sairam.size, est.sala?.id ?? '', est.mudo,
-    est.procurou, est.semPartida, jogadores().length].join('|');
+    est.procurou, est.semPartida, jogadores().length, presenca().map(p => p.estado[0]).join('')].join('|');
   const repintarSeMudou = () => { if (ctx.vivo() && assinar() !== assinatura) pintar(); };
 
   const ler = async () => {
@@ -87,7 +125,9 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
     est.lendo = true;
     try {
       const gid = gameId();
-      if (est.sala && !salaDaPartida(est.sala.id, gid)) { est.sala = null; est.linhas = []; est.naSala = null; } // a partida mudou
+      if (est.sala && !salaDaPartida(est.sala.id, gid)) { // a partida mudou
+        est.sala = null; est.linhas = []; est.naSala = null; est.eventos = new Map(); est.participantes = null; est.voltas = 0;
+      }
       if (!est.sala) {
         // sem saber a partida, nenhuma sala (a da partida anterior pode estar na lista)
         est.semPartida = !(Number(gid) > 0);
@@ -105,9 +145,15 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
       }
       const m = await ctx.lcu('GET', `/lol-chat/v1/conversations/${encodeURIComponent(est.sala.id)}/messages`);
       if (!ctx.vivo()) return;
-      if (m.status === 404) { est.sala = null; est.linhas = []; est.naSala = null; return; } // a sala fechou
+      if (m.status === 404) { est.sala = null; est.linhas = []; est.naSala = null; est.eventos = new Map(); est.participantes = null; return; } // a sala fechou
       if (!m.ok) return;
       Object.assign(est, lerMensagens(m.json));
+      // quem está na sala: participants ([S], só GET) na 1ª volta e a cada SALA.participantesCada voltas; falha = fica nos eventos
+      if (est.voltas++ % SALA.participantesCada === 0) {
+        const p = await ctx.lcu('GET', `/lol-chat/v1/conversations/${encodeURIComponent(est.sala.id)}/participants`);
+        if (!ctx.vivo()) return;
+        est.participantes = p.ok ? lerParticipantes(p.json) : null;
+      }
       if (est.tam !== 'recolhido') est.vistas = est.linhas.length;
     } finally { est.lendo = false; repintarSeMudou(); }
   };
@@ -139,7 +185,7 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
   }));
   const bt = h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'sala-enviar' }, on: { click: ctx.seguro(e => enviar(e)) } }, 'enviar');
   const en = h('div', { doc, class: 'lc-cp-en' }, input, bt);
-  const bloq = h('div', { doc, class: 'lc-cp-bloq' }, '⛔ chat bloqueado pela Riot nesta conta: dá para ler, não dá para enviar');
+  const bloq = h('div', { doc, class: 'lc-cp-bloq' }, '⛔ chat bloqueado pela Riot nesta conta: só leitura, sem envio');
   const ms = h('div', { doc, class: 'lc-cp-ms' });
   const cab = h('div', { doc, class: 'lc-cp-dh', dataset: { a: 'sala-tam' },
     on: { click: ctx.seguro(e => { if (e?.target?.closest?.('button')) return; mudarTam(est.tam === 'recolhido' ? 'normal' : 'recolhido'); }) } });
@@ -157,6 +203,19 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
       h('div', { doc, class: 'lc-cp-tx' }, nome, ' ', l.texto));
   }
 
+  // [aliados][inimigos]: foto de 16 px com a borda da cor do lado; quem saiu fica apagado no mesmo lugar (a faixa não pula)
+  function faixaPresenca(pres) {
+    const dentro = pres.filter(p => p.estado === 'dentro').length;
+    // a foto nasce com title = campeão, que ganharia do title do ícone ("saiu da sala" sumia no hover): tirar o de dentro
+    const foto = p => { const f = fotoCampeao(p.campeaoId, { tam: 16, nome: p.campeao, doc }); f.removeAttribute?.('title'); return f; };
+    const icone = p => h('span', { doc, class: `lc-cp-pres-j ${p.eu ? 'lc-cp-pres-eu' : p.aliado ? 'lc-cp-pres-al' : 'lc-cp-pres-in'}${p.estado === 'saiu' ? ' lc-cp-pres-saiu' : ''}`,
+      title: `${[nomeCompleto(p), p.campeao].filter(Boolean).join(' · ')}: ${p.estado === 'saiu' ? 'saiu da sala' : 'na sala'}` },
+    foto(p));
+    const grupo = (lista, classe) => (lista.length ? h('span', { doc, class: `lc-cp-pres-g ${classe}` }, ...lista.map(icone)) : null);
+    return h('span', { doc, class: 'lc-cp-pres', dataset: { a: 'sala-presenca' }, title: `${dentro} de ${pres.length} na sala` },
+      grupo(pres.filter(p => p.aliado), 'lc-cp-pres-gal'), grupo(pres.filter(p => !p.aliado), 'lc-cp-pres-gin'));
+  }
+
   function pintar() {
     if (!ctx.vivo()) return;
     assinatura = assinar();
@@ -167,9 +226,11 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
     const recolhido = est.tam === 'recolhido';
     const nl = naoLidas();
     cab.setAttribute('title', recolhido ? 'abrir o chat' : 'recolher o chat');
+    // aberta e com o eog: a faixa de quem está na sala toma o lugar do contador (ícone de cada campeão; quem saiu, apagado)
+    const pres = recolhido || !est.sala ? [] : presenca();
     // h() descarta os null; replaceChildren do DOM não (escreveria "null"): filtrar
     cab.replaceChildren(...['💬 ', h('b', { doc }, 'sala do pós-jogo'),
-      est.naSala !== null ? h('span', { doc }, ` · ${est.naSala} na sala`) : null,
+      pres.length ? faixaPresenca(pres) : est.naSala !== null ? h('span', { doc }, ` · ${est.naSala} na sala`) : null,
       recolhido && nl ? h('span', { doc, class: 'lc-cp-un' }, String(nl)) : null,
       recolhido && ult ? h('span', { doc, class: 'lc-cp-ult' }, ...nomeNaSala(ult.puuid ? mapa.get(ult.puuid) : null, nomes()).map(p => h('span', { doc, class: p.classe }, p.texto)), ' ', ult.texto) : null,
       h('span', { doc, class: 'lc-cp-tam' },
@@ -186,7 +247,7 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
       : [h('div', { doc, class: 'lc-cp-cm lc-cp-sis' }, !est.procurou ? 'procurando a sala…' : est.semPartida ? 'esperando saber qual é a partida…'
         : est.sala ? 'ninguém falou ainda' : 'a sala do pós-jogo não está aberta')]));
     input.setAttribute('placeholder', est.mudo ? 'envio bloqueado' : est.sala ? 'mensagem para a sala (Enter envia)' : est.semPartida ? 'sem a partida, sem sala' : 'sem sala');
-    input.setAttribute('title', est.semPartida ? 'ainda não sei qual é a partida: a sala de outra partida não pode receber' : '');
+    input.setAttribute('title', est.semPartida ? 'partida ainda não identificada: a mensagem não vai para a sala de outra partida' : '');
     input.disabled = est.mudo || !est.sala;
     bt.disabled = est.mudo || !est.sala || est.enviando;
     // mensagem nova desce sozinha só se ele já estava no fim (lendo lá em cima, fica onde está)
@@ -223,6 +284,13 @@ export const CSS_SALA = `
 #lc-compacto .lc-cp-nm { font-weight:600; }
 #lc-compacto .lc-cp-nm-al { color:#58b3ff; } #lc-compacto .lc-cp-nm-in { color:#ff6b7f; } #lc-compacto .lc-cp-nm-eu { color:var(--lc-ouro); }
 #lc-compacto .lc-cp-camp { opacity:.72; margin-left:3px; }
+#lc-compacto .lc-cp-pres { display:inline-flex; align-items:center; gap:6px; margin-left:8px; min-width:0; overflow:hidden; }
+#lc-compacto .lc-cp-pres-g { display:inline-flex; gap:2px; }
+#lc-compacto .lc-cp-pres-gin { padding-left:6px; border-left:1px solid rgba(70,55,20,.8); }
+#lc-compacto .lc-cp-pres-j { display:inline-flex; border:1px solid transparent; border-radius:2px; line-height:0; }
+#lc-compacto .lc-cp-pres-j .lc-cp-foto { font-size:7px; }
+#lc-compacto .lc-cp-pres-al { border-color:#58b3ff; } #lc-compacto .lc-cp-pres-in { border-color:#ff6b7f; } #lc-compacto .lc-cp-pres-eu { border-color:var(--lc-ouro); }
+#lc-compacto .lc-cp-pres-saiu { border-color:#3c3c41; opacity:.35; filter:grayscale(1); }
 #lc-compacto .lc-cp-en { height:34px; flex:none; display:flex; align-items:center; gap:6px; padding:0 8px; border-top:1px solid rgba(70,55,20,.6); }
 #lc-compacto .lc-cp-en input { flex:1; min-width:0; height:24px; margin:0; background:var(--lc-bg); border:1px solid var(--lc-linha); color:var(--lc-ouro2);
   padding:0 8px; font:inherit; font-size:12px; user-select:text; }

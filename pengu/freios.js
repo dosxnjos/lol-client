@@ -51,14 +51,14 @@ export function avaliarFreios(fr, { derrotasSeguidas = 0, data }) {
 
 // 44% foi medido depois de exatamente 2 derrotas; com 3+ a amostra é ruído (71%, 7 partidas): cita o 2
 const frase = m => {
-  if (m.tipo === 'madrugada') return `de madrugada teu winrate cai: ${MEDICAO.wrMadrugada}% contra ${MEDICAO.wrDia}% de dia`;
-  if (m.derrotas === null) return 'não sei quantas derrotas seguidas tu tem (o histórico não carregou)';
-  if (m.derrotas === ATUALIZANDO) return 'não sei quantas derrotas seguidas tu tem (o histórico ainda não tem a última partida)';
-  if (m.derrotas === 2) return `2 derrotas seguidas: depois disso teu winrate cai para ${MEDICAO.wrDepoisDe2}%`;
-  return `${m.derrotas} derrotas seguidas: depois de 2 teu winrate já cai para ${MEDICAO.wrDepoisDe2}%`;
+  if (m.tipo === 'madrugada') return `de madrugada o seu winrate cai: ${MEDICAO.wrMadrugada}% contra ${MEDICAO.wrDia}% de dia`;
+  if (m.derrotas === null) return 'sequência de derrotas desconhecida (o histórico não carregou)';
+  if (m.derrotas === ATUALIZANDO) return 'sequência de derrotas desconhecida (o histórico ainda não tem a última partida)';
+  if (m.derrotas === 2) return `2 derrotas seguidas: depois disso o seu winrate cai para ${MEDICAO.wrDepoisDe2}%`;
+  return `${m.derrotas} derrotas seguidas: depois de 2, o seu winrate já cai para ${MEDICAO.wrDepoisDe2}%`;
 };
 // os dois freios de uma vez: uma frase só, um 2º clique confirma os dois
-export const textoFreios = motivos => `${motivos.map(frase).join('; e ')}. buscar mesmo assim?`;
+export const textoFreios = motivos => `${motivos.map(frase).join('; e ')}. Buscar mesmo assim?`;
 
 // dois cliques: o 1º que cai num freio arma a janela; o 2º dentro dela confirma. Fora dela vale como 1º de novo.
 // 2º clique antes de minMs (duplo clique de reflexo) é ignorado: não confirma nem rearma. agora injetável (teste sem

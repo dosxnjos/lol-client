@@ -9,7 +9,7 @@ import regrasMd from './licoes.md?raw';
 import { jogarDeNovo } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
 import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
-import { estilo } from '../compacto/comum.js';
+import { estilo, frase } from '../compacto/comum.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -154,7 +154,7 @@ export function mostrarReabrir() {
   if (!ultimaAberta || !document.body) { esconderReabrir(); return null; }
   const { gameId, fimDePartida, vista } = ultimaAberta;
   const a = analises.get(gameId);
-  const [texto, dica] = a && !a.pronta ? ['⏳ analisando a partida…', 'a análise segue aqui atrás; clica para ver o carregamento']
+  const [texto, dica] = a && !a.pronta ? ['⏳ analisando a partida…', 'a análise segue aqui atrás; clique para ver o carregamento']
     : a?.erro ? ['📊 tentar a análise de novo', `a última tentativa falhou: ${a.erro}`]
     : vista ? ['📊 reabrir análise', 'abre de novo o painel do pós-jogo (mentor, lições, rota)']
       : ['📊 análise pronta', 'abre o painel do pós-jogo (mentor, lições, rota)'];
@@ -192,7 +192,7 @@ function moldura(conteudo) {
 }
 const htmlCarregando = texto => `<div class="lc-carregando"><span class="lc-carregando-texto">${esc(texto)}</span>
   <button class="lc-fechar" title="fechar (Esc): a análise segue e o botão no topo reabre">✕</button>
-  <div class="lc-nota">dá para fechar: a análise segue e o botão no topo reabre.</div></div>`;
+  <div class="lc-nota">pode fechar: a análise segue e o botão no topo reabre.</div></div>`;
 const htmlErro = msg => `<div class="lc-carregando">pós-jogo: ${esc(msg)} <button class="lc-fechar" title="fechar (Esc)">✕</button></div>`;
 
 // abertura automática (D4): enquanto carrega, só o botão do topo; se ele clicou ou digitou no client nesse meio
@@ -311,8 +311,8 @@ async function cicloMentor(p) {
 async function acaoMentor(p, caminho, corpo) {
   const aviso = p.el.querySelector('[data-mentor-aviso]');
   const r = await p.coletor(caminho, { metodo: 'POST', corpo, prazoMs: 8000 });
-  if (aviso) aviso.textContent = r.status === 202 ? '' : r.status === 429 ? 'mentor ocupado com outra chamada: tenta de novo em alguns segundos.'
-    : r.status === 0 ? 'coletor fora do ar.' : `não deu: ${r.dados?.erro || r.status}`;
+  if (aviso) aviso.textContent = r.status === 202 ? '' : r.status === 429 ? 'mentor ocupado com outra pergunta: tente de novo em alguns segundos.'
+    : r.status === 0 ? 'coletor fora do ar.' : `a pergunta não foi enviada: ${r.dados?.erro || r.status}`;
   if (r.status === 202) {
     const m = await p.coletor(`/mentor/${p.r.gameId}`);
     if (m.status === 200 && p.vivo()) { p.mentor = m.dados; pintar(p, ['mentor']); }
@@ -323,7 +323,7 @@ async function acaoMentor(p, caminho, corpo) {
 // "jogar de novo e buscar": só o clique chama (fila-rapida.js jogarDeNovo). Freios (freios.js, os mesmos da fila
 // rápida): com N derrotas seguidas na sessão (pausa < 2 h) ou de madrugada, o 1º clique só pede confirmação e o 2º,
 // em até 8 s, busca. Sem o 2º clique nada acontece.
-const avisarToast = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(msg); } catch { console.log('[lol-client]', msg); } };
+const avisarToast = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(frase(msg)); } catch { console.log('[lol-client]', msg); } };
 async function acaoJogarDeNovo(p, botao) {
   p.confirmacao ||= criarConfirmacao();
   // duplo clique de reflexo (2º clique em menos de 700 ms depois de armar): ignorado, a confirmação segue na tela
@@ -347,7 +347,7 @@ async function acaoJogarDeNovo(p, botao) {
   if (r.status === 'confirmar') {
     botao.classList.add('lc-confirmar');
     botao.textContent = r.texto;
-    botao.title = `clica de novo em até ${JANELA_MS / 1000} s para buscar`;
+    botao.title = `clique de novo em até ${JANELA_MS / 1000} s para buscar`;
     p.timerFreio = setTimeout(() => { botao.classList.remove('lc-confirmar'); botao.textContent = textoOriginal; }, JANELA_MS + 50);
     return;
   }
@@ -489,7 +489,7 @@ export async function analisarUltima() {
   try { hist = await historico(); } catch (e) { console.error('[lol-client] pós-jogo: histórico', e); }
   if (minha !== abertura) return null; // fechou a caixa (✕, Esc, clique fora)
   if (compactoAVista()) { remover(); console.log('[lol-client] pós-jogo: a camada compacta voltou; a análise não abre por baixo dela'); return null; }
-  if (!hist) { moldura(htmlErro('não consegui ler o histórico do client: tenta de novo pelo Ctrl+K')); return null; }
+  if (!hist) { moldura(htmlErro('não foi possível ler o histórico do client: tente de novo pelo Ctrl+K')); return null; }
   const ultima = hist
     .filter(g => g.mapId === 11 && g.gameDuration >= 300 && !FORA_DAS_CONTAS.includes(g.queueId)).sort((a, b) => b.gameCreation - a.gameCreation)[0];
   if (!ultima) { moldura(htmlErro('nenhuma partida de Summoner\'s Rift no histórico')); return null; }

@@ -115,7 +115,12 @@ const CFG = {
 const SKINS = [
   { championId: 154, id: 154000, name: 'Zac', isBase: true, unlocked: true, splashPath: '/lol-game-data/assets/v1/champion-splashes/154/154000.jpg', tilePath: '/t/154000.jpg', childSkins: [] },
   { championId: 154, id: 154001, name: 'Zac Arma Especial', unlocked: false, ownership: { owned: false }, splashPath: '/s/154001.jpg', childSkins: [] },
-  { championId: 154, id: 154002, name: 'Zac Piscina', unlocked: true, splashPath: '/s/154002.jpg', childSkins: [{ id: 154010 }] },
+  // chromas no formato do /help (TeamBuilderDirect-SkinSelectorChildSkin: id, name, shortName, colors, unlocked, ownership, disabled,
+  // chromaPreviewPath, parentSkinId); só a 154010 é dele e liberada
+  { championId: 154, id: 154002, name: 'Zac Piscina', unlocked: true, splashPath: '/s/154002.jpg', childSkins: [
+    { id: 154010, championId: 154, name: 'Zac Piscina (Rubi)', shortName: 'Rubi', colors: ['#D33528', '#7A1B12'], unlocked: true, ownership: { owned: true }, chromaPreviewPath: '/c/154010.png', parentSkinId: 154002 },
+    { id: 154011, championId: 154, name: 'Zac Piscina (Safira)', shortName: 'Safira', colors: ['#2756CE'], unlocked: false, ownership: { owned: false }, parentSkinId: 154002 },
+    { id: 154012, championId: 154, name: 'Zac Piscina (Esmeralda)', shortName: 'Esmeralda', colors: ['#27D15F'], unlocked: true, ownership: { owned: true }, disabled: true, parentSkinId: 154002 }] },
   { championId: 154, id: 154006, name: 'Zac SKT T1', unlocked: false, ownership: { owned: true }, splashPath: '/s/154006.jpg', childSkins: [] },
   { championId: 154, id: 154007, name: 'Zac Desativada', unlocked: true, disabled: true, splashPath: '/s/154007.jpg', childSkins: [] },
   { championId: 58, id: 58001, name: 'Renekton Galáctico', unlocked: true, splashPath: '/s/58001.jpg', childSkins: [] },
@@ -179,7 +184,7 @@ const todasEscritas = [];
 {
   const l40 = lerSessao(S(40));
   caso('leitura: localPlayerCellId 4, meu ban em andamento = banir (ação 4)', l40.me === 4 && l40.modo.tipo === 'banir' && l40.modo.acao?.id === 4, JSON.stringify(l40.modo));
-  caso('leitura: time por ordem de pick, "tu" e aliado 1..4 sem nome', igual(l40.time.map(x => x.rotulo), ['aliado 1', 'aliado 2', 'aliado 3', 'aliado 4', 'tu']) && l40.eu.cellId === 4);
+  caso('leitura: time por ordem de pick, "você" e aliado 1..4 sem nome', igual(l40.time.map(x => x.rotulo), ['aliado 1', 'aliado 2', 'aliado 3', 'aliado 4', 'você']) && l40.eu.cellId === 4);
   const l30 = lerSessao(S(30)), l32 = lerSessao(S(32));
   caso('leitura: troca de ordem (cells 1 e 3) muda a posição do cell entre eventos', l30.time.find(x => x.cellId === 1).pos === 'TOP' && l32.time.find(x => x.cellId === 1).pos === 'UTILITY');
   caso('leitura: hover inimigo (ação em andamento) não aparece; pick completo aparece (ev 18 -> 19)',
@@ -201,7 +206,7 @@ const todasEscritas = [];
     && lerSessao(S(45)).modo.tipo === 'esperar' && lerSessao(S(53)).modo.tipo === 'escolher' && lerSessao(S(53)).eu.hover === 154
     && lerSessao(S(54)).modo.tipo === 'finalizar' && lerSessao(S(58)).modo.tipo === 'finalizar' && lerSessao(S(59)).modo.tipo === 'finalizar');
   caso('leitura: rótulo da fase (planejamento, banimento, tua vez, finalização)',
-    rotuloFase(lerSessao(S(28)))[0] === 'PLANEJAMENTO' && rotuloFase(l40)[0] === 'BANIMENTO' && rotuloFase(lerSessao(S(53)))[0] === 'ESCOLHA · TUA VEZ'
+    rotuloFase(lerSessao(S(28)))[0] === 'PLANEJAMENTO' && rotuloFase(l40)[0] === 'BANIMENTO' && rotuloFase(lerSessao(S(53)))[0] === 'ESCOLHA · SUA VEZ'
     && rotuloFase(lerSessao(S(58)))[0] === 'FINALIZAÇÃO' && rotuloFase(lerSessao(S(47)))[1].includes('aliado 2'));
   caso('leitura: sessão sem myTeam = null', lerSessao({}) === null && lerSessao(null) === null);
   const tr = S(40);
@@ -214,6 +219,13 @@ const todasEscritas = [];
   const sk = skinsDoCampeao(SKINS, 154);
   caso('skins: só as que ele tem (padrão, unlocked, owned), sem desativada nem de outro campeão',
     igual(sk.map(k => k.id), [154000, 154002, 154006]) && skinMarcada(sk, 154010) === 154002);
+  // chromas (pedido de 15/10/2026 ~12:45: "quero poder escolher o chroma quando estiver disponível"); cor como o skin-button da Riot
+  // (rcp-fe-lol-champ-select 16.20: 2 cores = diagonal 135°, 1 cor = sólida)
+  const pisc = sk.find(k => k.id === 154002);
+  caso('chromas: só as que ele tem e liberadas (sem a desativada nem a não comprada), com nome curto e a cor da Riot',
+    igual(pisc?.chromas?.map(c => [c.id, c.nome]), [[154010, 'Rubi']]) && pisc.chromas[0].cor === 'linear-gradient(135deg, #D33528 0%, #D33528 50%, #7A1B12 50%, #7A1B12 100%)'
+    && igual(sk.find(k => k.id === 154000)?.chromas, []), JSON.stringify(pisc?.chromas));
+  caso('chromas: a desativada e a não comprada seguem marcando a skin-mãe (skinMarcada)', skinMarcada(sk, 154011) === 154002 && skinMarcada(sk, 154012) === 154002);
   const cat = new Map(CATALOGO.filter(c => c.id > 0 && c.id < 10000).map(c => [c.id, { id: c.id, nome: c.name, alias: c.alias }]));
   caso('grade: favoritos na frente e busca sem acento/apóstrofo ("ksante")',
     listaGrade(cat, { favoritos: [58, 154] }).slice(0, 2).join() === '58,154' && igual(listaGrade(cat, { busca: 'ksante' }), [897]));
@@ -291,7 +303,8 @@ const todasEscritas = [];
   const t = await montarTela({ inicial: S(28), servicos: { champ: { partidas: () => [], estatisticas: id => ({ geral: id === 58 ? { n: 87, winrate: 48 } : { n: 0 } }) } } });
   const favs = t.todos('button.lc-cp-sel-fav');
   caso('intenção: favoritos Renekton e Zac com o winrate do histórico', favs.length === 2 && /Renekton/.test(favs[0].textContent) && /87 partidas · 48%/.test(favs[0].textContent) && /sem partidas/.test(favs[1].textContent));
-  caso('intenção: sem botão de confirmar (declarar é 1 clique, pedido do Gabriel 14/10/2026)', !t.achar('button[data-a="acao"]') && /1 clique/.test(t.raiz.textContent));
+  caso('intenção: sem botão de confirmar (declarar é 1 clique, pedido do Gabriel 14/10/2026)', !t.achar('button[data-a="acao"]') && /um clique declara/.test(t.raiz.textContent)
+    && /clique num campeão para declarar/.test(t.achar('button[data-a="acao-marcador"]')?.textContent || ''), t.achar('button[data-a="acao-marcador"]')?.textContent);
   favs[1].click(); await tick();
   caso('intenção: clicar no favorito já declara (PATCH da minha ação de pick, completed false, sem travar)',
     igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/actions/18 {"completed":false,"championId":154}']) && t.todos('button.lc-cp-sel-fav')[1].classList.contains('lc-cp-sel-on'), t.escritas().join('; '));
@@ -336,7 +349,7 @@ const todasEscritas = [];
   const t = await montarTela({ inicial: S(53), rotas: { 'PATCH /lol-champ-select/v1/session/actions/18': { status: 500, json: {} } } });
   t.rodarTimers(tela.ARMAR_MS);
   t.achar('button[data-a="acao"]').click(); await tick();
-  caso('escolher: PATCH de travar com 500 vira aviso de erro, sem derrubar a tela', t.avisos.some(([m, e]) => e && /não consegui travar Zac \(500\)/.test(m)) && t.falhas.length === 0 && !t.achar('button[data-a="acao"]').disabled);
+  caso('escolher: PATCH de travar com 500 vira aviso de erro, sem derrubar a tela', t.avisos.some(([m, e]) => e && /não foi possível travar Zac \(500\)/.test(m)) && t.falhas.length === 0 && !t.achar('button[data-a="acao"]').disabled);
 }
 {
   // 204 que não trava (foi o que a LCU fez com o POST .../complete em 14/10/2026): a sessão segue com a ação aberta
@@ -430,7 +443,7 @@ const todasEscritas = [];
   const recebido = S(40); recebido.pickOrderSwaps.find(x => x.cellId === 2).state = 'RECEIVED';
   await t.emitir(recebido);
   const caixa = t.achar('div.lc-cp-sel-receb');
-  caso('trocas: RECEIVED abre a caixa "pedido de troca de ordem" com a ordem dos dois', !!caixa && /troca de ordem/.test(caixa.textContent) && /tu escolhe em 3º, ele em 5º/.test(caixa.textContent), caixa?.textContent);
+  caso('trocas: RECEIVED abre a caixa "pedido de troca de ordem" com a ordem dos dois', !!caixa && /troca de ordem/.test(caixa.textContent) && /você escolhe em 3º, ele em 5º/.test(caixa.textContent), caixa?.textContent);
   caixa.querySelector('button[data-a="aceitar"]').click(); await tick();
   caso('trocas: aceitar = POST pick-order-swaps/5/accept', t.escritas().at(-1) === 'POST /lol-champ-select/v1/session/pick-order-swaps/5/accept');
   t.achar('div.lc-cp-sel-receb').querySelector('button[data-a="recusar"]').click(); await tick();
@@ -456,7 +469,7 @@ const todasEscritas = [];
   s.trades = [{ cellId: 3, id: 7, state: 'RECEIVED' }, { cellId: 0, id: 4, state: 'BUSY' }];
   const t = await montarTela({ inicial: s });
   const caixa = t.achar('div.lc-cp-sel-receb');
-  caso('troca de campeão: caixa "tu fica com Camp420, ele com Zac"', !!caixa && /tu fica com Camp420, ele com Zac/.test(caixa.textContent), caixa?.textContent);
+  caso('troca de campeão: caixa "você fica com Camp420, ele com Zac"', !!caixa && /você fica com Camp420, ele com Zac/.test(caixa.textContent), caixa?.textContent);
   caixa.querySelector('button[data-a="aceitar"]').click(); await tick();
   caso('troca de campeão: aceitar = POST champion-swaps/7/accept', igual(t.escritas(), ['POST /lol-champ-select/v1/session/champion-swaps/7/accept']), t.escritas().join('; '));
   todasEscritas.push(...t.escritas());
@@ -516,8 +529,8 @@ const todasEscritas = [];
   const d3 = S(28);
   d3.positionSwaps.find(x => x.cellId === 0).id = 40;
   await t3.emitir(d3);
-  caso('troca: ⇄ posição recusada por ti e contrato regenerado sem DECLINED: "tu recusou", sem aviso de "sem resposta"',
-    t3.escritas().at(-1) === 'POST /lol-champ-select/v1/session/position-swaps/6/decline' && /tu recusou a troca de posição/.test(linhaDo(t3, 0)?.textContent || '') && semAvisoRuim(t3),
+  caso('troca: ⇄ posição recusada por ti e contrato regenerado sem DECLINED: "você recusou", sem aviso de "sem resposta"',
+    t3.escritas().at(-1) === 'POST /lol-champ-select/v1/session/position-swaps/6/decline' && /você recusou a troca de posição/.test(linhaDo(t3, 0)?.textContent || '') && semAvisoRuim(t3),
     linhaDo(t3, 0)?.textContent);
   todasEscritas.push(...t3.escritas());
   // d) a sequência real inteira (troca entre dois aliados, ninguém pediu nada a mim): nada de aviso nem recado
@@ -544,8 +557,8 @@ const todasEscritas = [];
   atual = S(53); // a vez dele chegou e o evento não veio
   tela._estado().ultimoEvento = Date.now() - 5000;
   reler?.fn(); await tick();
-  caso('socket mudo: com evento recente não relê; 3 s sem evento relê por GET e pinta a vez certa ("TUA VEZ", TRAVAR)',
-    !!reler && comEvento && gets() === g0 + 1 && /TUA VEZ/.test(t.titulo.textContent) && /TRAVAR/.test(t.achar('button[data-a="acao"]')?.textContent || '') && t.falhas.length === 0,
+  caso('socket mudo: com evento recente não relê; 3 s sem evento relê por GET e pinta a vez certa ("SUA VEZ", TRAVAR)',
+    !!reler && comEvento && gets() === g0 + 1 && /SUA VEZ/.test(t.titulo.textContent) && /TRAVAR/.test(t.achar('button[data-a="acao"]')?.textContent || '') && t.falhas.length === 0,
     JSON.stringify({ g0, g: gets(), titulo: t.titulo.textContent }));
   todasEscritas.push(...t.escritas());
 }
@@ -557,8 +570,36 @@ const todasEscritas = [];
   const sks = t.todos('button.lc-cp-sel-sk');
   caso('skin: só as 3 que ele tem, a escolhida (154002) marcada', igual(sks.map(b => String(b.dataset.id)), ['154000', '154002', '154006']) && sks[1].classList.contains('lc-cp-sel-on'));
   caso('skin: miniatura da splash (sem canvas no teste: cai na url do client)', /url\("\/t\/154000\.jpg"\)|url\("\/lol-game-data/.test(sks[0].style.backgroundImage || ''), sks[0].style.backgroundImage);
-  sks[2].click(); await tick();
-  caso('skin: clique = PATCH my-selection {selectedSkinId}', igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/my-selection {"selectedSkinId":154006}']), t.escritas().join('; '));
+  // chromas da skin marcada, em cima das splash arts: [padrão][Rubi]; a padrão (a própria skin) acesa enquanto nenhum chroma está escolhido
+  const crs = () => t.todos('button[data-a="chroma"]');
+  const linhaCr = t.achar('div[data-a="chromas"]');
+  caso('chromas: a skin escolhida (Zac Piscina) mostra a linha de chromas acima das splash arts: padrão + Rubi, padrão acesa',
+    !!linhaCr && igual(crs().map(b => String(b.dataset.id)), ['154002', '154010']) && crs()[0].classList.contains('lc-cp-sel-on')
+    && linhaCr.parentNode === t.achar('div[data-a="skins"]')?.parentNode
+    && linhaCr.parentNode.childNodes.indexOf(linhaCr) < linhaCr.parentNode.childNodes.indexOf(t.achar('div[data-a="skins"]')),
+    crs().map(b => b.getAttribute('title')).join());
+  caso('chromas: bolinha com a cor da Riot e o nome no title', /linear-gradient\(135deg, #D33528/.test(crs()[1]?.style.background || '') && /Rubi/.test(crs()[1]?.getAttribute('title') || ''),
+    crs()[1]?.style.background);
+  caso('chromas: só ler não escreve nada', t.escritas().length === 0, t.escritas().join('; '));
+  crs()[1]?.click(); await tick();
+  caso('chromas: clique = PATCH my-selection {selectedSkinId: id do chroma} (como o requestSetSkin da Riot)',
+    igual(t.escritas(), ['PATCH /lol-champ-select/v1/session/my-selection {"selectedSkinId":154010}']), t.escritas().join('; '));
+  const comChroma = S(58); comChroma.myTeam.find(c => c.cellId === 4).selectedSkinId = 154010;
+  await t.emitir(comChroma);
+  caso('chromas: o client confirmou o Rubi: a bolinha acende e a splash da Piscina segue marcada',
+    crs()[1]?.classList.contains('lc-cp-sel-on') && !crs()[0]?.classList.contains('lc-cp-sel-on')
+    && t.todos('button.lc-cp-sel-sk').find(b => String(b.dataset.id) === '154002')?.classList.contains('lc-cp-sel-on'));
+  crs()[0]?.click(); await tick();
+  caso('chromas: "padrão" volta para a skin sem chroma (PATCH com o id da skin)', t.escritas().at(-1) === 'PATCH /lol-champ-select/v1/session/my-selection {"selectedSkinId":154002}', t.escritas().join('; '));
+  await t.emitir(S(58));
+  const antes = t.escritas().length;
+  const sks2 = t.todos('button.lc-cp-sel-sk');
+  sks2[2].click(); await tick();
+  caso('skin: clique = PATCH my-selection {selectedSkinId}', t.escritas().slice(antes).join() === 'PATCH /lol-champ-select/v1/session/my-selection {"selectedSkinId":154006}', t.escritas().join('; '));
+  const semChroma = S(58); semChroma.myTeam.find(c => c.cellId === 4).selectedSkinId = 154006;
+  await t.emitir(semChroma);
+  caso('chromas: skin sem chroma (SKT T1) = sem a linha', !t.achar('div[data-a="chromas"]'));
+  await t.emitir(S(58));
   t.achar('button[data-a="feitico-abrir"][data-slot="0"]').click(); await tick();
   t.achar('button[data-a="feitico"][data-id="4"]').click(); await tick();
   caso('feitiço: Flash no D com Flash no F = troca de lugar (PATCH spell1 4, spell2 11)', t.escritas().at(-1) === 'PATCH /lol-champ-select/v1/session/my-selection {"spell1Id":4,"spell2Id":11}', t.escritas().join('; '));
@@ -567,7 +608,7 @@ const todasEscritas = [];
   const ren = S(58); ren.myTeam.find(c => c.cellId === 4).championId = 58;
   await t.emitir(ren);
   const pags = t.todos('button[data-a="runa-pagina"]');
-  caso('runa: Renekton com 2 páginas mostra as 2 e fecha o popup escondido do runas.js', pags.length === 2 && fechou.length >= 1 && /escolhe uma/.test(t.achar('div[data-a="runa"]').textContent));
+  caso('runa: Renekton com 2 páginas mostra as 2 e fecha o popup escondido do runas.js', pags.length === 2 && fechou.length >= 1 && /escolha uma/.test(t.achar('div[data-a="runa"]').textContent));
   pags[0].click(); await tick();
   caso('runa: clique = PUT currentpage com o id puro', t.escritas().at(-1) === 'PUT /lol-perks/v1/currentpage 1409260191' && /✓ aplicada/.test(t.achar('div[data-a="runa"]').textContent), t.escritas().join('; '));
   // achado 5: o runas.js sabe da escolha no clique, ANTES do PUT (um ⤢ logo depois não reabre o popup)
@@ -801,8 +842,8 @@ const todasEscritas = [];
     t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
     caso('travar em voo: clique na grade ignorado (só o PATCH de travar saiu)', igual(t.escritas(), [`${P13} {"completed":true,"championId":58}`]), t.escritas().join('; '));
     t.rodarTimers(tela.PRAZO_MS); await tick(6);
-    caso('travar mudo: no PRAZO_MS aviso "não consegui travar Renekton (sem resposta)" com ⤢, botão de volta e nenhuma 2ª escrita',
-      t.avisos.some(([m, e]) => e && /não consegui travar Renekton \(sem resposta\)/.test(m) && /expandir/.test(m)) && !t.achar('button[data-a="acao"]').disabled
+    caso('travar mudo: no PRAZO_MS aviso "não foi possível travar Renekton (sem resposta)" com ⤢, botão de volta e nenhuma 2ª escrita',
+      t.avisos.some(([m, e]) => e && /não foi possível travar Renekton \(sem resposta\)/.test(m) && /expandir/.test(m)) && !t.achar('button[data-a="acao"]').disabled
       && t.escritas().length === 1, JSON.stringify(t.avisos));
   }
   {
@@ -813,8 +854,8 @@ const todasEscritas = [];
     const t = await montarTela({ inicial: s });
     t.rodarTimers(tela.ARMAR_MS);
     const b = t.achar('button[data-a="acao"]');
-    caso('motivo: TRAVAR Renekton cinza com a nota "Renekton foi banido: clica outro"', b.disabled && /TRAVAR Renekton/.test(b.textContent)
-      && /Renekton foi banido: clica outro/.test(t.achar('[data-a="motivo"]')?.textContent || ''), t.achar('[data-a="motivo"]')?.textContent);
+    caso('motivo: TRAVAR Renekton cinza com a nota "Renekton foi banido: escolha outro"', b.disabled && /TRAVAR Renekton/.test(b.textContent)
+      && /Renekton foi banido: escolha outro/.test(t.achar('[data-a="motivo"]')?.textContent || ''), t.achar('[data-a="motivo"]')?.textContent);
   }
   {
     // nº 5: na ESCOLHA, lista de picks vazia segue filtrando (só favoritos, cinza) com a nota e o ⤢
@@ -1118,8 +1159,9 @@ const todasEscritas = [];
     // o caso do relato: lobby TOP/JUNGLE, recebeu JUNGLE
     zerar();
     const t3 = await montarTela({ inicial: comPos(SR(0), 'jungle'), rotas: LOBBY });
-    caso('painel: o caso do relato (pediu TOP/JUNGLE, recebeu SELVA) = "SELVA" e "não é a tua 1ª: tu pediu TOPO"',
-      aberto(t3) && painel(t3).dataset.destaque === 'segunda' && /SELVA/.test(painel(t3).textContent) && /tu pediu TOPO/.test(painel(t3).textContent), painel(t3)?.textContent);
+    caso('painel: o caso do relato (pediu TOP/JUNGLE, recebeu SELVA) = "SELVA" e "fora da 1ª opção (TOPO)", sem repetir "1ª opção"',
+      aberto(t3) && painel(t3).dataset.destaque === 'segunda' && /SELVA/.test(painel(t3).textContent) && /fora da 1ª opção \(TOPO\)/.test(painel(t3).textContent)
+      && (painel(t3).textContent.match(/1ª opção/g) || []).length === 1, painel(t3)?.textContent);
     caso('palavra: na linha "tu" com o mesmo destaque', palavra(t3, 1)?.textContent === 'SELVA' && palavra(t3, 1)?.dataset.destaque === 'segunda', palavra(t3, 1)?.textContent);
     // lobby que não responde: segue sem a comparação (nada quebra)
     zerar();
@@ -1173,7 +1215,7 @@ const todasEscritas = [];
     caso('aviso: linha da posição do selo em amarelo (lc-cp-sel-pouco)', !!linhaDo(t, 1)?.querySelector('[data-a="selo"]')?.classList.contains('lc-cp-sel-pouco'));
     const peq = linhaDo(t, 1)?.querySelector('div.lc-cp-sel-n')?.textContent || '';
     caso('palavra: embaixo do "tu" só o campeão da intenção (sem posição nem "(escolhendo)": cabe ao lado de ATIRADOR e do selo)',
-      peq === 'tuRenekton', peq);
+      peq === 'vocêRenekton', peq);
     // minha vez (ev 14): o aviso segue e o TRAVAR continua ligado (nunca impede)
     await t.emitir(comPos(SR(14), 'jungle'));
     t.rodarTimers(tela.ARMAR_MS);
@@ -1277,8 +1319,8 @@ const todasEscritas = [];
       zerar();
       Object.assign(memo, { pos1: 'TOP', pos2: 'JUNGLE', em: Date.now() });
       const t = await montarTela({ inicial: comPos(SR(0), 'jungle') });
-      caso('revisão: lobby 404 na seleção + preferidas lidas no lobby = "não é a tua 1ª: tu pediu TOPO"',
-        painel(t)?.dataset.destaque === 'segunda' && /tu pediu TOPO/.test(painel(t)?.textContent || ''), painel(t)?.textContent);
+      caso('revisão: lobby 404 na seleção + preferidas lidas no lobby = "fora da 1ª opção (TOPO)"',
+        painel(t)?.dataset.destaque === 'segunda' && /fora da 1ª opção \(TOPO\)/.test(painel(t)?.textContent || ''), painel(t)?.textContent);
       zerar();
       Object.assign(memo, { pos1: 'TOP', pos2: 'JUNGLE', em: Date.now() - 3 * 3600e3 });
       const t2 = await montarTela({ inicial: comPos(SR(0), 'jungle') });
@@ -1286,7 +1328,7 @@ const todasEscritas = [];
       zerar();
       Object.assign(memo, { pos1: 'MIDDLE', pos2: 'BOTTOM', em: Date.now() });
       const t3 = await montarTela({ inicial: comPos(SR(0), 'jungle'), rotas: LOBBY });
-      caso('revisão: o GET da seleção respondeu = vale ele, não a memória do lobby', painel(t3)?.dataset.destaque === 'segunda' && /tu pediu TOPO/.test(painel(t3)?.textContent || ''), painel(t3)?.textContent);
+      caso('revisão: o GET da seleção respondeu = vale ele, não a memória do lobby', painel(t3)?.dataset.destaque === 'segunda' && /fora da 1ª opção \(TOPO\)/.test(painel(t3)?.textContent || ''), painel(t3)?.textContent);
       Object.assign(memo, { pos1: '', pos2: '', em: 0 });
     }
   }

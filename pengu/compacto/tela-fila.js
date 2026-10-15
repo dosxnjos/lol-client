@@ -73,11 +73,11 @@ export function criarTelaFila({ agora = Date.now } = {}) {
 
     s.cancelar = ctx.seguro(async () => {
       if (s.cancelando) return;
-      if (s.g?.lider !== true) { ctx.avisar(s.g?.lider === false ? 'em grupo só o líder cancela' : 'não sei se tu é o líder: cancela pelo client normal', true); return; }
+      if (s.g?.lider !== true) { ctx.avisar(s.g?.lider === false ? 'em grupo só o líder cancela' : 'líder do grupo desconhecido: cancele pelo client normal', true); return; }
       s.cancelando = true; s.pintar();
       try {
         const r = await ctx.lcu('DELETE', '/lol-lobby/v2/lobby/matchmaking/search');
-        if (!r.ok) ctx.avisar(`não consegui cancelar (${r.status}): usa o client normal`, true);
+        if (!r.ok) ctx.avisar(`não foi possível cancelar (${r.status}): use o client normal`, true);
         // ok: a fase volta a Lobby e o roteador troca para a tela 1
       } finally { s.cancelando = false; s.pintar(); }
     });
@@ -139,7 +139,7 @@ function contagemAceite(s) {
 export function textoNotaRc(s) {
   if (s.ctx?.fase === 'ChampSelect') return 'abrindo a seleção…';
   const v = contagemAceite(s);
-  if (v) { s.rcVista = true; return 'responde na contagem do aceite, aqui em cima. Se alguém não aceitar, a busca volta sozinha.'; }
+  if (v) { s.rcVista = true; return 'responda na contagem do aceite, aqui em cima. Se alguém não aceitar, a busca volta sozinha.'; }
   if (s.rcVista) return 'aceitando a partida: esperando os outros jogadores. Se alguém não aceitar, a busca volta sozinha.';
   return 'esperando a contagem do aceite…';
 }
@@ -168,8 +168,8 @@ function pintar(s) {
       const nomeLider = g.membros?.find(m => m.lider && !m.eu)?.nome;
       return h('div', { class: 'lc-cp-nota lc-cp-centro' }, `só o líder${nomeLider ? ` (${nomeLider})` : ''} cancela`);
     }
-    return h('button', { class: 'lc-cp-btn lc-cp-verm lc-cp-cancelar', disabled: true, title: 'não sei se tu é o líder: cancela pelo client normal (⤢ expandir)', dataset: { a: 'cancelar-fila' } },
-      g ? 'cancelar (não sei se tu é o líder)' : 'cancelar (lendo o grupo…)');
+    return h('button', { class: 'lc-cp-btn lc-cp-verm lc-cp-cancelar', disabled: true, title: 'líder do grupo desconhecido: cancele pelo client normal (⤢ expandir)', dataset: { a: 'cancelar-fila' } },
+      g ? 'cancelar (líder desconhecido)' : 'cancelar (lendo o grupo…)');
   };
 
   // ready check: partida achada por fase (a busca pode ainda não ter dito "Found"); o aceite é do #lc-aceite, por cima

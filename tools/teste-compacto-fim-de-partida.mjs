@@ -45,6 +45,7 @@ class El {
   set className(v) { this.classList.s = new Set(String(v).split(/\s+/).filter(Boolean)); }
   setAttribute(k, v) { if (k === 'id') this.id = String(v); else if (k === 'class') this.className = v; else this.attrs.set(k, String(v)); }
   getAttribute(k) { return k === 'id' ? this.id : this.attrs.get(k) ?? null; }
+  removeAttribute(k) { this.attrs.delete(k); }
   get children() { return this.childNodes.filter(n => n.nodeType === 1); }
   append(...ns) {
     for (let n of ns) {
@@ -269,6 +270,39 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   const lr = sala.lerMensagens(real);
   caso('sala: mensagem real da sala (type groupchat) aparece; chat também (como o isChatMessage da Riot); system e celebration não',
     igual(lr.linhas.map(l => [l.id, l.puuid, l.texto]), [['1792044882211:17', 'puuid-2', 'gg'], ['c1', 'puuid-3', 'oi']]), JSON.stringify(lr.linhas));
+  // quem está na sala (pedido de 15/10/2026 ~12:45: "mostrasse um ícone [...] quais campeões estão na sala ainda"): sonda de
+  // 14/10 = left_room de quem nunca teve joined_room (os 10 entram na sala no fim da partida; joined_room só de quem chega
+  // depois dele). Sem evento = dentro; o último evento vale; falar = dentro.
+  const ev = lm.eventos;
+  caso('presença: eventos da sala por puuid (joined/fala = dentro, left = saiu)', ev.get('puuid-1') === 'dentro' && ev.get('puuid-2') === 'dentro'
+    && ev.get('puuid-6') === 'saiu' && !ev.has('puuid-7'), JSON.stringify([...ev]));
+  const pres = sala.presencaNaSala(js, ev);
+  caso('presença: os 10 do eog, quem saiu marcado, quem não deu sinal conta como dentro; eu sempre dentro',
+    pres.length === 10 && pres.filter(p => p.estado === 'saiu').map(p => p.puuid).join() === 'puuid-6' && pres.find(p => p.eu)?.estado === 'dentro'
+    && pres.every(p => p.campeaoId > 0), JSON.stringify(pres.map(p => [p.puuid, p.estado])));
+  const reentrou = sala.lerMensagens([...FX.chat, { id: 'm9', type: 'system', body: 'joined_room', fromPuuid: 'puuid-6' }]);
+  caso('presença: saiu e voltou = dentro (o último evento vale)', sala.presencaNaSala(js, reentrou.eventos).every(p => p.estado === 'dentro'));
+  // participants ([S], rota que o rcp-fe-lol-social lê em toda conversa; LolChatParticipant tem puuid): com casamento vale ela
+  const comPart = sala.presencaNaSala(js, ev, sala.lerParticipantes([{ puuid: 'puuid-1' }, { summonerId: 1002 }, { gameName: 'jogador3', gameTag: 'br1' }, { puuid: 'puuid-eu' }]));
+  caso('presença com participants: quem casa (puuid, summonerId ou Riot ID) está; quem não casa e não falou saiu',
+    igual(comPart.filter(p => p.estado === 'dentro').map(p => p.puuid), ['puuid-eu', 'puuid-1', 'puuid-2', 'puuid-3', 'puuid-5']), JSON.stringify(comPart.map(p => [p.puuid, p.estado])));
+  caso('presença com participants que não casa com ninguém (formato inesperado): ignora e fica nos eventos',
+    igual(sala.presencaNaSala(js, ev, sala.lerParticipantes([{ x: 1 }])).map(p => p.estado), pres.map(p => p.estado))
+    && sala.lerParticipantes('lixo') === null && sala.lerParticipantes({ participants: [{ puuid: 'a' }] }).length === 1);
+  // cor do lado no lado vermelho e sem isPlayerTeam: o aliado é sempre o time dele (a mesma regra do chat expandido)
+  const aliadosDe = eog => ja.jogadoresDoEog(eog).filter(j => j.aliado).map(j => j.puuid).sort().join();
+  const aliadosFx = aliadosDe(FX.eog);
+  const invertido = { ...FX.eog, teams: [...FX.eog.teams].reverse() };
+  const semFlag = { ...FX.eog, teams: FX.eog.teams.map(t => ({ ...t, isPlayerTeam: undefined })) };
+  caso('cor do lado: com o time dele em 2º (lado vermelho) e sem isPlayerTeam, os aliados continuam os 5 do time dele',
+    aliadosFx.split(',').length === 5 && aliadosFx.includes('puuid-eu') && aliadosDe(invertido) === aliadosFx && aliadosDe(semFlag) === aliadosFx,
+    JSON.stringify([aliadosFx, aliadosDe(semFlag)]));
+  caso('presença: bot nunca entra na faixa', sala.presencaNaSala([...js, { puuid: null, bot: true, campeaoId: 1, aliado: false }], ev).length === 10);
+  // nome do campeão com a cor do lado, como no chat expandido (chat-posjogo.js pinta o .message-name inteiro pelo time)
+  const camp = j => sala.nomeNaSala(j, 'ambos')[1]?.classe || '';
+  caso('sala: o "(Campeão)" leva a cor do lado (aliado, inimigo, eu), como o nick',
+    /lc-cp-nm-al/.test(camp(por('puuid-2'))) && /lc-cp-nm-in/.test(camp(por('puuid-5'))) && /lc-cp-nm-eu/.test(camp(eu)) && /lc-cp-camp/.test(camp(eu))
+    && /lc-cp-nm-in/.test(sala.nomeNaSala(por('puuid-5'), 'campeao')[0].classe), camp(por('puuid-2')));
   const jj = por('puuid-2');
   caso('sala: nome pelo modo do chat do pós-jogo (ambos / só campeão / só jogador)',
     igual(sala.nomeNaSala(jj, 'ambos').map(p => p.texto), ['Jogador2', `(${jj.campeao})`]) && igual(sala.nomeNaSala(jj, 'campeao').map(p => p.texto), [jj.campeao])
@@ -447,6 +481,23 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   const linhas = s.qq('.lc-cp-cm');
   caso('sala aberta: foto do campeão e "Jogador (Campeão)" em cada linha, sem "entrou/saiu"', linhas.length === 3 && linhas.every(l => !!l.querySelector('.lc-cp-foto'))
     && linhas[0].textContent.includes('Jogador2') && linhas.every(l => !/joined_room|left_room/.test(l.textContent)), linhas.map(l => l.textContent).join(' | '));
+  const fx = s.q('.lc-cp-pres');
+  const icones = fx ? fx.querySelectorAll('.lc-cp-pres-j') : [];
+  caso('sala aberta: faixa com o ícone dos 10 campeões no cabeçalho; quem saiu apagado (Graves), os outros acesos',
+    icones.length === 10 && icones.filter(i => i.classList.contains('lc-cp-pres-saiu')).length === 1
+    && /Graves/.test(icones.find(i => i.classList.contains('lc-cp-pres-saiu'))?.getAttribute('title') || ''), fx?.textContent);
+  // a foto de dentro nasce com title = campeão; se ficasse, o hover mostraria só o campeão e o "saiu da sala" sumiria
+  caso('sala aberta: no hover do ícone vale o title do ícone ("… saiu da sala"), a foto de dentro não tem title próprio',
+    icones.length === 10 && icones.every(i => !i.querySelector('.lc-cp-foto')?.getAttribute('title'))
+    && /saiu da sala/.test(icones.find(i => i.classList.contains('lc-cp-pres-saiu'))?.getAttribute('title') || ''),
+    icones.map(i => i.querySelector('.lc-cp-foto')?.getAttribute('title')).join());
+  caso('sala aberta: a faixa diz quantos estão (9 de 10) e separa aliados e inimigos',
+    /9 de 10/.test(fx?.getAttribute('title') || '') && fx.querySelector('.lc-cp-pres-gal')?.querySelectorAll('.lc-cp-pres-j').length === 5
+    && fx.querySelectorAll('.lc-cp-pres-in').length === 5 && fx.querySelectorAll('.lc-cp-pres-eu').length === 1, fx?.getAttribute('title'));
+  await s.clicar(s.q('[data-a="sala-recolher"]'));
+  caso('sala recolhida: sem a faixa (só a última linha)', !s.q('.lc-cp-pres'));
+  await s.clicar(s.q('[data-a="sala-aumentar"]'));
+  caso('sala: participants só por GET (nenhuma escrita)', s.falsa.chamadas.some(c => c.metodo === 'GET' && c.url === MSGS.replace('/messages', '/participants')) && s.escritas().length === 0);
   const input = s.q('[data-a="sala-texto"]');
   input.value = 'gg wp';
   input.disparar('keydown', { key: 'Enter', isTrusted: false });
@@ -631,8 +682,8 @@ const MSGS_VELHA = `/lol-chat/v1/conversations/${encodeURIComponent(VELHA)}/mess
   const s = cenario({ rotas: { 'GET /lol-gameflow/v1/gameflow-metadata/player-status': { lastQueuedLobbyStatus: { queueId: 420, isLeader: true, memberSummonerIds: [111], allowedPlayAgain: false } } } });
   await s.honra(); await s.ir('EndOfGame');
   await s.clicar(s.q('[data-a="lobby"]'));
-  caso('ir para o lobby sozinho sem play-again: dismiss-stats com o aviso "fui para o início"', igual(s.escritas(), ['POST /lol-end-of-game/v1/state/dismiss-stats'])
-    && s.avisos.some(([m]) => /fui para o início/.test(m)), s.escritas().join(', '));
+  caso('ir para o lobby sozinho sem play-again: dismiss-stats com o aviso "indo para o início"', igual(s.escritas(), ['POST /lol-end-of-game/v1/state/dismiss-stats'])
+    && s.avisos.some(([m]) => /indo para o início/.test(m)), s.escritas().join(', '));
 }
 
 relatar(casos);

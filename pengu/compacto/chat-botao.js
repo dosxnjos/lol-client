@@ -37,7 +37,7 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
   const bolha = h('i', { doc, class: 'lc-cp-bolha', style: { display: 'none' } });
   let abrindo = false;
   const aoLado = !!ctx.servicos?.lateral?.ligada?.();
-  const bt = h('button', { doc, class: 'lc-cp-ic', title: aoLado ? 'amigos (abre ao lado; clica de novo para fechar)' : 'amigos (abre em janela própria)', dataset: { a: 'chat' }, on: { click: ctx.seguro(async () => {
+  const bt = h('button', { doc, class: 'lc-cp-ic', title: aoLado ? 'amigos (abre ao lado; outro clique fecha)' : 'amigos (abre em janela própria)', dataset: { a: 'chat' }, on: { click: ctx.seguro(async () => {
     if (abrindo) return;
     abrindo = true;
     try {
@@ -45,7 +45,7 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
       if (!ctx.vivo()) return;
       // sem o coletor (ou sem a rota do chat): o chat é o da Riot, no client normal (plano § Riscos)
       ctx.expandir();
-      ctx.avisar('chat em janela própria indisponível (coletor fora): abri o client normal', true);
+      ctx.avisar('chat em janela própria indisponível (coletor fora do ar): abrindo o client normal', true);
     } finally { abrindo = false; }
   }) } }, '💬', bolha);
   if (antesDe && antesDe.parentNode === ctx.extras && typeof ctx.extras.insertBefore === 'function') ctx.extras.insertBefore(bt, antesDe);

@@ -83,7 +83,7 @@ export async function levantar(lcu, cfg) {
     const [itens, bonus] = await Promise.all(['items', 'bonus-items'].map(t =>
       lcu('GET', `/lol-event-hub/v1/events/${id}/reward-track/${t}`).catch(() => null)));
     if (!itens?.ok || !Array.isArray(itens.json) || !bonus?.ok || !Array.isArray(bonus.json)) {
-      out.pulados.push({ fonte: 'evento', id, motivo: `não consegui ler os marcos da trilha (${itens?.status ?? 'erro'}/${bonus?.status ?? 'erro'})` });
+      out.pulados.push({ fonte: 'evento', id, motivo: `não foi possível ler os marcos da trilha (${itens?.status ?? 'erro'}/${bonus?.status ?? 'erro'})` });
       continue;
     }
     const escolha = [...itens.json, ...bonus.json].find(i => (i?.rewardOptions?.length ?? 0) > 1 && !i.rewardOptions.some(o => o?.selected));
@@ -179,7 +179,7 @@ export function criarRecompensas({ cfg, lcu, avisar = () => {}, log = () => {}, 
       const plano = planejarColeta(lev.coletar, { grupos, tentativas, concessoesLidas: lev.concessoesLidas });
       for (const g of plano.travados) {
         log(`recompensas: a 1ª coleta do tipo ${g} respondeu ok mas continua pendente; tipo parado nesta sessão`);
-        avisar(`coleta de recompensas (${g}) não teve efeito: parei esse tipo até reabrir o client`, true);
+        avisar(`coleta de recompensas (${g}) não teve efeito: esse tipo fica pausado até reabrir o client`, true);
       }
       const r = await coletar(lcu, plano.fila, { dormir, log });
       // concessão: id único, a rodada seguinte confere se saiu da lista. Trilha do evento e passe: o id é o do
@@ -192,7 +192,7 @@ export function criarRecompensas({ cfg, lcu, avisar = () => {}, log = () => {}, 
       // falha avisa uma vez por recompensa; depois de MAX_FALHAS ela sai da fila desta sessão
       const falhasNovas = r.falhas.filter(f => !falhasAvisadas.has(f.id));
       for (const f of falhasNovas) falhasAvisadas.add(f.id);
-      if (falhasNovas.length) avisar(`${falhasNovas.length} recompensa(s) não coletada(s): tento de novo depois da próxima partida`, true);
+      if (falhasNovas.length) avisar(`${falhasNovas.length} recompensa(s) não coletada(s): nova tentativa depois da próxima partida`, true);
       return { status: 'feito', coletadas: r.ok, falhas: r.falhas.length, escolher: lev.escolher.length, esperando: plano.esperando, travados: plano.travados.length };
     } finally { rodando = false; }
   }

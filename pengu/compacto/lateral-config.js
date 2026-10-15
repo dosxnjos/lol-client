@@ -41,7 +41,7 @@ export function criarConfigView(amb) {
     try { topo = corpo.scrollTop || 0; } catch { /* sem layout */ }
     const cru = h('div', { doc });
     try { montarPainel(cru, { cfg: amb.cfg, definir: amb.definir }); }
-    catch (e) { corpo.replaceChildren(h('div', { doc, class: 'lc-lt-vazio' }, `não consegui montar as configurações (${e?.message || e})`)); return; }
+    catch (e) { corpo.replaceChildren(h('div', { doc, class: 'lc-lt-vazio' }, `não foi possível montar as configurações (${e?.message || e})`)); return; }
     // o bloco do compacto vem primeiro (é o que ele mexe daqui; protótipo B1)
     const grupos = agrupar([...(cru.children || cru.childNodes || [])]).sort((a, b) => (b.titulo === BLOCO_INICIAL) - (a.titulo === BLOCO_INICIAL));
     const blocos = [];

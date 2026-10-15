@@ -176,8 +176,8 @@ casos.push(
   acao?.perform();
   globalThis.document = docAntes;
   casos.push(['b3: Ctrl+K liga/desliga com a camada à vista: confirmação dentro do #lc-compacto; sem ela, no Toast',
-    { naCamada, toastsCamada, toasts }, v => v.naCamada.length === 1 && /esconder TFT: (ligado|desligado)/.test(v.naCamada[0]) && v.toastsCamada === 0
-      && v.toasts.length === 1 && /esconder TFT/.test(v.toasts[0])]);
+    { naCamada, toastsCamada, toasts }, v => v.naCamada.length === 1 && /esconder TFT: (ligado|desligado)/i.test(v.naCamada[0]) && v.toastsCamada === 0
+      && v.toasts.length === 1 && /esconder TFT/i.test(v.toasts[0])]);
 }
 
 let ok = 0;

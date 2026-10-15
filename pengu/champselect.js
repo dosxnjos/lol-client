@@ -173,7 +173,7 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
       document.body.appendChild(el);
     }
     const t = ultimaLeitura ? textoSelo(estatisticasCampeao([...partidas.values()], alvo.championId, alvo.posicao), nome)
-      : { titulo: nome, linhas: [falhou && !carregando ? 'histórico indisponível agora (tento de novo)' : 'carregando histórico…'] };
+      : { titulo: nome, linhas: [falhou && !carregando ? 'histórico indisponível agora (nova tentativa em seguida)' : 'carregando histórico…'] };
     // matchup, trauma e draft: do coletor, só para o campeão em tela (dado de outro campeão não aparece)
     if (coletor && (coach.campeao !== alvo.championId || Date.now() - coach.em > 3000)) lerCoach(alvo.championId);
     const extra = [];

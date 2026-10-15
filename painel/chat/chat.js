@@ -106,10 +106,10 @@
       if (acao === 'minimizar' || acao === 'fechar') return janela(acao);
       if (acao === 'offline') { offAberto = !offAberto; return pintar(); }
       if (acao === 'convidar') {
-        if (el.classList.contains('off')) return avisar(el.dataset.motivo || 'não dá para convidar agora', true);
+        if (el.classList.contains('off')) return avisar(el.dataset.motivo || 'convite indisponível agora', true);
         el.classList.add('off');
         const r = await pedir(`/chat/convidar/${el.dataset.k}`, {});
-        if (r.j && r.j.ok) avisar('convite enviado: quando ele aceitar, aparece no teu grupo');
+        if (r.j && r.j.ok) avisar('convite enviado: quando ele aceitar, aparece no seu grupo');
         else avisar(`convite não saiu: ${(r.j && r.j.motivo) || 'coletor fora do ar'}`, true);
         return atualizar();
       }

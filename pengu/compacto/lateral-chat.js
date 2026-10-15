@@ -77,9 +77,9 @@ export const pidDe = f => String(f?.pid || f?.id || '');
 
 // lobby (GET /lol-lobby/v2/lobby) -> {tem, pode, motivo, membros:Set}: convidar só no lobby, como líder (ou convite liberado)
 export function lobbyParaConvite(r) {
-  if (!r || r.status === 0 || (r.ok === false && r.status !== 404)) return { tem: null, pode: false, motivo: 'não consegui ler o lobby', membros: new Set() };
+  if (!r || r.status === 0 || (r.ok === false && r.status !== 404)) return { tem: null, pode: false, motivo: 'não foi possível ler o lobby', membros: new Set() };
   const lob = r.ok ? r.json : null;
-  if (!lob || typeof lob !== 'object') return { tem: false, pode: false, motivo: 'abre o lobby antes (escolhe a fila no compacto)', membros: new Set() };
+  if (!lob || typeof lob !== 'object') return { tem: false, pode: false, motivo: 'abra o lobby antes (escolha a fila no compacto)', membros: new Set() };
   const eu = lob.localMember || {};
   const membros = new Set();
   for (const m of lob.members || []) for (const c of ['puuid', 'summonerId']) if (m?.[c]) membros.add(String(m[c]));
@@ -91,7 +91,7 @@ export function lobbyParaConvite(r) {
 export function verAmigos({ amigos = [], conversas = [], lobby = null, convidados = new Map(), abertas = new Set(), agoraMs = Date.now() } = {}) {
   const porPid = new Map();
   for (const c of conversas) if (ehConversaDireta(c)) porPid.set(String(c.pid || c.id || '').toLowerCase(), c);
-  const lob = lobby || { tem: false, pode: false, motivo: 'abre o lobby antes', membros: new Set() };
+  const lob = lobby || { tem: false, pode: false, motivo: 'abra o lobby antes', membros: new Set() };
   const online = [], offline = [];
   for (const f of Array.isArray(amigos) ? amigos : []) {
     if (!f || typeof f !== 'object') continue;
@@ -111,7 +111,7 @@ export function verAmigos({ amigos = [], conversas = [], lobby = null, convidado
     if (noGrupo || st.ocupado) item.convidar = { mostra: false };
     else if (conv0 !== undefined && agoraMs - conv0 < CONVITE_VALE_MS) item.convidar = { mostra: true, ok: false, rotulo: 'convidado', motivo: 'convite enviado' };
     else if (!item.summonerId) item.convidar = { mostra: true, ok: false, rotulo: 'convidar', motivo: 'sem o id do amigo para convidar' };
-    else item.convidar = { mostra: true, ok: !!lob.pode, rotulo: 'convidar', motivo: lob.motivo || 'convidar para o teu grupo' };
+    else item.convidar = { mostra: true, ok: !!lob.pode, rotulo: 'convidar', motivo: lob.motivo || 'convidar para o seu grupo' };
     online.push(item);
   }
   const cmp = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
@@ -230,7 +230,7 @@ export function criarListaAmigos(amb) {
     sub.textContent = `${d.online.length} online de ${d.online.length + d.offline.length}`;
     const casa = a => !f || a.nome.toLocaleLowerCase('pt-BR').includes(f);
     const filhos = [];
-    if (time) filhos.push(h('button', { doc, class: 'lc-lt-sala', dataset: { a: 'lt-sala-time' }, title: 'chat do teu time na seleção (só campeão e posição)',
+    if (time) filhos.push(h('button', { doc, class: 'lc-lt-sala', dataset: { a: 'lt-sala-time' }, title: 'chat do seu time na seleção (só campeão e posição)',
       on: { click: amb.seguro(e => amb.aoTime?.(e)) } }, '🗨 sala do time', time.naoLidas ? h('span', { doc, class: 'lc-lt-un' }, String(time.naoLidas)) : null));
     if (d.pedidos > 0) filhos.push(h('button', { doc, class: 'lc-lt-pedidos', dataset: { a: 'lt-pedidos' }, title: 'aceitar ou recusar é no client normal',
       on: { click: amb.seguro(e => amb.aoPedidos?.(e)) } }, `${d.pedidos} ${d.pedidos === 1 ? 'pedido' : 'pedidos'} de amizade`, h('span', { doc }, 'abrir ⤢')));
@@ -258,7 +258,7 @@ export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)',
   const ms = h('div', { doc, class: 'lc-lt-ms', dataset: { a: 'lt-msgs' } });
   const input = h('input', { doc, class: 'lc-lt-in', maxlength: String(TEXTO_MAX), autocomplete: 'off', dataset: { a: 'lt-texto' }, placeholder });
   const bt = h('button', { doc, class: 'lc-cp-btn lc-cp-prim lc-lt-env', dataset: { a: 'lt-enviar' } }, 'enviar');
-  const bloq = h('div', { doc, class: 'lc-lt-bloq' }, '⛔ chat bloqueado pela Riot nesta conta: dá para ler, não dá para enviar');
+  const bloq = h('div', { doc, class: 'lc-lt-bloq' }, '⛔ chat bloqueado pela Riot nesta conta: só leitura, sem envio');
   const en = h('div', { doc, class: 'lc-lt-en' }, input, bt);
   const el = h('div', { doc, class: 'lc-lt-conversa' }, ms, en);
   const enviar = async e => {
@@ -306,7 +306,7 @@ export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)',
 // linha da sala do time: foto do campeão + posição (nunca nome)
 export function linhaSalaTime(l, doc) {
   const q = l.quem;
-  const rot = !q ? 'aliado' : q.eu ? 'tu' : POS_PT[q.posicao] || 'aliado';
+  const rot = !q ? 'aliado' : q.eu ? 'você' : POS_PT[q.posicao] || 'aliado';
   return h('div', { doc, class: 'lc-lt-cm' + (q?.eu ? ' lc-lt-eu' : '') }, fotoCampeao(q?.campeao, { tam: 20, doc }),
     h('div', { doc, class: 'lc-lt-tx' }, h('b', { doc }, rot), ' ', l.texto));
 }

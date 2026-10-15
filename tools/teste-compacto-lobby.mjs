@@ -340,7 +340,7 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const s = cenario({ cfgFila: { freioTilt: 2 }, servicos: { fila: { derrotasSeguidas: async () => null } } });
   await s.iniciar();
   await s.clicar('[data-a="jogar"]');
-  caso('freio: sequência desconhecida (histórico não leu) pede confirmação', s.buscas() === 0 && s.q('[data-a="freio"]')?.textContent.includes('não sei quantas'));
+  caso('freio: sequência desconhecida (histórico não leu) pede confirmação', s.buscas() === 0 && s.q('[data-a="freio"]')?.textContent.includes('sequência de derrotas desconhecida'));
 }
 {
   // penalidade (dodge): JOGAR apagado com motivo e prazo; nem clique forçado busca
@@ -496,7 +496,7 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const s = cenario({ rotas: { 'GET /lol-lobby/v2/lobby': { status: 500, json: { message: 'x' } } } });
   await s.iniciar();
   const bt = s.q('[data-a="jogar"]');
-  caso('lobby ilegível: JOGAR cinza com motivo, nada busca', bt?.disabled && bt.textContent.includes('não li o lobby') && s.efetivo() === 'compacto');
+  caso('lobby ilegível: JOGAR cinza com motivo, nada busca', bt?.disabled && bt.textContent.includes('não foi possível ler o lobby') && s.efetivo() === 'compacto');
   await s.evento('/lol-lobby/v2/lobby', 5);
   await s.evento('/lol-lobby/v2/received-invitations', { estranho: true });
   caso('evento torto não derruba a tela', s.efetivo() === 'compacto' && s.rot.estado().tela === 'lobby');
@@ -557,7 +557,7 @@ const buscando = (over = {}) => ({ searchState: 'Searching', timeInQueue: 41, es
   const s = cenario({ fase: 'Matchmaking', rotas: { 'GET /lol-lobby/v2/lobby': { status: 500, json: null }, 'GET /lol-matchmaking/v1/search': buscando() } });
   await s.iniciar();
   const bt = s.q('[data-a="cancelar-fila"]');
-  caso('fila: liderança desconhecida = cancelar cinza com motivo', bt?.disabled && bt.textContent.includes('não sei se tu é o líder'));
+  caso('fila: liderança desconhecida = cancelar cinza com motivo', bt?.disabled && bt.textContent.includes('líder desconhecido'));
   await s.clicar('[data-a="cancelar-fila"]', true);
   caso('fila: cinza forçado não escreve', s.escritas().length === 0);
 }
@@ -619,8 +619,8 @@ const buscando = (over = {}) => ({ searchState: 'Searching', timeInQueue: 41, es
   const comContagem = nota();
   cont.remove();
   s.rel.avancar(1000); await tick();
-  caso('ready check: nota "esperando a contagem" → "responde na contagem" → depois do aceite (contagem sumiu) "esperando os outros"',
-    /esperando a contagem/.test(semContagemAinda) && /responde na contagem/.test(comContagem) && /esperando os outros/.test(nota()),
+  caso('ready check: nota "esperando a contagem" → "responda na contagem" → depois do aceite (contagem sumiu) "esperando os outros"',
+    /esperando a contagem/.test(semContagemAinda) && /responda na contagem/.test(comContagem) && /esperando os outros/.test(nota()),
     JSON.stringify([semContagemAinda, comContagem, nota()]));
   await s.ir('Matchmaking');
   await s.evento('/lol-matchmaking/v1/search', buscando({ timeInQueue: 3 }));

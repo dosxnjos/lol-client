@@ -168,10 +168,10 @@ export function sequenciaHoje(lista) {
 // (número, null ou ATUALIZANDO); hoje: resumoHoje; data: Date local.
 export function dicaLocal({ seq, hoje, data }) {
   const M = MEDICAO;
-  if (typeof seq === 'number' && seq >= 2) return `${seq} derrotas seguidas: depois de 2 teu winrate cai para ${M.wrDepoisDe2}% (${M.partidas} partidas, ${M.data}).`;
-  if (data && ehMadrugada(data)) return `de madrugada teu winrate cai: ${M.wrMadrugada}% contra ${M.wrDia}% de dia (${M.partidas} partidas).`;
+  if (typeof seq === 'number' && seq >= 2) return `${seq} derrotas seguidas: depois de 2, o seu winrate cai para ${M.wrDepoisDe2}% (${M.partidas} partidas, ${M.data}).`;
+  if (data && ehMadrugada(data)) return `de madrugada o seu winrate cai: ${M.wrMadrugada}% contra ${M.wrDia}% de dia (${M.partidas} partidas).`;
   const extra = hoje && hoje.d >= 2 && typeof seq === 'number' && seq < 2 ? ` as ${hoje.d} derrotas de hoje não foram seguidas.` : '';
-  return `de dia teu winrate é ${M.wrDia}%, contra ${M.wrMadrugada}% de madrugada (${M.partidas} partidas, ${M.data}).${extra}`;
+  return `de dia o seu winrate é ${M.wrDia}%, contra ${M.wrMadrugada}% de madrugada (${M.partidas} partidas, ${M.data}).${extra}`;
 }
 
 // não lidas do chat (só conversas 1:1; salas do lobby/seleção ficam de fora), abrir a lista de amigos e o 💬: moram em
@@ -204,18 +204,18 @@ export const filaDeFora = g => !!(g?.existe && !g.grupo && !g.custom && Number(g
 // o que o JOGAR faz agora -> {pode: false, motivo, rotulo?} | {pode: true, modo: 'solo'|'grupo'|'aram'}
 // filaEscolhida: ele clicou numa fila desta tela (só então o JOGAR troca um lobby de outra fila)
 export function planoJogar(g, fila, { filaEscolhida = false } = {}) {
-  if (!g?.lido) return { pode: false, motivo: g?.erro ? `não li o lobby (${g.erro}): busca pelo client normal` : 'lendo o lobby…' };
+  if (!g?.lido) return { pode: false, motivo: g?.erro ? `não foi possível ler o lobby (${g.erro}): busque pelo client normal` : 'lendo o lobby…' };
   if (g.custom) return { pode: false, motivo: 'lobby personalizado: é pelo client normal' };
   if (g.restricao) return { pode: false, motivo: g.restricao };
   if (g.existe && g.grupo) {
     if (g.lider === false) return { pode: false, motivo: 'em grupo quem busca é o líder', rotulo: 'O LÍDER BUSCA' };
-    if (g.lider !== true) return { pode: false, motivo: 'não sei quem é o líder do grupo: busca pelo client normal' };
-    if (!ORDEM_FILAS.includes(g.fila)) return { pode: false, motivo: `o grupo está na fila ${g.fila ?? 'desconhecida'}: busca pelo client normal` };
+    if (g.lider !== true) return { pode: false, motivo: 'líder do grupo desconhecido: busque pelo client normal' };
+    if (!ORDEM_FILAS.includes(g.fila)) return { pode: false, motivo: `o grupo está na fila ${g.fila ?? 'desconhecida'}: busque pelo client normal` };
     return { pode: true, modo: 'grupo' };
   }
   if (filaDeFora(g) && !filaEscolhida)
-    return { pode: false, motivo: `teu lobby é de ${nomeFila(g.fila)}: escolhe a fila acima para trocar, ou busca pelo client normal` };
-  if (!ORDEM_FILAS.includes(fila)) return { pode: false, motivo: 'escolhe uma fila' };
+    return { pode: false, motivo: `o lobby é de ${nomeFila(g.fila)}: escolha a fila acima para trocar ou busque pelo client normal` };
+  if (!ORDEM_FILAS.includes(fila)) return { pode: false, motivo: 'escolha uma fila' };
   return { pode: true, modo: fila === 450 ? 'aram' : 'solo' };
 }
 
@@ -261,7 +261,7 @@ export function cabecalho(ctx, { agora = Date.now } = {}) {
     if (rk.ok) cache.ranque = ranqueSolo(rk.json);
     if (s.ok || rk.ok) cache.emCab = agora();
     if (!ctx.vivo()) return;
-    nome.textContent = cache.nome || 'tu';
+    nome.textContent = cache.nome || 'você';
     sub.textContent = cache.ranque?.texto || '';
     caixaAv.replaceChildren(avatar(cache.icone, cache.nome, 30));
   };
@@ -338,7 +338,7 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
         if (!s.expandiu) {
           s.expandiu = true;
           ctx.expandir();
-          ctx.avisar(g.custom ? 'lobby personalizado: abri o client normal' : `grupo na fila ${g.fila ?? 'desconhecida'}: abri o client normal`);
+          ctx.avisar(g.custom ? 'lobby personalizado: abrindo o client normal' : `grupo na fila ${g.fila ?? 'desconhecida'}: abrindo o client normal`);
         }
         return;
       }
@@ -436,7 +436,7 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
         if (!acao || !pj) return;
         const doc = s.raiz?.ownerDocument || s.raiz?.doc || globalThis.document;
         ctx.expandir();
-        if (doc?.documentElement?.classList?.contains?.('lc-modo-compacto')) { ctx.avisar('não consegui sair do modo compacto: usa ⤢ expandir', true); return; }
+        if (doc?.documentElement?.classList?.contains?.('lc-modo-compacto')) { ctx.avisar('não foi possível sair do modo compacto: use ⤢ expandir', true); return; }
         const r = acao === 'abrir' && an?.gameId ? pj.abrirPainel?.(an.gameId, {}) : pj.analisarUltima?.();
         Promise.resolve(r).catch(e => console.error('[lol-client] compacto: última partida', e));
       }),
@@ -445,7 +445,7 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
         s.ocupado = true; pintarSeguro();
         try {
           const r = await ctx.lcu('DELETE', '/lol-lobby/v2/lobby');
-          if (!r.ok && r.status !== 404) ctx.avisar(`não consegui sair do grupo (${r.status})`, true);
+          if (!r.ok && r.status !== 404) ctx.avisar(`não foi possível sair do grupo (${r.status})`, true);
         } finally { s.ocupado = false; pintarSeguro(); }
       }),
     };
@@ -498,7 +498,7 @@ async function jogar(s, ctx, { agora, relogio }) {
 export async function buscarDireto(ctx, modo, fr, { confirmado = false, seq, relogio = () => new Date(), agora = Date.now }) {
   const lcu = ctx.lcu;
   const fase = (await lcu('GET', '/lol-gameflow/v1/gameflow-phase')).json;
-  if (typeof fase !== 'string') throw new Error('não consegui ler a fase do client');
+  if (typeof fase !== 'string') throw new Error('não foi possível ler a fase do client');
   if (!FASES_LIVRES.includes(fase)) throw new Recusa(fase === 'Matchmaking' ? 'já está na fila' : `jogar indisponível agora (${fase})`);
   if (!confirmado) {
     const tilt = (Number(fr.freioTilt) || 0) > 0;
@@ -511,16 +511,16 @@ export async function buscarDireto(ctx, modo, fr, { confirmado = false, seq, rel
   if (!lb.ok && lb.status !== 404) throw new Error(`ler lobby: ${lb.status}`);
   const g = estadoGrupo(lb);
   if (modo === 'grupo') {
-    if (!g.existe || !g.grupo) throw new Recusa('o grupo mudou: confere e clica de novo');
+    if (!g.existe || !g.grupo) throw new Recusa('o grupo mudou: confira e clique de novo');
     if (g.lider !== true) throw new Recusa('em grupo quem busca é o líder');
-    if (g.custom || !ORDEM_FILAS.includes(g.fila)) throw new Recusa('fila do grupo fora do compacto: busca pelo client normal');
+    if (g.custom || !ORDEM_FILAS.includes(g.fila)) throw new Recusa('fila do grupo fora do compacto: busque pelo client normal');
     if (FILAS_COM_POSICAO.includes(g.fila)) {
       if (fr.pos1 === fr.pos2) throw new Recusa(`1ª e 2ª posição iguais (${fr.pos1})`);
       const p = await lcu('PUT', '/lol-lobby/v2/lobby/members/localMember/position-preferences', { firstPreference: fr.pos1, secondPreference: fr.pos2 });
       if (!p.ok) throw new Error(`posições: ${p.status} ${p.json?.message ?? ''}`);
     }
   } else if (modo === 'aram') {
-    if (g.grupo) throw new Recusa('entrou gente no grupo: confere e clica de novo');
+    if (g.grupo) throw new Recusa('alguém entrou no grupo: confira e clique de novo');
     if (!g.existe || g.fila !== 450) {
       const c = await lcu('POST', '/lol-lobby/v2/lobby', { queueId: 450 });
       if (!c.ok) throw new Error(`criar lobby do ARAM: ${c.status} ${c.json?.message ?? ''}`);
@@ -556,7 +556,7 @@ async function abrirConvidar(s, ctx) {
   const r = await ctx.lcu('GET', '/lol-chat/v1/friends');
   if (!ctx.vivo() || !s.amigosAbertos) return;
   s.amigos = r.ok ? amigosParaConvidar(r.json) : [];
-  s.amigosErro = r.ok ? '' : `não li os amigos (${r.status})`;
+  s.amigosErro = r.ok ? '' : `não foi possível ler os amigos (${r.status})`;
   s.pintar();
 }
 
@@ -569,7 +569,7 @@ async function convidarAmigo(s, ctx, a) {
   try {
     if (!s.g.existe) {
       const c = await ctx.lcu('POST', '/lol-lobby/v2/lobby', { queueId: s.fila });
-      if (!c.ok) { ctx.avisar(`não consegui montar o lobby (${c.status})`, true); return; }
+      if (!c.ok) { ctx.avisar(`não foi possível montar o lobby (${c.status})`, true); return; }
     }
     const inv = { toSummonerId: a.summonerId ?? undefined, toPuuid: a.puuid || undefined };
     const r = await ctx.lcu('POST', '/lol-lobby/v2/lobby/invitations', [inv]);
@@ -617,9 +617,9 @@ function pintar(s, cab) {
   // grupo
   filhos.push(h('div', { class: 'lc-cp-rot' }, 'grupo'));
   const mbs = [];
-  if (!g.existe || !g.membros.length) mbs.push(h('span', { class: 'lc-cp-mb' }, avatar(cache.icone, cache.nome, 18), 'tu'));
+  if (!g.existe || !g.membros.length) mbs.push(h('span', { class: 'lc-cp-mb' }, avatar(cache.icone, cache.nome, 18), 'você'));
   else for (const m of [...g.membros].sort((x, y) => (y.lider ? 1 : 0) - (x.lider ? 1 : 0))) {
-    const nome = m.eu ? 'tu' : (m.nome || cache.nomes.get(String(m.summonerId)) || 'amigo');
+    const nome = m.eu ? 'você' : (m.nome || cache.nomes.get(String(m.summonerId)) || 'amigo');
     if (!m.eu && !m.nome && m.summonerId && !cache.nomes.has(String(m.summonerId))) resolverNome(s, m.summonerId);
     mbs.push(h('span', { class: 'lc-cp-mb' }, avatar(m.icone, nome, 18), nome, m.lider && g.grupo ? h('small', {}, 'líder') : null));
   }
@@ -639,18 +639,18 @@ function pintar(s, cab) {
   // posições
   filhos.push(h('div', { class: 'lc-cp-rot' }, 'posições'));
   if (comPos) filhos.push(h('div', { class: 'lc-cp-posicoes' },
-    h('button', { title: 'clica para trocar', disabled: s.ocupado, dataset: { a: 'pos', v: '1' }, on: { click: () => a.pos?.(1) } }, '1ª', h('b', {}, NOME_POS[s.pos1] || s.pos1)),
-    h('button', { title: 'clica para trocar', disabled: s.ocupado, dataset: { a: 'pos', v: '2' }, on: { click: () => a.pos?.(2) } }, '2ª', h('b', {}, NOME_POS[s.pos2] || s.pos2))));
+    h('button', { title: 'clique para trocar', disabled: s.ocupado, dataset: { a: 'pos', v: '1' }, on: { click: () => a.pos?.(1) } }, '1ª', h('b', {}, NOME_POS[s.pos1] || s.pos1)),
+    h('button', { title: 'clique para trocar', disabled: s.ocupado, dataset: { a: 'pos', v: '2' }, on: { click: () => a.pos?.(2) } }, '2ª', h('b', {}, NOME_POS[s.pos2] || s.pos2))));
   else filhos.push(h('div', { class: 'lc-cp-nota' }, filaLobby === 450 ? 'ARAM não tem posição' : 'esta fila não tem posição'));
 
   // JOGAR
   const plano = planoJogar(g, s.fila, { filaEscolhida: !!s.filaEscolhida });
   const armado = s.confirmacao.armada() && !!s.textoFreio;
   if (g.restricao) {
-    filhos.push(h('div', { class: 'lc-cp-pena' }, '⛔ ', h('b', {}, 'não dá para buscar agora.'), h('br'), g.restricao));
-    filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, dataset: { a: 'jogar' } }, 'JOGAR', h('small', {}, 'volta quando liberar; buscar continua sendo clique teu')));
+    filhos.push(h('div', { class: 'lc-cp-pena' }, '⛔ ', h('b', {}, 'busca indisponível agora.'), h('br'), g.restricao));
+    filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, dataset: { a: 'jogar' } }, 'JOGAR', h('small', {}, 'volta quando liberar; a busca só começa com o seu clique')));
   } else if (membro) {
-    filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, dataset: { a: 'jogar' } }, 'O LÍDER BUSCA', h('small', {}, `${f.n} · tu escolhe as tuas posições`)));
+    filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, dataset: { a: 'jogar' } }, 'O LÍDER BUSCA', h('small', {}, `${f.n} · escolha as suas posições`)));
   } else if (!plano.pode) {
     filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, title: plano.motivo, dataset: { a: 'jogar' } }, plano.rotulo || 'JOGAR', h('small', {}, plano.motivo)));
   } else {
@@ -697,7 +697,7 @@ function listaAmigos(s) {
         const ocupado = s.convidando.has(String(am.summonerId ?? am.puuid));
         return h('div', { class: 'lc-cp-amigo' + (am.livre ? '' : ' lc-cp-apagado') },
           h('span', { class: 'lc-cp-nm' }, am.nome, h('small', {}, am.status)),
-          h('button', { class: 'lc-cp-link', disabled: ocupado || !am.livre, title: am.livre ? 'convidar para o teu grupo' : 'ocupado agora',
+          h('button', { class: 'lc-cp-link', disabled: ocupado || !am.livre, title: am.livre ? 'convidar para o seu grupo' : 'ocupado agora',
             dataset: { a: 'convidar-amigo' }, on: { click: () => a.convidarAmigo?.(am) } }, ocupado ? '…' : 'convidar'));
       });
   return h('div', { class: 'lc-cp-amigos', dataset: { a: 'amigos' } },

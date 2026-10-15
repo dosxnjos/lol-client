@@ -344,11 +344,11 @@ const J = x => JSON.stringify(x);
   const s = await pronto('Lobby');
   const ctx = s.telas.lobby.ctx;
   ctx.expandir();
-  ctx.avisar('lobby personalizado: abri o client normal');   // o tela-lobby avisa logo DEPOIS de expandir
+  ctx.avisar('lobby personalizado: abrindo o client normal');   // o tela-lobby avisa logo DEPOIS de expandir
   await s.passar();
   const e = s.inicio()[0];
   caso('tela sozinha (sem clique dele): origem tela-sozinha, porEle false, gatilho "tela lobby", aviso só com vocabulário',
-    e && e.origem === 'tela-sozinha' && e.porEle === false && e.gatilho === 'tela lobby' && e.aviso === 'lobby personalizado abri o client normal', J(e));
+    e && e.origem === 'tela-sozinha' && e.porEle === false && e.gatilho === 'tela lobby' && e.aviso === 'lobby personalizado abrindo o client normal', J(e));
 
   const s2 = await pronto('Lobby', { comGesto: GESTO_MS - 200 });
   s2.telas.lobby.ctx.avisar('Fulaninho#BR1: chat indisponível');

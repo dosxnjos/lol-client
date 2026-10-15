@@ -103,8 +103,11 @@ export function estilo(id, css, doc = globalThis.document) {
 // aviso curto: dentro da camada compacta quando ela está à vista (o Toast do client pode ficar embaixo dela);
 // senão o Toast do Pengu; sem nenhum dos dois, console. Na camada ele fica logo abaixo do topo e não pega clique
 // (pointer-events:none): embaixo moram TRAVAR/BANIR e JOGAR, e o aviso de 4,5 s não pode tapar o botão da vez.
+// frase de aviso começa com maiúscula (docs/TEXTOS-DA-INTERFACE.md): a 1ª letra depois de símbolo/emoji inicial ("⛔ chat…")
+export const frase = msg => String(msg ?? '').replace(/^([^\p{L}\p{N}]*)(\p{Ll})/u, (_, a, l) => a + l.toLocaleUpperCase('pt-BR'));
+
 export function avisar(msg, erro = false, doc = globalThis.document) {
-  const texto = String(msg ?? '');
+  const texto = frase(msg);
   try {
     const camada = doc?.getElementById?.('lc-compacto');
     if (camada) {

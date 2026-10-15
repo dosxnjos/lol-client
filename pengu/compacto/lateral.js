@@ -109,7 +109,7 @@ export function criarLateral({
     if (assinatura === assinaturaPainel && painelAbas.children.length === (e.abas.length > 1 ? e.abas.length : 0)) { trocar(painelCorpo, [corpo]); return; }
     assinaturaPainel = assinatura;
     painelCab.replaceChildren(h('b', { doc }, a.tipo === 'conversa' ? a.nome : TITULO[a.tipo]),
-      h('small', { doc }, a.tipo === 'conversa' ? (a.txt || 'conversa') : a.tipo === 'coach' ? 'selo completo · troca com o teu hover' : 'só campeão e posição de quem fala'));
+      h('small', { doc }, a.tipo === 'conversa' ? (a.txt || 'conversa') : a.tipo === 'coach' ? 'selo completo · acompanha o seu hover' : 'só campeão e posição de quem fala'));
     painelAbas.replaceChildren(...(e.abas.length > 1 ? e.abas.map(x => h('button', { doc, class: 'lc-lt-aba' + (x.k === a.k ? ' lc-lt-on' : ''), dataset: { a: 'lt-aba', k: x.k },
       on: { click: seguro(ev => { if (ev?.target?.closest?.('[data-a="lt-fechar-x"]')) return; e.ativa = x.k; render(); }) } },
     h('span', { doc }, x.tipo === 'conversa' ? x.nome : x.tipo === 'coach' ? '📊 coach' : '🗨 time'),
@@ -163,8 +163,8 @@ export function criarLateral({
     let lay = layout(e, { util: u, col: col() });
     if (lay.cabe) return true;
     // conversas.clear(): reabrir o mesmo amigo depois cria a conversa de novo (antes ficava a view velha, presa à aba velha)
-    if (lado === 'esq' && (e.lista || e.abas.length)) { e.lista = false; limparAtiva(); e.abas = []; e.ativa = null; conversas.clear(); avisar('não cabe tudo ao lado no teu monitor: fechei o chat para abrir as configurações'); }
-    else if (lado === 'dir' && e.config) { e.config = false; avisar('não cabe tudo ao lado no teu monitor: fechei as configurações'); }
+    if (lado === 'esq' && (e.lista || e.abas.length)) { e.lista = false; limparAtiva(); e.abas = []; e.ativa = null; conversas.clear(); avisar('não cabe tudo ao lado neste monitor: o chat fechou para abrir as configurações'); }
+    else if (lado === 'dir' && e.config) { e.config = false; avisar('não cabe tudo ao lado neste monitor: as configurações fecharam'); }
     lay = layout(e, { util: u, col: col() });
     if (lay.cabe) return true;
     return false;
@@ -174,7 +174,7 @@ export function criarLateral({
   function alternarLista() {
     if (!lateralLigada(cfg)) return false;
     e.lista = !e.lista;
-    if (e.lista) { e.vistaEstreita = 'lista'; if (!caber('dir')) { e.lista = false; avisar('a lista de amigos não cabe ao lado neste monitor: usa o client normal', true); } }
+    if (e.lista) { e.vistaEstreita = 'lista'; if (!caber('dir')) { e.lista = false; avisar('a lista de amigos não cabe ao lado neste monitor: use o client normal', true); } }
     render();
     if (e.lista) lerAmigos().catch(err => falha('amigos', err));
     return true;
@@ -189,7 +189,7 @@ export function criarLateral({
       podarConversas(k);
     } else x.auto = false; // ele abriu: a recusa da abertura automática não fecha mais esta aba
     e.ativa = k; e.vistaEstreita = 'painel';
-    if (!caber('dir')) { fecharAba(k, { semRender: true }); avisar('a conversa não cabe ao lado neste monitor: usa o client normal', true); }
+    if (!caber('dir')) { fecharAba(k, { semRender: true }); avisar('a conversa não cabe ao lado neste monitor: use o client normal', true); }
     render();
     lerConversaAba(x).catch(err => falha('conversa', err));
     const v = conversas.get(k)?.view;
@@ -239,7 +239,7 @@ export function criarLateral({
     e.config = !e.config;
     if (e.config) {
       if (configView) delete configView.el.dataset.pintado;
-      if (!caber('esq')) { e.config = false; avisar('as configurações não cabem ao lado neste monitor: usa o client normal', true); }
+      if (!caber('esq')) { e.config = false; avisar('as configurações não cabem ao lado neste monitor: use o client normal', true); }
     }
     render();
     return true;
@@ -248,11 +248,11 @@ export function criarLateral({
     abrirConfigRiot();
   }
   // pedidos de amizade: aceitar/recusar é no client normal (expande)
-  function pedidosNoClient() { roteador()?.expandir?.(); avisar('pedidos de amizade: aceita ou recusa no client normal'); }
+  function pedidosNoClient() { roteador()?.expandir?.(); avisar('pedidos de amizade: aceite ou recuse no client normal'); }
 
   async function convidar(a, ev) {
     if (ev?.isTrusted === false) return;
-    if (!a?.convidar?.ok) { avisar(a?.convidar?.motivo || 'não dá para convidar agora', true); return; }
+    if (!a?.convidar?.ok) { avisar(a?.convidar?.motivo || 'convite indisponível agora', true); return; }
     st.convidados.set(a.pid, agora());
     pintarLista();
     const r = await lcu('POST', '/lol-lobby/v2/lobby/invitations', [{ toSummonerId: a.summonerId }]);
@@ -309,7 +309,7 @@ export function criarLateral({
       if (p.ok) st.pedidos = pedidosRecebidos(p.json);
     }
     st.lobby = lobbyParaConvite(l);
-    if (!f.ok || !Array.isArray(f.json)) st.amigos = { ok: false, motivo: f.status === 0 ? 'o client não respondeu' : `não li os amigos (${f.status})` };
+    if (!f.ok || !Array.isArray(f.json)) st.amigos = { ok: false, motivo: f.status === 0 ? 'o client não respondeu' : `não foi possível ler os amigos (${f.status})` };
     else {
       const abertas = new Set(e.abas.filter(x => x.tipo === 'conversa').map(x => x.pid));
       st.amigos = { ok: true, pedidos: st.pedidos, ...verAmigos({ amigos: f.json, conversas: st.conversas, lobby: st.lobby, convidados: st.convidados, abertas, agoraMs: agora() }) };
@@ -336,7 +336,7 @@ export function criarLateral({
     if (!x.conv) { c.motivo = ''; c.linhas = []; c.view.pintar([], { bloqueado: st.mudo }); return; }
     const [m, euAgora] = await Promise.all([lcu('GET', `/lol-chat/v1/conversations/${encodeURIComponent(x.conv)}/messages`), eu()]);
     if (m.status === 404) { c.linhas = []; c.motivo = ''; }
-    else if (!m.ok) c.motivo = `não li a conversa (${m.status})`;
+    else if (!m.ok) c.motivo = `não foi possível ler a conversa (${m.status})`;
     else { c.linhas = lerConversa(m.json, euAgora); c.motivo = ''; }
     c.view.pintar(c.linhas, { motivo: c.motivo, bloqueado: st.mudo });
   }
@@ -355,10 +355,10 @@ export function criarLateral({
     if (!naSelecao()) return;
     const [lista, sess, quem] = await Promise.all([lerConversas(), lerSessao(), eu()]);
     const sala = acharSalaTime(lista || st.conversas, sess);
-    if (!sala) { st.sala = null; st.salaLinhas = []; timeView?.pintar([], { motivo: 'a sala do time ainda não abriu (ou não sei qual é)', bloqueado: true }); return; }
+    if (!sala) { st.sala = null; st.salaLinhas = []; timeView?.pintar([], { motivo: 'a sala do time ainda não abriu (ou não foi encontrada)', bloqueado: true }); return; }
     if (st.sala?.id !== sala.id) { st.sala = sala; st.salaVistas = 0; }
     const m = await lcu('GET', `/lol-chat/v1/conversations/${encodeURIComponent(sala.id)}/messages`);
-    if (!m.ok) { timeView?.pintar(st.salaLinhas, { motivo: m.status === 404 ? 'a sala do time fechou' : `não li a sala (${m.status})`, bloqueado: st.mudo }); return; }
+    if (!m.ok) { timeView?.pintar(st.salaLinhas, { motivo: m.status === 404 ? 'a sala do time fechou' : `não foi possível ler a sala (${m.status})`, bloqueado: st.mudo }); return; }
     st.salaLinhas = lerSalaTime(m.json, elencoTime(sess), quem);
     if (e.ativa === 'time' && L().painel) st.salaVistas = st.salaLinhas.length;
     timeView?.pintar(st.salaLinhas, { bloqueado: st.mudo, desenhar: l => linhaSalaTime(l, doc) });

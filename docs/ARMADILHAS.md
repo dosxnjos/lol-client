@@ -504,6 +504,15 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `022583`, `ShowMain` em `022656`, fase `EndOfGame` o tempo todo). Por isso o coach ao vivo (liga só em
   `InProgress`/`Reconnect`, `coletor/coach_vivo.py`) fica calado no replay, mesmo com a 2999 de pé. O `found` também é
   cinza no botão da Riot (`_updateButtonToFound`). `pengu/replay.js`.
+- **Quem está na sala do pós-jogo não sai de `joined_room`** (sonda de 14/10/2026, 15/10) → `joined_room` só vem de quem
+  entra depois dele; quem já estava só aparece no `left_room` (4 saídas sem entrada na sonda). Contar só as entradas dava
+  "1 na sala" com 9. A faixa da sala (`presencaNaSala`, `compacto/chat-sala.js`): sem evento = dentro, último evento vale,
+  falar = dentro. `GET .../conversations/{id}/participants` ([S]: o rcp-fe-lol-social lê em toda conversa, `LolChatParticipant`
+  com `puuid` no /help) vale só se casar com alguém do eog; formato inesperado = ignora.
+- **Chroma = `childSkins` da skin no `skin-carousel-skins`** (rcp-fe-lol-champ-select 16.20, lido 15/10/2026) → cada filho tem
+  `id`, `shortName`, `colors` (1 cor = sólida, 2 = diagonal 135°, o `color` do skin-button), `unlocked`/`ownership.owned` e
+  `disabled` (o jmx `DisabledChromas`); escolher = o mesmo `PATCH session/my-selection {selectedSkinId: id do chroma}` do
+  `requestSetSkin`. Com chroma escolhido, `selectedSkinId` é o do filho: a skin-mãe sai por `skinMarcada` (`filhos`).
 
 ## Live Client Data API (`127.0.0.1:2999`, medido na partida 3292746609, 13/10/2026)
 

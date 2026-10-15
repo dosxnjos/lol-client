@@ -2,7 +2,7 @@
 // client: LCU falsa (tools/lcu-falsa.mjs) e DOM mínimo feito aqui. Formatos medidos no client em 15/10/2026 (só GET):
 // /lol-replays/v1/configuration, /metadata/{id} nos estados "watch" e "download" e o 404 sem registro. Rotas e corpos lidos no
 // rcp-fe-lol-shared-components 16.20 (ReplayButton). Regras que o teste segura: nada escrito sem clique de verdade; baixar sem
-// registro cria antes (corpo igual ao da Riot); assistir só no 2º clique (aviso antes); estados cinza com motivo.
+// registro cria antes (corpo igual ao da Riot); assistir em 1 clique (pedido de 15/10/2026 ~12:45); estados cinza com motivo.
 // uso: node tools/teste-replay.mjs
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { lcu as lcuReal } from '../pengu/compacto/comum.js';
@@ -104,7 +104,9 @@ function cenario({ meta = ok({ state: 'download', downloadProgress: 0, gameId: G
   s.b().click(); await tick(12);
   caso('baixar: clique dele = POST download/graceful {componentType do fim de partida}; linha vira "baixando"',
     igual(s.falsa.escritas().map(c => [c.url, c.corpo]), [[R.baixar(true), { componentType: 'replay-button_end-of-game' }]]) && s.b().disabled === true && /baixando/.test(s.b().textContent)
-    && s.avisos.some(([t, e]) => /baixando o replay/.test(t) && !e), JSON.stringify(s.falsa.escritas()));
+    && s.avisos.some(([t, e]) => /baixando o replay/i.test(t) && !e), JSON.stringify(s.falsa.escritas()));
+  caso('textos (docs/TEXTOS-DA-INTERFACE.md): o aviso do download não justifica o óbvio nem usa "tu"',
+    s.avisos.every(([t]) => !/porque|\btu\b|clicou/.test(t)), JSON.stringify(s.avisos));
 }
 {
   const s = cenario({ meta: SEM_REGISTRO });
@@ -143,24 +145,25 @@ function cenario({ meta = ok({ state: 'download', downloadProgress: 0, gameId: G
   await s.linha.ler(); await tick();
   caso('watch: "assistir replay" à vista e o baixar some', s.a().disabled === false && s.a().textContent === 'assistir replay' && s.b().style.display === 'none');
   s.a().click({ isTrusted: false }); await tick();
-  caso('assistir: clique sintético não arma nem abre', s.escritas().length === 0 && !s.linha.estado().armada);
-  s.a().click(); await tick();
-  caso('assistir: 1º clique só avisa (abre o jogo, a Riot minimiza o client) e arma; nada enviado',
-    s.escritas().length === 0 && s.linha.estado().armada && /clica de novo/.test(s.a().textContent) && s.avisos.some(([t]) => /abre o jogo/.test(t) && /minimiza/.test(t)));
-  s.est.agora += 200; s.a().click(); await tick();
-  caso('assistir: 2º clique de reflexo (< 700 ms) não confirma', s.escritas().length === 0);
-  s.est.agora += 1500; s.a().click(); await tick(12);
-  caso('assistir: 2º clique em até 8 s = POST watch {componentType}', igual(s.falsa.escritas().map(c => [c.url, c.corpo]), [[R.assistir, { componentType: 'replay-button_end-of-game' }]]));
+  caso('assistir: clique sintético não abre', s.escritas().length === 0);
+  // pedido de 15/10/2026 ~12:45: "se eu clicar para assistir o replay, é porque eu já cliquei antes para baixar [...] iniciar o
+  // replay de primeira": 1 clique = POST watch, com um aviso curto de que o jogo vai abrir (a Riot minimiza o client)
+  s.a().click(); await tick(12);
+  caso('assistir: 1 clique dele = POST watch {componentType} (sem 2º clique de confirmação)',
+    igual(s.falsa.escritas().map(c => [c.url, c.corpo]), [[R.assistir, { componentType: 'replay-button_end-of-game' }]]), JSON.stringify(s.falsa.escritas()));
+  caso('assistir: aviso curto de que o jogo vai abrir, sem pedir 2º clique',
+    s.avisos.some(([t, e]) => /jogo/.test(t) && !e) && !s.avisos.some(([t]) => /de novo/.test(t)), JSON.stringify(s.avisos));
+  s.est.agora += 200; s.a().click(); await tick(12);
+  caso('assistir: clique de reflexo logo depois de abrir não manda o watch de novo', s.escritas().length === 1, JSON.stringify(s.escritas()));
 }
 {
-  const s = cenario({ meta: ok({ state: 'watch' }) });
-  await s.linha.ler(); s.a().click(); await tick();
-  s.est.agora += 9000; s.a().click(); await tick();
-  caso('assistir: 2º clique depois dos 8 s só arma de novo (nada abre)', s.escritas().length === 0 && s.linha.estado().armada);
+  const s = cenario({ meta: ok({ state: 'watch' }), }); // o botão nunca vira "clique de novo"
+  await s.linha.ler(); await tick();
+  caso('assistir: o rótulo é sempre "assistir replay" (nenhum estado armado)', s.a().textContent === 'assistir replay' && !/de novo/.test(s.a().getAttribute('title') || ''));
 }
 {
   const s = cenario({ meta: ok({ state: 'watch' }), cfg: { ...CFG, isPlayingGame: true } });
-  await s.linha.ler(); s.a().click(); s.a().click(); await tick();
+  await s.linha.ler(); s.a().click(); await tick();
   caso('assistir com partida rodando: botão cinza com motivo, clique não abre', s.a().disabled === true && /partida rodando/.test(s.a().getAttribute('title')) && s.escritas().length === 0);
 }
 {

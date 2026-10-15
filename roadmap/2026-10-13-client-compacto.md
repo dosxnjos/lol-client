@@ -1232,6 +1232,74 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     — **prova:** `teste-compacto-selecao.mjs` 231/231 (16 casos novos; 11 vermelhos antes), `teste-compacto-lobby.mjs` 138/138
     (2 novos: reserva com FILL, personalizada apaga); `teste-compacto` 175, `posjogo` 124, `fim-de-partida` 90, `lateral` 118,
     `jogo` 47, `expansoes` 34, `winrate` ok.
+17. [ ] **Textos de produto, replay em 1 clique, quem está na sala, cor do campeão e chroma (relato de 15/10/2026 ~12:45).**
+    Palavras dele: (a) "fui clicar no botão de baixar replay e apareceu o texto 'só porque tu clicou'. Esse texto é muito
+    imaturo para um app. Outro é '1 clique na grade declara', que poderia ser 'clique para declarar' [...] preciso que tenha
+    uma regra geral para que tenha uma comunicação mais correta [...] de preferência ajustar ou remover a regra que diz para
+    falar desse jeito"; (b) "se eu clicar para assistir o replay, é porque eu já cliquei antes para baixar [...] queria clicar
+    em assistir replay e iniciar o replay de primeira"; (c) "na sala do pós-jogo mostrasse um ícone [...] quais campeões estão
+    na sala ainda"; (d) "o nick tá ótimo, mas o nome do campeão pode ser colorido de acordo com o lado [...] no mesmo esquema
+    que funciona no modo expandido"; (e) "na seleção de skins, eu também quero poder escolher o chroma quando estiver
+    disponível. Pode ficar em cima das splash arts". (O resto do mesmo relato, feitiços e "voltou" sem voz, é do coletor:
+    [calibrar avisos](2026-10-14-calibrar-avisos.md).)
+    **Causa de (a):** a persona do chat com o Gabriel ("tu fez", minúsculas) vazou para a interface. `C:\Dev\CLAUDE.md` agora
+    diz que texto de interface nunca herda a persona; a régua do projeto é [TEXTOS-DA-INTERFACE](../docs/TEXTOS-DA-INTERFACE.md)
+    (1 linha no CLAUDE.md) e `node tools/teste-textos.mjs` varre os literais de `pengu/**` e `painel/**` (no HEAD: 1/8, 241
+    achados; depois: 8/8).
+    **Construído em 15/10/2026 (offline):**
+    - **(a) auditoria dos textos** em `pengu/**` e `painel/**` (≈150 literais): sem "tu/teu/tua" (impessoal ou "você/seu"; "tu"
+      na linha dele vira "você"), imperativo de "você" (clique, tente, use, escolha, aguarde), sem "só porque", o app sem 1ª
+      pessoa ("não foi possível…", "abrindo o client normal", "… desconhecido"), sem "dá para"/"pra"; o "1ª opção: TOPO" no
+      painel da posição; "Buscar mesmo assim?" com maiúscula. Aviso (toast) com maiúscula inicial por `frase()`
+      (`compacto/comum.js`, usado em `avisar()`, no Toast da fila rápida e no do pós-jogo). Palavras novas dos avisos no
+      `VOCABULARIO` das expansões (abrindo, possível…), para o registro não virar "…". Não mexido: falas/rótulos da voz
+      (`coletor/avisos.py`, LICOES), texto copiado da Riot (denúncia), o `VOCABULARIO`, log e comentário. Lista antes/depois
+      completa no `git diff` de `pengu/` e `painel/` deste passo; amostra no guia.
+    - **(b) assistir em 1 clique** (`pengu/replay.js`): sem `criarConfirmacao`; o clique dele manda o `POST .../watch` e avisa
+      "abrindo o replay: o jogo vai abrir e o client volta quando ele fechar"; clique de reflexo até `REPLAY.reflexoMs` (4 s)
+      depois de abrir não manda de novo. Vale no compacto e no painel grande (o mesmo `criarReplay`).
+    - **(c) faixa de quem está na sala** (`compacto/chat-sala.js`): com a sala aberta e o eog lido, o cabeçalho troca o
+      "N na sala" pelos ícones (16 px) dos campeões do eog, [aliados | inimigos], borda azul/vermelha/dourada (eu), quem saiu
+      apagado no mesmo lugar; `title` "9 de 10 na sala" e "Nome #TAG · Campeão: saiu da sala". Regra (`presencaNaSala`): sem
+      evento = dentro (sonda de 14/10: `left_room` de quem nunca teve `joined_room`, ARMADILHAS § LCU), último evento vale,
+      falar = dentro; `GET .../participants` ([S]) a cada 4 voltas (~6 s) vale só se casar com alguém (puuid, summonerId ou
+      Riot ID). Recolhida: só a última linha, como antes. Na honra também (a mesma faixa).
+    - **(d) "(Campeão)" na cor do lado**: `nomeNaSala` dá ao campeão a mesma classe de cor do nick (aliado azul, inimigo
+      vermelho, ele dourado), com a opacidade do expandido (`.lc-cp-camp` .72), como o `chat-posjogo.js` pinta o
+      `.message-name` inteiro.
+    - **(e) chroma** (`tela-champselect.js`): `skinsDoCampeao` traz `chromas` (os `childSkins` dele: unlocked/owned, sem
+      `disabled`), cor como o skin-button da Riot (`corDoChroma`: 2 cores = diagonal 135°); na finalização, com a skin
+      marcada tendo chroma, uma linha "chroma [padrão][bolinhas]" logo acima das splash arts; clique = o mesmo `PATCH
+      session/my-selection {selectedSkinId}` da skin (o `requestSetSkin` da Riot manda o id do chroma); "padrão" volta à skin
+      sem chroma; a bolinha escolhida ganha o anel dourado e a splash da skin-mãe segue marcada.
+    **Decisões técnicas (opus, 15/10/2026, a mais reversível):** (xxx) "você/seu" quando precisa de pessoa (padrão da Riot
+    pt-BR) e impessoal no resto: alta; reverte trocando os literais (o teste aponta cada um). (xxxi) caixa: rótulo curto
+    segue o bloco (minúsculas do compacto aprovado) e só o aviso ganha maiúscula, por `frase()` central: média (o relato
+    falou de tom, não de caixa); reverte tirando `frase()` do `avisar`. (xxxii) presença "sem evento = dentro": média (os 10
+    entram na sala no fim da partida; quem caiu do jogo e nunca entrou aparece aceso); reverte para 3 estados (sem evento =
+    meio apagado) se o client real mostrar gente fantasma. (xxxiii) faixa no cabeçalho, não numa linha nova: alta (a altura
+    do dock é fixa; 420/420 sem estouro medido no harness). (xxxiv) chroma só os que ele tem: alta (a faixa de skins já
+    mostra só as dele; a Riot oferece comprar os outros, o compacto não compra). (xxxv) reflexo de 4 s no assistir: média.
+    — **prova (15/10/2026):** `teste-replay.mjs` 35/35 (4 vermelhos antes), `teste-compacto-fim-de-partida.mjs` 101/101 (11
+    casos novos, vermelhos antes: crash em `lm.eventos`), `teste-compacto-selecao.mjs` 240/240 (6 vermelhos antes),
+    `teste-textos.mjs` 8/8 (novo; 1/8 no HEAD), `teste-compacto` 175, `lobby` 138, `posjogo` 124, `lateral` 118, `jogo` 47,
+    `expansoes` 39, `jogar-de-novo` 97, `config` 50, `runas`, `recompensas`, `chat-posjogo`, `aceite`, `abas`, `licoes`,
+    `painel`, `teste-alertas.py` 133/133. Prints (harness, `temp/compacto-harness/`): `2026-10-15-sala-presenca-e-cor-do-campeao.png`
+    (antes: `2026-10-14-fim-C-sala.png`), `2026-10-15-replay-assistir-1-clique.png`, `2026-10-15-chroma-rubi-escolhido.png`,
+    `2026-10-15-textos-intencao-depois.png` (antes: `2026-10-15-papel-4-…png`), `2026-10-15-textos-papel-segunda-opcao.png`.
+    **Só o client prova:** o `GET .../participants` na sala do pós-jogo (formato e se casa com o eog; sonda de 15/10 em
+    EndOfGame achou a sala já fechada), se quem nunca entrou na sala aparece aceso, o `PATCH` com o id do chroma aceito na
+    finalização real e as bolinhas com as cores da Riot, o replay abrindo no 1º clique e o aviso visível antes do MinimizeAll.
+    **Revisão adversarial (15/10/2026):** (1) o varredor do `teste-textos.mjs` não entrava em template dentro de `${…}` (as
+    abas do pós-jogo passavam sem leitura): agora varre a expressão e o template aninhado (caso novo), e pega "tento" e
+    "baixa pelo"; três textos que ainda feriam o guia corrigidos ("baixa pelo client normal" → "baixe…", "(tento a cada 30 s)"
+    → "(nova tentativa a cada 30 s)", "tento ler o histórico de novo" → "nova leitura do histórico em instantes").
+    (2) "não é a 1ª opção · 1ª opção: TOPO" repetia "1ª opção": vira "fora da 1ª opção (TOPO)" (vale também com FILL, onde
+    "2ª opção" seria falso). (3) no ícone da faixa da sala, o `title` da foto (só o campeão) ganhava do `title` do ícone e o
+    "saiu da sala" sumia no hover: a foto perde o próprio. (4) cor do lado: o `jogadoresDoEog` não tinha a regra do expandido
+    para eog sem `isPlayerTeam` (todo mundo sairia vermelho): agora o aliado é o time com `isLocalPlayer`; caso novo prova o
+    time dele em 2º (lado vermelho) e sem a flag. Conferido sem mudança: assistir só fica clicável no estado `watch` (replay
+    baixado); a faixa só mostra nome que o eog já mostra; chroma só da skin marcada, só os liberados, só por clique.
 
 ## Revisão da construção (13/10/2026)
 

@@ -106,11 +106,11 @@ export function iniciarSemPopups(cfg) {
 // bloco "Avisos do client" nas Configurações (registrarBloco)
 export function blocoSemPopups(corpo, { cfg, definir, ui }) {
   corpo.append(
-    ui.caixa('semPopups.ligado', 'Calar avisos automáticos do client', 'Some com os avisos que o client mostra quando o jogo mexe em algo por ti. Nada muda no jogo: só o aviso não aparece.',
+    ui.caixa('semPopups.ligado', 'Calar avisos automáticos do client', 'Some com os avisos que o client mostra quando o jogo muda algo sozinho. Nada muda no jogo: só o aviso não aparece.',
       cfg.semPopups.ligado, v => definir('semPopups.ligado', v)),
     ui.caixa('semPopups.runasAutomaticas', 'Aviso de runas mudadas pelo jogo', 'Depois de um patch o jogo ajusta páginas de runa sozinho e o client avisa no champ select e no botão Jogar.',
       cfg.semPopups.runasAutomaticas, v => definir('semPopups.runasAutomaticas', v)),
-    ui.caixa('semPopups.smiteAutomatico', 'Aviso de golpear colocado sozinho', 'Quando tu cai de selva sem golpear, o jogo põe o feitiço e o client avisa no champ select.',
+    ui.caixa('semPopups.smiteAutomatico', 'Aviso de golpear colocado sozinho', 'Quando você cai de selva sem golpear, o jogo põe o feitiço e o client avisa no champ select.',
       cfg.semPopups.smiteAutomatico, v => definir('semPopups.smiteAutomatico', v)),
     ui.explica('O aviso de "você foi preenchido" continua: no client atual ele sai do próprio champ select, que o lol-client não toca.'));
 }

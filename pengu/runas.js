@@ -132,7 +132,7 @@ export function iniciarRunas(context, cfg) {
     const r = await lcu('PUT', '/lol-perks/v1/currentpage', p.id); // corpo: o id puro (int32)
     // com a camada compacta à vista o ✓ da tela 3 já confirma: o aviso sairia em dobro (passo 11, decisão ii)
     if (r.ok) { if (compactoAVista()) console.log('[lol-client] runas:', `runa ${p.name} aplicada`); else avisar(`runa ${p.name} aplicada`); }
-    else avisar(`não consegui aplicar a runa ${p.name} (${r.status})`, true);
+    else avisar(`não foi possível aplicar a runa ${p.name} (${r.status})`, true);
     return r.ok;
   };
 
@@ -168,7 +168,7 @@ export function iniciarRunas(context, cfg) {
     const apagadas = consulta.apagadas.filter(id => !apagadasAvisadas.has(id));
     if (apagadas.length) {
       apagadas.forEach(id => apagadasAvisadas.add(id));
-      avisar(`${apagadas.length === 1 ? 'uma página' : apagadas.length + ' páginas'} da regra de ${nomes[championId] || championId} não existe mais no client: ajuste nas configurações do lol-client`, true);
+      avisar(`${apagadas.length === 1 ? 'uma página' : apagadas.length + ' páginas'} da regra de ${nomes[championId] || championId} não ${apagadas.length === 1 ? 'existe' : 'existem'} mais no client: ajuste nas configurações do lol-client`, true);
     }
     const porId = Object.fromEntries(paginas.map(p => [p.id, p]));
     // 1 página ou sem regra (as regras mudaram no meio da seleção): não há escolha pendente; sem limpar, cada saída da
@@ -196,7 +196,7 @@ export function iniciarRunas(context, cfg) {
     limparPendente();
     const atual = await lcu('GET', '/lol-perks/v1/currentpage');
     const dono = atual.ok ? donoDaPagina(regras, atual.json?.id, championId) : null;
-    if (dono && vivo()) avisar(`tua runa atual é a de ${nomes[dono] || dono} (${atual.json.name})`, true);
+    if (dono && vivo()) avisar(`a runa atual é a de ${nomes[dono] || dono} (${atual.json.name})`, true);
     return { acao: dono ? 'avisou' : 'nada', dono };
   }
 

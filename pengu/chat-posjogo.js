@@ -596,7 +596,7 @@ export function iniciarChatPosjogo(context, cfg) {
 export function blocoChatPosjogo(corpo, { cfg, definir, ui }) {
   const c = cfg.chatPosjogo, caixa = (k, rotulo, explica) => ui.caixa('chatPosjogo.' + k, rotulo, explica, c[k], v => definir('chatPosjogo.' + k, v));
   corpo.append(
-    caixa('ligado', 'Chat do pós-jogo melhorado', 'No chat da tela de estatísticas: campeão de cada um, cor certa do time e menos poluição. Com o painel do lol-client aberto, o chat fica por baixo; vale quando tu fecha o painel e nos outros modos.'),
+    caixa('ligado', 'Chat do pós-jogo melhorado', 'No chat da tela de estatísticas: campeão de cada um, cor certa do time e menos poluição. Com o painel do lol-client aberto, o chat fica por baixo; vale com o painel fechado e nos outros modos.'),
     ui.linha(ui.lista('chatPosjogo.nomes', 'Nome em cada linha', NOMES_CHAT, modoNomes(c.nomes), v => definir('chatPosjogo.nomes', v))),
     caixa('iconeCampeao', 'Ícone do campeão', 'A foto do campeão (do próprio client) antes do nome.'),
     caixa('corTime', 'Cor certa de aliado e inimigo', 'O client pinta todo mundo como inimigo; aqui aliado fica azul e inimigo vermelho.'),

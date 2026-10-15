@@ -30,14 +30,14 @@ export const inimigosTravados = s => new Set((s?.theirTeam || []).map(c => Numbe
 // coach = {dados, campeao, fora}; nome(id) -> nome do campeão; traumas: chave "Mostrar traumas"; fila = id da fila
 export function modeloSelo({ sessao, est = null, histN = 0, histErro = false, coach = null, nome = id => `campeão ${id}`, traumas = true, fila = null, temColetor = true }) {
   const eu = meuNaSessao(sessao);
-  if (!eu) return { vazio: 'passa o mouse num campeão (ou trava) para ver o selo' };
+  if (!eu) return { vazio: 'passe o mouse num campeão (ou trave) para ver o selo' };
   const m = { campeao: { id: eu.championId, nome: nome(eu.championId) }, travado: eu.travado, posicao: eu.posicao,
-    sub: ['tu', POS_PT[eu.posicao], FILA_PT[fila]].filter(Boolean).join(' · '), linhas: [], amostra: '', rota: null, trauma: null, draft: null, fora: false };
+    sub: ['você', POS_PT[eu.posicao], FILA_PT[fila]].filter(Boolean).join(' · '), linhas: [], amostra: '', rota: null, trauma: null, draft: null, fora: false };
   if (est) {
     const t = textoSelo(est, m.campeao.nome);
     m.linhas = t.linhas;
     m.amostra = histN ? `histórico: ${histN} partidas` : '';
-  } else m.linhas = [histErro ? 'histórico indisponível agora (tento de novo)' : 'carregando histórico…'];
+  } else m.linhas = [histErro ? 'histórico indisponível agora (nova tentativa em seguida)' : 'carregando histórico…'];
   const d = coach && coach.campeao === eu.championId ? coach.dados : null;
   if (d) {
     const adv = adversarioDoDraft(d.draft, eu.posicao);
@@ -69,10 +69,10 @@ export function criarCoachView({ doc }) {
         h('span', { doc, class: 'lc-lt-tag' + (m.travado ? ' lc-lt-trav' : '') }, m.travado ? 'travado' : 'hover')),
       ...m.linhas.map(l => h('div', { doc, class: 'lc-lt-sl' }, l)),
       m.amostra ? h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.amostra) : null);
-    const rota = h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'na tua rota'),
+    const rota = h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'na sua rota'),
       m.rota ? h('div', { doc, class: 'lc-lt-mu' }, fotoCampeao(m.campeao.id, { tam: 28, doc }), h('span', { doc, class: 'lc-lt-mudo' }, '×'),
         fotoCampeao(m.rota.adv.id, { tam: 28, nome: m.rota.adv.nome, doc }), h('div', { doc }, h('div', { doc, class: 'lc-lt-az' }, m.rota.texto), h('small', { doc, class: 'lc-lt-mudo' }, m.rota.rota)))
-        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'coach: coletor fora do ar (sem matchup e draft)' : 'adversário da tua rota ainda não travou'),
+        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'coach: coletor fora do ar (sem matchup e draft)' : 'adversário da sua rota ainda não travou'),
       m.trauma ? h('div', { doc, class: 'lc-lt-sl lc-lt-trauma' }, m.trauma) : null);
     const draft = m.draft ? h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'draft'),
       h('div', { doc, class: 'lc-lt-sl lc-lt-az' }, m.draft.faixa),

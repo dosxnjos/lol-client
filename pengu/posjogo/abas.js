@@ -110,12 +110,12 @@ export function alertasSessao(ses, esta, hist, horaAgora) {
   const geral = hist?.geral?.wr;
   if (!esta.vitoria && ses.seq >= 2) {
     const ad = hist?.apos_derrotas?.[String(Math.min(ses.seq, 3))];
-    const num = ad?.n ? `: depois de ${Math.min(ses.seq, 3)}${ses.seq >= 3 ? '+' : ''} derrotas seguidas tu ganha ${Math.round(ad.wr)}% (${ad.n} partidas)${geral !== null && geral !== undefined ? `, contra ${Math.round(geral)}% no geral` : ''}` : '';
-    out.push({ nivel: ses.seq >= 3 ? 'forte' : 'medio', texto: `${ses.seq} derrotas seguidas${num}. ${ses.seq >= 3 ? 'Para por hoje ou troca de atividade.' : 'Pausa de 10 min antes da próxima.'}` });
+    const num = ad?.n ? `: depois de ${Math.min(ses.seq, 3)}${ses.seq >= 3 ? '+' : ''} derrotas seguidas o seu winrate é ${Math.round(ad.wr)}% (${ad.n} partidas)${geral !== null && geral !== undefined ? `, contra ${Math.round(geral)}% no geral` : ''}` : '';
+    out.push({ nivel: ses.seq >= 3 ? 'forte' : 'medio', texto: `${ses.seq} derrotas seguidas${num}. ${ses.seq >= 3 ? 'Pare por hoje ou troque de atividade.' : 'Faça uma pausa de 10 min antes da próxima.'}` });
   }
   const fx = hist?.faixas?.[faixaDe(horaAgora)];
   if (fx?.n >= 10 && geral !== null && geral !== undefined && fx.wr <= geral - 5)
-    out.push({ nivel: 'medio', texto: `Agora (${faixaDe(horaAgora).replace('-', '–')}h) tu ganha ${Math.round(fx.wr)}% (${fx.n} partidas), contra ${Math.round(geral)}% no geral.` });
+    out.push({ nivel: 'medio', texto: `Agora (${faixaDe(horaAgora).replace('-', '–')}h) o seu winrate é ${Math.round(fx.wr)}% (${fx.n} partidas), contra ${Math.round(geral)}% no geral.` });
   return out;
 }
 
@@ -224,7 +224,7 @@ export function htmlMentor(m) {
   for (const c of (m.conversa || []).filter(x => x.uso === 'pergunta')) {
     const resp = c.status === 'pensando' ? '<span class="lc-pensando">pensando<span>…</span></span>'
       : c.status === 'erro' ? `<span class="lc-neg">${esc(c.erro || 'falhou')}</span>` : textoMentor(c.resposta || '');
-    partes.push(`<div class="lc-conversa"><div class="lc-pergunta">tu: ${esc(c.pergunta)}</div><div>${resp}</div></div>`);
+    partes.push(`<div class="lc-conversa"><div class="lc-pergunta">você: ${esc(c.pergunta)}</div><div>${resp}</div></div>`);
   }
   return partes.join('');
 }
@@ -249,7 +249,7 @@ function grafico(titulo, pontos, chave, mortes, lado = 540, alto = 230) {
   const marcas = [10, 15].filter(mn => mn <= maxMin).map(mn => `<line x1="${X(mn)}" x2="${X(mn)}" y1="${m.c}" y2="${m.c + h}" stroke="#463714" stroke-dasharray="3 3"/>`).join('');
   const mt = mortes.map(mo => `<text x="${X(mo.ms / 60000)}" y="${(m.c + h - 3).toFixed(1)}" text-anchor="middle" class="lc-g-morte">✕</text>`).join('');
   const ult = pontos[pontos.length - 1];
-  return `<div class="lc-grafico"><div class="lc-g-titulo">${titulo} <span class="lc-nota">fim: tu ${mil(ult.eu[chave])}${ult.adv ? ` · ele ${mil(ult.adv[chave])}` : ''}</span></div>
+  return `<div class="lc-grafico"><div class="lc-g-titulo">${titulo} <span class="lc-nota">fim: você ${mil(ult.eu[chave])}${ult.adv ? ` · ele ${mil(ult.adv[chave])}` : ''}</span></div>
     <svg viewBox="0 0 ${lado} ${alto}" width="${lado}" height="${alto}" xmlns="http://www.w3.org/2000/svg">
     ${grade}${eixo}${marcas}${linha(p => p.adv?.[chave], '#e84057')}${linha(p => p.eu[chave], '#0ac8b9')}${mt}</svg></div>`;
 }
@@ -263,12 +263,12 @@ export function abaRota(r, nome) {
   }).join('');
   const f = r.farm;
   const farmTxt = f.media === null ? `${virgula(f.valor)}/min · amostra insuficiente (${f.n})`
-    : `${virgula(f.valor)}/min contra tua média de ${virgula(f.media)} com ${esc(nome(r.campeao))} (${f.n} partidas) · ${f.diferenca >= 0 ? '<span class="lc-pos">+' : '<span class="lc-neg">'}${virgula(f.diferenca)}</span>`;
-  return `<div class="lc-legenda"><span><i style="background:#0ac8b9"></i>tu</span>${adv ? `<span><i style="background:#e84057"></i>${adv}${r.adversario.incerto ? ' (provável)' : ''}</span>` : ''}<span class="lc-g-morte">✕</span> tuas mortes · tracejado: 10 e 15 min</div>
+    : `${virgula(f.valor)}/min contra a sua média de ${virgula(f.media)} com ${esc(nome(r.campeao))} (${f.n} partidas) · ${f.diferenca >= 0 ? '<span class="lc-pos">+' : '<span class="lc-neg">'}${virgula(f.diferenca)}</span>`;
+  return `<div class="lc-legenda"><span><i style="background:#0ac8b9"></i>você</span>${adv ? `<span><i style="background:#e84057"></i>${adv}${r.adversario.incerto ? ' (provável)' : ''}</span>` : ''}<span class="lc-g-morte">✕</span> suas mortes · tracejado: 10 e 15 min</div>
     <div class="lc-graficos">${grafico('ouro total', r.curva, 'ouro', r.mortes)}${grafico('experiência', r.curva, 'xp', r.mortes)}</div>
     <div class="lc-rota-baixo">
       <div><h3>contra o adversário de rota</h3>
-        ${linhasDiff ? `<table><tr><th></th><th>ouro</th><th>xp</th><th>farm</th><th>tu contra ele (ouro / xp / farm)</th></tr>${linhasDiff}</table>` : '<div>sem dados (partida curta ou sem adversário)</div>'}</div>
+        ${linhasDiff ? `<table><tr><th></th><th>ouro</th><th>xp</th><th>farm</th><th>você contra ele (ouro / xp / farm)</th></tr>${linhasDiff}</table>` : '<div>sem dados (partida curta ou sem adversário)</div>'}</div>
       <div><h3>farm por minuto</h3><div>${farmTxt}</div>
         <div class="lc-nota">ouro e xp da linha do tempo: 1 quadro por minuto.</div></div>
     </div>`;
@@ -320,7 +320,7 @@ export function abaMortes(r, nome) {
     </tr>`).join('');
   return `<div class="lc-mortes">
     <div class="lc-mapa">${svgMapa(r)}
-      <div class="lc-legenda"><span><i style="background:#0ac8b9"></i>teu trajeto (1 ponto por minuto)</span><span><i style="background:#e84057"></i>mortes</span></div>
+      <div class="lc-legenda"><span><i style="background:#0ac8b9"></i>seu trajeto (1 ponto por minuto)</span><span><i style="background:#e84057"></i>mortes</span></div>
       <div class="lc-nota">posição amostrada 1 vez por minuto: pode estar até 30 s longe do momento real.</div>
     </div>
     <div class="lc-direita">
@@ -344,10 +344,10 @@ export function abaObjetivos(r) {
     const pred = o.tipo.endsWith('_BUILDING');
     const forma = pred ? `<rect x="${(+X(o.ms) - 8).toFixed(1)}" y="${yDe[o.lado] - 8}" width="16" height="16" fill="#010a13" stroke="${cor}" stroke-width="1.5"/>`
       : `<circle cx="${X(o.ms)}" cy="${yDe[o.lado]}" r="9" fill="${cor}" opacity=".9"/>`;
-    return `<g><title>${mmss(o.ms)} ${nomeObjetivo(o)} (${o.lado === 'aliado' ? 'teu time' : 'inimigo'})</title>${forma}
+    return `<g><title>${mmss(o.ms)} ${nomeObjetivo(o)} (${o.lado === 'aliado' ? 'seu time' : 'inimigo'})</title>${forma}
       <text x="${X(o.ms)}" y="${yDe[o.lado] + 3.5}" text-anchor="middle" class="${pred ? 'lc-o-pred' : 'lc-o-mon'}" fill="${pred ? cor : '#010a13'}">${SIGLA[o.tipo] || '?'}</text></g>`;
   };
-  const mortes = r.mortes.map((m, i) => `<g><title>${m.t} tua morte ${i + 1}</title><text x="${X(m.ms)}" y="79" text-anchor="middle" class="lc-g-morte">✕</text></g>`).join('');
+  const mortes = r.mortes.map((m, i) => `<g><title>${m.t} sua morte ${i + 1}</title><text x="${X(m.ms)}" y="79" text-anchor="middle" class="lc-g-morte">✕</text></g>`).join('');
   const conta = (lado, f) => objs.filter(o => o.lado === lado && f(o)).length;
   const tipos = [['dragões', o => o.tipo === 'DRAGON' || o.tipo === 'ELDER_DRAGON'], ['vastilarvas', o => o.tipo === 'HORDE'], ['Arauto', o => o.tipo === 'RIFTHERALD'],
     ['Barão', o => o.tipo === 'BARON_NASHOR'], ['Atakhan', o => o.tipo === 'ATAKHAN'], ['torres', o => o.tipo === 'TOWER_BUILDING'], ['inibidores', o => o.tipo === 'INHIBITOR_BUILDING']];
@@ -356,9 +356,9 @@ export function abaObjetivos(r) {
   const lista = objs.map(o => `<li class="lc-${o.lado}"><span>${mmss(o.ms)}</span> ${nomeObjetivo(o)}</li>`).join('');
   return `<div class="lc-placar lc-placar-obj">${placar || '<div>nenhum objetivo na linha do tempo</div>'}</div>
     <svg class="lc-linha-obj" viewBox="0 0 ${L} ${A}" width="${L}" height="${A}" xmlns="http://www.w3.org/2000/svg">
-      <text x="4" y="${yDe.aliado + 4}" class="lc-o-rot">teu time</text><text x="4" y="83" class="lc-o-rot">tuas mortes</text><text x="4" y="${yDe.inimigo + 4}" class="lc-o-rot">inimigo</text>
+      <text x="4" y="${yDe.aliado + 4}" class="lc-o-rot">seu time</text><text x="4" y="83" class="lc-o-rot">suas mortes</text><text x="4" y="${yDe.inimigo + 4}" class="lc-o-rot">inimigo</text>
       ${eixo}${objs.map(marca).join('')}${mortes}</svg>
-    <div class="lc-legenda"><span>D dragão · V vastilarva · A Arauto · B Barão · At Atakhan · T torre · I inibidor</span><span><i style="background:#0ac8b9"></i>teu time</span><span><i style="background:#e84057"></i>inimigo</span></div>
+    <div class="lc-legenda"><span>D dragão · V vastilarva · A Arauto · B Barão · At Atakhan · T torre · I inibidor</span><span><i style="background:#0ac8b9"></i>seu time</span><span><i style="background:#e84057"></i>inimigo</span></div>
     <ul class="lc-lista-obj">${lista}</ul>`;
 }
 
@@ -385,7 +385,7 @@ export function abaTendencia(r, nome, ctx, ctxEstado, revisao, mostrarTraumas) {
     traumas = `<div><h3>traumas nesta partida</h3>${ctx ? (lista.length ? `<ul class="lc-padroes">${lista.map(t =>
       `<li><b>${esc(nome(t.campeao))}</b> é trauma: ${t.vitorias}V/${t.derrotas}D com ${esc(nome(r.campeao))} · lift ${virgula(t.lift, 2)}</li>`).join('')}</ul>`
       : '<div>nenhum campeão-trauma no time inimigo desta partida</div>') : `<div class="lc-nota">${ctxNota(ctxEstado)}</div>`}
-      <div class="lc-nota">trauma: campeão inimigo com derrota acima da tua taxa geral (lift ≥ 1,2, n ≥ 3); com ~170 campeões comparados, 1 ou 2 podem ser acaso.</div></div>`;
+      <div class="lc-nota">trauma: campeão inimigo com derrota acima da sua taxa geral (lift ≥ 1,2, n ≥ 3); com ~170 campeões comparados, 1 ou 2 podem ser acaso.</div></div>`;
   }
   const rv = revisao?.revisao;
   const pct = p => (p === null || p === undefined ? '—' : `${Math.round(p * 100)}%`);
@@ -393,7 +393,7 @@ export function abaTendencia(r, nome, ctx, ctxEstado, revisao, mostrarTraumas) {
   const jg = rv ? `<div class="lc-ind-num"><b>${rv.acertos}/${rv.n}</b> <span class="lc-nota">minutos com o jungler a ≤ ${rv.raio} unidades da previsão (${pct(rv.precisao)})</span></div>
       ${ac ? `<div class="lc-nota">acumulado: ${ac.acertos}/${ac.n} (${pct(ac.precisao)}) em ${ac.partidas} ${ac.partidas === 1 ? 'partida' : 'partidas'}</div>` : ''}`
     : `<div class="lc-nota">${revisao?.status === 0 ? 'coletor fora do ar' : 'sem previsão gravada nesta partida (o coach ao vivo não rodou nela)'}</div>`;
-  return `<h3>esta partida contra as tuas últimas ${r.tendencia[0]?.n ?? 0} (Rift, sem remake)</h3>
+  return `<h3>esta partida contra as suas últimas ${r.tendencia[0]?.n ?? 0} (Rift, sem remake)</h3>
     <div class="lc-inds">${inds}</div>
     <div class="lc-tend-baixo">${traumas}<div><h3>previsão do jungler inimigo</h3>${jg}</div></div>`;
 }

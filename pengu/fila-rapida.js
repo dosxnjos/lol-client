@@ -4,6 +4,7 @@
 import { avaliarFreios, textoFreios, derrotasSeguidasAgora, criarConfirmacao, cliqueComFreio, JANELA_MS, ATUALIZANDO } from './freios.js';
 import { valida } from './posjogo/abas.js';
 import { FORA_DAS_CONTAS } from './posjogo/analise.js';
+import { frase } from './compacto/comum.js';
 
 const SELETORES = { ancora: '.navbar_backdrop', botao: '#lc-fila-rapida' };
 const FASES_BLOQUEADAS = ['ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'Reconnect', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
@@ -16,7 +17,7 @@ const lcu = async (metodo, url, corpo) => {
   return { ok: r.ok, status: r.status, json };
 };
 
-const avisar = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(msg); } catch { console.log('[lol-client]', msg); } };
+const avisar = (msg, erro) => { try { (erro ? Toast.error : Toast.success)(frase(msg)); } catch { console.log('[lol-client]', msg); } };
 
 export class Recusa extends Error {}
 
@@ -38,7 +39,7 @@ export function restricaoDura(lobby, agora = Date.now()) {
 // fase em que a fila rápida pode montar o lobby; senão Recusa/Error (só leitura)
 async function conferirFase() {
   const fase = (await lcu('GET', '/lol-gameflow/v1/gameflow-phase')).json;
-  if (typeof fase !== 'string') throw new Error('não consegui ler a fase do client');
+  if (typeof fase !== 'string') throw new Error('não foi possível ler a fase do client');
   if (FASES_BLOQUEADAS.includes(fase)) throw new Recusa(`fila rápida indisponível agora (${fase})`);
   if (fase === 'Matchmaking') throw new Recusa('já está na fila');
   return fase;
@@ -53,7 +54,7 @@ export async function prepararLobby(cfg) {
   const lobby = await lcu('GET', '/lol-lobby/v2/lobby');
   if (!lobby.ok && lobby.status !== 404) throw new Error(`ler lobby: ${lobby.status}`);
   if (lobby.ok && ((lobby.json?.members?.length ?? 0) > 1 || lobby.json?.invitations?.some(i => i.state === 'Pending')))
-    throw new Recusa('tem mais gente no grupo: monte a fila pelo botão do client');
+    throw new Recusa('há mais jogadores no grupo: monte a fila pelo botão do client');
   if (!lobby.ok || lobby.json?.gameConfig?.queueId !== fr.fila) {
     const r = await lcu('POST', '/lol-lobby/v2/lobby', { queueId: fr.fila });
     if (!r.ok) throw new Error(`criar lobby: ${r.status} ${r.json?.message ?? ''}`);
@@ -96,13 +97,13 @@ export async function jogarDeNovo(cfg, opcoes = {}) {
   const recusa = motivo => ({ status: 'recusa', motivo });
   const lerFase = async () => (await lcu('GET', '/lol-gameflow/v1/gameflow-phase')).json;
   const fase = await lerFase();
-  if (typeof fase !== 'string') return recusa('não consegui ler a fase do client');
+  if (typeof fase !== 'string') return recusa('não foi possível ler a fase do client');
   if (!['EndOfGame', 'Lobby', 'None'].includes(fase)) return recusa(`jogar de novo só depois do fim da partida (agora: ${fase})`);
 
   const st = (await lcu('GET', '/lol-gameflow/v1/gameflow-metadata/player-status')).json;
   const ant = st?.lastQueuedLobbyStatus;
   const queueId = Number(ant?.queueId) || 0;
-  if (!queueId || queueId < 0) return recusa('não sei a fila da partida anterior');
+  if (!queueId || queueId < 0) return recusa('fila da partida anterior desconhecida');
   if (queueIdEsperado !== undefined && queueIdEsperado !== null && Number(queueIdEsperado) !== queueId)
     return recusa(`esta partida foi na fila ${queueIdEsperado} e a última fila do client é a ${queueId}: monte pelo client`);
   const grupo = !ant.isLeader || (ant.memberSummonerIds?.length ?? 1) > 1;
@@ -118,14 +119,14 @@ export async function jogarDeNovo(cfg, opcoes = {}) {
     if (ant.allowedPlayAgain) voltou = (await lcu('POST', '/lol-lobby/v2/play-again')).ok;
     if (!voltou) {
       const d = await lcu('POST', '/lol-end-of-game/v1/state/dismiss-stats');
-      if (!d.ok) return recusa(`não consegui sair da tela de fim de partida (${d.status})`);
+      if (!d.ok) return recusa(`não foi possível sair da tela de fim de partida (${d.status})`);
     }
     // espera o client sair do EndOfGame
     const ate = agora() + prazoMs;
     let f = await lerFase();
     while (!['Lobby', 'None'].includes(f) && agora() < ate) { await dormir(500); f = await lerFase(); }
-    if (!['Lobby', 'None'].includes(f)) return recusa('saí da tela de fim de partida, mas o lobby não voltou a tempo: não busquei');
-    if (grupo) return { status: 'grupo', motivo: f === 'Lobby' ? 'de volta ao lobby do grupo: o líder busca' : 'saí da tela de fim de partida; o lobby do grupo não voltou' };
+    if (!['Lobby', 'None'].includes(f)) return recusa('a tela de fim de partida fechou, mas o lobby não voltou a tempo: a busca não começou');
+    if (grupo) return { status: 'grupo', motivo: f === 'Lobby' ? 'de volta ao lobby do grupo: o líder busca' : 'a tela de fim de partida fechou, mas o lobby do grupo não voltou' };
   }
   if (grupo) return { status: 'grupo', motivo: 'em grupo quem busca é o líder' };
 
@@ -135,11 +136,11 @@ export async function jogarDeNovo(cfg, opcoes = {}) {
   let lobby = await lcu('GET', '/lol-lobby/v2/lobby');
   if (!lobby.ok && lobby.status !== 404) return recusa(`ler lobby: ${lobby.status}`);
   if (lobby.ok && ((lobby.json?.members?.length ?? 0) > 1 || lobby.json?.invitations?.some(i => i.state === 'Pending')))
-    return { status: 'grupo', motivo: 'tem mais gente no lobby: o líder busca' };
+    return { status: 'grupo', motivo: 'há mais jogadores no lobby: o líder busca' };
   if (!lobby.ok || lobby.json?.gameConfig?.queueId !== queueId) {
     // sem lobby (play-again falhou, fila fora de rotação) ou fila diferente: cria na mesma da partida
     const c = await lcu('POST', '/lol-lobby/v2/lobby', { queueId });
-    if (!c.ok) return recusa(`não consegui montar a fila ${queueId} (${c.status} ${c.json?.message ?? ''}): fora de rotação?`);
+    if (!c.ok) return recusa(`não foi possível montar a fila ${queueId} (${c.status} ${c.json?.message ?? ''}): fora de rotação?`);
   }
   if (FILAS_COM_POSICAO.includes(queueId)) {
     if (fr.pos1 === fr.pos2) return recusa(`1ª e 2ª posição iguais (${fr.pos1}): troque nas configurações`);
@@ -272,7 +273,7 @@ export function iniciarFilaRapida(context, cfg, { historico = null } = {}) {
     b.classList.toggle('lc-ocupado', ocupado);
     b.classList.toggle('lc-confirmar', armado);
     const fr = cfg.filaRapida;
-    b.title = buscando ? 'sair da fila' : armado ? `${textoFreio} (clica de novo em até ${JANELA_MS / 1000} s)`
+    b.title = buscando ? 'sair da fila' : armado ? `${textoFreio} (clique de novo em até ${JANELA_MS / 1000} s)`
       : `${fr.fila === 420 ? 'solo/duo' : 'flex'}: ${fr.pos1} e ${fr.pos2}`;
   };
 

@@ -49,6 +49,7 @@ export const ESPERA_SEQ_MS = 2000;
 // '' (nenhuma etapa) depois da honra: a Riot troca de etapa ou de fase em < 1 s; parado mais que isso, expande (revisão de
 // 14/10/2026: sem prazo, a tela ficava presa no PreEndOfGame e escondia o que a Riot abrisse por baixo)
 export const ESPERA_POS_HONRA_MS = 4000;
+export const MOTIVO_CONFIG_RIOT = 'configurações da Riot (abertas por você)'; // forcar() e a volta comparam o mesmo texto
 export const CLASSE = 'lc-modo-compacto'; // no <html> enquanto a camada está à vista (lc-compacto é a chave ligada)
 export const ESPERA_SESSAO_MS = 2000; // champ select sem a sessão do gameflow lida: espera isso e expande
 export const CONTAGEM_MS = 1500; // ready check sem o #lc-aceite visto até aqui: expande (o popup da Riot fica embaixo da camada)
@@ -114,7 +115,7 @@ export function destinoDaFase(fase, info = {}) {
       // info.seq: nome da etapa (undefined = ainda não lida); seqFirme: a etapa ficou SEQ_FIRME_MS; seqEsgotou: sem etapa
       // (não lida ou '') por tempo demais (o roteador conta: ESPERA_SEQ_MS antes da honra, ESPERA_POS_HONRA_MS depois)
       if (info.seq === SEQ_HONRA) return { tipo: 'tela', tela: 'honra' };
-      if (typeof info.seq !== 'string') return info.seqEsgotou ? { tipo: 'expandir', motivo: 'não li a etapa do fim de partida: tela da Riot' }
+      if (typeof info.seq !== 'string') return info.seqEsgotou ? { tipo: 'expandir', motivo: 'etapa do fim de partida sem leitura: tela da Riot' }
         : { tipo: 'esperar', motivo: 'lendo a etapa do fim de partida' };
       // '' = nenhuma etapa: na entrada (a honra vem ~0,1 s depois) ou no fim da honra (a Riot já vai trocar); parado, expande
       if (!info.seq) return info.seqEsgotou ? { tipo: 'expandir', motivo: 'fim de partida sem etapa da Riot: tela da Riot' }
@@ -315,7 +316,7 @@ export function criarRoteador({
     // 'jogo' desde o passo 14 só sai para partida fora de SR/ARAM (TFT, Arena...): client normal embaixo do jogo, como antes
     if (d.tipo === 'jogo') return { modo: 'expandido', motivo: d.motivo || 'partida: client normal embaixo do jogo', daFase: true, origem: 'jogo-fora' };
     if (est.forcado) return { modo: 'expandido', motivo: est.forcado, origem: est.forcadoTipo || 'forcado' };
-    if (quer !== 'compacto') return { modo: 'expandido', motivo: est.override ? 'expandido por ti' : 'padrão: client normal', origem: est.override ? 'por-ele' : 'padrao' };
+    if (quer !== 'compacto') return { modo: 'expandido', motivo: est.override ? 'expandido por você' : 'padrão: client normal', origem: est.override ? 'por-ele' : 'padrao' };
     if (!janela.disponivel()) return { modo: 'expandido', motivo: 'sem controle da janela (riotInvoke)', origem: 'sem-riotinvoke' };
     const m = carregar(d.tela);
     if (m.estado === 'carregando') return { modo: 'esperar', motivo: `carregando a tela ${d.tela}` };
@@ -558,7 +559,7 @@ export function criarRoteador({
   // "Configurações da Riot" do painel B1: expande (o modal dela é de 1280) e, quando ele fechar, volta ao compacto
   // (comportamento novo do passo 13, decisão técnica v; as outras janelas da Riot seguem a regra 7 de sempre)
   function abrirConfigRiot() {
-    forcar('configurações da Riot (abertas por ti)', 'config-riot');
+    forcar(MOTIVO_CONFIG_RIOT, 'config-riot');
     est.configRiot = true;
     est.gatilho = 'painel ⚙: Configurações da Riot';
     resolver();
@@ -567,7 +568,7 @@ export function criarRoteador({
   function configRiotFechou() {
     if (!est.configRiot) return;
     est.configRiot = false;
-    if (est.forcado === 'configurações da Riot (abertas por ti)') { est.forcado = null; est.volta = 'as Configurações da Riot fecharam'; resolver(); }
+    if (est.forcado === MOTIVO_CONFIG_RIOT) { est.forcado = null; est.volta = 'as Configurações da Riot fecharam'; resolver(); }
   }
 
   function mudarFase(a) {
@@ -675,7 +676,7 @@ export function criarRoteador({
     forcar(`erro na tela compacta (${String(e?.message || e).slice(0, 120)})`, 'erro-tela');
     // o texto sai no fim do resolver (pode ser reentrante): só então se sabe se o client normal abriu ou espera o foco
     avisarDepois(() => (est.adiado === 'expandir' ? 'a tela compacta falhou: o client normal abre quando voltar a ele'
-      : 'a tela compacta falhou: abri o client normal'), true);
+      : 'a tela compacta falhou: abrindo o client normal'), true);
     resolver();
   }
 
@@ -920,14 +921,14 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     let visto = false, avisou = false;
     (async () => {
       try { const s = await globalThis.rcp?.whenReady?.('rcp-fe-lol-settings'); if (typeof s?.show === 'function') { s.show(); return; } } catch (e) { console.error('[lol-client] compacto: configurações da Riot', e); }
-      avisarPadrao('abre a engrenagem ⚙ no topo do client: ao fechar as configurações, o compacto volta', false);
+      avisarPadrao('abra a engrenagem ⚙ no topo do client: ao fechar as configurações, o compacto volta', false);
     })();
     clearInterval(vigiaCfg);
     vigiaCfg = setInterval(() => {
       const aberto = !!doc.querySelector('.lol-settings-container');
       if (aberto) visto = true;
       else if (visto) { clearInterval(vigiaCfg); vigiaCfg = null; rot.configRiotFechou(); return; }
-      if (!visto && !avisou && Date.now() - inicio > 5000) { avisou = true; avisarPadrao('as Configurações da Riot não abriram sozinhas: usa a engrenagem ⚙ no topo', true); }
+      if (!visto && !avisou && Date.now() - inicio > 5000) { avisou = true; avisarPadrao('as Configurações da Riot não abriram sozinhas: use a engrenagem ⚙ no topo', true); }
       if (Date.now() - inicio > 600000) { clearInterval(vigiaCfg); vigiaCfg = null; }
     }, 500);
   }
@@ -1047,7 +1048,7 @@ export function expandirAntes({ compacto, abrir, aVista = () => !!globalThis.doc
   const naCamada = () => { try { return aVista() || compacto?.estado?.().efetivo === 'compacto'; } catch { return false; } };
   if (naCamada()) {
     try { compacto?.expandir?.('Ctrl+K'); } catch (e) { console.error('[lol-client] compacto: expandir', e); }
-    if (naCamada()) { avisar('não consegui sair do modo compacto: usa ⤢ expandir e chama de novo pelo Ctrl+K', true); return null; }
+    if (naCamada()) { avisar('não foi possível sair do modo compacto: use ⤢ expandir e chame de novo pelo Ctrl+K', true); return null; }
   }
   return abrir();
 }

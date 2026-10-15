@@ -109,7 +109,7 @@ function desenharAmeaca(e) {
   $('ameaca-nome').className = 'nome-grande' + (a.morto ? ' velho' : '');
   $('ameaca-linha').textContent = `${a.k}/${a.d}/${a.a} · ${mil(a.ouroEstimado)} em itens`;
   chips.append(chip(`dano ${a.dano}`, a.dano === 'AP' ? 'azul' : a.dano === 'AD' ? 'vermelho' : ''));
-  if (a.minhaRota) { chips.append(chip('tua rota: evita 1x1', 'vermelho')); $('b-ameaca').classList.add('alerta'); }
+  if (a.minhaRota) { chips.append(chip('sua rota: evite 1x1', 'vermelho')); $('b-ameaca').classList.add('alerta'); }
   if (a.morto) chips.append(chip(volta(a.renascerS), 'verde'));
   else if (!a.atual) chips.append(chip(`visto há ${ha(a.vistoHaS)}`, 'velho'));
   chips.append(chip(`nível ${a.nivel}${a.atual ? '' : '?'}`, a.atual ? '' : 'velho'));

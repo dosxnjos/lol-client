@@ -439,7 +439,7 @@ async function perguntar(ctx, est, input, e) {
     est.pergunta = '';
     const m = await col(`/mentor/${est.gameId}`).catch(() => null);
     if (ctx.vivo() && m?.status === 200 && m.dados?.status) est.mentor = m.dados;
-  } else ctx.avisar(r?.status === 429 ? 'mentor ocupado com outra chamada: tenta de novo em alguns segundos'
+  } else ctx.avisar(r?.status === 429 ? 'mentor ocupado com outra pergunta: tente de novo em alguns segundos'
     : r?.status === 0 ? 'coletor fora do ar' : `o mentor não aceitou a pergunta (${r?.dados?.erro || r?.status})`, true);
   pintar(ctx, est);
 }
@@ -515,7 +515,7 @@ async function clicarJogar(ctx, est, e) {
     est.textoFreio = r.texto;
     est.armadoAte = _relogio.agora() + JANELA_MS;
     est.armadoVisto = true;
-  } else if (r?.status === 'buscando') ctx.avisar('de volta à fila (só porque tu clicou)');
+  } else if (r?.status === 'buscando') ctx.avisar('de volta à fila');
   else if (r?.status === 'grupo') ctx.avisar(r.motivo);
   else if (r?.status === 'recusa') ctx.avisar(`jogar de novo: ${r.motivo}`, true);
   if (ctx.vivo()) pintar(ctx, est);
@@ -525,7 +525,7 @@ async function clicarJogar(ctx, est, e) {
 // client deixa (lastQueuedLobbyStatus.allowedPlayAgain), senão sai do fim de partida como o ✕ dela. Nunca busca.
 export async function irParaLobby(ctx, est, e) {
   if (e?.isTrusted === false || est.ocupado) return;
-  if (ctx.fase !== 'EndOfGame') { ctx.avisar('espera as estatísticas chegarem', true); return; }
+  if (ctx.fase !== 'EndOfGame') { ctx.avisar('aguarde as estatísticas chegarem', true); return; }
   est.ocupado = true;
   pintar(ctx, est);
   let expandir = false;
@@ -539,10 +539,10 @@ export async function irParaLobby(ctx, est, e) {
       const grupo = (st.ok ? emGrupo(st.json) : null) ?? est.grupo;
       if (grupo === false) {
         const d = await ctx.lcu('POST', '/lol-end-of-game/v1/state/dismiss-stats');
-        if (d.ok) ctx.avisar('a Riot não deixou voltar ao lobby: fui para o início');
-        else ctx.avisar(`não consegui sair da tela de fim de partida (${d.status})`, true);
+        if (d.ok) ctx.avisar('a Riot não permitiu voltar ao lobby: indo para o início');
+        else ctx.avisar(`não foi possível sair da tela de fim de partida (${d.status})`, true);
       } else {
-        ctx.avisar('a Riot não deixou voltar ao lobby por aqui: abri o client normal', true);
+        ctx.avisar('a Riot não permitiu voltar ao lobby por aqui: abrindo o client normal', true);
         expandir = true;
       }
     }
@@ -556,17 +556,17 @@ export async function irParaLobby(ctx, est, e) {
 function verAnalise(ctx, est) {
   const id = est.gameId, abrir = ctx.servicos?.posjogo?.abrirPainel;
   ctx.expandir();
-  if (!id) { ctx.avisar('não sei qual partida analisar: Ctrl+K > analisar última partida', true); return; }
+  if (!id) { ctx.avisar('partida não identificada: use Ctrl+K > analisar última partida', true); return; }
   if (typeof abrir !== 'function') { ctx.avisar('painel do pós-jogo indisponível: Ctrl+K > analisar última partida', true); return; }
   try { abrir(id, { fimDePartida: true })?.catch?.(() => {}); } catch { /* o client normal já está à vista */ }
 }
 
 async function fechar(ctx, e) {
   if (e?.isTrusted === false) return;
-  if (ctx.fase !== 'EndOfGame') { ctx.avisar('espera as estatísticas chegarem', true); return; }
+  if (ctx.fase !== 'EndOfGame') { ctx.avisar('aguarde as estatísticas chegarem', true); return; }
   // o mesmo que o ✕ da tela de estatísticas da Riot: sai do fim de partida, nunca busca
   const r = await ctx.lcu('POST', '/lol-end-of-game/v1/state/dismiss-stats');
-  if (!r.ok) ctx.avisar(`não consegui fechar a tela de fim de partida (${r.status})`, true);
+  if (!r.ok) ctx.avisar(`não foi possível fechar a tela de fim de partida (${r.status})`, true);
 }
 
 // ---- desenho (h() = textContent: texto do eog, do chat e do coletor nunca vira HTML) ----
@@ -598,7 +598,7 @@ function montarPartes(ctx, est) {
   if (!est.sala) est.sala = criarSala(ctx, { jogadores: () => est.jogadores, gameId: () => est.gameId, tamanho: 'normal', aoNome: j => abrirJogador(ctx, est.social, j, { raiz: ctx.raiz }) });
   // replay (pedido de 15/10/2026): uma linha só por montagem, entre o chat e os botões; botões nascem uma vez (../replay.js)
   if (!est.replay) est.replay = criarReplay({ lcu: ctx.lcu, gameId: () => est.gameId, fim: true, vivo: () => ctx.vivo(), avisar: (m, e) => ctx.avisar(m, e),
-    corpo: () => ({ gameType: est.tipoFila || est.tipoFilaEog, queueId: est.fila }), agora: () => _relogio.agora(), tempo: (fn, ms) => ctx.tempo(fn, ms) });
+    corpo: () => ({ gameType: est.tipoFila || est.tipoFilaEog, queueId: est.fila }), agora: () => _relogio.agora() });
   est.partes = { faixa: h('div', { class: 'lc-cp-faixa' }), abas: h('div', { class: 'lc-cp-pj-abas' }), cont: h('div', { class: 'lc-cp-pj-cont' }),
     replay: h('div', { class: 'lc-cp-replay' }, est.replay.el), base: h('div', { class: 'lc-cp-base' }) };
   est.corpo.replaceChildren(est.partes.faixa, est.partes.abas, est.partes.cont, est.sala.el, est.partes.replay, est.partes.base);
@@ -678,7 +678,7 @@ function conteudoResumo(ctx, est) {
   }
   // conversa: a última pergunta e a resposta
   const perg = (m.conversa || []).filter(c => c.uso === 'pergunta').at(-1);
-  if (perg) caixa.push(h('div', { class: 'lc-cp-mt-resp' }, h('i', {}, 'tu: '), perg.pergunta || '', h('br'),
+  if (perg) caixa.push(h('div', { class: 'lc-cp-mt-resp' }, h('i', {}, 'você: '), perg.pergunta || '', h('br'),
     perg.status === 'pensando' ? h('i', {}, 'pensando…') : perg.status === 'erro' ? `falhou: ${perg.erro || ''}` : String(perg.resposta || '').replace(/\*\*/g, '')));
   const podePerguntar = comColetor && m.status !== 'fora' && m.status !== 'indisponivel' && !!est.gameId;
   const input = h('input', { dataset: { a: 'mentor-pergunta' }, maxlength: '500', placeholder: podePerguntar ? 'perguntar ao mentor sobre esta partida' : 'perguntar fica cinza sem o coletor' });
@@ -729,7 +729,7 @@ function conteudoDetalhes(ctx, est) {
     };
     const kda = j => (j.kda ? (j.kda[0] + j.kda[2]) / Math.max(1, j.kda[1]) : 0);
     out.push(h('div', { class: 'lc-cp-vs' },
-      h('div', { class: 'lc-cp-vs-cab' }, h('span', { class: 'lc-cp-e' }, fotoCampeao(eu.campeaoId, { tam: 24, nome: eu.campeao }), ` tu · ${eu.campeao}`),
+      h('div', { class: 'lc-cp-vs-cab' }, h('span', { class: 'lc-cp-e' }, fotoCampeao(eu.campeaoId, { tam: 24, nome: eu.campeao }), ` você · ${eu.campeao}`),
         h('span', { class: 'lc-cp-meio' }, POSICOES[eu.posicao] || ''),
         h('span', { class: 'lc-cp-d' }, [adv.nome, adv.campeao].filter(Boolean).join(' · ') + ' ', fotoCampeao(adv.campeaoId, { tam: 24, nome: adv.campeao }))),
       lin('KDA', kda(eu), kda(adv), eu.kda ? eu.kda.join('/') : '–', adv.kda ? adv.kda.join('/') : '–'),
@@ -753,7 +753,7 @@ function conteudoDetalhes(ctx, est) {
   const meu = lista.filter(j => j.aliado), deles = lista.filter(j => !j.aliado);
   const v = est.resumo?.vitoria;
   out.push(h('div', { class: 'lc-cp-jg-h' }, h('span'), h('span'), h('span', {}, 'K/D/A'), h('span', {}, 'farm'), h('span', {}, 'dano'), h('span', {}, 'ouro'), h('span')),
-    h('div', { class: 'lc-cp-tm' }, h('span', {}, `teu time${v === true ? ' · vitória' : v === false ? ' · derrota' : ''}`), h('b', {}, tot(meu))), ...meu.map(linha),
+    h('div', { class: 'lc-cp-tm' }, h('span', {}, `seu time${v === true ? ' · vitória' : v === false ? ' · derrota' : ''}`), h('b', {}, tot(meu))), ...meu.map(linha),
     h('div', { class: 'lc-cp-tm' }, h('span', {}, 'adversários'), h('b', {}, tot(deles))), ...deles.map(linha),
     h('div', { class: 'lc-cp-nota lc-cp-centro' }, 'itens, runas e feitiços: ⤢ análise completa'));
   return out;
@@ -764,7 +764,7 @@ function pintarBase(ctx, est) {
   const r = est.resumo;
   const b = botaoJogar({ fase: ctx.fase, cfg: ctx.cfg, fila: est.fila, custom: est.custom, resumo: r, grupo: est.grupo, armada });
   const bt = h('button', {
-    class: 'lc-cp-jogar' + (b.armada ? ' lc-cp-armado' : ''), dataset: { a: 'jogar' }, title: b.motivo || (b.armada ? `${est.textoFreio} (clica de novo em até ${JANELA_MS / 1000} s)` : b.sub),
+    class: 'lc-cp-jogar' + (b.armada ? ' lc-cp-armado' : ''), dataset: { a: 'jogar' }, title: b.motivo || (b.armada ? `${est.textoFreio} (clique de novo em até ${JANELA_MS / 1000} s)` : b.sub),
     on: { click: ctx.seguro(e => clicarJogar(ctx, est, e)) },
   }, est.ocupado ? 'UM INSTANTE…' : b.texto, h('small', {}, b.sub));
   bt.disabled = !!b.motivo || est.ocupado;

@@ -15,11 +15,11 @@ const botao = (texto, classe, aoClicar) => {
 
 export function blocoChampSelect(champ) {
   return (corpo, { cfg, definir, ui }) => {
-    corpo.append(ui.caixa('champSelect.ligado', 'Winrate com o campeão', 'No champ select, mostra partidas, winrate e KDA com o campeão em hover ou escolhido, no geral e na tua posição; com o coletor ligado, também o teu histórico contra o adversário de rota provável, o trauma e a força do draft em faixa. Só os teus dados.',
+    corpo.append(ui.caixa('champSelect.ligado', 'Winrate com o campeão', 'No champ select, mostra partidas, winrate e KDA com o campeão em hover ou escolhido, no geral e na posição da partida; com o coletor ligado, também o histórico contra o adversário de rota provável, o trauma e a força do draft em faixa. Só dados da sua conta.',
       cfg.champSelect.ligado, v => definir('champSelect.ligado', v)));
     const e = champ?.estado?.();
     corpo.append(ui.explica(!e ? '' : e.carregando && !e.partidas ? 'Lendo o histórico do client (leva até 40 s)…'
-      : !e.ultimaLeitura ? 'Histórico ainda não lido: tento de novo no próximo champ select.'
+      : !e.ultimaLeitura ? 'Histórico ainda não lido: nova tentativa no próximo champ select.'
       : `Histórico lido: ${e.partidas} partidas (o client guarda 20 ou 200, conforme o dia; personalizada, treino e remake ficam fora da conta).`));
   };
 }
@@ -41,7 +41,7 @@ export function blocoRunas(corpo, ctx) {
   if (!dados.campeoes || !dados.paginas) {
     corpo.append(ui.explica('Carregando campeões e páginas de runas…'));
     carregar().then(() => { if (corpo.isConnected) blocoRunas(corpo, ctx); }).catch(() => {
-      if (corpo.isConnected) corpo.append(ui.explica('Não consegui ler campeões e páginas do client.'));
+      if (corpo.isConnected) corpo.append(ui.explica('Não foi possível ler campeões e páginas do client.'));
     });
     return;
   }
@@ -138,10 +138,10 @@ export function blocoRunas(corpo, ctx) {
 
 // avisos.TIPOS_LIGAVEIS do coletor: tipo -> rótulo. Duas caixas por tipo: voz e tela (painel + moldura)
 const AVISOS = [
-  ['gank', 'Gank provável'], ['intruso_grupo', '2+ inimigos chegando'], ['intruso', 'Intruso na tua rota'],
+  ['gank', 'Gank provável'], ['intruso_grupo', '2+ inimigos chegando'], ['intruso', 'Intruso na sua rota'],
   ['jungler_apareceu', 'Jungler inimigo apareceu'], ['mid_indo', 'Mid inimigo saiu da rota'], ['mid_sumiu', 'Mid inimigo sumiu'],
   ['adversario_voltou', 'Adversário de rota voltou'], ['janela_objetivo', 'Janela de objetivo (inimigos mortos)'],
-  ['objetivo_60s', 'Objetivo em 60 s'], ['mortes_cedo', 'Mortes antes dos 10'], ['inimigo_fed', 'Inimigo forte na tua rota'],
+  ['objetivo_60s', 'Objetivo em 60 s'], ['mortes_cedo', 'Mortes antes dos 10'], ['inimigo_fed', 'Inimigo forte na sua rota'],
   ['ouro_guardado', 'Ouro guardado (hora de voltar?)'], ['feitico_voltou', 'Feitiço inimigo voltou (Flash...)'],
   ['pico_nivel', 'Inimigo no nível de pico'], ['pico_item', 'Inimigo fechou item'], ['regra', 'Outras dicas do coach'],
   ['feitico_marcado', 'Retorno do F7 (Flash marcado)'], ['overlay_f8', 'Retorno do F8 (overlay ligado/desligado)', ['tela']],
@@ -158,11 +158,11 @@ export const blocoConexao = estado => (corpo, { ui }) => {
   const e = estado();
   corpo.append(ui.explica(e.ok === null ? 'Coletor: ainda sem contato (a config vai quando ele responder).'
     : e.ok ? `Coletor ligado em 127.0.0.1:8765${e.enviadoEm ? ': config aplicada' : ''}.`
-      : 'Coletor fora do ar agora: a config fica salva aqui e vai sozinha quando ele subir (tento a cada 30 s).'));
+      : 'Coletor fora do ar agora: a config fica salva aqui e vai sozinha quando ele subir (nova tentativa a cada 30 s).'));
 };
 
 export const blocoPainel = (corpo, ctx) => corpo.append(
-  caixaCoach(ctx, 'painelAoVivo', 'Painel ao vivo na 2ª tela', 'Na partida, abre o painel no monitor secundário (tua rota, ameaça, teu padrão, time e objetivos) e fecha no fim.'),
+  caixaCoach(ctx, 'painelAoVivo', 'Painel ao vivo na 2ª tela', 'Na partida, abre o painel no monitor secundário (sua rota, ameaça, seu padrão, time e objetivos) e fecha no fim.'),
   caixaCoach(ctx, 'amostrasAoVivo', 'Gravar amostras da partida', 'A cada 10 s guarda nível, itens, ouro estimado e KDA dos 10 no banco: deixa o pós-jogo mais fino.'));
 
 // voz: pacote Aoede gravado antes (coletor/voz.py), Maria do Windows só para a frase que falta no pacote
@@ -175,10 +175,10 @@ export function blocoAlertas(corpo, ctx) {
   const { cfg, definir, ui } = ctx;
   corpo.append(caixaCoach(ctx, 'alertasTela', 'Moldura de alertas na tela', 'Borda colorida pulsando + rótulo curto por ~2 s, só com o jogo em primeiro plano.'),
     // regras da calibração de 14/10/2026 (roadmap/2026-10-14-calibrar-avisos.md, passo 7): padrão = como ficou nela
-    caixaCoach(ctx, 'gankOutraRota', 'Avisar gank nas outras rotas', 'Quando o jungler deles parece ir pegar um colega teu em outra rota, avisa em amarelo, sem pressa, para tu avisar o time. O gank na rota onde tu está não muda com esta caixa.'),
-    ui.linha(ui.lista('coach.junglerLonge', 'Jungler inimigo longe de ti', JUNGLER_LONGE, cfg.coach.junglerLonge, v => definir('coach.junglerLonge', v))),
-    ui.explica('Longe = longe de onde tu está agora (não da rota que tu escolheu). Jogando de jungler, tudo conta como perto. "Só no painel" precisa do painel da 2ª tela ligado. A linha "Jungler inimigo apareceu" abaixo cala ele perto e longe.'),
-    caixaCoach(ctx, 'midSumiuFiltro', 'Avisar "mid sumiu" só quando faz sentido', 'Ligado: só no começo do jogo (de 1:30 a 14:00, antes de cair a 1ª torre do meio) e calado quando tu está morto ou na base, quando atacam a tua base ou no meio de uma briga. Desligado: avisa toda vez que o mid some. Nos dois casos, no máximo 4 vezes por partida, com 2 minutos entre um e outro.'),
+    caixaCoach(ctx, 'gankOutraRota', 'Avisar gank nas outras rotas', 'Quando o jungler deles parece ir pegar um aliado em outra rota, avisa em amarelo, sem pressa, para você avisar o time. O gank na sua rota não muda com esta caixa.'),
+    ui.linha(ui.lista('coach.junglerLonge', 'Jungler inimigo longe de você', JUNGLER_LONGE, cfg.coach.junglerLonge, v => definir('coach.junglerLonge', v))),
+    ui.explica('Longe = longe de onde você está agora (não da rota escolhida). Jogando de jungler, tudo conta como perto. "Só no painel" precisa do painel da 2ª tela ligado. A linha "Jungler inimigo apareceu" abaixo cala ele perto e longe.'),
+    caixaCoach(ctx, 'midSumiuFiltro', 'Avisar "mid sumiu" só quando faz sentido', 'Ligado: só no começo do jogo (de 1:30 a 14:00, antes de cair a 1ª torre do meio) e calado quando você está morto ou na base, quando atacam a sua base ou no meio de uma briga. Desligado: avisa toda vez que o mid some. Nos dois casos, no máximo 4 vezes por partida, com 2 minutos entre um e outro.'),
     ui.explica('Por tipo: "voz" fala o aviso; "tela" mostra no painel e na moldura. Desmarcar os dois cala o aviso.'));
   const desl = cfg.coach.avisosDesligados;
   const trocar = (destino, tipo, ligado) => {  // lê o valor vivo: duas caixas seguidas sem remontar o painel
@@ -204,11 +204,11 @@ export const blocoMinimapa = (corpo, ctx) => corpo.append(
     ctx.ui.lista('coach.overlayCor', 'Cor da mancha', OVERLAY_CORES, ctx.cfg.coach.overlayCor, v => ctx.definir('coach.overlayCor', v)),
     ctx.ui.lista('coach.overlayForca', 'Força da cor', OVERLAY_FORCAS, ctx.cfg.coach.overlayForca, v => ctx.definir('coach.overlayForca', v))),
   caixaCoach(ctx, 'overlaySuave', 'Mancha muda aos poucos', 'Ligado: a mancha cresce e some devagar. Desligado: muda na hora, aos saltos.'),
-  ctx.ui.explica('Como ler: a mancha é onde o jungler deles pode estar agora; quanto mais forte a cor, mais provável. Ela não pinta onde o teu time está vendo e some uns 30 s depois da última pista dele.'),
-  caixaCoach(ctx, 'feiticos', 'Flash e feitiços inimigos', 'Lê os pings de feitiço do chat (OCR) e conta a recarga. Na partida, F7 marca na mão o flash do inimigo: uma batida escolhe o adversário da tua rota, cada batida a mais passa para a próxima (top, jungler, mid, atirador, suporte) e a borda mostra quem está escolhido; parado cerca de 1 segundo, marca. Segurar F7 desfaz a última marcação.'));
+  ctx.ui.explica('Como ler: a mancha é onde o jungler deles pode estar agora; quanto mais forte a cor, mais provável. Ela não pinta onde o seu time tem visão e some uns 30 s depois da última pista dele.'),
+  caixaCoach(ctx, 'feiticos', 'Flash e feitiços inimigos', 'Lê os pings de feitiço do chat (OCR) e conta a recarga. Na partida, F7 marca na mão o flash do inimigo: uma batida escolhe o adversário da sua rota, cada batida a mais passa para a próxima (top, jungler, mid, atirador, suporte) e a borda mostra quem está escolhido; parado cerca de 1 segundo, marca. Segurar F7 desfaz a última marcação.'));
 
 export const blocoMentor = (corpo, ctx) => corpo.append(
-  caixaCoach(ctx, 'mentor', 'Mentor no pós-jogo', 'No fim da partida, o teu Claude lê os números e escreve a análise; dá para perguntar no pós-jogo.'),
+  caixaCoach(ctx, 'mentor', 'Mentor no pós-jogo', 'No fim da partida, o Claude lê os números e escreve a análise; no pós-jogo, também responde perguntas.'),
   ctx.ui.linha(
     ctx.ui.lista('coach.mentorModelo', 'Modelo', MODELOS, ctx.cfg.coach.mentorModelo, v => ctx.definir('coach.mentorModelo', v)),
     ctx.ui.lista('coach.mentorEffort', 'Esforço', EFFORTS, ctx.cfg.coach.mentorEffort, v => ctx.definir('coach.mentorEffort', v))),
@@ -218,7 +218,7 @@ export const blocoCarregamento = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'carregamento', 'Os 10 na tela de carregamento', 'Elo, winrate e tags com número dos 10 jogadores (sequência, fora da rota, OTP, primeira vez, experiência, KDA, morre cedo, domina a rota) no painel da 2ª tela, pela Riot API. Identidade dos outros só em memória.'));
 
 export const blocoTraumas = (corpo, { cfg, definir, ui }) => corpo.append(
-  ui.caixa('traumas.ligado', 'Mostrar traumas', 'Campeão inimigo que mais aparece nas tuas derrotas (lift ≥ 1,2 com n ≥ 3, sempre com V/D ao lado): linha no selo do champ select e bloco na aba Tendência do pós-jogo.',
+  ui.caixa('traumas.ligado', 'Mostrar traumas', 'Campeão inimigo que mais aparece nas suas derrotas (lift ≥ 1,2 com n ≥ 3, sempre com V/D ao lado): linha no selo do champ select e bloco na aba Tendência do pós-jogo.',
     cfg.traumas.ligado, v => definir('traumas.ligado', v)));
 
 // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): vale na hora (index.js aoMudar -> sincronizar)

@@ -13,19 +13,20 @@
 //   {componentType}; assistir: POST /lol-replays/v1/rofls/{gameId}/watch {componentType}.
 // Só por clique dele (isTrusted): nada baixa nem abre sozinho; o create também só sai do clique em "baixar". Assistir abre o jogo
 // e a Riot minimiza o client (LeagueClient.log de 15/10: "Ux state set to MinimizeAll", a fase segue EndOfGame, e no fim do
-// replay "ShowMain"): 1º clique arma e avisa, 2º em até 8 s abre (freios.js criarConfirmacao). A janela não é mexida aqui:
+// replay "ShowMain"): 1 clique abre, com um aviso curto (pedido de 15/10/2026 ~12:45: "se eu clicar para assistir o replay, é
+// porque eu já cliquei antes para baixar [...] iniciar o replay de primeira"; antes eram 2 cliques em 8 s). Clique de reflexo
+// logo depois de abrir não manda o watch de novo (REPLAY.reflexoMs). A janela não é mexida aqui:
 // quem devolve o tamanho compacto depois do ShowMain é o roteador (compacto/index.js, "a janela voltou a 1280 sozinha").
-// Importável no node (tools/teste-replay.mjs): nada de DOM no topo.
+// Textos: docs/TEXTOS-DA-INTERFACE.md. Importável no node (tools/teste-replay.mjs): nada de DOM no topo.
 import { h, lcu as lcuPadrao } from './compacto/comum.js';
-import { criarConfirmacao, JANELA_MS } from './freios.js';
 
 export const COMPONENTE = { fim: 'replay-button_end-of-game', historico: 'replay-button_match-history' };
-export const REPLAY = { cadaMs: 2000 };
+export const REPLAY = { cadaMs: 2000, reflexoMs: 4000 };
 const MOTIVOS = {
   incompatible: 'replay de outra versão do jogo: não abre nesta',
   missingOrExpired: 'o replay desta partida não existe ou expirou',
   lost: 'o replay se perdeu no servidor da Riot',
-  error: 'o replay deu erro (a Riot não disse qual)',
+  error: 'erro no replay (a Riot não informou o motivo)',
   unsupported: 'esta partida não tem replay',
 };
 
@@ -61,32 +62,32 @@ export function modeloReplay({ gid, meta, cfg = null, fim = true, temCorpo = tru
   const cinza = (rotulo, motivo) => ({ mostra: true, ok: false, rotulo, motivo });
   const pode = (rotulo, motivo = '') => ({ mostra: true, ok: true, rotulo, motivo });
   const out = (estado, texto, baixar, assistir = nada) => ({ estado, texto, baixar, assistir });
-  if (!(Number(gid) > 0)) return out('sem-partida', 'replay: esperando saber qual é a partida', cinza('baixar replay', 'ainda não sei qual é a partida'));
+  if (!(Number(gid) > 0)) return out('sem-partida', 'replay: esperando saber qual é a partida', cinza('baixar replay', 'partida ainda não identificada'));
   const c = cfg?.ok && cfg.json && typeof cfg.json === 'object' ? cfg.json : null;
   if (c && (c.isReplaysEnabled === false || (fim ? c.isReplaysForEndOfGameEnabled === false : c.isReplaysForMatchHistoryEnabled === false)))
     return out('desligado', 'replay desligado pela Riot', cinza('baixar replay', 'a Riot desligou o replay aqui'));
   if (!meta) return out('lendo', 'replay: conferindo…', cinza('baixar replay', 'conferindo o replay'));
   if (meta.status === 404) {
     // ninguém criou o registro do replay ainda (o botão da Riot cria ao aparecer): o clique em "baixar" cria e baixa
-    if (!temCorpo) return out('sem-registro', 'replay: sem a fila da partida', cinza('baixar replay', 'sem a fila da partida: baixa pelo client normal'));
+    if (!temCorpo) return out('sem-registro', 'replay: sem a fila da partida', cinza('baixar replay', 'sem a fila da partida: baixe pelo client normal'));
     if (c?.isPatching) return out('sem-registro', 'replay: o client está atualizando', cinza('baixar replay', 'o client está atualizando'));
-    return out('sem-registro', 'replay desta partida', pode('baixar replay', 'confere com a Riot e baixa o replay'));
+    return out('sem-registro', 'replay desta partida', pode('baixar replay', 'registrar o replay na Riot e baixar'));
   }
-  if (!meta.ok || !meta.json || typeof meta.json !== 'object') return out('falha', `replay: não li o estado (${meta.status})`, cinza('baixar replay', `o client não respondeu o replay (${meta.status})`));
+  if (!meta.ok || !meta.json || typeof meta.json !== 'object') return out('falha', `replay: estado sem leitura (${meta.status})`, cinza('baixar replay', `o client não respondeu o replay (${meta.status})`));
   const st = String(meta.json.state || '');
   const pct = Number(meta.json.downloadProgress);
   const atualizando = !!c?.isPatching;
   switch (st) {
     case 'checking': case 'found': return out(st, 'replay: verificando…', cinza('baixar replay', 'a Riot está verificando o replay'));
-    case 'download': return out(st, 'replay disponível', atualizando ? cinza('baixar replay', 'o client está atualizando') : pode('baixar replay', 'baixa o replay desta partida'));
-    case 'retryDownload': return out(st, 'o download do replay falhou', atualizando ? cinza('baixar de novo', 'o client está atualizando') : pode('baixar de novo', 'tenta baixar de novo'));
+    case 'download': return out(st, 'replay disponível', atualizando ? cinza('baixar replay', 'o client está atualizando') : pode('baixar replay', 'baixar o replay desta partida'));
+    case 'retryDownload': return out(st, 'o download do replay falhou', atualizando ? cinza('baixar de novo', 'o client está atualizando') : pode('baixar de novo', 'tentar o download de novo'));
     case 'downloading': {
       const p = Number.isFinite(pct) && pct >= 0 && pct <= 100 ? ` ${Math.round(pct)}%` : '';
       return out(st, `baixando o replay…${p}`, cinza(`baixando…${p}`, 'baixando o replay'));
     }
     case 'watch': {
       const m = motivoAssistir(c);
-      return out(st, 'replay baixado', nada, m ? cinza('assistir replay', m) : pode('assistir replay', 'abre o jogo com o replay (a Riot minimiza o client)'));
+      return out(st, 'replay baixado', nada, m ? cinza('assistir replay', m) : pode('assistir replay', 'abrir o jogo com o replay (o client minimiza e volta no fim)'));
     }
     default: {
       const m = MOTIVOS[st] || `estado do replay desconhecido (${st || 'vazio'})`;
@@ -110,7 +111,7 @@ export async function baixarReplay(lcu, { gid, fim = true, corpo = null, tentati
   const verificando = x => x.ok && ['checking', 'found'].includes(String(x.json?.state || ''));
   for (let i = 0; i < tentativas && verificando(m); i++) { await esperar(1000); m = await lcu('GET', r.metadata); }
   const st = m.ok ? String(m.json?.state || '') : '';
-  if (st === 'checking' || st === 'found') return { ok: false, espera: true, motivo: 'a Riot ainda está verificando o replay: tenta em alguns segundos' };
+  if (st === 'checking' || st === 'found') return { ok: false, espera: true, motivo: 'a Riot ainda está verificando o replay: tente em alguns segundos' };
   if (st !== 'download' && st !== 'retryDownload') return { ok: false, motivo: m.ok ? (MOTIVOS[st] || `o replay está em "${st}"`) : `o client não respondeu o replay (${m.status})` };
   const b = await lcu('POST', r.baixar(fim), { componentType: fim ? COMPONENTE.fim : COMPONENTE.historico });
   return b.ok ? { ok: true } : { ok: false, motivo: `a Riot recusou o download (${b.status})` };
@@ -122,7 +123,7 @@ export async function assistirReplay(lcu, { gid, fim = true }) {
 }
 
 // Linha do replay (status + baixar + assistir). Botões nascem uma vez e só mudam texto/disabled/title (ARMADILHAS: botão recriado
-// engole o clique). amb: {doc, lcu, gameId(), fim(), corpo() -> dados do corpoCriar, avisar(msg, erro), vivo(), agora(), tempo(fn, ms),
+// engole o clique). amb: {doc, lcu, gameId(), fim(), corpo() -> dados do corpoCriar, avisar(msg, erro), vivo(), agora(),
 // esperar(ms) (teste), classe}
 // -> {el, ler(), pintar(), estado()}. Quem chama faz ler() no relógio (REPLAY.cadaMs) com a tela à vista.
 export function criarReplay(amb) {
@@ -130,8 +131,8 @@ export function criarReplay(amb) {
   const lcu = amb.lcu || lcuPadrao;
   const vivo = () => (typeof amb.vivo === 'function' ? amb.vivo() : true);
   const avisar = (m, e) => { try { amb.avisar?.(m, e); } catch { /* segue */ } };
-  const st = { meta: null, cfg: null, lendo: false, ocupado: false, lidoGid: null };
-  const conf = criarConfirmacao({ agora: amb.agora || Date.now });
+  const st = { meta: null, cfg: null, lendo: false, ocupado: false, lidoGid: null, abriuEm: 0 };
+  const agora = () => (typeof amb.agora === 'function' ? amb.agora() : Date.now());
   const corpoAgora = () => corpoCriar(amb.corpo?.() || {});
   const pref = amb.classe || 'lc-rp';
   const texto = h('span', { doc, class: `${pref}-tx`, dataset: { a: 'replay-estado' } }, 'replay');
@@ -146,7 +147,6 @@ export function criarReplay(amb) {
     const gid = amb.gameId?.();
     modelo = modeloReplay({ gid, meta: st.lidoGid === gid ? st.meta : null, cfg: st.cfg, fim: fim(), temCorpo: !!corpoAgora() });
     texto.textContent = modelo.texto;
-    const armada = conf.armada();
     const um = (bt, m, rotulo) => {
       bt.hidden = !m.mostra;
       bt.style.display = m.mostra ? '' : 'none';
@@ -155,9 +155,7 @@ export function criarReplay(amb) {
       bt.setAttribute('title', m.motivo || '');
     };
     um(btB, modelo.baixar, st.ocupado && modelo.baixar.mostra ? 'um instante…' : modelo.baixar.rotulo);
-    um(btA, modelo.assistir, armada && modelo.assistir.ok ? 'abrir o jogo? clica de novo' : modelo.assistir.rotulo);
-    btA.classList.toggle(`${pref}-armado`, armada && modelo.assistir.ok);
-    btA.setAttribute('title', armada && modelo.assistir.ok ? `abre o jogo com o replay e a Riot minimiza o client: clica de novo em até ${JANELA_MS / 1000} s` : modelo.assistir.motivo || '');
+    um(btA, modelo.assistir, modelo.assistir.rotulo);
   }
 
   async function ler() {
@@ -183,7 +181,7 @@ export function criarReplay(amb) {
     try { r = await baixarReplay(lcu, { gid, fim: fim(), corpo: corpoAgora(), ...(amb.esperar ? { esperar: amb.esperar } : {}) }); } catch (err) { r = { ok: false, motivo: err?.message || String(err) }; }
     finally { st.ocupado = false; }
     if (!vivo()) return;
-    if (r.ok) avisar('baixando o replay (só porque tu clicou)');
+    if (r.ok) avisar('baixando o replay');
     else avisar(`replay: ${r.motivo}`, !r.espera);
     await ler();
   }
@@ -192,20 +190,15 @@ export function criarReplay(amb) {
     if (e?.isTrusted === false || st.ocupado) return;
     const gid = amb.gameId?.();
     if (!modelo?.assistir?.ok || !(Number(gid) > 0)) { if (modelo?.assistir?.motivo) avisar(`replay: ${modelo.assistir.motivo}`, true); return; }
-    if (conf.cedo()) return; // duplo clique de reflexo não confirma
-    if (!conf.clique()) {
-      conf.armar();
-      avisar(`assistir abre o jogo com o replay e a Riot minimiza o client (volta quando o replay fechar): clica de novo em até ${JANELA_MS / 1000} s`);
-      pintar();
-      if (typeof amb.tempo === 'function') amb.tempo(() => pintar(), JANELA_MS + 50);
-      return;
-    }
+    // clique de reflexo logo depois de abrir: o jogo já está subindo, não manda o watch de novo
+    if (st.abriuEm && agora() - st.abriuEm < REPLAY.reflexoMs) return;
     st.ocupado = true; pintar();
     let r;
     try { r = await assistirReplay(lcu, { gid, fim: fim() }); } catch (err) { r = { ok: false, motivo: err?.message || String(err) }; }
     finally { st.ocupado = false; }
+    if (r.ok) st.abriuEm = agora();
     if (!vivo()) return;
-    if (r.ok) avisar('abrindo o replay: o client volta quando ele fechar');
+    if (r.ok) avisar('abrindo o replay: o jogo vai abrir e o client volta quando ele fechar');
     else avisar(`replay: ${r.motivo}`, true);
     await ler();
   }
@@ -213,7 +206,7 @@ export function criarReplay(amb) {
   btB.addEventListener('click', e => { baixar(e).catch(err => avisar(`replay: ${err?.message || err}`, true)); });
   btA.addEventListener('click', e => { assistir(e).catch(err => avisar(`replay: ${err?.message || err}`, true)); });
   pintar();
-  return { el, ler, pintar, baixar, assistir, estado: () => ({ ...st, modelo, armada: conf.armada() }) };
+  return { el, ler, pintar, baixar, assistir, estado: () => ({ ...st, modelo }) };
 }
 
 export const CSS_REPLAY = `
@@ -224,5 +217,4 @@ export const CSS_REPLAY = `
   color:#f0e6d2; font:inherit; font-size:11.5px; }
 .lc-rp-bt:hover { filter:brightness(1.15); }
 .lc-rp-bt[disabled] { border-color:#3c3c41; color:#6b6f76; cursor:not-allowed; filter:none; }
-.lc-rp-bt.lc-rp-armado { border-color:#f2c14e; color:#f2c14e; }
 `;

@@ -485,7 +485,7 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
     && !s.camada().querySelector('.lc-cp-pdl'), t);
   await s.clicar('jogar');
   caso('LCU quebrada: jogar de novo (fila pela sessão do roteador) recusa sem escrever, com aviso de erro',
-    s.falsa.escritas().length === 0 && s.avisos.some(([m, e]) => e && /jogar de novo: não consegui ler a fase/.test(m)), JSON.stringify(s.avisos));
+    s.falsa.escritas().length === 0 && s.avisos.some(([m, e]) => e && /jogar de novo: não foi possível ler a fase/.test(m)), JSON.stringify(s.avisos));
 }
 {
   tela._esquecer();
@@ -623,11 +623,11 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
   await s.rel.avancar(2100);
   const n0 = s.falsa.escritas().length;
   await s.clicar('replay-assistir');
-  const armou = s.falsa.escritas().length === n0 && s.avisos.some(([m]) => /abre o jogo/.test(m) && /minimiza/.test(m));
-  await s.rel.avancar(1500);
-  await s.clicar('replay-assistir');
-  caso('replay: assistir = aviso no 1º clique, POST watch só no 2º', armou && est.assistiu === true
-    && s.falsa.escritas().slice(n0).map(c => c.url).join() === `/lol-replays/v1/rofls/${GID}/watch`, JSON.stringify(s.avisos));
+  await s.rel.avancar(300);
+  // pedido de 15/10/2026 ~12:45: assistir em 1 clique (antes: aviso no 1º, watch no 2º)
+  caso('replay: assistir = POST watch no 1º clique, com aviso curto de que o jogo vai abrir', est.assistiu === true
+    && s.falsa.escritas().slice(n0).map(c => c.url).join() === `/lol-replays/v1/rofls/${GID}/watch` && s.avisos.some(([m]) => /jogo vai abrir/.test(m)),
+    JSON.stringify(s.avisos));
   // a Riot minimiza o client (MinimizeAll) e, no fim do replay, ShowMain pode devolver 1280: a fase segue EndOfGame (LeagueClient.log
   // de 15/10) e o roteador encolhe de novo, sem sair da tela do pós-jogo
   const p0 = s.pedidos.length;

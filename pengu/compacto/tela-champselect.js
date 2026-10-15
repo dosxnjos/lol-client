@@ -37,7 +37,7 @@ export const TROCAS = [
   { tipo: 'CAMPEAO', campo: 'trades', rota: 'champion-swaps', botao: '⟲ campeão', nome: 'campeão', mostrar: 'showTrades' },
 ];
 const MOTIVO = {
-  BUSY: { todos: 'outra troca em andamento: espera ela fechar' },
+  BUSY: { todos: 'outra troca em andamento: aguarde a resposta' },
   INVALID: {
     POSICAO: 'troca de posição não vale agora (fora de fase, ou um de vocês já escolheu)',
     ORDEM: 'troca de ordem não vale agora (fora de fase, ou um de vocês já escolheu)',
@@ -101,7 +101,7 @@ export function lerSessao(s) {
       skin: num(c.selectedSkinId), spells: [num(c.spell1Id), num(c.spell2Id)], autofill: c.isAutofilled === true };
   }).sort((x, y) => x.ordem - y.ordem || x.cellId - y.cellId);
   let n = 0;
-  time.forEach((t, i) => { t.n = i + 1; t.rotulo = t.eu ? 'tu' : `aliado ${++n}`; });
+  time.forEach((t, i) => { t.n = i + 1; t.rotulo = t.eu ? 'você' : `aliado ${++n}`; });
   const eu = time.find(t => t.eu) || null;
 
   // inimigo: só a ação de pick completa (nunca theirTeam.championPickIntent nem a ação em andamento)
@@ -139,7 +139,7 @@ export function lerSessao(s) {
   const andamento = lista.filter(a => a.isInProgress && !a.completed);
   const banindo = andamento.some(a => a.type === 'ban');
   const pickAgora = andamento.find(a => a.type === 'pick');
-  const vez = !pickAgora ? '' : aliada(pickAgora) ? (time.find(t => t.cellId === num(pickAgora.actorCellId))?.rotulo || 'teu time') : 'time inimigo';
+  const vez = !pickAgora ? '' : aliada(pickAgora) ? (time.find(t => t.cellId === num(pickAgora.actorCellId))?.rotulo || 'seu time') : 'time inimigo';
 
   const t = s.timer || {};
   return {
@@ -154,10 +154,10 @@ export function lerSessao(s) {
 // rótulo da fase no topo (protótipo: FASE_ROT) -> [título, linha de baixo]
 export function rotuloFase(l) {
   const f = l?.fase || '';
-  if (f === 'PLANNING') return ['PLANEJAMENTO', 'PLANNING · declara tua intenção'];
+  if (f === 'PLANNING') return ['PLANEJAMENTO', 'PLANNING · declare a sua intenção'];
   if (f === 'BAN_PICK') {
     if (l.modo.tipo === 'banir' || l.banindo) return ['BANIMENTO', 'BAN_PICK · bans simultâneos'];
-    if (l.modo.tipo === 'escolher') return ['ESCOLHA · TUA VEZ', 'BAN_PICK · escolhendo'];
+    if (l.modo.tipo === 'escolher') return ['ESCOLHA · SUA VEZ', 'BAN_PICK · escolhendo'];
     return ['ESCOLHA', l.vez ? `BAN_PICK · vez: ${l.vez}` : 'BAN_PICK · escolhendo'];
   }
   if (f === 'FINALIZATION') return ['FINALIZAÇÃO', 'FINALIZATION · skin, feitiços, trocas'];
@@ -215,17 +215,18 @@ export function papelDe(l, prefs = null, ini = '') {
   const fill = pedidas.includes('FILL');
   const validas = pedidas.filter(p => POS[p]);
   const p1 = pedidas[0];
-  let destaque = 'normal', nota = 'tua posição nesta seleção';
+  // textos impessoais (docs/TEXTOS-DA-INTERFACE.md): "1ª opção: TOPO", nunca "tu pediu TOPO"
+  let destaque = 'normal', nota = 'posição nesta seleção';
   if (POS[ini] && ini !== pos) {
     destaque = POS[p1] && p1 !== pos ? 'segunda' : 'normal';
-    nota = `trocou de posição: era ${NOME(ini)}` + (destaque === 'segunda' ? ` · tu pediu ${NOME(p1)}` : '');
+    nota = `trocou de posição: era ${NOME(ini)}` + (destaque === 'segunda' ? ` · 1ª opção: ${NOME(p1)}` : '');
   } else if ((eu.autofill && !validas.includes(pos)) || (validas.length && !fill && !validas.includes(pos))) {
     destaque = 'auto';
-    nota = 'PREENCHIMENTO AUTOMÁTICO' + (validas.length ? ` · tu pediu ${validas.map(NOME).join(' e ')}` : '');
+    nota = 'PREENCHIMENTO AUTOMÁTICO' + (validas.length ? ` · opções: ${validas.map(NOME).join(' e ')}` : '');
   } else if (POS[p1] && p1 !== pos) {
     destaque = 'segunda';
-    nota = `não é a tua 1ª: tu pediu ${NOME(p1)}`;
-  } else if (p1 === pos) nota = 'tua 1ª opção';
+    nota = `fora da 1ª opção (${NOME(p1)})`;
+  } else if (p1 === pos) nota = '1ª opção';
   return { pos, nome: NOME(pos), icone: iconePosicao(pos), destaque, nota };
 }
 
@@ -326,7 +327,7 @@ export function acompanharPedidos(mem, s, agora = Date.now()) {
 export function textoResultado(r, rotulo) {
   const nome = TROCAS.find(t => t.tipo === r.tipo)?.nome || 'troca';
   if (r.resultado === 'aceito') return `troca de ${nome} feita`;
-  if (r.resultado === 'recusado') return r.dir === 'SENT' ? `${rotulo} recusou a troca de ${nome}` : `tu recusou a troca de ${nome}`;
+  if (r.resultado === 'recusado') return r.dir === 'SENT' ? `${rotulo} recusou a troca de ${nome}` : `você recusou a troca de ${nome}`;
   if (r.resultado === 'cancelado') return r.dir === 'SENT' ? `pedido de troca de ${nome} cancelado` : `${rotulo} desistiu da troca de ${nome}`;
   if (r.resultado === 'morreu') return `o pedido de troca de ${nome} morreu na virada de fase`;
   return `o pedido de troca de ${nome} fechou sem resposta`;
@@ -352,12 +353,25 @@ export function listaGrade(cat, { busca = '', permitidos = null, favoritos = [] 
     .sort((a, b) => (fav.includes(b) - fav.includes(a)) || (fav.indexOf(a) - fav.indexOf(b)) || nome(a).localeCompare(nome(b), 'pt-BR'));
 }
 
-// skins que ele tem do campeão (carrossel do client): padrão sempre; chroma escolhida marca a skin-mãe
+// cor da bolinha do chroma, igual ao skin-button da Riot (rcp-fe-lol-champ-select 16.20, `color`): 2 cores = diagonal 135°,
+// 1 cor = sólida; sem cor = ''
+export function corDoChroma(cores) {
+  const c = (Array.isArray(cores) ? cores : []).map(x => String(x || '').replace(/[^#\w(),.% -]/g, ''));
+  if (!c.length || !c[0]) return '';
+  return c.length !== 1 && c[1] ? `linear-gradient(135deg, ${c[0]} 0%, ${c[0]} 50%, ${c[1]} 50%, ${c[1]} 100%)` : c[0];
+}
+
+// skins que ele tem do campeão (carrossel do client): padrão sempre; chroma escolhida marca a skin-mãe. chromas: os childSkins
+// que ele tem e estão liberados (unlocked ou owned, sem disabled: a Riot também tira os desativados do jmx), na ordem do id
+// (pedido de 15/10/2026 ~12:45: "quero poder escolher o chroma quando estiver disponível")
 export function skinsDoCampeao(carrossel, championId) {
   const lista = (Array.isArray(carrossel) ? carrossel : []).filter(k => k && num(k.championId) === championId && !k.disabled
     && (k.isBase || k.unlocked || k.ownership?.owned));
+  const filhos = k => (Array.isArray(k.childSkins) ? k.childSkins : []).filter(c => c && typeof c === 'object');
   return lista.map(k => ({ id: num(k.id), nome: String(k.name || (k.isBase ? 'padrão' : k.id)), base: !!k.isBase,
-    splash: String(k.splashPath || ''), tile: String(k.tilePath || ''), filhos: (Array.isArray(k.childSkins) ? k.childSkins : []).map(c => num(c?.id)) }))
+    splash: String(k.splashPath || ''), tile: String(k.tilePath || ''), filhos: filhos(k).map(c => num(c.id)),
+    chromas: filhos(k).filter(c => num(c.id) > 0 && num(c.id) !== num(k.id) && !c.disabled && (c.unlocked || c.ownership?.owned))
+      .map(c => ({ id: num(c.id), nome: String(c.shortName || c.name || c.id), cor: corDoChroma(c.colors) })).sort((a, b) => a.id - b.id) }))
     .sort((a, b) => (b.base - a.base) || a.id - b.id);
 }
 export const skinMarcada = (skins, selecionada) => skins.find(k => k.id === selecionada || k.filhos.includes(selecionada))?.id ?? null;
@@ -471,6 +485,13 @@ export const CSS = `
 #lc-compacto .lc-cp-sel-acao { display:flex; gap:6px; }
 #lc-compacto .lc-cp-sel-acao .lc-cp-btn { flex:1; font-size:14px; letter-spacing:.1em; padding:9px; }
 #lc-compacto .lc-cp-sel-skins { display:flex; gap:5px; overflow-x:auto; padding-bottom:3px; }
+#lc-compacto .lc-cp-sel-chromas { display:flex; align-items:center; gap:6px; margin:-2px 0 4px; }
+#lc-compacto .lc-cp-sel-chromas .lc-cp-nota { margin-right:2px; }
+#lc-compacto .lc-cp-sel-cr { flex:none; width:16px; height:16px; padding:0; border-radius:50%; border:1px solid var(--lc-linha); cursor:pointer;
+  background:#3a3f45; box-shadow:0 0 0 1px rgba(0,0,0,.6) inset; }
+#lc-compacto .lc-cp-sel-cr:hover { filter:brightness(1.2); }
+#lc-compacto .lc-cp-sel-cr.lc-cp-sel-on { border:2px solid var(--lc-ouro); width:18px; height:18px; }
+#lc-compacto .lc-cp-sel-cr[disabled] { opacity:.5; cursor:not-allowed; }
 #lc-compacto .lc-cp-sel-sk { position:relative; flex:none; width:104px; height:62px; border:1px solid var(--lc-linha); padding:0; overflow:hidden;
   background:#151b22 center/cover no-repeat; font-family:inherit; font-size:9.5px; color:#fff; text-align:left; line-height:1.15;
   text-shadow:0 1px 2px #000; cursor:pointer; }
@@ -602,7 +623,7 @@ function montarEsqueleto(st) {
   raiz.append(
     el('div', { class: 'lc-cp-sel-barra' }, p.barra),
     p.receb,
-    el('div', { class: 'lc-cp-sel-sec' }, el('span', {}, 'teu time · ordem de escolha')),
+    el('div', { class: 'lc-cp-sel-sec' }, el('span', {}, 'seu time · ordem de escolha')),
     p.time,
     el('div', { class: 'lc-cp-sel-sec' }, el('span', {}, 'time inimigo · só campeão'), p.toggle),
     p.inim,
@@ -617,7 +638,7 @@ function aoSessao(st, s) {
   if (!l) throw new Error('sessão da seleção sem myTeam');
   // seleção com banco (ARAM), espectador ou sem seleção: a tela é da Riot
   if (s.benchEnabled || s.isSpectating || l.fila === 450) {
-    if (!st.saiu) { st.saiu = true; ctx.avisar('esta seleção (banco/ARAM ou espectador) é da tela da Riot: abri o client normal'); ctx.expandir(); }
+    if (!st.saiu) { st.saiu = true; ctx.avisar('esta seleção (banco/ARAM ou espectador) é da tela da Riot: abrindo o client normal'); ctx.expandir(); }
     return;
   }
   if (st.sessao?.id !== s.id || st.l?.me !== l.me) { st.escolhido = 0; st.spAberto = null; st.skins = null; st.runa = null; }
@@ -855,7 +876,7 @@ function clicarCampeao(st, id) {
     if (f.enviado) return;
     // banir/travar esperando o hover em voo: o clique novo é ele mudando de ideia (nunca trava o campeão de antes)
     st.fechando = null;
-    ctx.avisar(`${f.verbo === 'banir' ? 'ban' : 'travamento'} de ${f.nome} cancelado: clica ${VERBO[f.verbo].rot} de novo`);
+    ctx.avisar(`${f.verbo === 'banir' ? 'ban' : 'travamento'} de ${f.nome} cancelado: clique em ${VERBO[f.verbo].rot} de novo`);
   }
   st.escolhido = id;
   const a = l.modo.acao;
@@ -878,7 +899,7 @@ function enviarHover(st) {
   if (st.l?.modo.acao?.id !== q.acao) { st.hover = null; return; } // a ação mudou (virou o ban, travou): o clique morreu
   st.hover = null;
   st.ocupado.add('hover'); st.hoverVoo = q.id;
-  const erro = q.intencao ? 'não consegui declarar a intenção' : 'não consegui marcar o campeão';
+  const erro = q.intencao ? 'não foi possível declarar a intenção' : 'não foi possível marcar o campeão';
   lcuComPrazo(st, 'PATCH', `${CS}/session/actions/${q.acao}`, { completed: false, championId: q.id }, PRAZO_HOVER_MS).then(ctx.seguro(r => {
     st.ocupado.delete('hover'); st.hoverVoo = null;
     st.hoverEnviado = r.ok ? { acao: q.acao, id: q.id, em: Date.now() } : null;
@@ -889,7 +910,7 @@ function enviarHover(st) {
       st.hover = null;
       if (!r.ok && !r.status) {
         st.fechando = null;
-        ctx.avisar(`o client não respondeu ao campeão marcado: clica ${VERBO[f.verbo].rot} de novo ou ⤢ expandir`, true);
+        ctx.avisar(`o client não respondeu ao campeão marcado: clique em ${VERBO[f.verbo].rot} de novo ou em ⤢ expandir`, true);
         if (ctx.vivo()) { st.chaveSel = ''; pintar(st); }
         return;
       }
@@ -925,7 +946,7 @@ function enviarAcao(st) {
   if (st.l?.modo.acao?.id !== f.acao) { st.fechando = null; return repintar(); }
   if (!dadosEscolha(st).pode(f.id)) {
     st.fechando = null;
-    ctx.avisar(`${f.nome} não está mais disponível: clica outro`, true);
+    ctx.avisar(`${f.nome} não está mais disponível: escolha outro`, true);
     return repintar();
   }
   f.enviado = true;
@@ -938,7 +959,7 @@ function enviarAcao(st) {
     st.ocupado.delete('acao');
     if (!r.ok) {
       if (st.fechando === f) st.fechando = null;
-      ctx.avisar(`não consegui ${f.verbo} ${f.nome} (${r.status || 'sem resposta'}): tenta de novo ou ⤢ expandir`, true);
+      ctx.avisar(`não foi possível ${f.verbo} ${f.nome} (${r.status || 'sem resposta'}): tente de novo ou use ⤢ expandir`, true);
     } else { ok = true; if (prazo) conferirAcao(st, f); }
     repintar();
   }));
@@ -953,7 +974,7 @@ function conferirAcao(st, f) {
     const a = acoes(s).find(x => x.id === f.acao);
     const aberta = a && !a.completed && a.isInProgress;
     if (st.fechando === f) st.fechando = null;
-    if (aberta) ctx.avisar(`o client não ${VERBO[f.verbo].fez} ${f.nome}: tenta de novo ou ⤢ expandir`, true);
+    if (aberta) ctx.avisar(`o client não ${VERBO[f.verbo].fez} ${f.nome}: tente de novo ou use ⤢ expandir`, true);
     // fechou no client e o evento não veio (socket mudo): a tela passa a valer a sessão relida (sem isso o botão voltaria
     // ligado para uma ação já fechada)
     else if (r.ok && Array.isArray(r.json?.myTeam) && st.l?.modo.acao?.id === f.acao) return aoSessao(st, r.json);
@@ -965,7 +986,7 @@ function troca(st, tr, id, verbo, cellId) {
   if (!Number.isInteger(id)) return;
   if (verbo !== 'request' && cellId !== undefined) marcarClique(st.mem, tr.tipo, cellId, verbo);
   const txt = { request: 'pedir', cancel: 'cancelar', accept: 'aceitar', decline: 'recusar' }[verbo];
-  escrever(st, `troca:${tr.tipo}:${id}`, [['POST', `${CS}/session/${tr.rota}/${id}/${verbo}`, undefined, `não consegui ${txt} a troca de ${tr.nome}`]]);
+  escrever(st, `troca:${tr.tipo}:${id}`, [['POST', `${CS}/session/${tr.rota}/${id}/${verbo}`, undefined, `não foi possível ${txt} a troca de ${tr.nome}`]]);
 }
 
 // ---------- pintura ----------
@@ -1005,10 +1026,10 @@ function pintarPapel(st) {
   p.papel?.remove();
   const icone = _papel.semIcone ? null : el('img', { src: papel.icone, alt: '', dataset: { a: 'papel-icone' },
     on: { error: e => { _papel.semIcone = true; try { e?.target?.remove?.(); } catch { /* segue */ } } } });
-  p.papel = el('div', { class: `lc-cp-sel-papel-painel lc-cp-sel-d-${papel.destaque}`, role: 'status', title: 'clica para fechar',
+  p.papel = el('div', { class: `lc-cp-sel-papel-painel lc-cp-sel-d-${papel.destaque}`, role: 'status', title: 'clique para fechar',
     dataset: { a: 'papel-painel', destaque: papel.destaque }, on: { click: st.fecharPapelClique } },
   icone, el('div', { class: 'lc-cp-sel-papel-nome' }, papel.nome), el('div', { class: 'lc-cp-sel-papel-nota' }, papel.nota),
-  el('div', { class: 'lc-cp-sel-papel-dica' }, 'tua posição · some sozinho ou com um clique'));
+  el('div', { class: 'lc-cp-sel-papel-dica' }, 'sua posição · fecha sozinho ou com um clique'));
   p.papelChave = chave; p.papelPos = papel.pos;
   if (refeito) p.papel.style.animation = 'none';
   raiz.insertBefore(p.papel, p.sel);
@@ -1032,9 +1053,9 @@ function pintarRecebida(st) {
   if (!r) return p.receb.replaceChildren();
   const { t, tr, e } = r, eu = l.eu || {};
   let txt;
-  if (tr.tipo === 'POSICAO') txt = [el('b', {}, t.rotulo), ` (${nomePos(t.pos)}) quer trocar de posição: tu vai para `, el('b', {}, nomePos(t.pos)), ', ele para ', el('b', {}, nomePos(eu.pos)), '.'];
-  else if (tr.tipo === 'ORDEM') txt = [el('b', {}, t.rotulo), ' quer trocar a ordem de escolha: tu escolhe em ', el('b', {}, `${t.n}º`), ', ele em ', el('b', {}, `${eu.n}º`), '.'];
-  else txt = [el('b', {}, t.rotulo), ' quer trocar de campeão: tu fica com ', el('b', {}, nomeDe(st, t.travado) || 'o campeão dele'), ', ele com ', el('b', {}, nomeDe(st, eu.travado) || 'o teu'), '.'];
+  if (tr.tipo === 'POSICAO') txt = [el('b', {}, t.rotulo), ` (${nomePos(t.pos)}) quer trocar de posição: você vai para `, el('b', {}, nomePos(t.pos)), ', ele para ', el('b', {}, nomePos(eu.pos)), '.'];
+  else if (tr.tipo === 'ORDEM') txt = [el('b', {}, t.rotulo), ' quer trocar a ordem de escolha: você escolhe em ', el('b', {}, `${t.n}º`), ', ele em ', el('b', {}, `${eu.n}º`), '.'];
+  else txt = [el('b', {}, t.rotulo), ' quer trocar de campeão: você fica com ', el('b', {}, nomeDe(st, t.travado) || 'o campeão dele'), ', ele com ', el('b', {}, nomeDe(st, eu.travado) || 'o seu'), '.'];
   const ocupado = st.ocupado.has(`troca:${tr.tipo}:${e.id}`);
   p.receb.replaceChildren(el('div', { class: 'lc-cp-sel-receb', role: 'alert' },
     el('div', { class: 'lc-cp-sel-tt' }, `pedido de troca de ${tr.nome}`), ...txt,
@@ -1091,7 +1112,7 @@ function pintarTime(st) {
         dir = el('div', { class: 'lc-cp-sel-pend' }, `pedido de ${tr.nome} enviado`, el('br'), 'aguardando… ',
           el('button', { dataset: { a: 'cancelar', tipo: tr.tipo }, disabled: st.ocupado.has(`troca:${tr.tipo}:${e.id}`), on: { click: ctx.seguro(() => troca(st, tr, e.id, 'cancel', t.cellId)) } }, 'cancelar'));
       } else if (chegou) {
-        dir = el('div', { class: 'lc-cp-sel-pend' }, `pediu troca de ${chegou[0].nome}`, el('br'), 'responde acima');
+        dir = el('div', { class: 'lc-cp-sel-pend' }, `pediu troca de ${chegou[0].nome}`, el('br'), 'responda acima');
       } else if (res && res.ate > Date.now()) {
         const ruim = res.resultado !== 'aceito';
         dir = el('div', { class: 'lc-cp-sel-pend ' + (ruim ? 'lc-cp-sel-ruim' : 'lc-cp-sel-bom') }, textoResultado(res, t.rotulo));
@@ -1117,7 +1138,7 @@ function pintarInimigos(st) {
   const filhos = [el('div', { class: 'lc-cp-sel-inim', dataset: { a: 'inimigos-fotos' } }, ...fotos,
     el('span', { class: 'lc-cp-nota', style: { marginLeft: '4px' } }, vis ? `${vis} de ${l.nInimigos} travados` : 'aparece quando cada um trava'))];
   if (l.banidos.length) {
-    const nomes = l.banidos.map(b => nomeDe(st, b.id) + (b.meu ? ' (teu)' : '')).join(', ');
+    const nomes = l.banidos.map(b => nomeDe(st, b.id) + (b.meu ? ' (seu)' : '')).join(', ');
     filhos.push(el('div', { class: 'lc-cp-sel-bans', title: nomes, dataset: { a: 'bans' } }, el('span', {}, `${l.banidos.length} banidos`),
       ...l.banidos.map(b => foto(st, b.id, 22, b.meu ? ' lc-cp-sel-teu' : ''))));
   }
@@ -1133,7 +1154,7 @@ function pintarSel(st) {
   const chave = `desconhecido|${l.fase}`;
   if (chave === st.chaveSel) return;
   st.chaveSel = chave;
-  st.partes.sel.replaceChildren(st.el('div', { class: 'lc-cp-nota' }, `fase da seleção que eu não conheço (${l.fase || 'sem leitura'}): usa ⤢ expandir para a tela da Riot.`));
+  st.partes.sel.replaceChildren(st.el('div', { class: 'lc-cp-nota' }, `fase da seleção desconhecida (${l.fase || 'sem leitura'}): use ⤢ expandir para a tela da Riot.`));
 }
 
 // "winrate no champ select" (champSelect.ligado) vale nos dois modos: desligado, nem os números dos favoritos nem o selo
@@ -1153,7 +1174,7 @@ export function textoSeloTela(champ, id, pos, nome = '') {
     if (typeof champ.partidas === 'function' && champ.partidas() === null) {
       // leitura que falhou (sem outra em voo): o mesmo texto do selo do client normal, não "carregando" para sempre
       const e = typeof champ.estado === 'function' ? champ.estado() : null;
-      return e?.falhou && !e.carregando ? so('histórico indisponível agora', 'tento ler o histórico de novo em instantes')
+      return e?.falhou && !e.carregando ? so('histórico indisponível agora', 'nova leitura do histórico em instantes')
         : so('histórico carregando', 'lendo o histórico do client');
     }
     const est = champ.estatisticas(id, pos);
@@ -1194,14 +1215,14 @@ function dadosEscolha(st) {
 function motivoFora(st, d, id) {
   const { l } = st;
   const nome = nomeDe(st, id);
-  if (l.banidosConhecidos.has(id)) return `${nome} foi banido: clica outro.`;
-  if (l.travados.has(id)) return `${nome} já foi escolhido: clica outro.`;
+  if (l.banidosConhecidos.has(id)) return `${nome} foi banido: escolha outro.`;
+  if (l.travados.has(id)) return `${nome} já foi escolhido: escolha outro.`;
   if (l.modo.tipo === 'banir') {
     const al = l.time.find(t => !t.eu && t.hover === id);
-    if (al && d.fora.has(id)) return `${al.rotulo} quer jogar ${nome}: não dá para banir, clica outro.`;
-    return `${nome} não está na lista de bans do client: clica outro.`;
+    if (al && d.fora.has(id)) return `${al.rotulo} quer jogar ${nome}: não pode ser banido, escolha outro.`;
+    return `${nome} não está na lista de bans do client: escolha outro.`;
   }
-  return `${nome} não está entre os teus campeões liberados: clica outro ou ⤢ expandir.`;
+  return `${nome} não está entre os seus campeões liberados: escolha outro ou use ⤢ expandir.`;
 }
 // campeão do botão: o clicado agora, senão o que o client já tem nesta ação. No ban, NUNCA a intenção de pick dele
 // (a intenção declarada no PLANNING viraria "BANIR <o campeão dele>" a um clique)
@@ -1253,24 +1274,24 @@ function pintarEscolha(st) {
     }, txt));
   } else {
     p.acao.replaceChildren(el('button', { class: 'lc-cp-btn', disabled: true, dataset: { a: 'acao-marcador' } },
-      l.modo.acao ? '1 clique na grade declara' : 'tua vez ainda não chegou'));
+      l.modo.acao ? 'clique num campeão para declarar' : 'sua vez ainda não chegou'));
   }
   const notas = [];
   if (avisoPos) notas.push(el('div', { class: 'lc-cp-nota lc-cp-sel-avisopos', dataset: { a: 'aviso-posicao' },
-    title: 'partidas tuas com ele nesta posição, no histórico do client (o mesmo do selo); só aviso, nada é impedido' }, `⚠ ${avisoPos}`));
+    title: 'suas partidas com este campeão nesta posição, no histórico do client; só um aviso, a escolha continua livre' }, `⚠ ${avisoPos}`));
   // sem lista na escolha a nota do sem-lista já explica o cinza
   if ((tipo === 'banir' || tipo === 'escolher') && id && !pode(id) && !(semLista && tipo !== 'banir') && !f)
     notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'motivo' } }, motivoFora(st, d, id)));
   if (l.meuBan !== null && !l.revelado && l.fase === 'BAN_PICK' && tipo !== 'banir')
-    notas.push(el('div', { class: 'lc-cp-nota' }, l.meuBan > 0 ? `tu baniu ${nomeDe(st, l.meuBan)}. Os bans dos 10 aparecem juntos quando todos terminarem.` : 'tu não baniu ninguém.'));
+    notas.push(el('div', { class: 'lc-cp-nota' }, l.meuBan > 0 ? `seu ban: ${nomeDe(st, l.meuBan)}. Os bans dos 10 aparecem juntos quando todos terminarem.` : 'nenhum ban seu nesta seleção.'));
   // com o aviso da posição, as notas genéricas de espera/intenção saem (o aviso ocupa a linha delas: 1 linha a mais rolava
   // a tela 10 px em 420×680, harness 15/10/2026)
-  if (tipo === 'esperar' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'tua vez de escolher ainda não chegou: 1 clique muda a intenção.' : 'tua vez ainda não chegou.'));
+  if (tipo === 'esperar' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'sua vez de escolher ainda não chegou: um clique muda a intenção.' : 'sua vez ainda não chegou.'));
   // a nota da intenção fica no topo, com as outras: o que fica embaixo da grade tem altura fixa entre as fases
-  if (tipo === 'intencao' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, '1 clique declara a intenção (só o teu time vê); escolher de verdade é na tua vez.'));
+  if (tipo === 'intencao' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, 'um clique declara a intenção (só o seu time vê); a escolha vale na sua vez.'));
   if (semLista) notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'sem-lista' } }, tipo === 'banir'
     ? 'o client não mandou a lista de bans: mostrando todos (se não valer, o client recusa e avisa).'
-    : 'o client não mandou a lista dos teus campeões: só os favoritos, cinza. ⤢ expandir para escolher na tela da Riot.'));
+    : 'o client não mandou a lista dos seus campeões: só os favoritos, em cinza. Use ⤢ expandir para escolher na tela da Riot.'));
   p.notas.replaceChildren(...notas);
   p.fim.replaceChildren();
 }
@@ -1303,7 +1324,7 @@ function pintarFinal(st) {
   const fe = st.feiticos || FEITICOS;
   const runa = st.runa?.campeao === champ ? st.runa : null;
   const oc = k => st.ocupado.has(k);
-  const chave = JSON.stringify([champ, sk?.map(k => k.id), eu.skin, eu.spells, st.spAberto, fe, runa, s.allowSkinSelection, oc('skin'), oc('feitico'), oc('runa'), st.cat.size, l.fase]);
+  const chave = JSON.stringify([champ, sk?.map(k => [k.id, k.chromas.map(c => c.id)]), eu.skin, eu.spells, st.spAberto, fe, runa, s.allowSkinSelection, oc('skin'), oc('feitico'), oc('runa'), st.cat.size, l.fase]);
   if (chave === st.chaveSel) return;
   st.chaveSel = chave;
   const filhos = [];
@@ -1311,8 +1332,20 @@ function pintarFinal(st) {
   const marcada = sk ? skinMarcada(sk, eu.skin) : null;
   filhos.push(el('div', { class: 'lc-cp-rot' }, `skin de ${nomeDe(st, champ)} `,
     el('span', { class: 'lc-cp-nota', style: { textTransform: 'none', letterSpacing: '0' } },
-      s.allowSkinSelection === false ? '(esta fila não deixa escolher)' : !sk ? '(lendo as tuas skins…)' : sk.length === 1 ? '(só a padrão: tu não tem outra)' : `(as ${sk.length} que tu tem)`)));
+      s.allowSkinSelection === false ? '(esta fila não deixa escolher)' : !sk ? '(lendo as skins…)' : sk.length === 1 ? '(só a padrão)' : `(${sk.length} disponíveis)`)));
   let faixa = null;
+  // chromas da skin marcada, em cima das splash arts: [padrão][cada chroma dele]; clique = o mesmo PATCH da skin (requestSetSkin
+  // da Riot manda o id do chroma em selectedSkinId)
+  const mae = sk && s.allowSkinSelection !== false ? sk.find(k => k.id === marcada) : null;
+  if (mae?.chromas?.length) {
+    const bolinha = (id, nome, cor) => el('button', {
+      class: 'lc-cp-sel-cr' + (eu.skin === id ? ' lc-cp-sel-on' : ''), title: nome, disabled: oc('skin'), dataset: { a: 'chroma', id },
+      style: cor ? { background: cor } : undefined,
+      on: { click: ctx.seguro(() => { if (eu.skin !== id) escrever(st, 'skin', [['PATCH', `${CS}/session/my-selection`, { selectedSkinId: id }, 'não foi possível trocar o chroma']]); }) },
+    });
+    filhos.push(el('div', { class: 'lc-cp-sel-chromas', dataset: { a: 'chromas' } }, el('span', { class: 'lc-cp-nota' }, 'chroma'),
+      bolinha(mae.id, `${mae.nome} (padrão)`, ''), ...mae.chromas.map(c => bolinha(c.id, c.nome, c.cor))));
+  }
   if (sk && s.allowSkinSelection !== false) {
     // roda do mouse na faixa rola as skins para o lado (Gabriel, 14/10/2026); no começo/fim da faixa ou com tudo à vista
     // a roda segue para a tela (não prende a rolagem). Ouvinte só aqui: a grade de campeões não existe nesta fase
@@ -1321,7 +1354,7 @@ function pintarFinal(st) {
     filhos.push(faixa = el('div', { class: 'lc-cp-sel-skins', dataset: { a: 'skins' }, on: { wheel: e => rodaNaFaixa(st, faixa, e), scroll: () => lembrarFaixa(st, faixa) } }, ...sk.map(k => {
       const b = el('button', {
         class: 'lc-cp-sel-sk' + (k.id === marcada ? ' lc-cp-sel-on' : ''), title: k.nome, disabled: oc('skin'), dataset: { a: 'skin', id: k.id },
-        on: { click: ctx.seguro(() => { if (k.id !== marcada) escrever(st, 'skin', [['PATCH', `${CS}/session/my-selection`, { selectedSkinId: k.id }, 'não consegui trocar a skin']]); }) },
+        on: { click: ctx.seguro(() => { if (k.id !== marcada) escrever(st, 'skin', [['PATCH', `${CS}/session/my-selection`, { selectedSkinId: k.id }, 'não foi possível trocar a skin']]); }) },
       }, el('span', {}, k.nome));
       miniatura(k.splash, st.doc).then(d => {
         const url = d || k.tile || k.splash;
@@ -1344,7 +1377,7 @@ function pintarFinal(st) {
         st.spAberto = null;
         if (eu.spells[slot] === fid) { st.chaveSel = ''; return pintar(st); }
         const [spell1Id, spell2Id] = trocarFeitico(eu.spells, slot, fid);
-        escrever(st, 'feitico', [['PATCH', `${CS}/session/my-selection`, { spell1Id, spell2Id }, 'não consegui trocar o feitiço']]);
+        escrever(st, 'feitico', [['PATCH', `${CS}/session/my-selection`, { spell1Id, spell2Id }, 'não foi possível trocar o feitiço']]);
       }) },
     }, fe[fid]))));
   }
@@ -1380,11 +1413,11 @@ function pintarRuna(st, runa, champ) {
   const linha = (...f) => el('div', { class: 'lc-cp-sel-runa', dataset: { a: 'runa' } }, ...f);
   if (!runa || runa.estado === 'lendo') return linha(el('span', { class: 'lc-cp-nota' }, 'lendo as páginas…'));
   if (runa.estado === 'desligada') return linha(el('span', { class: 'lc-cp-nota' }, 'runa por campeão desligada nas configurações: fica a atual'));
-  if (runa.estado === 'erro') return linha(el('span', { class: 'lc-cp-nota' }, 'não consegui ler as páginas: fica a atual'));
+  if (runa.estado === 'erro') return linha(el('span', { class: 'lc-cp-nota' }, 'não foi possível ler as páginas: fica a atual'));
   const c = runa.candidatas, atual = runa.atual?.id;
   // escolha feita aqui: o runas.js esquece a pendência no clique (um ⤢ logo depois não reabre o popup; passo 11 b4)
   const aplicar = pg => { try { ctx.servicos?.runas?.escolheu?.(); } catch { /* segue */ } return aplicarPut(pg); };
-  const aplicarPut = pg => escrever(st, 'runa', [['PUT', '/lol-perks/v1/currentpage', pg.id, `não consegui aplicar a runa ${pg.nome}`]],
+  const aplicarPut = pg => escrever(st, 'runa', [['PUT', '/lol-perks/v1/currentpage', pg.id, `não foi possível aplicar a runa ${pg.nome}`]],
     `runa ${pg.nome} aplicada`, () => { if (st.runa?.campeao === champ) st.runa = { ...st.runa, atual: { id: pg.id, nome: pg.nome } }; });
   if (!c.length) return linha(el('span', { class: 'lc-cp-nota' }, `sem página para ${nome}: fica a atual${runa.atual?.nome ? ` (${runa.atual.nome})` : ''}`));
   if (c.length === 1) {
@@ -1396,5 +1429,5 @@ function pintarRuna(st, runa, champ) {
   return linha(`${c.length} páginas de ${nome}: `, ...c.map(pg => el('button', {
     class: pg.id === atual ? 'lc-cp-sel-on' : undefined, disabled: st.ocupado.has('runa'), dataset: { a: 'runa-pagina', id: pg.id },
     on: { click: ctx.seguro(() => { if (pg.id !== atual) aplicar(pg); }) },
-  }, pg.nome)), marcada ? el('span', { class: 'lc-cp-sel-ok' }, '✓ aplicada') : el('span', { class: 'lc-cp-nota' }, 'escolhe uma'));
+  }, pg.nome)), marcada ? el('span', { class: 'lc-cp-sel-ok' }, '✓ aplicada') : el('span', { class: 'lc-cp-nota' }, 'escolha uma'));
 }

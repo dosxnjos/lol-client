@@ -215,7 +215,7 @@ export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
     diag('post', { status: r?.status ?? 0, timer: atual.timer });
     if (!r?.ok) {
       popupLivre(true);
-      try { Toast.error('não consegui aceitar a partida: aceita no popup do client'); } catch { console.error('[lol-client] aceite falhou', r?.status); }
+      try { Toast.error('Não foi possível aceitar a partida: aceite no popup do client'); } catch { console.error('[lol-client] aceite falhou', r?.status); }
     }
   };
   const avaliar = payload => {
