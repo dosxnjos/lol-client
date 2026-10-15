@@ -112,7 +112,9 @@ class LCUFalsa:
              "timestamp": "2026-10-13T16:58:00.000Z", "isHistorical": True},
             {"id": "m2", "type": "chat", "fromPid": EU["pid"], "fromId": EU["id"], "body": "<b>bora</b>",
              "timestamp": "2026-10-13T16:59:00.000Z", "isHistorical": True},
-            {"id": "m3", "type": "system", "body": "Fulano entrou", "timestamp": "2026-10-13T17:00:00.000Z"}]}
+            {"id": "m3", "type": "system", "body": "Fulano entrou", "timestamp": "2026-10-13T17:00:00.000Z"},
+            # 15/10/2026: 1:1 reais terminam em "joined_room" de sistema; a conversa não mostra
+            {"id": "m4", "type": "system", "body": "joined_room", "timestamp": "2026-10-13T17:01:00.000Z"}]}
         self.lobby = {"localMember": {"isLeader": True, "puuid": "eu-0000", "summonerId": 1},
                       "members": [{"puuid": "eu-0000", "summonerId": 1}]}
         self.fase = "Lobby"
@@ -334,7 +336,7 @@ def principal():
         # ---- conversa ----
         s, corpo, _ = get(f"/chat/api/conversa/{k_de(1)}")
         c = json.loads(corpo)
-        caso("conversa: 3 mensagens, a minha marcada 'eu', a de sistema 'sis'",
+        caso("conversa: 3 mensagens (o joined_room some), a minha marcada 'eu', a de sistema 'sis'",
              s == 200 and c["ok"] and [m["eu"] for m in c["msgs"]] == [False, True, False] and c["msgs"][2]["sis"]
              and c["nome"] == "Fulano" and c["naoLidas"] == 2, c)
         s, corpo, _ = get(f"/chat/api/conversa/{k_de(3)}")

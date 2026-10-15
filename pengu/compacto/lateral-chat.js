@@ -123,10 +123,13 @@ export function verAmigos({ amigos = [], conversas = [], lobby = null, convidado
   return { online, offline, grupos, naoLidas: [...online, ...offline].reduce((s, a) => s + a.un, 0) };
 }
 
+const ehEntrouSaiu = m => String(m.type || '').toLowerCase() === 'system' && /^(joined|left)_room$/.test(String(m.body || '').trim());
+
 // mensagens -> [{id, eu, texto, quando, sis}] (as MSGS_MAX últimas). eu = {id, puuid, pid, summonerId}
 export function lerConversa(msgs, eu) {
   const meus = new Set([eu?.id, eu?.pid, eu?.puuid].filter(Boolean).map(String));
-  return (Array.isArray(msgs) ? msgs : []).filter(m => m && typeof m === 'object').slice(-MSGS_MAX).map(m => {
+  // "joined_room"/"left_room" de sistema nas 1:1 (visto em 15/10/2026: 4 conversas terminando nelas) não são conversa
+  return (Array.isArray(msgs) ? msgs : []).filter(m => m && typeof m === 'object' && !ehEntrouSaiu(m)).slice(-MSGS_MAX).map(m => {
     const tipo = String(m.type || 'chat').toLowerCase();
     const de = [m.fromPid, m.fromId, m.fromPuuid].filter(Boolean).map(String);
     return { id: String(m.id ?? ''), eu: de.some(d => meus.has(d)), texto: String(m.body ?? ''), quando: String(m.timestamp || ''),

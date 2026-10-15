@@ -602,6 +602,8 @@ class ChatJanelas:
             if not isinstance(m, dict):
                 continue
             tipo = str(m.get("type") or "chat").lower()
+            if tipo == "system" and str(m.get("body") or "").strip() in ("joined_room", "left_room"):
+                continue   # entrou/saiu de sistema nas 1:1 (15/10/2026): não é conversa
             de = {str(m.get(x) or "") for x in ("fromPid", "fromId", "fromPuuid")} - {""}
             msgs.append({"eu": bool(de & meus), "texto": str(m.get("body") or ""), "ts": _hora(m.get("timestamp")),
                          "sis": tipo not in ("chat", "groupchat")})

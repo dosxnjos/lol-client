@@ -822,6 +822,8 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
     linhas.length === 2 && linhas[0].quem.posicao === 'JUNGLE' && linhas[0].quem.campeao === 64 && linhas[1].quem.eu && !JSON.stringify(linhas).includes(NOME_OCULTO), JSON.stringify(linhas));
   caso('elenco do time: guarda campeão/posição e as chaves só em Set (nenhum gameName)', !JSON.stringify(elencoTime(sessaoCS(58)).map(x => ({ ...x, chaves: [...x.chaves] }))).includes(NOME_OCULTO));
   caso('conversa: mensagens minhas por fromId, sistema separado', igual(lerConversa([{ id: 1, body: 'a', fromId: 'eu' }, { id: 2, body: 'b', fromId: 'x', type: 'system' }], { id: 'eu' }).map(m => [m.eu, m.sis]), [[true, false], [false, true]]));
+  caso('conversa: "joined_room"/"left_room" de sistema somem (15/10: 1:1 terminando nelas mostrava o texto cru)',
+    igual(lerConversa([{ id: 1, body: 'oi', fromId: 'x', type: 'chat' }, { id: 2, body: 'joined_room', type: 'system' }, { id: 3, body: 'left_room', type: 'system' }], { id: 'eu' }).map(m => m.texto), ['oi']));
   const nome = id => ({ 58: 'Renekton', 24: 'Jax' }[id] || `campeão ${id}`);
   const est = { geral: { n: 93, winrate: 51, kda: 1.5 }, posicao: { pos: 'TOP', n: 88, winrate: 51, kda: 1.5 } };
   const coach = { campeao: 58, dados: { draft: { inimigos: [{ campeao: 24, rota: 'TOP' }], aliados: [{ campeao: 64 }], faixa: 'leve vantagem', p: 0.56, termos: [{ pp: 1.2, texto: 'dano misto no teu time' }] },
