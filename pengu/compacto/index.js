@@ -27,7 +27,7 @@
 import { criarJanela, criarCamada, criarBotaoModo, criarArrasto, invocadorRiot, ehAtalho, CSS, GRACA_MEDIDA_MS, tamanho } from './modo.js';
 import { lcu as lcuPadrao, avisar as avisarPadrao, estilo, FASES_JOGO } from './comum.js';
 import { avisarModo } from './chat-ponte.js';
-import { criarGeometria, lerTelaRiot } from './geometria.js';
+import { criarGeometria, lerTelaRiot, quadroDaPagina, esperarTamanhoDaPagina } from './geometria.js';
 import { criarLateral, CSS_LATERAL, lateralLigada } from './lateral.js';
 
 export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'Reconnect',
@@ -255,7 +255,9 @@ export function criarRoteador({
   const adiar = oque => { if (est.adiado !== oque) { est.adiado = oque; log(`partida: ${oque} espera o foco no client (jogo na frente)`); } };
   const coluna = () => tamanho(cfg.compacto?.larg, cfg.compacto?.alt)[0];
   const compactar = () => janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt, extra());
-  const porLarguras = () => { try { const j = emJogo(); camada.larguras?.({ esq: j ? 0 : est.lateral.esq, col: coluna(), dir: j ? 0 : est.lateral.dir }); } catch { /* sem DOM */ } };
+  // sobre ({esq, dir}, da geometria): as larguras do passo em curso, não as mais novas (a geometria cresce com a esquerda VELHA e
+  // põe a nova na volta do MoveTo; um 2º clique no meio não pode desencontrar CSS e posição)
+  const porLarguras = sobre => { try { const j = emJogo(); camada.larguras?.({ esq: j ? 0 : (sobre?.esq ?? est.lateral.esq), col: coluna(), dir: j ? 0 : (sobre?.dir ?? est.lateral.dir) }); } catch { /* sem DOM */ } };
   const gancho = (nome, ...a) => { try { lateral?.[nome]?.(...a); } catch (e) { log(`lateral: ${nome} falhou`, e); } };
   const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
   const assinadas = new Set();
@@ -394,7 +396,7 @@ export function criarRoteador({
         } else if (emJogo() && podeMexer() && typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra())) {
           // tela de jogo montada sem foco numa janela pequena mas do tamanho de antes (a lateral somada: "acertar o tamanho
           // da janela" adiado): com o foco de volta, só ResizeTo (revisão adversarial, achado 4). Só nas fases de jogo: fora
-          // delas a fila da geometria é dona da ordem CSS → MoveTo → ResizeTo, e um compactar() no meio dela pularia a coluna
+          // delas a fila da geometria é dona da ordem CSS/MoveTo/ResizeTo, e um compactar() no meio dela pularia a coluna
           log('partida: acertando o tamanho da janela (foco no client)');
           if (!compactar()) { est.forcado = 'a janela não encolheu (riotInvoke)'; pendente = true; return; }
         }
@@ -414,14 +416,22 @@ export function criarRoteador({
       desmontarTela();
       const entrando = est.efetivo !== 'compacto';
       const partes = camada.montar();
-      porLarguras();
-      if (precisa && !compactar() && !janela.ehCompacta()) {
-        camada.remover();
-        est.forcado = 'a janela não encolheu (riotInvoke)';
-        est.efetivo = 'expandido'; est.motivo = est.forcado; est.tela = null;
-        return;
+      // troca de tela já no compacto, janela pequena, fora da partida: a fila da geometria é a dona da ordem CSS/ResizeTo/MoveTo
+      // (revisão adversarial de 15/10/2026: saindo da partida com a ⚙ aberta, porLarguras + compactar daqui punham esq 360 numa
+      // página de 420 antes do ResizeTo, o pisca da ⚙; prova: teste-compacto-lateral.mjs "⚙ aberta numa partida inteira")
+      const pelaGeometria = !entrando && pequena && !emJogo() && !!geometria && janela.disponivel();
+      if (pelaGeometria) {
+        if (precisa) aplicarGeometria();
+      } else {
+        porLarguras();
+        if (precisa && !compactar() && !janela.ehCompacta()) {
+          camada.remover();
+          est.forcado = 'a janela não encolheu (riotInvoke)';
+          est.efetivo = 'expandido'; est.motivo = est.forcado; est.tela = null;
+          return;
+        }
+        if ((precisa || entrando) && !emJogo()) geometria?.ajustar(); // partida: nada de MoveTo (passo 14)
       }
-      if ((precisa || entrando) && !emJogo()) geometria?.ajustar(); // partida: nada de MoveTo (passo 14)
       if (podeMexer()) est.adiado = null;
       classe(true);
       est.efetivo = 'compacto'; est.motivo = null; est.tela = a.tela;
@@ -448,10 +458,17 @@ export function criarRoteador({
     if (saindo) gancho('aoEfetivo', a.modo);
   }
 
-  // a lateral pede larguras (px CSS). Compacto à vista: a janela muda na hora (geometria: anda antes de crescer para a
-  // esquerda, prende ao monitor, coluna parada); senão só guarda e vale quando o compacto voltar. -> true se mudou
+  // a lateral pede larguras (px CSS). Compacto à vista: a janela muda na hora (geometria: cresce antes de andar, anda antes de
+  // encolher, prende ao monitor, coluna parada); senão só guarda e vale quando o compacto voltar. -> true se mudou
   // opcoes {soSemMover, aoRecusar}: abertura automática (decisão 1): a geometria confere com a tela relida e, se teria de mover
   // a janela, não muda nada e chama aoRecusar (a lateral desfaz e pede as larguras de antes)
+  // a tarefa da geometria com CSS, ResizeTo e o painel da esquerda. m = as medidas que a geometria está aplicando (o ResizeTo
+  // espera exatamente essa largura); esconderEsq: o painel da esquerda fica invisível no quadro da corrida CSS x MoveTo
+  // (ARMADILHAS § Client, "pisca ao abrir ⚙")
+  function aplicarGeometria({ soSemMover = false, aoRecusar = null } = {}) {
+    return geometria.aplicar({ redimensionar: m => est.efetivo === 'compacto' && (m ? janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt, m.larg - m.col) : compactar()),
+      porCss: porLarguras, soSemMover, aoRecusar, esconderEsq: on => camada.mudando?.(on) });
+  }
   function pedirLateral({ esq = 0, dir = 0 } = {}, { soSemMover = false, aoRecusar = null } = {}) {
     const novo = { esq: Math.max(0, Math.round(Number(esq) || 0)), dir: Math.max(0, Math.round(Number(dir) || 0)) };
     if (novo.esq === est.lateral.esq && novo.dir === est.lateral.dir) return false;
@@ -461,7 +478,7 @@ export function criarRoteador({
     if (est.efetivo === 'compacto' && janela.disponivel() && geometria) {
       // a tarefa da geometria é assíncrona: só redimensiona se o compacto ainda estiver à vista quando ela rodar. As variáveis
       // CSS saem na tarefa, junto do MoveTo (revisão de 14/10/2026: na hora do clique a coluna saía de vista até o ScreenData)
-      geometria.aplicar({ redimensionar: () => est.efetivo === 'compacto' && compactar(), porCss: porLarguras, soSemMover, aoRecusar });
+      aplicarGeometria({ soSemMover, aoRecusar });
       return true;
     }
     porLarguras();
@@ -626,7 +643,14 @@ export function criarRoteador({
       lateral: { ...est.lateral }, telas: Object.fromEntries([...modulos].map(([k, v]) => [k, v.estado])) };
   }
   // tamanho CSS que a janela compacta deve ter agora (coluna + lateral) e a largura da esquerda (geometria)
-  const medidasJanela = () => { const [larg, alt] = tamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra()); return { larg, alt, esq: est.lateral.esq, col: coluna() }; };
+  // pintada: a esquerda que o CSS tem AGORA (camada.medidas; na partida porLarguras põe 0 sem a geometria saber): é dela que a
+  // geometria parte (revisão adversarial de 15/10/2026)
+  const medidasJanela = () => {
+    const [larg, alt] = tamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra());
+    let pintada = null;
+    try { const v = camada.medidas?.().esq; if (Number.isFinite(v)) pintada = v; } catch { /* sem camada */ }
+    return { larg, alt, esq: est.lateral.esq, dir: est.lateral.dir, col: coluna(), pintada };
+  };
 
   return {
     aoFase(fase) {
@@ -743,6 +767,8 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     medidas: () => rot?.medidasJanela() || null,
     log: (...a) => console.log('[lol-client] compacto:', ...a),
     ativo: () => geometriaAtiva(rot?.estado()),
+    // crescer: CSS e MoveTo só com a página já na largura nova (evento resize); quadros pelo rAF (com rede, minimizada não trava)
+    quadro: quadroDaPagina(window), esperarTamanho: esperarTamanhoDaPagina(window), agora: () => performance.now(),
   });
   const arrasto = criarArrastoJanela({ geometria, janela, medidas: () => rot?.medidasJanela() || null, win: window, raf: fn => requestAnimationFrame(fn) });
   const camada = criarCamada({

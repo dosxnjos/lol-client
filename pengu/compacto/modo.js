@@ -200,7 +200,12 @@ export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar
   const remover = () => { el?.remove(); el = null; partes = null; };
   // larguras dos três pedaços (px CSS; o roteador é o dono: index.js est.lateral)
   const larguras = m => { medidas = { esq: Math.max(0, Number(m?.esq) || 0), col: Math.max(0, Number(m?.col) || PADRAO_COMPACTA[0]), dir: Math.max(0, Number(m?.dir) || 0) }; porVariaveis(); };
-  return { montar, remover, existe: () => !!el, conectada, partes: () => partes, pedirFechar, larguras, medidas: () => ({ ...medidas }) };
+  // painel da esquerda invisível enquanto a janela anda (geometria: o quadro da corrida CSS x MoveTo mostra fundo, nunca as
+  // configurações no lugar da coluna). Só a esquerda: a coluna nunca some
+  let mudando = false;
+  const mudar = on => { mudando = !!on; try { el?.classList?.toggle?.('lc-cp-mudando', mudando); } catch { /* sem DOM */ } };
+  return { montar, remover, existe: () => !!el, conectada, partes: () => partes, pedirFechar, larguras, medidas: () => ({ ...medidas }),
+    mudando: mudar, estaMudando: () => mudando };
 }
 
 // Botão "▣ modo compacto" no client normal, ao lado da fila rápida (protótipo tela 6). Mesmo padrão do
@@ -278,6 +283,9 @@ export const CSS_MODO = `
 /* só a direita some vazia: a esquerda vazia ainda ocupa a largura da variável até a geometria aplicar (senão, ao fechar ⚙, a
    coluna pulava para a esquerda antes do MoveTo; revisão de 14/10/2026). Variável 0 + overflow hidden = não ocupa nada */
 #lc-compacto > .lc-cp-dir:empty { display:none; }
+#lc-compacto.lc-cp-mudando > .lc-cp-esq > * { visibility:hidden; }
+/* fundo da página no compacto: a sobra que a janela mostra ao alargar antes de a página pintar no tamanho novo sai escura [S] */
+html.lc-modo-compacto { background:#010a13; }
 #lc-compacto *, #lc-compacto *::before, #lc-compacto *::after { box-sizing:border-box; }
 #lc-compacto ::-webkit-scrollbar { width:6px; height:6px; }
 #lc-compacto ::-webkit-scrollbar-thumb { background:#463714; border-radius:3px; }

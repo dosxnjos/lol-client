@@ -140,6 +140,89 @@ function janelaFalsa({ x = 640, y = 100, w = 1280, h = 720, z = 1.25, mon = MONI
   return win;
 }
 
+// ---------- janela por quadros: o pipeline do client, quadro a quadro (o que o Gabriel vê piscar, 15/10/2026) ----------
+// Cada quadro: (1) a página fica sabendo do tamanho que a janela tinha no fim do quadro anterior (a ida e volta browser →
+// página do ResizeTo: muda o innerWidth e dispara resize); (2) rAF e o que ele destrava; (3) a página pinta: foto das variáveis
+// --lc-cp-* e do painel da esquerda escondido, no tamanho que ELA conhece; (4) o DWM aplica os pedidos nativos que chegaram
+// (MoveTo/ResizeTo; atrasoNativo: N quadros depois); (5) a tela mostra a foto da página na janela onde ela está.
+// Pedido nativo e CSS da mesma volta caem no mesmo quadro (atrasoNativo 0); a corrida real de 0-1 quadro é [S]
+// (geometria.MOVE_APOS_CSS_QUADROS). prazoQuadros: o ESPERA_TAMANHO_MS do client contado em quadros (~15 a 60 Hz).
+// paginaAtrasa: quadros a mais até a página saber do ResizeTo; pinturaAtrasa: a tela mostra a pintura do quadro ANTERIOR (o
+// pedido nativo ganha a corrida contra o CSS; o oposto de atrasoNativo)
+function janelaQuadros({ x = 640, y = 100, w = 1280, h = 720, z = 1.25, mon = MONITORES.meio, atrasoNativo = 0, prazoQuadros = 15, paginaAtrasa = 0, pinturaAtrasa = false } = {}) {
+  const j = { os: { x, y, w, h }, vista: w, z, mon: { ...mon }, fila: [], raf: [], esperas: [], quadros: [], pedidos: [], n: 0, minimizada: false,
+    foto: () => null, cssEsq: () => null, sabe: [] };
+  for (const k of ['x', 'y', 'w', 'h']) Object.defineProperty(j, k, { get: () => j.os[k], set: v => { j.os[k] = v; } });
+  j.riotInvoke = arg => {
+    const p = JSON.parse(arg.request);
+    if (p.name === 'Window.ScreenData') {
+      const o = { ...j.os };
+      setImmediate(() => arg.onSuccess?.(JSON.stringify({ result: JSON.stringify({ screenX: o.x, screenY: o.y, screenAvailLeft: j.mon.L, screenAvailTop: j.mon.T,
+        screenAvailWidth: j.mon.W, screenAvailHeight: j.mon.H, windowWidth: o.w * z, windowHeight: o.h * z, windowMinimized: false, zoomScale: z }) })));
+      return;
+    }
+    j.pedidos.push({ name: p.name, params: p.params, quadro: j.n, esqCss: j.cssEsq() });
+    j.fila.push({ p, em: j.n + atrasoNativo });
+  };
+  j.quadro = () => new Promise(r => j.raf.push(r));
+  j.esperarTamanho = larg => new Promise(res => {
+    if (Math.abs(j.vista - larg) <= 8) { res(true); return; }
+    j.esperas.push({ larg, res, ate: j.n + prazoQuadros });
+  });
+  const aplicar = p => {
+    if (p.name === 'Window.ResizeTo') { [j.os.w, j.os.h] = p.params; j.sabe.push({ w: j.os.w, em: j.n + 1 + paginaAtrasa }); }
+    else if (p.name === 'Window.MoveTo') [j.os.x, j.os.y] = p.params;
+    else if (p.name === 'Window.CenterToScreen') { j.os.x = Math.round(j.mon.L + (j.mon.W - j.os.w * z) / 2); j.os.y = Math.round(j.mon.T + (j.mon.H - j.os.h * z) / 2); }
+  };
+  j.passar = async () => {
+    j.n++;
+    // (1) resize na página
+    while (j.sabe.length && j.sabe[0].em <= j.n) j.vista = j.sabe.shift().w;
+    j.esperas = j.esperas.filter(e => {
+      if (Math.abs(j.vista - e.larg) <= 8) { e.res(true); return false; }
+      if (j.n >= e.ate) { e.res(false); return false; }
+      return true;
+    });
+    // (2) rAF + o que ele destrava (continuações, ScreenData)
+    for (const r of j.raf.splice(0)) r();
+    await tick(12);
+    // (3) pinta
+    const pintura = { vista: j.vista, ...(j.foto() || {}) };
+    const f = pinturaAtrasa ? (j.anterior || pintura) : pintura;
+    j.anterior = pintura;
+    // (4) DWM
+    const agora = j.fila.filter(q => q.em <= j.n);
+    j.fila = j.fila.filter(q => q.em > j.n);
+    for (const q of agora) aplicar(q.p);
+    // (5) tela
+    j.quadros.push({ n: j.n, x: j.os.x, w: j.os.w, ...f });
+  };
+  j.rodar = async (n = 40) => { for (let i = 0; i < n; i++) await j.passar(); };
+  return j;
+}
+// quadros ruins de UM passo (desde = índice em s.win.quadros do 1º quadro do passo): coluna cortada, ou num lugar que não é o de
+// antes nem o de depois do passo (o pulo de 1+ quadro que ele vê), ou indo e voltando. Onde a âncora cabe, o conferir() do fim
+// do passo exige a coluna nela; onde não cabe (borda do monitor) ela anda uma vez, de propósito.
+function quadrosRuins(s, desde = 0) {
+  const z = s.win.z, colX = q => q.x + q.esq * z;
+  const qs = s.win.quadros.slice(desde).filter(q => q.compacto);
+  const antes = s.win.quadros.slice(0, desde).filter(q => q.compacto).at(-1);
+  if (!qs.length) return [];
+  const ini = antes ? colX(antes) : colX(qs[0]), fim = colX(qs.at(-1));
+  const perto = (a, b) => Math.abs(a - b) <= 2;
+  const ruins = [];
+  let trocas = 0, ult = ini;
+  for (const q of qs) {
+    const util = Math.min(q.vista, q.w), x = colX(q);
+    if (q.esq + q.col > util + 0.5) ruins.push(`#${q.n} coluna cortada (esq ${q.esq} + col ${q.col} > ${util}; página ${q.vista}, janela ${q.w})`);
+    else if (!perto(x, ini) && !perto(x, fim)) ruins.push(`#${q.n} coluna em ${x} (antes ${ini}, depois ${fim})`);
+    if (!perto(x, ult)) { trocas++; ult = x; }
+    if (q.esq > 0 && q.temEsq && !q.mudando && !perto(x, fim)) ruins.push(`#${q.n} configurações à vista com a coluna fora do lugar`);
+  }
+  if (trocas > 1) ruins.push(`coluna mudou de lugar ${trocas} vezes num passo`);
+  return ruins;
+}
+
 // ---------- telas falsas (a lateral não depende da tela da coluna) ----------
 const telaFalsa = nome => ({ montar(raiz, ctx) { raiz.append(ctx.raiz.doc.createElement('div')); ctx.titulo.append(`tela ${nome}`); }, atualizar() {} });
 const TELAS = { lobby: telaFalsa('lobby'), fila: telaFalsa('fila'), champselect: telaFalsa('champselect'), posjogo: telaFalsa('posjogo'), honra: telaFalsa('honra'),
@@ -185,10 +268,11 @@ const AMIGOS = () => [
 ];
 
 // ---------- cenário: roteador + lateral + geometria de verdade ----------
-function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ = null, posjogo = null } = {}) {
+// quadros: {atrasoNativo, prazoQuadros, paginaAtrasa} = janela por quadros (a página só sabe do ResizeTo um quadro depois)
+function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ = null, posjogo = null, quadros = null } = {}) {
   const doc = novoDoc();
   globalThis.document = doc;
-  const win = janelaFalsa({ x, mon: MONITORES[mon] || mon, canto });
+  const win = quadros ? janelaQuadros({ x, mon: MONITORES[mon] || mon, ...quadros }) : janelaFalsa({ x, mon: MONITORES[mon] || mon, canto });
   const est = { amigos: AMIGOS(), conversas: [{ id: 'a1@br1.pvp.net', pid: 'a1@br1.pvp.net', type: 'chat', unreadMessageCount: 0, gameName: 'amigo 1' },
     { id: SALA_CS, type: 'championSelect', extra: { campo: NUNCA } }],
   msgsA1: [{ id: 'm1', type: 'chat', body: 'bora uma duo?', fromId: 'a1@br1.pvp.net', timestamp: '2026-10-14T19:58:00.000Z' }],
@@ -201,12 +285,17 @@ function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ 
   const lcu = (m, u, c) => lcuReal(m, u, c, falsa.fetch);
   const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680, chatLateral: true, conversaSozinha: true, ...cfgCompacto }, aceite: { ligado: true }, traumas: { ligado: true } };
   let agoraMs = 1_000_000;
-  const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => [win.w, win.h], agora: () => agoraMs });
+  const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => (quadros ? [win.vista, win.h] : [win.w, win.h]), agora: () => agoraMs });
   const s = { doc, win, est, falsa, cfg, avisos: [], logs: [], agora: () => agoraMs, avancar: ms => { agoraMs += ms; } };
   // esperar: a folga antes de reler depois do ResizeTo (120 ms no client) vira 2 voltas do laço (o ResizeTo "tarde" da janela
   // falsa assenta em 1)
+  // quadro: uma volta do laço; esperarTamanho: a janela falsa aplica o ResizeTo na hora (a janela por quadros, mais abaixo, é a
+  // que tem a página atrasada)
   const geo = criarGeometria({ lerTela: () => lerTelaRiot(win), mover: (a, b) => janela.mover(a, b), medidas: () => s.rot?.medidasJanela() || null,
-    ativo: () => geometriaAtiva(s.rot?.estado()), esperar: () => tick(2) });
+    ativo: () => geometriaAtiva(s.rot?.estado()),
+    ...(quadros
+      ? { esperar: async () => { for (let i = 0; i < 7; i++) await win.quadro(); }, quadro: win.quadro, esperarTamanho: win.esperarTamanho, agora: () => win.n * 16.7 }
+      : { esperar: () => tick(2), quadro: () => tick(1), esperarTamanho: async larg => { await tick(1); return Math.abs(win.w - larg) <= 8; } }) });
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => {}, aoFechar: () => {} });
   const avisar = (m, e) => s.avisos.push([m, !!e]);
   const lat = criarLateral({ cfg, rot: () => s.rot, doc, lcu, servicos: { champ }, geometria: geo, avisar, log: (...a) => s.logs.push(a.map(String).join(' ')),
@@ -232,6 +321,15 @@ function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ 
   Object.assign(s, { geo, camada, lat, lcu, janela, arrasto });
   s.ir = async fase => { s.rot.aoFase(fase); await tick(8); await geo.ocioso(); await tick(4); };
   s.passo = async fn => { await fn(); await tick(8); await geo.ocioso(); await tick(8); await geo.ocioso(); };
+  if (quadros) {
+    // o que a página pinta em cada quadro
+    win.foto = () => {
+      const p = camada.partes(), m = camada.medidas();
+      return { compacto: s.rot.estado().efetivo === 'compacto' && !!p, esq: m.esq, col: m.col, dir: m.dir, mudando: camada.estaMudando?.() ?? false, temEsq: !!p?.esq.children.length };
+    };
+    s.ir = async fase => { s.rot.aoFase(fase); await win.rodar(40); };
+    s.passo = async fn => { await fn(); await win.rodar(40); };
+  }
   s.partes = () => camada.partes();
   return s;
 }
@@ -312,12 +410,13 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
   const nPedidos = s.win.pedidos.length;
   await s.passo(() => s.lat.alternarConfig());
   const cfgPed = s.win.pedidos.slice(nPedidos).map(p => p.name);
-  caso('⚙: as configurações crescem para a ESQUERDA (1440), a coluna fica no mesmo lugar da tela; anda antes de alargar',
-    s.win.w === 1440 && s.win.x === 640 - 450 && s.win.x + 360 * 1.25 === 640 && igual(cfgPed, ['Window.MoveTo', 'Window.ResizeTo']) && conferir(s).length === 0, JSON.stringify([s.win, cfgPed, conferir(s)]));
+  // ordem desde 15/10/2026 ("flickada" ao clicar na ⚙): janela que cresce alarga ANTES de andar; que encolhe anda antes de estreitar
+  caso('⚙: as configurações crescem para a ESQUERDA (1440), a coluna fica no mesmo lugar da tela; alarga antes de andar',
+    s.win.w === 1440 && s.win.x === 640 - 450 && s.win.x + 360 * 1.25 === 640 && igual(cfgPed, ['Window.ResizeTo', 'Window.MoveTo']) && conferir(s).length === 0, JSON.stringify([s.win, cfgPed, conferir(s)]));
   const n2 = s.win.pedidos.length;
   await s.passo(() => s.lat.alternarConfig());
   const ped2 = s.win.pedidos.slice(n2).map(p => p.name);
-  caso('fechar as configurações: encolhe e só então anda; coluna volta ao mesmo lugar (x 640)', s.win.w === 1080 && s.win.x === 640 && igual(ped2, ['Window.ResizeTo', 'Window.MoveTo']), JSON.stringify([s.win, ped2]));
+  caso('fechar as configurações: anda e só então encolhe; coluna volta ao mesmo lugar (x 640)', s.win.w === 1080 && s.win.x === 640 && igual(ped2, ['Window.MoveTo', 'Window.ResizeTo']), JSON.stringify([s.win, ped2]));
   await s.passo(() => s.lat.alternarLista());
   caso('✕ da lista com a conversa aberta: fica 780 (coluna + conversa)', s.win.w === 780 && conferir(s).length === 0, JSON.stringify(s.win));
   await s.passo(() => s.lat.fecharAba('c:a1@br1.pvp.net'));
@@ -830,10 +929,12 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const naHora2 = s.camada.medidas().esq;
   await tick(8); await s.geo.ocioso(); await tick(8);
   const fecha = s.win.pedidos.slice(n2).map(p => [p.name, p.esqCss]);
-  caso('⚙ abre: no clique a variável fica em 0 (a coluna não sai de vista); no MoveTo e no ResizeTo já está em 360',
-    naHora === 0 && igual(abre, [['Window.MoveTo', 360], ['Window.ResizeTo', 360]]), JSON.stringify([naHora, abre]));
-  caso('⚙ fecha: no clique segue 360; ResizeTo com 360, MoveTo com 0 (CSS e MoveTo juntos)',
-    naHora2 === 360 && igual(fecha, [['Window.ResizeTo', 360], ['Window.MoveTo', 0]]), JSON.stringify([naHora2, fecha]));
+  // desde 15/10/2026: crescer = ResizeTo com a esquerda VELHA (0) e o CSS novo só na volta do MoveTo; encolher = CSS e MoveTo
+  // juntos, ResizeTo por último
+  caso('⚙ abre: no clique a variável fica em 0 (a coluna não sai de vista); ResizeTo ainda com 0, MoveTo já com 360',
+    naHora === 0 && igual(abre, [['Window.ResizeTo', 0], ['Window.MoveTo', 360]]), JSON.stringify([naHora, abre]));
+  caso('⚙ fecha: no clique segue 360; MoveTo já com 0 (CSS e MoveTo juntos), ResizeTo por último',
+    naHora2 === 360 && igual(fecha, [['Window.MoveTo', 0], ['Window.ResizeTo', 0]]), JSON.stringify([naHora2, fecha]));
   caso('CSS: a esquerda vazia não some (sem .lc-cp-esq:empty), senão a coluna pulava para a esquerda antes do MoveTo',
     !/\.lc-cp-esq:empty/.test(CSS_MODO) && /\.lc-cp-dir:empty/.test(CSS_MODO));
   globalThis.document = ANTES.document;
@@ -956,6 +1057,160 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const antes = s.lat.estado().abas.map(a => a.k);
   await novaMsgDe(s, 2);
   caso(`${MAX_CONVERSAS} conversas abertas por ele: mensagem nova não abre (não fecha uma dele)`, igual(s.lat.estado().abas.map(a => a.k), antes), JSON.stringify(s.lat.estado().abas.map(a => a.k)));
+  globalThis.document = ANTES.document;
+}
+
+// =================== quadro a quadro: a ⚙ não pisca (relato do Gabriel, 15/10/2026 ~00:30) ===================
+// "ao clicar na engrenagem, o client dá uma flickada rápida antes da janela de configurações ir pra esquerda". Antes: CSS da
+// esquerda (360) + MoveTo + ResizeTo na mesma volta; a página ainda de 420 pintava [configurações 360][coluna 60] (coluna cortada,
+// configurações no lugar dela) até saber do tamanho novo. Cada quadro abaixo é o que a tela mostra.
+{
+  // cada op é um passo (clique + 40 quadros); os ruins de todos os passos
+  const abrirFechar = async (s, ops) => {
+    const ruins = [];
+    for (const op of ops) { const desde = s.win.quadros.length; await s.passo(op); ruins.push(...quadrosRuins(s, desde)); }
+    return ruins;
+  };
+  const base = async (opcoes = {}) => {
+    const s = cenario({ quadros: {}, ...opcoes });
+    await s.ir('Lobby');
+    s.ancora = s.win.x + s.camada.medidas().esq * s.win.z;
+    return s;
+  };
+  // 1. ⚙ abre e fecha sozinha
+  let s = await base();
+  const n0 = s.win.pedidos.length;
+  const ruins1 = await abrirFechar(s, [() => s.lat.alternarConfig()]);
+  const ped1 = s.win.pedidos.slice(n0).map(p => [p.name, p.esqCss]);
+  const ruins1b = await abrirFechar(s, [() => s.lat.alternarConfig()]);
+  caso('quadro a quadro, ⚙ abre: nenhum quadro com a coluna cortada ou fora do lugar (ResizeTo com a esquerda velha, MoveTo com a nova)',
+    ruins1.length === 0 && igual(ped1, [['Window.ResizeTo', 0], ['Window.MoveTo', 360]]) && s.win.quadros.length > 0 && conferir(s).length === 0 || false,
+    JSON.stringify([ruins1.slice(0, 3), ped1]));
+  caso('quadro a quadro, ⚙ fecha: nenhum quadro ruim (anda com o CSS, encolhe por último)', ruins1b.length === 0 && s.win.w === 420 && s.win.x === 640, JSON.stringify([ruins1b.slice(0, 3), s.win.w, s.win.x]));
+  // o painel da esquerda aparece só depois de a janela andar e segue visível no fim
+  const qs = s.win.quadros;
+  caso('quadro a quadro: o painel da esquerda nunca aparece antes da janela andar; ao fim de cada passo nada fica escondido',
+    !qs.some(q => q.esq > 0 && q.temEsq && !q.mudando && q.x !== 640 - 450) && !s.camada.estaMudando?.(), JSON.stringify(qs.filter(q => q.esq > 0 && q.temEsq && !q.mudando).slice(0, 2)));
+  globalThis.document = ANTES.document;
+
+  // 2. ⚙ com o chat aberto, ⚙ + 💬 na mesma volta (abrir e fechar), conversa no meio
+  s = await base();
+  const ruins2 = await abrirFechar(s, [() => s.lat.alternarLista(), () => s.lat.abrirConversa(A1), () => s.lat.alternarConfig(), () => s.lat.alternarConfig(),
+    () => { s.lat.alternarConfig(); s.lat.alternarLista(); }, () => { s.lat.alternarConfig(); s.lat.alternarLista(); }]);
+  caso('quadro a quadro, ⚙ com o chat aberto e ⚙ + 💬 juntos (abrir e fechar): nenhum quadro ruim, estado final certo',
+    ruins2.length === 0 && conferir(s).length === 0, JSON.stringify([ruins2.slice(0, 3), conferir(s)]));
+  globalThis.document = ANTES.document;
+
+  // 3. toda ordem de abrir e fechar (lista, conversa, ⚙), duas vezes
+  const falhas = [];
+  for (const abre of permutacoes(['lista', 'conversa', 'config'])) {
+    const p = await base();
+    for (const op of [...abre, ...abre]) {
+      const r = await abrirFechar(p, [() => (op === 'lista' ? p.lat.alternarLista() : op === 'config' ? p.lat.alternarConfig() : (p.lat.estado().abas.length ? p.lat.fecharAba('c:a1@br1.pvp.net') : p.lat.abrirConversa(A1)))]);
+      const e = conferir(p);
+      if (r.length || e.length) { falhas.push(`${abre} em ${op}: ${[...r, ...e].slice(0, 2).join('; ')}`); break; }
+    }
+    globalThis.document = ANTES.document;
+  }
+  caso('quadro a quadro, toda ordem de lista/conversa/⚙ (abrir e fechar): nenhum quadro com a coluna fora do lugar', falhas.length === 0, falhas.slice(0, 2).join(' | '));
+
+  // 4. monitor pequeno: ⚙ fecha o chat (caber('esq'): a esquerda cresce e a direita encolhe na mesma volta)
+  const pq = await base({ mon: 'pequeno', x: 300 });
+  await pq.passo(() => pq.lat.abrirConversa(A1));
+  pq.ancora = pq.win.x;
+  const ruins4 = await abrirFechar(pq, [() => pq.lat.alternarConfig(), () => pq.lat.alternarConfig()]);
+  caso('quadro a quadro, monitor pequeno (⚙ fecha o chat na mesma volta e reabre): nenhum quadro ruim', ruins4.length === 0 && conferir(pq).length === 0,
+    JSON.stringify([ruins4.slice(0, 3), conferir(pq)]));
+  globalThis.document = ANTES.document;
+
+  // 5. a página nunca fica sabendo do tamanho (o resize não chega): o prazo destrava a fila e o estado final fica certo
+  const pr = await base({ quadros: { paginaAtrasa: 30 } });
+  await pr.passo(() => pr.lat.alternarConfig());
+  await pr.win.rodar(40);
+  caso('resize que não chega a tempo: a geometria anda pelo prazo (não trava a fila) e termina no lugar',
+    pr.win.x === 640 - 450 && pr.win.w === 780 && (pr.geo.estado().traco || []).some(t => t.ev === 'tamanho-prazo'), JSON.stringify([pr.win.x, pr.win.w, (pr.geo.estado().traco || []).map(t => t.ev)]));
+  globalThis.document = ANTES.document;
+
+  // 6. o que só o client decide ([S]): DWM 1 quadro atrás da página. Sobra no máximo 1 quadro por passo (a corrida do MoveTo);
+  // antes eram 2+ com a coluna cortada
+  const at = await base({ quadros: { atrasoNativo: 1 } });
+  at.ancora = at.win.x;
+  const ruins6a = await abrirFechar(at, [() => at.lat.alternarConfig()]);
+  const ruins6b = await abrirFechar(at, [() => at.lat.alternarConfig()]);
+  const tortos = r => r.filter(x => x.startsWith('#')).length;
+  caso('[S] DWM um quadro atrás: no máximo 1 quadro torto ao abrir e 1 ao fechar (a corrida do MoveTo), nunca a coluna cortada',
+    tortos(ruins6a) <= 1 && tortos(ruins6b) <= 1 && ![...ruins6a, ...ruins6b].some(r => r.includes('cortada')), JSON.stringify([ruins6a, ruins6b]));
+  globalThis.document = ANTES.document;
+  // o oposto: o pedido nativo chega antes da pintura (antes: ao FECHAR, o ResizeTo estreitava a janela com as configurações ainda
+  // pintadas e a coluna sumia)
+  const pa = await base({ quadros: { pinturaAtrasa: true } });
+  pa.ancora = pa.win.x;
+  const ruins6c = await abrirFechar(pa, [() => pa.lat.alternarConfig()]);
+  const ruins6d = await abrirFechar(pa, [() => pa.lat.alternarConfig()]);
+  caso('[S] pintura um quadro atrás do pedido nativo: no máximo 1 quadro torto ao abrir e 1 ao fechar, nunca a coluna cortada',
+    tortos(ruins6c) <= 1 && tortos(ruins6d) <= 1 && ![...ruins6c, ...ruins6d].some(r => r.includes('cortada')), JSON.stringify([ruins6c, ruins6d]));
+  globalThis.document = ANTES.document;
+
+  // 6b. a partida começa no MEIO da transição (depois do ResizeTo, esperando o resize): nada de MoveTo com o jogo abrindo
+  // (ARMADILHAS § Client, passo 14) e o painel da esquerda não fica escondido
+  const gs = await base();
+  gs.lat.alternarConfig();
+  await gs.win.passar();
+  const nGs = gs.win.pedidos.length;
+  const jaRedimensionou = gs.win.pedidos.some(p => p.name === 'Window.ResizeTo' && p.params[0] === 780);
+  gs.rot.aoFase('GameStart');
+  await gs.win.rodar(40);
+  const naPartida = gs.win.pedidos.slice(nGs).map(p => p.name);
+  caso('partida no meio da transição da ⚙ (ResizeTo já saiu, esperando o resize): nenhum MoveTo depois, nada fica escondido',
+    jaRedimensionou && !naPartida.some(n => /MoveTo|CenterToScreen/.test(n)) && !gs.camada.estaMudando?.(), JSON.stringify([jaRedimensionou, naPartida]));
+  globalThis.document = ANTES.document;
+
+  // 6c. revisão adversarial (15/10/2026): ⚙ aberta numa partida inteira. Na partida a lateral some só pelo CSS (porLarguras com
+  // esq 0) e a janela encolhe a 420 sem a geometria saber: ela seguia achando 360 pintado. Ao sair da partida, a montagem do
+  // pós-jogo punha esq 360 numa página de 420 antes do ResizeTo e a geometria crescia "com a esquerda velha" 360: o mesmo pisca
+  // (configurações no lugar da coluna, coluna cortada) por uma ida e volta
+  const pg = await base();
+  await pg.passo(() => pg.lat.alternarConfig());
+  const ancoraPg = pg.win.x + 360 * pg.win.z;
+  const desdeJogo = pg.win.quadros.length;
+  await pg.ir('GameStart');
+  const ruinsEntra = quadrosRuins(pg, desdeJogo).filter(r => r.includes('cortada'));
+  const noJogo = { w: pg.win.w, esq: pg.camada.medidas().esq };
+  const desdePos = pg.win.quadros.length;
+  await pg.ir('WaitingForStats');
+  const ruinsPos = quadrosRuins(pg, desdePos);
+  pg.ancora = ancoraPg;
+  caso('⚙ aberta numa partida inteira: entrar sem coluna cortada; sair da partida volta [configurações][coluna] sem nenhum quadro ruim',
+    ruinsEntra.length === 0 && noJogo.w === 420 && noJogo.esq === 0 && ruinsPos.length === 0 && pg.win.w === 780 && conferir(pg).length === 0,
+    JSON.stringify([ruinsEntra.slice(0, 2), noJogo, ruinsPos.slice(0, 3), pg.win.w, conferir(pg)]));
+  globalThis.document = ANTES.document;
+
+  // 6d. fechar a ⚙ e a partida começar nos 2 quadros antes do ResizeTo (CSS e MoveTo já saíram): a geometria tem de saber que
+  // a esquerda pintada é 0 e onde a janela ficou; senão, depois da partida, a âncora sai 360 px à direita e a janela pula
+  const fg = await base();
+  await fg.passo(() => fg.lat.alternarConfig());
+  fg.lat.alternarConfig();
+  let movida = false;
+  for (let i = 0; i < 40 && !movida; i++) { await fg.win.passar(); movida = fg.win.x === 640; }
+  fg.rot.aoFase('GameStart');
+  await fg.win.rodar(40);
+  await fg.ir('WaitingForStats');
+  const xPos = fg.win.x;
+  const desdeChat = fg.win.quadros.length;
+  await fg.passo(() => fg.lat.alternarLista());
+  fg.ancora = 640;
+  caso('⚙ fechada nos quadros antes do ResizeTo e a partida começa: depois dela, abrir o chat não pula a janela (âncora certa)',
+    movida && fg.win.x === xPos && fg.win.x === 640 && quadrosRuins(fg, desdeChat).length === 0 && conferir(fg).length === 0,
+    JSON.stringify([movida, xPos, fg.win.x, fg.geo.estado().ancora, quadrosRuins(fg, desdeChat).slice(0, 2), conferir(fg)]));
+  globalThis.document = ANTES.document;
+
+  // 7. traço para medir no client: pedido, resize, tamanho, css, move, releitura, nessa ordem ao abrir
+  const tr = await base();
+  await tr.passo(() => tr.lat.alternarConfig());
+  const evs = (tr.geo.estado().traco || []).map(t => t.ev);
+  const i = evs.lastIndexOf('pedido');
+  caso('traço da geometria (__lolClient.compacto.geometria().traco): pedido → resize → tamanho → css → move → releitura',
+    igual(evs.slice(i), ['pedido', 'resize', 'tamanho', 'css', 'move', 'releitura']), JSON.stringify(evs.slice(i)));
   globalThis.document = ANTES.document;
 }
 

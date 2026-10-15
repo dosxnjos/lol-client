@@ -1054,6 +1054,50 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     aberto na tela dele. **Falta (só a partida prova), além da lista acima:** `hasFocus()` a cada 500 ms com o foco no chat da
     Riot; `visibilityState` do CEF minimizado; mapa de TFT/Arena chegando antes ou depois do GameStart.
 
+14b. [x] **⚙ sem piscar** (relato dele, 15/10/2026 ~00:30: "ao clicar na engrenagem, o client dá uma flickada rápida antes da
+    janela de configurações ir pra esquerda da janela principal"). Causa: a geometria punha `--lc-cp-esq: 360` + `MoveTo` +
+    `ResizeTo` na mesma volta; a página ainda de 420 pintava [configurações 360][coluna 60] até saber do tamanho novo (1+ quadro
+    com as configurações no lugar da coluna); ao fechar, o `ResizeTo` estreitava antes da pintura nova (coluna cortada).
+    Caminhos avaliados: (a) pedido atômico: **não existe** (os 23 `Window.*` do `LeagueClientUx.exe` lidos em 15/10; `MoveBy`/
+    `ResizeBy` são os mesmos dois pedidos; a própria Riot faz `moveTo` e `resizeTo` separados); (b) CSS antes do `MoveTo` = a ordem
+    que piscava; (c) escolhido, em `compacto/geometria.js` `aplicarAgora`: janela que **cresce** = `ResizeTo` primeiro com a
+    esquerda velha (a coluna fica, sobra fundo escuro à direita), CSS novo + `MoveTo` na mesma volta quando a página já tem a
+    largura nova (`resize`, prazo `ESPERA_TAMANHO_MS` 250); janela que **encolhe** = CSS + `MoveTo` primeiro, `ResizeTo` dois
+    quadros depois; (d) só no painel da esquerda: `lc-cp-mudando` o deixa invisível do quadro antes do `MoveTo` até 2 depois
+    (o quadro da corrida mostra fundo, nunca as configurações no lugar da coluna). Vale igual ao fechar e com ⚙ + 💬 juntos.
+    Fundo da página escuro no compacto (`html.lc-modo-compacto`) para a sobra do alargamento [S].
+    **Decisões técnicas (fable, 15/10/2026, a mais reversível):** (xiii) ordem por largura (cresce/encolhe) e não por lado:
+    confiança alta no harness, média no client; reverte se o traço mostrar a página pintando antes do `resize`; (xiv)
+    `MOVE_APOS_CSS_QUADROS = 0` (MoveTo na mesma volta do CSS): média; sobe para 1 se o traço/vídeo mostrar a coluna pulando
+    para a esquerda por um quadro; (xv) painel escondido 2 quadros: alta (custo 33 ms de "aparece depois").
+    — **prova (15/10/2026):** `teste-compacto-lateral.mjs` 115/115 com a **janela por quadros** (a página só sabe do `ResizeTo` um
+    quadro depois; cada quadro é o que a tela mostra): nenhum quadro com a coluna cortada ou fora do lugar ao abrir/fechar ⚙,
+    com o chat aberto, ⚙ + 💬 juntos, toda ordem de lista/conversa/⚙, monitor pequeno; partida no meio da transição sem
+    `MoveTo`; prazo do `resize` destrava a fila. Rodado contra o código de antes (cópia do `HEAD` 6db5898): 10 vermelhos
+    (coluna cortada no #41 ao abrir). Mutações (esconder, os 2 quadros antes de encolher, CSS velho no `ResizeTo`): vermelhas.
+    `teste-compacto.mjs` 175, `jogo` 47, `lobby` 136, `selecao` 165, `posjogo` 118, `fim-de-partida` 89. **Só o client prova:**
+    a corrida CSS × `MoveTo` (0-1 quadro; nos dois sentidos o harness segura ≤ 1 quadro torto e nunca a coluna cortada), se o
+    `resize` chega antes do 1º quadro no tamanho novo e se o `ResizeTo` mantém o canto (correção depois dele = 2º pulo). Ler
+    `__lolClient.compacto.geometria().traco` depois de abrir/fechar a ⚙ no lobby (`pedido → resize → tamanho → css → move →
+    releitura`, relógio em ms; `tamanho-prazo` ou `releitura corrige:true` = ainda pisca).
+    — **revisão adversarial (15/10/2026):** sequências testadas: ⚙ com 💬 aberto, fechar em toda ordem (as 6 permutações já
+    passam por todos os fechamentos), borda do monitor, recarga com painel aberto (a lateral não guarda a ⚙: volta fechada, sem
+    CSS da esquerda), partida no meio. **Achado real:** ⚙ aberta numa partida inteira. Na partida o roteador zera o CSS e encolhe a
+    janela a 420 sem a geometria saber (`g.esqAplicado` seguia 360); ao sair, a montagem do pós-jogo punha 360 numa página de 420
+    antes do `ResizeTo` e a geometria crescia "com a esquerda velha" 360: o mesmo pisca, por uma ida e volta. Variante: fechar a ⚙
+    e a partida começar nos 2 quadros antes do `ResizeTo` deixava a âncora 450 px físicos errada (a janela pulava ao abrir o chat
+    depois). **Decisão técnica (xvi, fable, 15/10/2026, a mais reversível; confiança alta no harness):** a geometria parte da
+    esquerda **pintada** (`medidasJanela().pintada`, CSS da camada) e não da que ela aplicou; o estado (`esqAplicado`, alvo) vale
+    no `MoveTo`, não no fim da tarefa; troca de tela já no compacto, fora da partida e com a janela pequena vai pela fila da
+    geometria (`pelaGeometria` em `index.js`). Reverte se o pós-jogo voltar a encolher a lateral. Prova: dois casos novos em
+    `teste-compacto-lateral.mjs` ("⚙ aberta numa partida inteira", "⚙ fechada nos quadros antes do ResizeTo"), vermelhos antes
+    (coluna cortada no #121; janela em 1090 em vez de 640) e com cada parte desfeita numa cópia; 117/117 e as outras suítes verdes.
+    **Correção do registro:** o traço não decide (xiv): com 0, `css` e `move` saem no mesmo ms do JS; quem chega primeiro na tela
+    só vídeo ou captura em alta taxa mostra. Também só o client: perto da borda direita o `ResizeTo` primeiro passa da borda do
+    monitor até o `MoveTo` (na 2ª tela, visível por 1+ quadro); `windowWidth` físico confirmado no `centerWithinMainWindow` da Riot.
+    Fica de risco aceito: uma troca de tela da Riot exatamente na espera do `resize` (≤ 250 ms) de um clique na ⚙ ainda pode pôr
+    o CSS novo antes do `MoveTo` (raro; a montagem com `entrando` segue com `porLarguras`).
+
 ## Revisão da construção (13/10/2026)
 
 Revisão adversarial achou 20 defeitos; nenhum falso, dois repetidos (12 = 2, 18 = 5): 18 distintos, todos corrigidos
@@ -1131,6 +1175,7 @@ expande (decisão acima).
 | paridade, 14/10: aceitar/recusar dentro da camada com o aceite automático desligado | a decisão é do popup da Riot (o compacto expande) e a janelinha do coletor já serve nos dois modos; tela própria de recusar iria contra "nada decide pelo jogador" | orquestrador (conferência de 14/10) |
 | paridade, 14/10: ARAM e seleção com banco, reconectar, honra, falha ao abrir o jogo | telas da Riot; já descartadas neste plano (regra 7). **Honra reaberta** pelo passo 12 (só a sequência `honor-vote`; celebrações seguem expandindo): vale o parecer dele na tela A | orquestrador |
 | chat ao lado do compacto na 2ª tela (passo 13) | a lateral é a própria janela do client; a página só enxerga o monitor onde ela está e prender à borda evita cair na 2ª tela (outra escala). Chat na 2ª tela = só as janelas do coletor | medição de 14/10 |
+| ⚙ sem nenhum quadro intermediário (passo 14b), agora | sem pedido atômico de posição + tamanho no client; o único caminho é `Window.ApplyMask` (existe no `LeagueClientUx.exe`, nenhum plugin da Riot chama, parâmetros desconhecidos): janela sempre na largura máxima e abrir ⚙ = tirar a máscara. Redesenho da geometria e escrita sem medição no client real; parado, não descartado | fable (15/10) |
 | paridade, 14/10: `ux-show`/`ux-flash` do popup de runas no compacto | quem escolhe é a tela 3, e ele já está nela porque acabou de travar | orquestrador (conferência de 14/10) |
 
 ## Relatório

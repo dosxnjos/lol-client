@@ -54,10 +54,12 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Lateral que some na troca de tela** (passo 13) → o roteador encolhia toda montagem fora de `noTamanho(cfg.larg, cfg.alt)`.
   Largura da janela = coluna da config + `est.lateral` do roteador (estado único; nunca em `cfg.compacto.larg`), e toda conta
   de tamanho usa as duas (`compacto/index.js` `compactar`/`extra`).
-- **Unidades da janela do client** (lido no rcp-fe-lol-uikit 16.20, 14/10/2026): `ResizeTo` em px CSS; `MoveTo`, `screenX/Y`
+- **Unidades da janela do client** (lido no rcp-fe-lol-uikit 16.20, 14/10/2026): `ResizeTo` em px CSS; `MoveTo`, `screenX/Y`,
+  `windowWidth/Height` do `ScreenData` (o `centerWithinMainWindow` da Riot centra `width·zoomScale` dentro deles, 15/10/2026)
   e a área útil em px **físicos** (×`zoomScale`, 1,25 aqui). Área útil e posição só pelo `riotInvoke` `Window.ScreenData` **com
   `onSuccess`** (`JSON.parse(JSON.parse(r).result)`); `screen.*`/`screenX` da página misturam unidades. Minimizada: `screenX`
-  −32000. `window.getScreenDetails()` trava. `compacto/geometria.js`: crescer à esquerda = `MoveTo` antes do `ResizeTo`; depois
+  −32000. `window.getScreenDetails()` trava. `compacto/geometria.js`: janela que cresce = `ResizeTo` antes do `MoveTo`, que
+  encolhe = `MoveTo` antes (§ "pisca ao abrir ⚙" abaixo); depois
   espera ~120 ms, relê e corrige ([S] o `ResizeTo` manter o canto e ser síncrono). Sem resposta do `ScreenData` = não move
   (nunca a reserva `screenX × dpr` no client: mistura unidades e jogava a janela fora do monitor).
 - **Arrasto que salta de volta ao lugar do 1º arrasto; conversa que abre "sozinha" movendo a janela** (revisão de 14/10/2026) →
@@ -67,6 +69,19 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Coluna some ao abrir ⚙ e pula para a esquerda ao fechar** → as variáveis `--lc-cp-*` iam na hora do clique e o `MoveTo`
   só depois da ida e volta do `ScreenData`; e `.lc-cp-esq:empty {display:none}` encolhia a esquerda antes da janela andar.
   O CSS sai na tarefa da geometria junto do `MoveTo` (`porCss`) e a esquerda vazia ocupa a largura da variável até lá.
+- **Pisca ao abrir ⚙ ("uma flickada antes das configurações irem para a esquerda", 15/10/2026)** → CSS da esquerda + `MoveTo`
+  + `ResizeTo` na mesma volta: a página só sabe do tamanho novo uma ida e volta depois e pintava [configurações][coluna cortada]
+  na janela velha; ao fechar, o `ResizeTo` estreitava antes da pintura nova. Não há pedido atômico (nenhum SetBounds entre os
+  `Window.*` do `LeagueClientUx.exe`). Ordem por largura em `geometria.aplicarAgora` (cresce: `ResizeTo` com a esquerda velha →
+  `resize` → CSS + `MoveTo`; encolhe: CSS + `MoveTo` → 2 quadros → `ResizeTo`) e painel da esquerda invisível na corrida
+  (`lc-cp-mudando`). Prova quadro a quadro: `janelaQuadros` em `teste-compacto-lateral.mjs`; no client,
+  `__lolClient.compacto.geometria().traco`. Plano: passo 14b.
+  - **o mesmo pisca ao sair da partida com a ⚙ aberta** (revisão de 15/10/2026) → na partida o roteador zera o CSS e encolhe a
+    janela sem a geometria saber; ela partia da esquerda "aplicada" (360) e a montagem do pós-jogo punha 360 numa página de 420
+    antes do `ResizeTo`. A geometria parte da esquerda **pintada** (`medidasJanela().pintada`, CSS da camada) e troca de tela já
+    no compacto, fora da partida, vai pela fila dela (`pelaGeometria` em `index.js`), nunca `porLarguras` + `compactar` direto.
+  - o traço não diz quem chega primeiro na tela (CSS e `MoveTo` saem no mesmo ms do JS): `MOVE_APOS_CSS_QUADROS` só se decide
+    por vídeo/captura em alta taxa. Perto da borda direita, o `ResizeTo` primeiro passa da borda do monitor até o `MoveTo` [S].
 - **Mensagem chega já lida e ele nunca vê** → a conversa marcada como lida (`PUT conversations/active`) seguia a ativa do client
   depois de trocar de aba, ir para a partida ou minimizar. `lateral.conferirAtiva` devolve (`DELETE`) quando ela sai de vista.
 - **Compacto parado em "lendo o lobby", botões mortos (14/10/2026)** → no boot a Riot tira o `#lc-compacto` do `<body>` e
