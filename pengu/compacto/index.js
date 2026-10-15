@@ -840,12 +840,12 @@ export function expandirAntes({ compacto, abrir, aVista = () => !!globalThis.doc
 export const CHAT_REAVISO_MS = 60000;
 // aviso do modo ao coletor (testável). coletor: fetch do coach.js (injetado; sem ele, o padrão da chat-ponte)
 // Passo 13: com o chat ao lado ligado (compacto.chatLateral), as janelas do Edge do coletor não abrem conversa nova sozinhas
-// (senão a conversa abriria em dobro). O corpo leva {compacto, lateral}: o coletor de hoje só lê `compacto`, então com a lateral
-// ligada vai compacto:false (o único jeito, sem mexer no coletor, de calar a abertura automática); o campo `lateral` é para o
-// coletor depois do patch (roadmap passo 13, "mudança do coletor"). chave = o que foi avisado (muda = avisa de novo).
+// (senão a conversa abriria em dobro). O corpo leva {compacto, lateral}: o coletor lê `lateral` (a2ab349) e cala a abertura
+// automática; `compacto` diz a verdade. Coletor anterior ao a2ab349 abriria em dobro: atualizar os dois juntos.
+// chave = o que foi avisado (muda = avisa de novo).
 export function criarAvisoChat({ cfg, coletor, repetir = setInterval, intervaloMs = CHAT_REAVISO_MS }) {
   let ultimo = null;
-  const valor = () => { const ligado = !!cfg.compacto?.ligado, lat = lateralLigada(cfg); return { compacto: ligado && !lat, lateral: lat }; };
+  const valor = () => { const ligado = !!cfg.compacto?.ligado, lat = lateralLigada(cfg); return { compacto: ligado, lateral: lat }; };
   const chave = () => JSON.stringify(valor());
   const avisar = () => {
     const v = valor();

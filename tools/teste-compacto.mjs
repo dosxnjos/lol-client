@@ -828,10 +828,10 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
       && Object.keys(TELAS).every(k => e.telas[k] === 'ok')
       && pedidos.filter(p => p.name === 'Window.ResizeTo').map(p => p.params.join('x')).join() === '420x640'
       && !!doc.getElementById('lc-compacto') && doc.documentElement.classList.contains('lc-modo-compacto'), JSON.stringify({ e, pedidos }));
-  // passo 13: com o chat ao lado ligado (padrão), as janelas do coletor não podem abrir conversa sozinhas (abriria em dobro): o
-  // coletor de hoje só lê `compacto`, então vai compacto:false + lateral:true (o caso de chatLateral desligado fica no bloco de baixo)
-  caso('iniciarCompacto: avisa o coletor do modo (POST /chat/plugin {compacto:false, lateral:true} com o chat ao lado ligado)',
-    aoColetor.some(([c, m, corpo]) => c === '/chat/plugin' && m === 'POST' && corpo?.compacto === false && corpo?.lateral === true), JSON.stringify(aoColetor));
+  // passo 13: com o chat ao lado ligado (padrão), as janelas do coletor não podem abrir conversa sozinhas (abriria em dobro):
+  // vai compacto:true + lateral:true e o coletor (a2ab349) cala pela lateral (o caso de chatLateral desligado fica no bloco de baixo)
+  caso('iniciarCompacto: avisa o coletor do modo (POST /chat/plugin {compacto:true, lateral:true} com o chat ao lado ligado)',
+    aoColetor.some(([c, m, corpo]) => c === '/chat/plugin' && m === 'POST' && corpo?.compacto === true && corpo?.lateral === true), JSON.stringify(aoColetor));
   const tecla = teclas.find(([ev]) => ev === 'keydown')?.[1];
   let parou = false;
   tecla?.({ ctrlKey: true, shiftKey: true, key: 'M', preventDefault() {}, stopPropagation() { parou = true; } });
@@ -904,7 +904,7 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
 }
 {
   // passo 13: chat ao lado desligado = comportamento de antes (compacto:true, as janelas do coletor abrem sozinhas); religar
-  // avisa de novo (compacto:false, lateral:true)
+  // avisa de novo (compacto:true, lateral:true)
   const { criarAvisoChat } = await import('../pengu/compacto/index.js');
   const cfg = { compacto: { ligado: true, chatLateral: false } };
   const aoColetor = [];
@@ -912,8 +912,8 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   await aviso.avisar();
   cfg.compacto.chatLateral = true;
   await aviso.mudou(); await aviso.mudou();
-  caso('aviso ao coletor: chatLateral desligado manda compacto:true (como antes); ligar a lateral avisa 1 vez compacto:false + lateral:true',
-    igual(aoColetor, [{ compacto: true, lateral: false }, { compacto: false, lateral: true }]), JSON.stringify(aoColetor));
+  caso('aviso ao coletor: chatLateral desligado manda compacto:true (como antes); ligar a lateral avisa 1 vez compacto:true + lateral:true',
+    igual(aoColetor, [{ compacto: true, lateral: false }, { compacto: true, lateral: true }]), JSON.stringify(aoColetor));
 }
 
 // ---------- 7b. Ctrl+K "analisar última partida" com a camada à vista (plano, passo 11 b2) ----------

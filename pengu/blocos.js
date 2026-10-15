@@ -144,7 +144,7 @@ const AVISOS = [
   ['objetivo_60s', 'Objetivo em 60 s'], ['mortes_cedo', 'Mortes antes dos 10'], ['inimigo_fed', 'Inimigo forte na tua rota'],
   ['ouro_guardado', 'Ouro guardado (hora de voltar?)'], ['feitico_voltou', 'Feitiço inimigo voltou (Flash...)'],
   ['pico_nivel', 'Inimigo no nível de pico'], ['pico_item', 'Inimigo fechou item'], ['regra', 'Outras dicas do coach'],
-  ['feitico_marcado', 'Retorno do F9 (Flash marcado)'], ['overlay_f8', 'Retorno do F8 (overlay ligado/desligado)', ['tela']],
+  ['feitico_marcado', 'Retorno do F7 (Flash marcado)'], ['overlay_f8', 'Retorno do F8 (overlay ligado/desligado)', ['tela']],
 ];
 const MODELOS = [['sonnet', 'Sonnet (padrão)'], ['haiku', 'Haiku'], ['opus', 'Opus']];
 const EFFORTS = [['low', 'Baixo'], ['medium', 'Médio (padrão)'], ['high', 'Alto']];
@@ -205,7 +205,7 @@ export const blocoMinimapa = (corpo, ctx) => corpo.append(
     ctx.ui.lista('coach.overlayForca', 'Força da cor', OVERLAY_FORCAS, ctx.cfg.coach.overlayForca, v => ctx.definir('coach.overlayForca', v))),
   caixaCoach(ctx, 'overlaySuave', 'Mancha muda aos poucos', 'Ligado: a mancha cresce e some devagar. Desligado: muda na hora, aos saltos.'),
   ctx.ui.explica('Como ler: a mancha é onde o jungler deles pode estar agora; quanto mais forte a cor, mais provável. Ela não pinta onde o teu time está vendo e some uns 30 s depois da última pista dele.'),
-  caixaCoach(ctx, 'feiticos', 'Flash e feitiços inimigos', 'Lê os pings de feitiço do chat (OCR) e conta a recarga; F9 + 1 a 5 marca na mão o flash do inimigo.'));
+  caixaCoach(ctx, 'feiticos', 'Flash e feitiços inimigos', 'Lê os pings de feitiço do chat (OCR) e conta a recarga. Na partida, F7 marca na mão o flash do inimigo: uma batida escolhe o adversário da tua rota, cada batida a mais passa para a próxima (top, jungler, mid, atirador, suporte) e a borda mostra quem está escolhido; parado cerca de 1 segundo, marca. Segurar F7 desfaz a última marcação.'));
 
 export const blocoMentor = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'mentor', 'Mentor no pós-jogo', 'No fim da partida, o teu Claude lê os números e escreve a análise; dá para perguntar no pós-jogo.'),
