@@ -216,6 +216,13 @@ def casos_convergencia(d, frases):
          and prog_s["suspeitas"] == 1 and prog_s["no_alvo"] == 0 and not prog_s["concluido"] and prog_s["fora_do_alvo"] == 1
          and G.para_convergir([seis[2]], pasta, presa_s, "alvo") == [] and prog_p["presas"] == 1 and prog_p["concluido"],
          f"{prog_s} {prog_p}")
+    # 15/10/2026: depois das suspeitas, o modelo que destoa (MODELOS_PRIMEIRO) passa à frente dos outros fora do alvo
+    destoa = {"frases": {seis[0]: {**fs[seis[0]], "modelo": "outro-tts"}, seis[2]: velha,
+                         seis[3]: {**fs[seis[3]], "modelo": G.MODELOS_PRIMEIRO[0]}}}
+    caso("ordem: suspeita, depois o modelo que destoa (3.1 preview), depois os outros fora do alvo",
+         G.para_convergir([seis[0], seis[2], seis[3]], pasta, destoa, "alvo") == [seis[3], seis[0], seis[2]]
+         and G.para_convergir([seis[0], seis[2], seis[3]], pasta, no_alvo_s, "alvo") == [seis[0], seis[3], seis[2]],
+         G.para_convergir([seis[0], seis[2], seis[3]], pasta, destoa, "alvo"))
 
     # 6c ponta a ponta: pacote completo com 2 suspeitas (uma já no alvo) e 1 boa fora do alvo; a rodada (sem nada faltando)
     # refaz as suspeitas primeiro, só no alvo. Ouvida certo = sai da Maria; ouvida errado = fica suspeita, +1 tentativa

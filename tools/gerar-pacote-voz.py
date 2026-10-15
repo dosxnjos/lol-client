@@ -613,6 +613,9 @@ def tentativas_no_alvo(v, alvo):
     return v.get("tentativas_alvo", 0) if v.get("alvo_tentado", alvo) == alvo else 0
 
 
+MODELOS_PRIMEIRO = ("gemini-3.1-flash-tts-preview",)   # timbre mais distante do alvo, ouvido pelo Gabriel
+
+
 def para_convergir(frases, pasta, indice, alvo, max_tentativas=MAX_TENTATIVAS_ALVO, hoje=None):
     """falas da fase (b), só com o alvo: as `suspeita` (de qualquer modelo, inclusive o alvo; PRIMEIRO na fila: tocam
     na Maria até serem refeitas; passo 6c, 15/10/2026) e as gravadas por outro modelo que não o alvo. Fora: as presas
@@ -624,7 +627,11 @@ def para_convergir(frases, pasta, indice, alvo, max_tentativas=MAX_TENTATIVAS_AL
     ok = [f for f in frases if _tem_arquivo(pasta, fs.get(f)) and (fs[f].get("suspeita") or fs[f].get("modelo") != alvo)
           and tentativas_no_alvo(fs[f], alvo) < max_tentativas
           and not (hoje and fs[f].get("alvo_tentado", alvo) == alvo and (fs[f].get("tentado_em") or "")[:10] == hoje)]
-    return [f for f in ok if fs[f].get("suspeita")] + [f for f in ok if not fs[f].get("suspeita")]
+    # depois das suspeitas, os modelos que mais destoam do alvo (Gabriel, 15/10/2026: "o mid chegando no top", do 3.1
+    # preview, "ficou muito diferente das outras [...] a tonalidade"); dentro de cada grupo, a ordem da fila de antes
+    def grupo(f):
+        return 0 if fs[f].get("suspeita") else 1 if fs[f].get("modelo") in MODELOS_PRIMEIRO else 2
+    return sorted(ok, key=grupo)
 
 
 def progresso(frases, pasta, indice, alvo):
