@@ -729,7 +729,7 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     `teste-compacto-selecao` 157, `teste-aceite` 43, `teste-chat-posjogo` 45, `teste-jogar-de-novo` 96 (freios),
     `teste-posjogo` 11, `teste-config` 50. Nenhum POST/PATCH contra o client real; `coletor/` intocado.
 13. [ ] **Chat lateral e grupo 2 da paridade (parecer de 14/10/2026 ~20:00 com 1 ajuste; construído offline e revisado em
-    14/10, commitado; falta a partida real: blocos "Construção" e "Revisão adversarial" no fim deste passo).** A regra do passo 0 valeu até o parecer. Pedido dele (14/10/2026 ~17:00): "O chat que hoje abre uma janela
+    14/10, commit `c713c3d`; falta a partida real: blocos "Construção" e "Revisão adversarial" no fim deste passo).** A regra do passo 0 valeu até o parecer. Pedido dele (14/10/2026 ~17:00): "O chat que hoje abre uma janela
     nova, eu queria que na verdade fosse o próprio modo compacto ganhando espaço para a direita, mostrando a lista. E se
     eu abrir esse chat com alguém, esse chat também expande mais para a direita. Aí se eu fechar a parte do chat, fica só
     o modo compacto e a lista de amigos. E eu também posso fechar a lista de amigos." Junto, o grupo 2 do passo 11 (d1-d3).
