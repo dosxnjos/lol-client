@@ -7,8 +7,8 @@ import { coletor as coletorPadrao } from '../coach.js';
 
 // último modo avisado e se o coletor ficou sabendo: o coletor sobe DEPOIS do client (gatilho 4688) e reinicia;
 // a consulta do 💬 (estadoChat) reenvia o modo quando o coletor volta, senão a conversa nova nunca abre sozinha
-const modo = { valor: null, entregue: false };
-export const _zerarModo = () => { modo.valor = null; modo.entregue = false; }; // só teste
+const modo = { valor: null, lateral: false, entregue: false };
+export const _zerarModo = () => { modo.valor = null; modo.lateral = false; modo.entregue = false; }; // só teste
 
 // 💬 com contador: {ok, naoLidas, abertas, lista, fora?, motivo?}. Chamar a cada poucos segundos com a tela à vista.
 export async function estadoChat(f = coletorPadrao) {
@@ -17,7 +17,7 @@ export async function estadoChat(f = coletorPadrao) {
     modo.entregue = false;
     return { ok: false, fora: true, naoLidas: 0, motivo: 'coletor fora do ar' };
   }
-  if (modo.valor !== null && !modo.entregue) await avisarModo(modo.valor, f);
+  if (modo.valor !== null && !modo.entregue) await avisarModo(modo.valor, f, { lateral: modo.lateral });
   const d = r.dados || {};
   return { ok: r.status === 200 && d.ok !== false, naoLidas: Math.max(0, Number(d.naoLidas) || 0),
     abertas: Array.isArray(d.abertas) ? d.abertas.length : 0, lista: !!d.lista, motivo: d.motivo || '' };
@@ -32,9 +32,12 @@ export async function abrirAmigos(f = coletorPadrao) {
 
 // o coletor só abre conversa sozinho (mensagem nova) com o client compacto ligado (cfg.compacto.ligado): chamar
 // na carga e a cada mudança da chave. Coletor fora: fica guardado e o próximo estadoChat que achar o coletor reenvia.
-export async function avisarModo(compacto, f = coletorPadrao) {
+// lateral (passo 13): o chat ao lado do compacto está ligado; quem chama já manda compacto:false junto (index.js
+// criarAvisoChat), porque o coletor de hoje só lê `compacto`. O campo é para o coletor depois do patch.
+export async function avisarModo(compacto, f = coletorPadrao, { lateral = false } = {}) {
   modo.valor = !!compacto;
-  const r = await f('/chat/plugin', { metodo: 'POST', corpo: { compacto: modo.valor }, prazoMs: 3000 });
+  modo.lateral = !!lateral;
+  const r = await f('/chat/plugin', { metodo: 'POST', corpo: { compacto: modo.valor, lateral: modo.lateral }, prazoMs: 3000 });
   modo.entregue = r.status === 200;
   return modo.entregue;
 }

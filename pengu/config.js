@@ -68,7 +68,10 @@ export const PADRAO = {
   // 13/10/2026); favoritos = championId fixos no topo da busca (58 Renekton, 154 Zac); larg/alt = janela em px CSS.
   // alt 680 desde 14/10/2026 (a tela 3 passava 26 px de 640 e mostrava barra de rolagem; carregar() leva o 640 salvo).
   // Classes: lc-compacto (ligado) e lc-inicio-compacto; a camada à vista é html.lc-modo-compacto (compacto/index.js)
-  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680 },
+  // passo 13 (aprovado em 14/10/2026 ~20:00): chatLateral = o 💬 abre a lista ao lado da coluna (e as janelas do coletor deixam de
+  // abrir conversa sozinhas); conversaSozinha = mensagem nova abre a conversa ao lado só se couber sem mover a janela e nunca na
+  // seleção (decisão 1 dele). Entram pela mescla, sem VERSAO nova.
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, conversaSozinha: true },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -222,6 +225,7 @@ const ALTERNAVEIS = [
   ['coach.mentor', 'mentor no pós-jogo'],
   ['compacto.ligado', 'client compacto (botão e Ctrl+Shift+M)'],
   ['compacto.inicioCompacto', 'abrir cada fase no modo compacto'],
+  ['compacto.chatLateral', 'chat ao lado do compacto'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],

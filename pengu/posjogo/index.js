@@ -86,6 +86,7 @@ function obterAnalise(gameId) {
   const a = { pronta: false, r: null, erro: null, esperaMs: null };
   analises.clear();
   analises.set(gameId, a);
+  descartadas = false;
   a.promessa = analisarPartida(gameId, {
     vivo: () => minha === geracao,
     aoEsperar: ms => { a.esperaMs = ms; aoMudarAnalise(gameId); },
@@ -94,7 +95,20 @@ function obterAnalise(gameId) {
     .finally(() => { a.pronta = true; aoMudarAnalise(gameId); });
   return a;
 }
-function esquecerAnalises() { geracao++; analises.clear(); }
+let descartadas = false; // o ready check limpou a análise: a linha do lobby compacto some até a próxima partida
+function esquecerAnalises() { geracao++; analises.clear(); descartadas = true; }
+
+// Estado da análise da última partida, só leitura, para o "📊 última partida" do lobby compacto (plano do compacto, passo 13
+// B3). Lê o cache (uma entrada): com a camada à vista no EndOfGame só o obterAnalise roda (b1) e ultimaAberta fica nulo.
+// -> null (descartada no ready check: a linha some) | {nunca: true} (nada em cache: "analisar") |
+//    {gameId, pronta, erro, vista, resumo: {vitoria, campeao, k, d, a, fila, criacao} | null}
+export function estadoAnalise() {
+  const [gameId, a] = [...analises.entries()].at(-1) || [];
+  if (!a) return descartadas ? null : { nunca: true };
+  const r = a.pronta && !a.erro ? a.r : null;
+  return { gameId, pronta: !!(a.pronta && !a.erro), erro: a.pronta ? (a.erro || null) : null, vista: ultimaAberta?.gameId === gameId && !!ultimaAberta.vista,
+    resumo: r?.esta ? { ...r.esta } : null };
+}
 
 // lições do motor daqui (licoes.md, docs/INSIGHTS.md) sobre a análise em cache, as mesmas do painel sem coletor (montar
 // e pintar 'licoes' com ctx null). Para a tela 4 do compacto quando o coletor está fora (plano do compacto, passo 11
@@ -552,5 +566,6 @@ export function iniciarPosjogo(context, cfg, coletor = null) {
   // licoesLocais(id): as lições do motor daqui para a tela 4 do compacto sem o coletor (passo 11 b5); painel desligado
   // nas configurações = sem motor local, como no client normal
   const locais = id => (cfg.posjogo?.ligado === false ? Promise.resolve(null) : licoesLocais(id));
-  return { aba, estado: estadoPainel, abrirPainel: abrir, licoesLocais: locais, analisarAgora };
+  // estadoAnalise/analisarUltima: a linha "📊 última partida" do lobby compacto (passo 13 B3), que expande antes de abrir
+  return { aba, estado: estadoPainel, abrirPainel: abrir, licoesLocais: locais, analisarAgora, estadoAnalise, analisarUltima: () => { pararVigia(); return analisarUltima(); } };
 }

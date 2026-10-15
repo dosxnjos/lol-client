@@ -728,8 +728,8 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     `teste-compacto.mjs` 145/145, `teste-compacto-posjogo.mjs` 118/118; sem mudança e verdes: `teste-compacto-lobby` 136,
     `teste-compacto-selecao` 157, `teste-aceite` 43, `teste-chat-posjogo` 45, `teste-jogar-de-novo` 96 (freios),
     `teste-posjogo` 11, `teste-config` 50. Nenhum POST/PATCH contra o client real; `coletor/` intocado.
-13. [ ] **Chat lateral e grupo 2 da paridade (proposta, aguardando aprovação do Gabriel).** ⛔ Nenhum código de produto
-    antes das 5 telas aprovadas (regra do passo 0). Pedido dele (14/10/2026 ~17:00): "O chat que hoje abre uma janela
+13. [ ] **Chat lateral e grupo 2 da paridade (parecer de 14/10/2026 ~20:00 com 1 ajuste; construído offline e revisado em
+    14/10, commitado; falta a partida real: blocos "Construção" e "Revisão adversarial" no fim deste passo).** A regra do passo 0 valeu até o parecer. Pedido dele (14/10/2026 ~17:00): "O chat que hoje abre uma janela
     nova, eu queria que na verdade fosse o próprio modo compacto ganhando espaço para a direita, mostrando a lista. E se
     eu abrir esse chat com alguém, esse chat também expande mais para a direita. Aí se eu fechar a parte do chat, fica só
     o modo compacto e a lista de amigos. E eu também posso fechar a lista de amigos." Junto, o grupo 2 do passo 11 (d1-d3).
@@ -827,6 +827,101 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     mover a janela e nunca na seleção; (2) a lateral volta depois da partida; (3) painel, que pelo ajuste B1 cresce para a
     **esquerda** (chat para a direita, coluna compacta parada no lugar). Registrado pela frente do fim de partida (passo
     12); a construção deste passo é da outra frente.
+
+    **Construção (14/10/2026, offline; nenhum POST/PATCH contra o client real; `coletor/` intocado).**
+    - **3 travas + estado único** (`compacto/modo.js`, `index.js`): `tamanho(larg, alt, extra)` limita só a coluna e soma a
+      lateral (teto `LATERAL_MAX` 1600); `ehCompacta` = a largura medida bate com a **pedida** (±8); "a Riot devolveu" = ≥ 1000 px
+      fora do pedido depois da folga; boot = < 1000 px ou fora do 16:9 da Riot. `est.lateral {esq, dir}` no roteador é o único
+      dono da largura (`pedirLateral`); troca de tela compara com coluna + lateral; expandir guarda o estado e o compacto volta igual.
+    - **Geometria** (`compacto/geometria.js`, novo): `Window.ScreenData` por `riotInvoke` com `onSuccess` (físicos, `zoomScale`);
+      âncora = x da coluna escolhido por ele (adota quando a janela não está onde foi deixada: arrasto, Windows); configurações
+      crescem à esquerda com `MoveTo` antes do `ResizeTo`, fechar faz o inverso; tudo preso à área útil; relê e corrige se o
+      `ResizeTo` não manteve o canto. Limites do arrasto em px físicos (o `criarArrasto.limites` misturava `screen.*` com CSS).
+    - **Camada em linha** `[esquerda][coluna][direita]` (`criarCamada`): aviso, alerta, denúncia, cartão do jogador e
+      `#lc-aceite` presos à coluna (`--lc-cp-esq`/`--lc-cp-col`).
+    - **A1/A2** (`compacto/lateral.js` + `lateral-chat.js`, novos): 💬 = lista (300) à direita; amigo = conversa (painel 360 com
+      abas, até 3 conversas, a 4ª fecha a mais antiga); ✕ de cada um; monitor estreito: a conversa entra no lugar da lista com ←;
+      abrir um lado que não cabe com o outro fecha o outro e avisa. Lista, status, grupos e "convidar" portados 1:1 de
+      `coletor/chat_janelas.py`; pedidos de amizade abrem o client normal. Escrita só por clique/Enter dele (`isTrusted`), corpos
+      lidos no JS da Riot: mensagem `sendMessage`, conversa nova `{id, type:"chat"}`, "lida" `PUT/DELETE conversations/active`
+      (só depois de clique ou tecla na conversa à vista), convite `[{toSummonerId}]`. Chat bloqueado (`isSystemMuted`) = campo cinza.
+      Por fase: troca de tela não mexe; partida encontrada com a contagem na coluna; em partida o client vai a 1280 e a lateral
+      fica guardada; coach e sala do time saem ao deixar a seleção.
+    - **Chat do time** ("chat do time entra sim"): na lateral, linha "🗨 sala do time" no topo da lista durante a seleção →
+      aba; só a conversa `type:"championSelect"` (só id/type ficam); quem fala = campeão + posição pelo `myTeam` da sessão
+      (casando puuid/summonerId/obfuscated*), sem casar = "aliado"; nenhum nome lido. Decisão: lateral (não a tela 3), porque a
+      tela 3 não tem altura sobrando (frente seleção) e a lateral já tem campo, abas e regra de foco; média, reverte se ele quiser
+      a sala dentro da tela 3.
+    - **B1** (`lateral-config.js`): ⚙ no topo do lobby/fila abre à esquerda os blocos de `configuracoes.js` (`montarPainel`,
+      sem "restaurar padrão"), um aberto por vez, "Client compacto" primeiro, busca; rodapé "Configurações da Riot" expande, chama
+      `rcp.whenReady('rcp-fe-lol-settings').show()` [S] e volta ao compacto quando o `.lol-settings-container` sai da página
+      (`abrirConfigRiot`/`configRiotFechou`; decisão v, só para esse caminho; a regra 7 das outras janelas segue igual).
+      Chaves novas: `compacto.chatLateral` e `compacto.conversaSozinha` (padrão ligadas; bloco "Client compacto" e Ctrl+K).
+    - **B2** (`lateral-coach.js`): 📊 na seleção (`tela-champselect.js`, só o botão) abre o selo completo como aba: geral e
+      posição, matchup contra o adversário de rota **travado** (`adversarioDoDraft` + conferido no `theirTeam`), trauma (chave),
+      draft com a barra do `p`; `champselect.js` ganhou `lerCoach` exportado (roda com "Winrate" desligado, decisão iv). Deixar o
+      coach aberto o traz de volta na próxima seleção só se couber sem mover.
+    - **B3** (`tela-lobby.js` + `posjogo/index.js` `estadoAnalise()` lendo o cache da análise, e `analisarUltima` no retorno do
+      `iniciarPosjogo`): linha "📊 última partida" abaixo da dica: pronta/vista → "⤢ reabrir", analisando → cinza, falhou →
+      "tentar de novo", nunca → "analisar"; some no ready check (`esquecerAnalises`) até a próxima partida; expande antes de abrir.
+    - **Decisão 1** (mensagem nova): abre a conversa sozinha só com o compacto à vista, em `None`/`Lobby`/`EndOfGame`, com a
+      chave ligada, última mensagem não minha e se couber sem mover (`cabeSemMover` com a tela lida); nunca dá foco nem marca lida.
+    **Decisões técnicas (opus, 14/10/2026):** (vi) coletor: o plugin manda `POST /chat/plugin {compacto: ligado && !lateral,
+    lateral}`; o coletor de hoje só lê `compacto`, então com a lateral ligada as janelas do Edge param de abrir conversa sozinhas
+    já (sem isso abriria em dobro). Reaproveita o `compacto:false` que o (iii) queria evitar: única via sem editar `coletor/`
+    (pedido da rodada); efeito colateral: o estado das janelas diz "client compacto desligado". Média; reverte quando o coletor
+    ler `lateral` (abaixo). (vii) conversas e coach dividem o painel de 360 em abas; config à esquerda fora das abas. Alta.
+    **Mudança do coletor (para o orquestrador aplicar; não feita aqui):** `coletor/chat_janelas.py` `rota_post` `/chat/plugin`:
+    `self.lateral = bool(corpo.get("lateral"))` (atributo novo `self.lateral = False` no `__init__`); `abre_sozinha_ligado`:
+    `return not self.lateral and (self.compacto is True or (self.compacto is None and self.lista_aberta))`; `pode_abrir_sozinha`:
+    com `self.lateral`, motivo "chat ao lado do compacto"; caso novo em `tools/teste-chat-janelas.py` (`{compacto:true,
+    lateral:true}` não abre). Depois disso o plugin pode mandar `compacto: ligado` de verdade (`index.js` `criarAvisoChat`, 1 linha).
+    Também zerar `self.lateral = False` no bloco da troca de porta (~linha 420-426, onde já faz `self.compacto = None`).
+    **Ordem de deploy:** primeiro o patch do coletor (e reiniciar o coletor), **depois** a linha do `criarAvisoChat`; na ordem
+    inversa a conversa volta a abrir em dobro (lateral + Edge). Até lá o paliativo `compacto:false` fica.
+    Revisão (advisor, antes de fechar): a tarefa da geometria é assíncrona; coach aberto na seleção e a partida começando = o
+    gancho da fase muda a largura, o roteador expande na mesma volta e a tarefa atrasada encolhia/movia o client de 1280. Hoje a
+    geometria só age com o compacto à vista (`ativo`, conferido antes e depois do ScreenData) e o `redimensionar` do roteador
+    também confere; caso novo (com e sem as configurações à esquerda).
+    **Revisão adversarial (14/10/2026, depois da construção; 1 grave, 2 médios confirmados, 1 plausível, 7 menores):**
+    - corrigido **(1, grave) arrasto com posição velha**: o 2º arrasto saltava ao lugar do 1º e a decisão 1 ("cabe sem mover")
+      usava a posição velha, movendo a coluna na seleção. O teste não via: a operação "arrasta" punha `s.win.x` direto. Agora
+      `criarArrastoJanela` (`index.js`, exportado) anota cada `MoveTo` na geometria (`anotarPosicao`) e relê no fim; abertura
+      automática (mensagem nova, coach lembrado) vai com `soSemMover`: a tarefa da geometria relê a tela e, se teria de mover
+      (ou não leu a tela), recusa e a lateral tira a aba (`desfazerAuto`). O teste usa o arrasto de verdade, também nas 60 aleatórias.
+    - corrigido **(2) coluna fora de vista ao abrir/fechar ⚙**: CSS `--lc-cp-*` sai na tarefa da geometria (`porCss`): crescendo à
+      esquerda CSS → MoveTo → ResizeTo; fechando ResizeTo → CSS → MoveTo; e `.lc-cp-esq:empty` saiu (a esquerda vazia encolhia
+      antes do MoveTo). Conferido também no harness (navegador): ao fechar ⚙ a coluna não pula antes da janela andar.
+    - corrigido **(3) reserva com unidades erradas**: com `riotInvoke`, ScreenData sem resposta/erro = `null` (só redimensiona).
+    - corrigido **(4, plausível) mensagem lida sem ele ver**: `conferirAtiva` devolve (`DELETE conversations/active`) ao trocar
+      de aba, fechar o painel, sair do compacto (partida, ⤢), no "–" e com a página oculta (`aoOculto`, `visibilitychange`).
+    - corrigido **(6)** "a Riot devolveu" também exige o 16:9 (1100×680 depois de pedir 1080 segue compacta); `teste-compacto`
+      ganhou a altura 720 nos 2 casos de restore (antes só a largura). **(8)** `caber('esq')` limpa o mapa de conversas.
+      **(9)** abas só são recriadas quando mudam (o relógio de 1,5 s comia cliques). **(10)** com 3 conversas abertas,
+      mensagem nova só conta. **(11)** a releitura depois do `ResizeTo` espera ~120 ms (`RELER_MS`; [S] CEF assíncrono).
+    - **(7)** sala do time casada com `session.chatDetails.multiUserChatId` (id igual ou `<muc>@…`); 2+ salas sem casar = não lê
+      nem envia; **1 sala só = ela** (decisão técnica viii, opus: confiança baixa no formato do id, nenhum dado real no repo;
+      reverte para "sem casar, não envia" se a próxima ranqueada mostrar que o id casa com o muc).
+    - aplicado com [S] **(5)** delta do arrasto × `zoomScale` (a base agora é física): pela leitura da Riot (CSS × zoomScale =
+      físico). Medição que decide, no lobby: `window.screenX * zoomScale` vs `ScreenData.screenX` — iguais = fica; diferentes =
+      reverter (`criarArrastoJanela` `escala: () => 1`, 1 linha).
+    - 15 mutações (cada conserto desfeito numa cópia no scratchpad): todas vermelhas.
+    — **prova da revisão (14/10/2026):** `teste-compacto-lateral.mjs` 101/101 (22 casos novos), `teste-compacto.mjs` 146/146 e
+    `rodar-testes.py` do compacto, config e plugin verdes (lista abaixo).
+    — **prova (14/10/2026):** `node tools/teste-compacto-lateral.mjs` 79/79 (novo; 144 sequências abre/fecha em toda ordem × 4
+    lugares do monitor, 60 aleatórias com arrasto/expandir/troca de tela, ResizeTo pelo centro, partida começando com o coach
+    aberto; mutação em cópia no scratchpad: 12 mutações, todas pegas), `teste-compacto.mjs` 146/146 (2 casos atualizados: padrão com as chaves novas e o aviso ao coletor
+    com a lateral), sem mudança e verdes: `compacto-lobby` 136, `compacto-selecao` 157, `compacto-fim-de-partida` 89,
+    `compacto-posjogo` 118, `config` 50, `aceite` 43, `chat-posjogo` 45, `jogar-de-novo` 96, `posjogo` 11, `runas`, `recompensas` 41,
+    `sem-popups` 22, `winrate`, `matchup`, `abas`, `licoes`. Prints do harness (`temp/compacto-harness/lateral.html`, `servir.mjs
+    8831`): `2026-10-14-lateral-{A1-conversa,B1,B1-tudo,B2-coach,sala-do-time,B3-pronta,A2-partida-encontrada,monitor-pequeno}.png`.
+    **Falta (só o client real prova):** `ScreenData` com `onSuccess` e o `ResizeTo` manter o canto (a correção cobre se não);
+    o pisca de 1 quadro ao crescer à esquerda; `rcp...settings.show()`; evento de mensagem nova (hoje releitura a cada 1,5–4,5 s);
+    envio 1:1 e na sala do time, "lida" e convite contra o client real; remetente da sala ranqueada casar com o `myTeam`
+    (senão sai "aliado"); `ux-show`/restore da Riot com a lateral aberta; atalhos da Riot e o foco do `aceite.js` com ele digitando
+    na lateral; janela em 2 monitores; recarga do plugin com a lateral aberta (volta a 420, estado não persiste); escala do
+    arrasto (achado 5) e o id da sala do time contra o `multiUserChatId` (achado 7); `ResizeTo` síncrono ou não (achado 11). Antes da
+    partida, depois da recarga no lobby: `node tools/cdp.mjs eval tools/compacto-importar.js` (os 5 módulos novos estão na lista).
 
 ## Revisão da construção (13/10/2026)
 

@@ -46,8 +46,29 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   - as Configurações da Riot (`.lol-settings-container`) expandem como qualquer modal: com a camada à vista ficavam
     abertas e invisíveis atrás dela (inclusive o bloco que desliga o compacto).
 - **A Riot devolve a janela a 1280×720 sozinha** [S] (restore do plugin-runner; `ux-minimize`/`ux-show` do `aceite.js`)
-  → camada de 1280 que não é compacto. `criarJanela.ehCompacta` desconfia de medida ≥ 1000 px depois de 1,5 s do próprio
-  `ResizeTo`; o `resize` da janela reavalia e o roteador encolhe de novo (3 vezes em 10 s = desiste e fica no normal).
+  → camada de 1280 que não é compacto. `criarJanela.ehCompacta` desconfia de medida ≥ 1000 px **que não bate com a largura
+  pedida** (±8) **e está no 16:9 da Riot** depois de 1,5 s do próprio `ResizeTo`; o `resize` da janela reavalia e o roteador
+  encolhe de novo para coluna + lateral (3 vezes em 10 s = desiste e fica no normal). Até o passo 13 a regra era "≥ 1000 px" e
+  desfazia a lateral (1080) em < 2 s; sem o 16:9, um `ResizeTo` que só errou o pedido por arredondamento [S] reencolhia 3 vezes
+  e expandia. No boot (nada pedido) vale compacta a < 1000 px **ou** fora do 16:9 (1080×680 com a lateral).
+- **Lateral que some na troca de tela** (passo 13) → o roteador encolhia toda montagem fora de `noTamanho(cfg.larg, cfg.alt)`.
+  Largura da janela = coluna da config + `est.lateral` do roteador (estado único; nunca em `cfg.compacto.larg`), e toda conta
+  de tamanho usa as duas (`compacto/index.js` `compactar`/`extra`).
+- **Unidades da janela do client** (lido no rcp-fe-lol-uikit 16.20, 14/10/2026): `ResizeTo` em px CSS; `MoveTo`, `screenX/Y`
+  e a área útil em px **físicos** (×`zoomScale`, 1,25 aqui). Área útil e posição só pelo `riotInvoke` `Window.ScreenData` **com
+  `onSuccess`** (`JSON.parse(JSON.parse(r).result)`); `screen.*`/`screenX` da página misturam unidades. Minimizada: `screenX`
+  −32000. `window.getScreenDetails()` trava. `compacto/geometria.js`: crescer à esquerda = `MoveTo` antes do `ResizeTo`; depois
+  espera ~120 ms, relê e corrige ([S] o `ResizeTo` manter o canto e ser síncrono). Sem resposta do `ScreenData` = não move
+  (nunca a reserva `screenX × dpr` no client: mistura unidades e jogava a janela fora do monitor).
+- **Arrasto que salta de volta ao lugar do 1º arrasto; conversa que abre "sozinha" movendo a janela** (revisão de 14/10/2026) →
+  a posição só era relida dentro da tarefa da geometria, e o arrasto (`MoveTo` direto) não contava a ela. Todo `MoveTo` fora da
+  fila passa por `geometria.anotarPosicao` e o fim do arrasto relê (`criarArrastoJanela`); abertura automática vai com
+  `soSemMover`: a tarefa relê a tela e, se teria de mover, recusa e a lateral desfaz. Delta do ponteiro × `zoomScale` [S].
+- **Coluna some ao abrir ⚙ e pula para a esquerda ao fechar** → as variáveis `--lc-cp-*` iam na hora do clique e o `MoveTo`
+  só depois da ida e volta do `ScreenData`; e `.lc-cp-esq:empty {display:none}` encolhia a esquerda antes da janela andar.
+  O CSS sai na tarefa da geometria junto do `MoveTo` (`porCss`) e a esquerda vazia ocupa a largura da variável até lá.
+- **Mensagem chega já lida e ele nunca vê** → a conversa marcada como lida (`PUT conversations/active`) seguia a ativa do client
+  depois de trocar de aba, ir para a partida ou minimizar. `lateral.conferirAtiva` devolve (`DELETE`) quando ela sai de vista.
 - **Compacto parado em "lendo o lobby", botões mortos (14/10/2026)** → no boot a Riot tira o `#lc-compacto` do `<body>` e
   põe uma **cópia** sem ouvintes; a tela seguia pintando no original, fora da página. Medido com 1 só `montar()` no
   registro. `criarCamada.conectada()` + roteador que remonta + vigia dos filhos do `<body>` (e intervalo de 2 s).
@@ -79,6 +100,11 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   para a janela não encolher embaixo do cursor indo ao popup.
 - **Aviso da camada em cima do botão da vez** → `.lc-cp-aviso` fica logo abaixo do topo e com `pointer-events:none`; embaixo
   moram TRAVAR/BANIR/JOGAR.
+- **Aviso, denúncia ou contagem do aceite esticados pela janela inteira** (passo 13) → com a lateral a camada é uma linha
+  `[esquerda][coluna][direita]`; tudo que se posiciona `absolute` vai dentro de `.lc-cp-coluna` (`position:relative`) e o
+  `#lc-aceite` usa `--lc-cp-esq`/`--lc-cp-col`. Elemento novo por cima da tela: pendurar na coluna, nunca no `#lc-compacto`.
+- **Teste node de 144 sequências levava minutos** → no Windows o `setTimeout(0)` espera o relógio do sistema (~15 ms); o
+  `tick` de `tools/teste-compacto-lateral.mjs` usa `setImmediate`.
 - **Toast e Ctrl+K invisíveis com a camada compacta à vista** (lido no `core.dll` do Pengu 1.1.6, 14/10/2026, sem abrir nada) →
   o contêiner do `Toast` é `fixed` com z-index 9999 e a raiz da CommandBar é `fixed … z-[99]` (só existe aberta; abre no
   `keydown` Ctrl+KeyK da `window`); a camada é z 100000. Aviso do plugin com a camada à vista vai por `compacto/comum.js`
@@ -377,6 +403,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `{body, type: "chat"}`, convite `[{toSummonerId}]`, "lida" = `PUT conversations/active {id}`, e o evento de mensagem
   nova com uri `/lol-chat/v1/conversations/<id>/messages/<mid>` `Create` (rede, se o evento vier em outro formato: a
   subida do `unreadMessageCount` lida a cada 5 s com o compacto ligado também abre a conversa).
+  - lido no JS da Riot (rcp-fe-lol-social/parties 16.20, 14/10/2026; nunca enviado ao client real): mensagem = `{type:"chat",
+    fromId, fromSummonerId, isHistorical:false, timestamp, body}` (sendMessage, também nas salas); conversa nova = `POST
+    conversations {id, type:"chat"}`; "lida" = `PUT conversations/active {id}`, fechar = `DELETE conversations/active`; convite
+    = `[{toSummonerId}]`. A lateral do compacto (`compacto/lateral*.js`) usa esses corpos.
   - "lida" (`PUT conversations/active`) só depois de clique ou tecla de verdade na janela aberta sozinha (`?auto=1`): ela
     pode nascer com o foco (`JanelasEdge.abrir` admite), e `document.hasFocus()` sozinho marcava a conversa sem ele ver.
   - `/chat/*` (menos `/chat/plugin`, `/chat/abrir/amigos`, `/chat/estado`) só aceita a origem das próprias páginas

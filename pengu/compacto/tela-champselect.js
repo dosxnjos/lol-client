@@ -25,7 +25,7 @@
 import { h, fotoCampeao, campeoes, estilo } from './comum.js';
 import { consultarRunas } from '../runas.js';
 import { textoSelo } from '../champselect.js';
-import { botaoChat } from './chat-botao.js';
+import { botaoChat, botaoCoach } from './chat-botao.js';
 
 const CS = '/lol-champ-select/v1';
 export const POS = { TOP: 'Topo', JUNGLE: 'Selva', MIDDLE: 'Meio', BOTTOM: 'Atirador', UTILITY: 'Suporte' };
@@ -457,6 +457,7 @@ function montarEsqueleto(st) {
   p.busca.addEventListener('input', ctx.seguro(() => { st.busca = String(p.busca.value || ''); pintarGrade(st); }));
   ctx.titulo.append(p.fase);
   ctx.extras.append(p.tempo);
+  botaoCoach(ctx); // passo 13 B2: 📊 abre o selo completo ao lado (só no clique dele)
   botaoChat(ctx); // protótipo (tela 3): relógio, 💬 com o contador, expandir
   raiz.append(
     el('div', { class: 'lc-cp-sel-barra' }, p.barra),

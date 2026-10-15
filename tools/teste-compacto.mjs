@@ -163,8 +163,9 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   globalThis.DataStore = { get: k => (k === 'lol-client.config' ? salvo : null), set: (k, v) => { if (k === 'lol-client.config') salvo = JSON.parse(JSON.stringify(v)); } };
   const { carregar, classes, PADRAO } = await import('../pengu/config.js');
   const c1 = JSON.parse(JSON.stringify(carregar()));
-  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680}',
-    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680 }), JSON.stringify(c1.compacto));
+  // passo 13 (14/10/2026): chatLateral e conversaSozinha entram ligados (A1 e decisão 1 do Gabriel)
+  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, chatLateral, conversaSozinha}',
+    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, conversaSozinha: true }), JSON.stringify(c1.compacto));
   // 14/10/2026: barra de rolagem na tela 3 com 640. A config salva do Gabriel tem 640 (o padrão antigo; não há campo nas
   // Configurações): sem migração, o padrão novo nunca chegava nele
   salvo = { versao: 3, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 } };
@@ -512,14 +513,15 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const s = cenario();
   s.rot.marcarPronto();
   await s.ir('Lobby');
-  s.win.innerWidth = 1280; // logo depois do ResizeTo (dentro da folga): ainda conta como compacta, nada muda
+  // 1280×720 inteiro (desde a revisão de 14/10/2026 "devolvida" exige o formato 16:9 da Riot; só a largura não basta)
+  s.win.innerWidth = 1280; s.win.innerHeight = 720; // logo depois do ResizeTo (dentro da folga): ainda conta como compacta, nada muda
   s.rot.reavaliar();
   const naFolga = s.nomes().length === 1;
   s.rel.avancar(GRACA_MEDIDA_MS + 10);
   s.rot.reavaliar();
   caso('Riot devolveu 1280 com a camada à vista: depois da folga encolhe de novo, sem remontar a tela',
     naFolga && igual(s.nomes(), ['Window.ResizeTo 420x640', 'Window.ResizeTo 420x640']) && s.telas.lobby.montadas === 1 && s.foto().efetivo === 'compacto', JSON.stringify(s.nomes()));
-  for (let i = 0; i < 3; i++) { s.win.innerWidth = 1280; s.rel.avancar(GRACA_MEDIDA_MS + 10); s.rot.reavaliar(); }
+  for (let i = 0; i < 3; i++) { s.win.innerWidth = 1280; s.win.innerHeight = 720; s.rel.avancar(GRACA_MEDIDA_MS + 10); s.rot.reavaliar(); }
   caso('Riot insiste em 1280 (3 vezes em 10 s): desiste e fica no client normal, sem camada',
     s.foto().efetivo === 'expandido' && !s.foto().camada && !s.foto().classe && /tamanho normal sozinha/.test(s.rot.estado().motivo), JSON.stringify(s.rot.estado()));
   const j = criarJanela({ invocar: invocadorRiot({ riotInvoke() {} }), medir: () => [1280, 720], agora: () => 5000 });
@@ -826,8 +828,10 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
       && Object.keys(TELAS).every(k => e.telas[k] === 'ok')
       && pedidos.filter(p => p.name === 'Window.ResizeTo').map(p => p.params.join('x')).join() === '420x640'
       && !!doc.getElementById('lc-compacto') && doc.documentElement.classList.contains('lc-modo-compacto'), JSON.stringify({ e, pedidos }));
-  caso('iniciarCompacto: avisa o coletor do modo (POST /chat/plugin {compacto:true})',
-    aoColetor.some(([c, m, corpo]) => c === '/chat/plugin' && m === 'POST' && corpo?.compacto === true), JSON.stringify(aoColetor));
+  // passo 13: com o chat ao lado ligado (padrão), as janelas do coletor não podem abrir conversa sozinhas (abriria em dobro): o
+  // coletor de hoje só lê `compacto`, então vai compacto:false + lateral:true (o caso de chatLateral desligado fica no bloco de baixo)
+  caso('iniciarCompacto: avisa o coletor do modo (POST /chat/plugin {compacto:false, lateral:true} com o chat ao lado ligado)',
+    aoColetor.some(([c, m, corpo]) => c === '/chat/plugin' && m === 'POST' && corpo?.compacto === false && corpo?.lateral === true), JSON.stringify(aoColetor));
   const tecla = teclas.find(([ev]) => ev === 'keydown')?.[1];
   let parou = false;
   tecla?.({ ctrlKey: true, shiftKey: true, key: 'M', preventDefault() {}, stopPropagation() { parou = true; } });
@@ -897,6 +901,19 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   await tick(4);
   caso('aviso ao coletor: coletor fora não lança; ligado reavisa a cada volta; desligado avisa 1 vez e para',
     ligadoN === 3 && aoColetor.length === 4 && aoColetor.at(-1)?.compacto === false, JSON.stringify(aoColetor));
+}
+{
+  // passo 13: chat ao lado desligado = comportamento de antes (compacto:true, as janelas do coletor abrem sozinhas); religar
+  // avisa de novo (compacto:false, lateral:true)
+  const { criarAvisoChat } = await import('../pengu/compacto/index.js');
+  const cfg = { compacto: { ligado: true, chatLateral: false } };
+  const aoColetor = [];
+  const aviso = criarAvisoChat({ cfg, coletor: async (c, op = {}) => { aoColetor.push(op.corpo); return { status: 200, dados: { ok: true } }; }, repetir: () => 1 });
+  await aviso.avisar();
+  cfg.compacto.chatLateral = true;
+  await aviso.mudou(); await aviso.mudou();
+  caso('aviso ao coletor: chatLateral desligado manda compacto:true (como antes); ligar a lateral avisa 1 vez compacto:false + lateral:true',
+    igual(aoColetor, [{ compacto: true, lateral: false }, { compacto: false, lateral: true }]), JSON.stringify(aoColetor));
 }
 
 // ---------- 7b. Ctrl+K "analisar última partida" com a camada à vista (plano, passo 11 b2) ----------

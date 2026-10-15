@@ -18,7 +18,7 @@ import { criarConfirmacao, cliqueComFreio, avaliarFreios, textoFreios, derrotasS
   JANELA_MS, ATUALIZANDO } from '../freios.js';
 import { valida } from '../posjogo/abas.js';
 import { definir as definirConfig } from '../config.js';
-import { botaoChat, abrirChat } from './chat-botao.js';
+import { botaoChat, abrirChat, botaoConfig } from './chat-botao.js';
 
 // ---------- dados fixos ----------
 export const FILAS_CP = {
@@ -219,6 +219,20 @@ export function planoJogar(g, fila, { filaEscolhida = false } = {}) {
   return { pode: true, modo: fila === 450 ? 'aram' : 'solo' };
 }
 
+// "📊 última partida" no lobby (passo 13 B3). an = servicos.posjogo.estadoAnalise() -> {titulo, sub, botao: {rotulo, acao, motivo}}
+// | null (sem linha: descartada no ready check, ou o painel pós-jogo do plugin não existe). acao: 'abrir' | 'analisar' | null
+export function linhaUltima(an, nomeCampeao = id => `campeão ${id}`) {
+  if (!an || typeof an !== 'object') return null;
+  if (an.nunca) return { titulo: '📊 última partida', sub: 'análise ainda não aberta nesta sessão', botao: { rotulo: 'analisar', acao: 'analisar' } };
+  const r = an.resumo;
+  const res = r ? `${r.vitoria ? 'vitória' : 'derrota'} · ${nomeCampeao(r.campeao)} ${r.k}/${r.d}/${r.a}` : '';
+  const quando = r ? [FILAS_CP[r.fila]?.c || FILAS_FORA[r.fila], Number(r.criacao) > 0 ? `às ${horaMin(Number(r.criacao))}` : ''].filter(Boolean).join(' ') : '';
+  if (an.erro) return { titulo: '📊 última partida', sub: `a análise falhou: ${String(an.erro).slice(0, 80)}`, botao: { rotulo: 'tentar de novo', acao: 'abrir' } };
+  if (!an.pronta) return { titulo: '📊 última partida', sub: 'analisando a partida…', botao: { rotulo: 'analisando…', acao: null, motivo: 'a análise ainda está rodando: o botão acende quando ela ficar pronta' } };
+  return { titulo: `📊 última partida${res ? `: ${res}` : ''}`, sub: [an.vista ? 'análise vista' : 'análise pronta', quando].filter(Boolean).join(' · '),
+    botao: { rotulo: '⤢ reabrir', acao: 'abrir' } };
+}
+
 // ---------- cache entre montagens (a tela 2 usa o mesmo cabeçalho) ----------
 const cache = { nome: '', icone: 0, ranque: null, emCab: 0, nomes: new Map(), memoria: { fila: null } };
 export const _zerarCache = () => { cache.nome = ''; cache.icone = 0; cache.ranque = null; cache.emCab = 0; cache.nomes.clear(); cache.memoria.fila = null; };
@@ -239,6 +253,7 @@ export function cabecalho(ctx, { agora = Date.now } = {}) {
   const caixaAv = h('span', { class: 'lc-cp-avcx' }, avatar(cache.icone, cache.nome, 30));
   ctx.titulo.append(h('div', { class: 'lc-cp-id' }, caixaAv, h('div', {}, nome, sub)));
   botaoChat(ctx);
+  botaoConfig(ctx); // ⚙ configurações à esquerda (passo 13 B1)
   const lerCab = async () => {
     if (cache.emCab && agora() - cache.emCab < 60000) return;
     const [s, rk] = await Promise.all([ctx.lcu('GET', '/lol-summoner/v1/current-summoner'), ctx.lcu('GET', '/lol-ranked/v1/current-ranked-stats')]);
@@ -345,6 +360,18 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
     };
     const lerHistorico = () => { s.hoje = lerHoje(ctx, agora(), () => { s.hoje = lerHoje(ctx, agora()); lerDica().catch(() => {}); pintarSeguro(); }); };
     s.recarregar = () => { lerLobby().catch(() => {}); lerConvites().catch(() => {}); };
+    // 📊 última partida (passo 13 B3): estado da análise do pós-jogo do plugin (só leitura), relido no relógio de 1 s; repinta só
+    // quando muda (repintar a tela a cada segundo perderia clique)
+    const lerAnalise = () => {
+      let an = null;
+      try { an = typeof ctx.servicos?.posjogo?.estadoAnalise === 'function' ? ctx.servicos.posjogo.estadoAnalise() : null; } catch { an = null; }
+      const sig = JSON.stringify(an);
+      if (sig === s.analiseSig) return false;
+      s.analise = an; s.analiseSig = sig;
+      if (an?.resumo?.campeao && !s.nomesCamp) campeoes().then(m => { s.nomesCamp = m; pintarSeguro(); }).catch(() => {});
+      return true;
+    };
+    lerAnalise();
 
     lerHistorico();
     pintarSeguro();
@@ -361,6 +388,7 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
       if (!armado && s.textoFreio) { s.textoFreio = ''; pintarSeguro(); }
       const hoje = resumoHoje(s.hoje);
       if (s.refs.terceira && hoje?.ultimaFim) s.refs.terceira.textContent = haQuanto(hoje.ultimaFim, agora());
+      if (lerAnalise()) pintarSeguro();
     }, 1000);
 
     // ---- ações (só clique) ----
@@ -394,6 +422,17 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
       convidar: ctx.seguro(() => abrirConvidar(s, ctx)),
       convidarAmigo: ctx.seguro(a => convidarAmigo(s, ctx, a)),
       fecharAmigos: ctx.seguro(() => { s.amigosAbertos = false; pintarSeguro(); }),
+      // B3: expande (o painel de 6 abas é de 1280) e só então abre; a camada não saiu = não abre por baixo dela
+      ultima: ctx.seguro(acao => {
+        const pj = ctx.servicos?.posjogo;
+        const an = s.analise;
+        if (!acao || !pj) return;
+        const doc = s.raiz?.ownerDocument || s.raiz?.doc || globalThis.document;
+        ctx.expandir();
+        if (doc?.documentElement?.classList?.contains?.('lc-modo-compacto')) { ctx.avisar('não consegui sair do modo compacto: usa ⤢ expandir', true); return; }
+        const r = acao === 'abrir' && an?.gameId ? pj.abrirPainel?.(an.gameId, {}) : pj.analisarUltima?.();
+        Promise.resolve(r).catch(e => console.error('[lol-client] compacto: última partida', e));
+      }),
       sair: ctx.seguro(async () => {
         if (s.ocupado) return;
         s.ocupado = true; pintarSeguro();
@@ -560,6 +599,14 @@ function pintar(s, cab) {
 
   if (s.dica) filhos.push(h('div', { class: 'lc-cp-dica' }, h('b', {}, 'coach'), s.dica));
 
+  // 📊 última partida (passo 13 B3): reabrir/analisar expande e abre o painel de 6 abas; some no próximo ready check
+  const ua = linhaUltima(s.analise, id => s.nomesCamp?.get?.(Number(id))?.nome || `campeão ${id}`);
+  if (ua) filhos.push(h('div', { class: 'lc-cp-ultima', dataset: { a: 'ultima' } },
+    s.analise?.resumo?.campeao ? fotoCampeao(s.analise.resumo.campeao, { tam: 26 }) : h('span', { class: 'lc-cp-ultima-ic' }, '📊'),
+    h('div', {}, h('b', {}, ua.titulo), h('small', {}, ua.sub)),
+    h('button', { class: 'lc-cp-btn' + (ua.botao.acao ? ' lc-cp-prim' : ' lc-cp-cinza'), disabled: !ua.botao.acao, title: ua.botao.motivo || undefined,
+      dataset: { a: 'ultima-' + (ua.botao.acao || 'espera') }, on: { click: () => a.ultima?.(ua.botao.acao) } }, ua.botao.rotulo)));
+
   // grupo
   filhos.push(h('div', { class: 'lc-cp-rot' }, 'grupo'));
   const mbs = [];
@@ -677,6 +724,12 @@ export const CSS_LOBBY = `
   background:#1e3a5f center/cover no-repeat; color:var(--lc-ouro2); font-weight:700; font-size:12px; }
 #lc-compacto .lc-cp-grupo .lc-cp-av { border-width:1px; font-size:10px; }
 #lc-compacto .lc-cp-dica b { color:var(--lc-azul); font-weight:600; margin-right:4px; }
+#lc-compacto .lc-cp-ultima { flex:none; display:flex; gap:9px; align-items:center; padding:7px 9px; border:1px solid #1d4b57; background:rgba(9,20,40,.65); }
+#lc-compacto .lc-cp-ultima > div { flex:1; min-width:0; }
+#lc-compacto .lc-cp-ultima b { display:block; color:var(--lc-ouro2); font-size:12px; font-weight:600; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#lc-compacto .lc-cp-ultima small { display:block; color:var(--lc-mudo); font-size:11px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+#lc-compacto .lc-cp-ultima .lc-cp-btn { flex:none; padding:5px 9px; font-size:11.5px; }
+#lc-compacto .lc-cp-ultima-ic { width:26px; text-align:center; flex:none; }
 #lc-compacto .lc-cp-seg { display:grid; grid-template-columns:repeat(4,1fr); border:1px solid var(--lc-linha); flex:none; }
 #lc-compacto .lc-cp-seg button { background:var(--lc-pan); color:var(--lc-mudo); border:none; border-right:1px solid var(--lc-linha); padding:8px 2px;
   font-family:inherit; font-size:12px; cursor:pointer; }

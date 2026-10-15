@@ -5,7 +5,9 @@
   const v = Date.now();
   const base = 'https://plugins/lol-client/';
   const mods = ['compacto/comum.js', 'compacto/modo.js', 'compacto/chat-ponte.js', 'compacto/chat-botao.js', 'compacto/index.js',
-    'compacto/tela-lobby.js', 'compacto/tela-fila.js', 'compacto/tela-champselect.js', 'compacto/tela-posjogo.js', 'posjogo/index.js'];
+    'compacto/tela-lobby.js', 'compacto/tela-fila.js', 'compacto/tela-champselect.js', 'compacto/tela-posjogo.js', 'posjogo/index.js',
+    // passo 13 (lateral): chat ao lado, configurações à esquerda, coach da seleção, geometria da janela
+    'compacto/geometria.js', 'compacto/lateral.js', 'compacto/lateral-chat.js', 'compacto/lateral-coach.js', 'compacto/lateral-config.js'];
   const out = {};
   for (const m of mods) {
     try { const mod = await import(`${base}${m}?v=${v}`); out[m] = Object.keys(mod).length + (typeof mod.montar === 'function' ? ' montar' : ''); }

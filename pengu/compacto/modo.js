@@ -11,15 +11,20 @@ import { h, CSS_BASE } from './comum.js';
 
 export const EXPANDIDA = [1280, 720];
 export const PADRAO_COMPACTA = [420, 680]; // mesmo padrão do config.js (compacto.larg/alt)
+// limites da COLUNA compacta (compacto.larg/alt da config); a lateral (passo 13) soma à largura da janela por fora deles
 const LIMITES = { larg: [360, 900], alt: [480, 1000] };
-// janela mais estreita que isto conta como compacta (leitura de innerWidth no boot: recarga do plugin com a janela
-// pequena precisa voltar ao normal se a fase não tiver tela compacta)
+export const LATERAL_MAX = 1600; // painéis ao lado (esquerda + direita), px CSS: valor torto não estica a janela além disso
+// boot (recarga do plugin, nada pedido ainda): conta como compacta a janela mais estreita que isto OU fora do formato 16:9 dos
+// tamanhos da Riot (1024×576, 1280×720, 1600×900, 1920×1080): a janela de 1080×680 com a lateral aberta também é compacta
 export const LARGURA_COMPACTA_MAX = 1000;
+const formatoRiot = (w, hh) => hh > 0 && Math.abs(w / hh - 16 / 9) < 0.03;
 
-// tamanho da janela compacta pela config, com limites (valor torto salvo não esconde o client)
-export function tamanho(larg, alt) {
+// tamanho da janela compacta pela config, com limites (valor torto salvo não esconde o client). extra = largura da lateral
+// (px CSS, do roteador; nunca da config)
+export function tamanho(larg, alt, extra = 0) {
   const ok = (v, [min, max], pad) => (Number.isFinite(Number(v)) && Number(v) >= min && Number(v) <= max ? Math.round(Number(v)) : pad);
-  return [ok(larg, LIMITES.larg, PADRAO_COMPACTA[0]), ok(alt, LIMITES.alt, PADRAO_COMPACTA[1])];
+  const lat = Number.isFinite(Number(extra)) ? Math.min(Math.max(Math.round(Number(extra)), 0), LATERAL_MAX) : 0;
+  return [ok(larg, LIMITES.larg, PADRAO_COMPACTA[0]) + lat, ok(alt, LIMITES.alt, PADRAO_COMPACTA[1])];
 }
 
 // riotInvoke não é gravável nem configurável, mas é chamável (ARMADILHAS § Client). -> fn(nome, params) -> bool
@@ -38,24 +43,30 @@ export const GRACA_MEDIDA_MS = 1500;
 
 // janela do client. medir() -> [innerWidth, innerHeight] (px CSS); agora() -> ms (teste)
 export function criarJanela({ invocar, medir = () => [globalThis.innerWidth, globalThis.innerHeight], agora = () => Date.now() }) {
-  let compacta = null, pedidoEm = 0; // o que eu pedi por último (null = ainda não mexi) e quando
+  let compacta = null, pedidoEm = 0, pedido = null; // o que eu pedi por último (null = ainda não mexi), quando e o tamanho
   // pequena = eu encolhi OU a medida diz pequena: na dúvida conta como pequena, porque daí o caminho é expandir
-  // (janela de 420 sem camada é o client inutilizável que não pode acontecer). Exceção: eu encolhi, mas a medida diz
-  // 1280 depois da folga = a própria Riot devolveu o tamanho normal (restore do plugin-runner, ux-show do aceite.js
-  // [S]): deixa de contar como compacta e o roteador encolhe de novo
+  // (janela de 420 sem camada é o client inutilizável que não pode acontecer). Exceção: eu encolhi, mas depois da folga a
+  // largura medida não é a que eu pedi (±8) e é de client normal (≥ 1000) = a própria Riot devolveu o tamanho dela (restore
+  // do plugin-runner, ux-show do aceite.js [S]): deixa de contar como compacta e o roteador encolhe de novo. Desde o passo 13
+  // a janela compacta pode ter 1080 ou mais (lateral aberta): "compacta" é a medida bater com o PEDIDO, não ser < 1000 px
+  // (a regra antiga reencolhia a lateral em < 2 s). Só a largura decide: a altura do client não muda com a lateral.
   const ehCompacta = () => {
-    const w = Number(medir?.()?.[0]);
+    const m = medir?.() || [];
+    const w = Number(m[0]), hh = Number(m[1]);
     const medida = Number.isFinite(w) && w > 0;
     if (compacta === true) {
-      if (medida && w >= LARGURA_COMPACTA_MAX && agora() - pedidoEm > GRACA_MEDIDA_MS) { compacta = false; return false; }
+      // + formato 16:9 (revisão de 14/10/2026): o tamanho que a Riot devolve é sempre dela (1280×720...); um ResizeTo que só
+      // não caiu no pedido (arredondamento, unidade [S]) com a lateral aberta não pode disparar 3 reencolhidas e expandir
+      const devolvida = medida && w >= LARGURA_COMPACTA_MAX && formatoRiot(w, hh) && pedido && Math.abs(w - pedido[0]) > 8 && agora() - pedidoEm > GRACA_MEDIDA_MS;
+      if (devolvida) { compacta = false; return false; }
       return true;
     }
-    return medida && w < LARGURA_COMPACTA_MAX;
+    return medida && (w < LARGURA_COMPACTA_MAX || (hh > 0 && !formatoRiot(w, hh)));
   };
-  // janela pequena mas fora do tamanho da config (ex.: 640 de antes de 14/10/2026 depois de recarregar o plugin): sem
-  // medida = não sei, conta como certa (não fica pedindo ResizeTo)
-  const noTamanho = (larg, alt) => {
-    const [w, hh] = tamanho(larg, alt);
+  // janela pequena mas fora do tamanho pedido (ex.: 640 de antes de 14/10/2026 depois de recarregar o plugin; lateral que
+  // mudou): sem medida = não sei, conta como certa (não fica pedindo ResizeTo). extra = lateral (px CSS)
+  const noTamanho = (larg, alt, extra = 0) => {
+    const [w, hh] = tamanho(larg, alt, extra);
     const m = medir?.() || [];
     const mw = Number(m[0]), mh = Number(m[1]);
     if (!(mw > 0) || !(mh > 0)) return true;
@@ -65,12 +76,14 @@ export function criarJanela({ invocar, medir = () => [globalThis.innerWidth, glo
     disponivel: () => (typeof invocar?.existe === 'function' ? invocar.existe() : typeof invocar === 'function'),
     ehCompacta,
     noTamanho,
-    compactar(larg, alt) {
-      const [w, hh] = tamanho(larg, alt);
+    // extra: largura da lateral (passo 13), somada à coluna da config
+    compactar(larg, alt, extra = 0) {
+      const [w, hh] = tamanho(larg, alt, extra);
       const ok = invocar('Window.ResizeTo', [w, hh]);
-      if (ok) { compacta = true; pedidoEm = agora(); }
+      if (ok) { compacta = true; pedidoEm = agora(); pedido = [w, hh]; }
       return ok;
     },
+    pedido: () => (pedido ? [...pedido] : null),
     // arrastar a janela compacta pelo topo (Window.MoveTo [x, y]; unidade [S]: medir no passo 9)
     mover: (x, y) => invocar('Window.MoveTo', [Math.round(x), Math.round(y)]),
     expandir() {
@@ -95,7 +108,10 @@ export function ehAtalho(e) {
 // posição nova = posição da janela no início + quanto o ponteiro andou na tela (screenX/Y). Unidade do MoveTo e do
 // window.screenX [S] (outerWidth vem em px físicos, innerWidth em CSS): limites() mantém um pedaço do topo à vista e
 // "⤢ expandir" recentra (CenterToScreen), então nunca some de vez. Clique em botão do topo não arrasta.
-export function criarArrasto({ posicao, mover, limites, raf = fn => setTimeout(fn, 16) }) {
+// Passo 13 (revisão de 14/10/2026): escala() converte o quanto o ponteiro andou (px da página) para a unidade da posição
+// (px físicos do ScreenData: × zoomScale; [S] medir no client, ARMADILHAS § Client); aoSoltar() no fim do arrasto (a geometria
+// relê a posição).
+export function criarArrasto({ posicao, mover, limites, raf = fn => setTimeout(fn, 16), escala = () => 1, aoSoltar = () => {} }) {
   let ini = null, alvo = null, agendado = false;
   const prender = (v, min, max) => (Number.isFinite(min) && Number.isFinite(max) && max >= min ? Math.min(Math.max(v, min), max) : v);
   const down = e => {
@@ -103,19 +119,21 @@ export function criarArrasto({ posicao, mover, limites, raf = fn => setTimeout(f
     try { if (e.target?.closest?.('button, input, [data-a]')) return false; } catch { /* segue */ }
     const p = posicao?.() || [];
     if (!Number.isFinite(p[0]) || !Number.isFinite(p[1]) || !Number.isFinite(e.screenX) || !Number.isFinite(e.screenY)) return false;
-    ini = { sx: e.screenX, sy: e.screenY, wx: p[0], wy: p[1] };
+    let k = 1;
+    try { k = Number(escala?.()) || 1; } catch { k = 1; }
+    ini = { sx: e.screenX, sy: e.screenY, wx: p[0], wy: p[1], k: k > 0 ? k : 1 };
     try { e.currentTarget?.setPointerCapture?.(e.pointerId); } catch { /* sem captura: move só dentro do topo */ }
     return true;
   };
   const move = e => {
     if (!ini || !Number.isFinite(e?.screenX) || !Number.isFinite(e?.screenY)) return;
     const L = limites?.() || {};
-    alvo = [prender(ini.wx + e.screenX - ini.sx, L.minX, L.maxX), prender(ini.wy + e.screenY - ini.sy, L.minY, L.maxY)];
+    alvo = [prender(ini.wx + (e.screenX - ini.sx) * ini.k, L.minX, L.maxX), prender(ini.wy + (e.screenY - ini.sy) * ini.k, L.minY, L.maxY)];
     if (agendado) return;
     agendado = true;
     raf(() => { agendado = false; if (alvo) try { mover(alvo[0], alvo[1]); } catch { /* segue */ } });
   };
-  const up = () => { ini = null; };
+  const up = () => { const era = !!ini; ini = null; if (era) try { aoSoltar?.(); } catch { /* segue */ } };
   return { down, move, up, ativo: () => !!ini };
 }
 
@@ -123,8 +141,20 @@ export function criarArrasto({ posicao, mover, limites, raf = fn => setTimeout(f
 // (100002) e do mesmo nível do #lc-runas/#lc-winrate, que somem com html.lc-modo-compacto (CSS_MODO).
 // avisoFechar() -> texto da confirmação do ✕ (no champ select fala do dodge). O ✕ pede um 2º clique.
 // arrasto: criarArrasto() (opcional): o topo arrasta a janela.
+// Passo 13: a camada é uma LINHA [painel da esquerda (configurações)] [coluna compacta] [painéis da direita (chat, coach)]. A
+// coluna é a tela de sempre (topo + corpo), com position:relative: aviso, alerta, denúncia e cartão do jogador ficam presos a
+// ela, nunca esticados pela janela inteira. larguras({esq, col, dir}) põe as variáveis --lc-cp-esq/--lc-cp-col na camada e no
+// <html> (o #lc-aceite fica sobre a coluna). Quem enche os painéis é a lateral (compacto/lateral.js).
 export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar, aoFechar, avisoFechar = () => 'fechar o client?', arrasto = null }) {
-  let el = null, partes = null;
+  let el = null, partes = null, medidas = { esq: 0, col: PADRAO_COMPACTA[0], dir: 0 };
+  const porVariaveis = () => {
+    const alvos = [el, doc.documentElement].filter(Boolean);
+    for (const a of alvos) try {
+      a.style?.setProperty?.('--lc-cp-esq', medidas.esq + 'px');
+      a.style?.setProperty?.('--lc-cp-col', medidas.col + 'px');
+      a.style?.setProperty?.('--lc-cp-dir', medidas.dir + 'px');
+    } catch { /* sem style */ }
+  };
   const fecharAlerta = () => el?.querySelector?.('.lc-cp-alerta')?.remove();
   const pedirFechar = () => {
     if (!el) return;
@@ -134,8 +164,9 @@ export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar
       h('div', { doc, class: 'lc-cp-bts' },
         h('button', { doc, class: 'lc-cp-btn lc-cp-verm', dataset: { a: 'fechar-sim' }, on: { click: () => { fecharAlerta(); aoFechar?.(); } } }, 'fechar mesmo assim'),
         h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'fechar-nao' }, on: { click: fecharAlerta } }, 'voltar')));
-    // logo abaixo do topo, por cima do conteúdo da tela
-    el.insertBefore ? el.insertBefore(alerta, partes.raiz) : el.appendChild(alerta);
+    // logo abaixo do topo, por cima do conteúdo da tela (dentro da coluna)
+    const pai = partes.coluna || el;
+    pai.insertBefore ? pai.insertBefore(alerta, partes.raiz) : pai.appendChild(alerta);
   };
   // a Riot, no boot, tira a camada do <body> e põe uma CÓPIA sem ouvintes (14/10/2026: tela parada em "lendo o
   // lobby", botões mortos; ARMADILHAS § Client). conectada() = a camada à vista é a minha
@@ -151,19 +182,25 @@ export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar
     const arrastar = arrasto ? {
       pointerdown: e => arrasto.down(e), pointermove: e => arrasto.move(e), pointerup: e => arrasto.up(e), pointercancel: e => arrasto.up(e),
     } : undefined;
-    el = h('div', { doc, id: 'lc-compacto', role: 'dialog', 'aria-label': 'client compacto' },
+    const esq = h('aside', { doc, class: 'lc-cp-esq', dataset: { lado: 'esq' } });
+    const dir = h('aside', { doc, class: 'lc-cp-dir', dataset: { lado: 'dir' } });
+    const coluna = h('div', { doc, class: 'lc-cp-coluna' },
       h('header', { doc, class: 'lc-cp-topo' + (arrasto ? ' lc-cp-arrasta' : ''), title: arrasto ? 'arraste por aqui para mover a janela' : undefined, on: arrastar }, titulo,
         h('div', { doc, class: 'lc-cp-acoes' }, extras,
           h('button', { doc, class: 'lc-cp-ic lc-cp-exp', title: 'client normal (Ctrl+Shift+M)', dataset: { a: 'expandir' }, on: { click: () => aoExpandir?.() } }, '⤢ expandir'),
           h('button', { doc, class: 'lc-cp-win', title: 'minimizar', dataset: { a: 'minimizar' }, on: { click: () => aoMinimizar?.() } }, '–'),
           h('button', { doc, class: 'lc-cp-win', title: 'fechar o client', dataset: { a: 'fechar' }, on: { click: pedirFechar } }, '✕'))),
       raiz);
+    el = h('div', { doc, id: 'lc-compacto', role: 'dialog', 'aria-label': 'client compacto' }, esq, coluna, dir);
     doc.body.appendChild(el);
-    partes = { raiz, titulo, extras, camada: el };
+    partes = { raiz, titulo, extras, camada: el, coluna, esq, dir };
+    porVariaveis();
     return partes;
   };
   const remover = () => { el?.remove(); el = null; partes = null; };
-  return { montar, remover, existe: () => !!el, conectada, partes: () => partes, pedirFechar };
+  // larguras dos três pedaços (px CSS; o roteador é o dono: index.js est.lateral)
+  const larguras = m => { medidas = { esq: Math.max(0, Number(m?.esq) || 0), col: Math.max(0, Number(m?.col) || PADRAO_COMPACTA[0]), dir: Math.max(0, Number(m?.dir) || 0) }; porVariaveis(); };
+  return { montar, remover, existe: () => !!el, conectada, partes: () => partes, pedirFechar, larguras, medidas: () => ({ ...medidas }) };
 }
 
 // Botão "▣ modo compacto" no client normal, ao lado da fila rápida (protótipo tela 6). Mesmo padrão do
@@ -231,9 +268,16 @@ export function criarBotaoModo({ doc = globalThis.document, aoClicar, raf = fn =
 
 // CSS da camada e do botão (injetado por comum.estilo: o estilo.css é de outras frentes)
 export const CSS_MODO = `
-#lc-compacto { position:fixed; inset:0; z-index:100000; display:flex; flex-direction:column; overflow:hidden; box-sizing:border-box;
-  background:radial-gradient(120% 60% at 50% 0%,#0f2236 0%,#010a13 60%); color:#cdbe91;
+#lc-compacto { position:fixed; inset:0; z-index:100000; display:flex; flex-direction:row; overflow:hidden; box-sizing:border-box;
+  background:#010a13; color:#cdbe91;
   font:13px/1.45 var(--font-body,"Segoe UI",sans-serif); user-select:none; }
+#lc-compacto > .lc-cp-coluna { position:relative; flex:none; width:var(--lc-cp-col,420px); min-width:0; height:100%; display:flex; flex-direction:column;
+  overflow:hidden; background:radial-gradient(120% 60% at 50% 0%,#0f2236 0%,#010a13 60%); }
+#lc-compacto > .lc-cp-esq { flex:none; width:var(--lc-cp-esq,0px); height:100%; overflow:hidden; display:flex; }
+#lc-compacto > .lc-cp-dir { flex:none; width:var(--lc-cp-dir,0px); height:100%; overflow:hidden; display:flex; }
+/* só a direita some vazia: a esquerda vazia ainda ocupa a largura da variável até a geometria aplicar (senão, ao fechar ⚙, a
+   coluna pulava para a esquerda antes do MoveTo; revisão de 14/10/2026). Variável 0 + overflow hidden = não ocupa nada */
+#lc-compacto > .lc-cp-dir:empty { display:none; }
 #lc-compacto *, #lc-compacto *::before, #lc-compacto *::after { box-sizing:border-box; }
 #lc-compacto ::-webkit-scrollbar { width:6px; height:6px; }
 #lc-compacto ::-webkit-scrollbar-thumb { background:#463714; border-radius:3px; }
@@ -257,7 +301,8 @@ export const CSS_MODO = `
 html.lc-modo-compacto #lc-runas, html.lc-modo-compacto #lc-winrate, html.lc-modo-compacto #lc-posjogo { display:none !important; }
 /* ready check no compacto: a contagem do aceite.js (z 100002) logo abaixo do topo, na largura da janela; a tela da fila
    desce o anel (lc-cp-anel-rc) para ela não cobrir o "partida encontrada" */
-html.lc-modo-compacto #lc-aceite { top:54px; left:12px; right:12px; transform:none; justify-content:center; flex-wrap:wrap; }
+html.lc-modo-compacto #lc-aceite { top:54px; left:calc(var(--lc-cp-esq,0px) + 12px); right:auto; width:calc(var(--lc-cp-col,420px) - 24px);
+  transform:none; justify-content:center; flex-wrap:wrap; box-sizing:border-box; }
 /* Ctrl+K do Pengu (CommandBar: raiz fixed z-[99], lido no core.dll em 14/10/2026) por cima da camada; se o Pengu mudar as
    classes, a regra só deixa de casar e volta ao de antes (lista por baixo) */
 html.lc-modo-compacto .fixed.top-0.left-0.z-\\[99\\] { z-index:100003 !important; }

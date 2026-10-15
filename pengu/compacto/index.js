@@ -24,9 +24,11 @@
 // }
 // Linhas que não se cruzam (plano § guardrails): busca só por clique e pelos freios (freios.js); nome oculto nunca;
 // nada decide pelo jogador; nunca tecla ou clique no jogo.
-import { criarJanela, criarCamada, criarBotaoModo, criarArrasto, invocadorRiot, ehAtalho, CSS, GRACA_MEDIDA_MS } from './modo.js';
+import { criarJanela, criarCamada, criarBotaoModo, criarArrasto, invocadorRiot, ehAtalho, CSS, GRACA_MEDIDA_MS, tamanho } from './modo.js';
 import { lcu as lcuPadrao, avisar as avisarPadrao, estilo } from './comum.js';
 import { avisarModo } from './chat-ponte.js';
+import { criarGeometria, lerTelaRiot } from './geometria.js';
+import { criarLateral, CSS_LATERAL, lateralLigada } from './lateral.js';
 
 export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'Reconnect',
   'FailedToLaunch', 'TerminatedInError', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
@@ -204,10 +206,20 @@ export function criarRoteador({
   modalAberto = () => null, aceiteManual = () => false, aceiteVivo = () => undefined, aoAplicar = () => {},
   contagemNaTela = () => undefined, // #lc-aceite no DOM? (undefined = não sei: não expande por isso)
   agendar = setTimeout, limpar = clearTimeout, repetir = setInterval, pararRepetir = clearInterval, agora = () => Date.now(),
+  // passo 13 (opcionais: sem eles, nada de lateral e nenhuma janela anda). geometria: criarGeometria (prende a janela ao
+  // monitor, coluna parada); lateral: {anexar(partes), aoFase(fase), aoEfetivo(efetivo)} (compacto/lateral.js)
+  geometria = null, lateral = null,
 }) {
   const reencolhidas = []; // quando a Riot devolveu a janela a 1280 com a tela compacta montada (ms)
+  // est.lateral: ESTADO ÚNICO de largura da lateral (px CSS): esq = configurações (cresce para a esquerda), dir = lista +
+  // painel (crescem para a direita). Janela = coluna da config + esq + dir; cfg.compacto.larg nunca muda por causa dela
   const est = { fase: null, info: { lida: false }, chave: null, destino: null, override: null, forcado: null,
-    efetivo: 'expandido', motivo: 'início', tela: null, pronto: false };
+    efetivo: 'expandido', motivo: 'início', tela: null, pronto: false, lateral: { esq: 0, dir: 0 }, configRiot: false };
+  const extra = () => est.lateral.esq + est.lateral.dir;
+  const coluna = () => tamanho(cfg.compacto?.larg, cfg.compacto?.alt)[0];
+  const compactar = () => janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt, extra());
+  const porLarguras = () => { try { camada.larguras?.({ esq: est.lateral.esq, col: coluna(), dir: est.lateral.dir }); } catch { /* sem DOM */ } };
+  const gancho = (nome, ...a) => { try { lateral?.[nome]?.(...a); } catch (e) { log(`lateral: ${nome} falhou`, e); } };
   const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
   const assinadas = new Set();
   let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null, timerContagem = null, timerModalRc = null, timerSeq = null;
@@ -233,7 +245,7 @@ export function criarRoteador({
       ...infoSequencia() });
     const chave = d.tipo === 'esperar' ? est.chave : `${d.tipo}:${d.tela || ''}`;
     // virou de destino: a escolha manual e a regra 7 valem só até aqui ("lembrar o modo por fase", plano)
-    if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; }
+    if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; est.configRiot = false; }
     est.destino = d;
     const quer = est.override || (c.inicioCompacto ? 'compacto' : 'expandido');
     if (d.tipo === 'esperar') return { modo: 'esperar', motivo: d.motivo };
@@ -321,7 +333,10 @@ export function criarRoteador({
         // a camada à vista não é a minha (a Riot trocou o <body> por uma cópia sem ouvintes): monta de novo
         log('a camada saiu da página: montando de novo');
         desmontarTela();
-        montarTela(a.tela, a.mod, camada.montar());
+        const partes = camada.montar();
+        porLarguras();
+        gancho('anexar', partes);
+        montarTela(a.tela, a.mod, partes);
         return;
       }
       if (est.efetivo === 'compacto' && montagem && montagem.nome === a.tela) {
@@ -333,36 +348,78 @@ export function criarRoteador({
           if (reencolhidas.length >= 3) { est.forcado = 'a janela voltou ao tamanho normal sozinha'; pendente = true; return; }
           reencolhidas.push(t);
           log('a janela voltou a 1280 sozinha: encolhendo de novo');
-          if (!janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt)) { est.forcado = 'a janela não encolheu (riotInvoke)'; pendente = true; return; }
+          if (!compactar()) { est.forcado = 'a janela não encolheu (riotInvoke)'; pendente = true; return; }
+          geometria?.ajustar();
         }
         if (montagem.fase !== est.fase) mudarFase(a);
         return;
       }
       desmontarTela();
+      const entrando = est.efetivo !== 'compacto';
       const partes = camada.montar();
-      // já pequena mas noutro tamanho (recarga do plugin com a janela de 640 de antes): encolhe para o tamanho da config
-      const precisa = !janela.ehCompacta() || (typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt));
-      if (precisa && !janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt) && !janela.ehCompacta()) {
+      porLarguras();
+      // já pequena mas noutro tamanho (recarga do plugin com a janela de 640 de antes): encolhe para o tamanho pedido. Troca
+      // de tela compara com coluna + lateral (passo 13: antes comparava só com a config e toda troca de tela encolhia a lateral)
+      const precisa = !janela.ehCompacta() || (typeof janela.noTamanho === 'function' && !janela.noTamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra()));
+      if (precisa && !compactar() && !janela.ehCompacta()) {
         camada.remover();
         est.forcado = 'a janela não encolheu (riotInvoke)';
         est.efetivo = 'expandido'; est.motivo = est.forcado; est.tela = null;
         return;
       }
+      if (precisa || entrando) geometria?.ajustar();
       classe(true);
       est.efetivo = 'compacto'; est.motivo = null; est.tela = a.tela;
+      gancho('anexar', partes);
+      if (entrando) gancho('aoEfetivo', 'compacto');
       // toda montagem vai para o LeagueClientUx.log: sem ela, o log de uma partida só mostrava as saídas do compacto
       // e não provava o que estava na tela (14/10/2026 14:43)
       log(`tela ${a.tela} (${est.fase})`);
       montarTela(a.tela, a.mod, partes);
       return;
     }
-    // expandido: sem camada e a janela no tamanho normal
+    // expandido: sem camada e a janela no tamanho normal (a lateral some junto e volta igual quando o compacto voltar)
+    const saindo = est.efetivo === 'compacto';
     desmontarTela();
     camada.remover();
     classe(false);
-    if (a.modo === 'expandido' && janela.ehCompacta()) janela.expandir();
+    if (a.modo === 'expandido' && janela.ehCompacta()) { janela.expandir(); geometria?.esquecer(); }
     if (est.efetivo !== a.modo || est.motivo !== a.motivo) log(`${a.modo}: ${a.motivo}`);
     est.efetivo = a.modo; est.motivo = a.motivo; est.tela = null;
+    if (saindo) gancho('aoEfetivo', a.modo);
+  }
+
+  // a lateral pede larguras (px CSS). Compacto à vista: a janela muda na hora (geometria: anda antes de crescer para a
+  // esquerda, prende ao monitor, coluna parada); senão só guarda e vale quando o compacto voltar. -> true se mudou
+  // opcoes {soSemMover, aoRecusar}: abertura automática (decisão 1): a geometria confere com a tela relida e, se teria de mover
+  // a janela, não muda nada e chama aoRecusar (a lateral desfaz e pede as larguras de antes)
+  function pedirLateral({ esq = 0, dir = 0 } = {}, { soSemMover = false, aoRecusar = null } = {}) {
+    const novo = { esq: Math.max(0, Math.round(Number(esq) || 0)), dir: Math.max(0, Math.round(Number(dir) || 0)) };
+    if (novo.esq === est.lateral.esq && novo.dir === est.lateral.dir) return false;
+    est.lateral = novo;
+    if (est.efetivo === 'compacto' && janela.disponivel() && geometria) {
+      // a tarefa da geometria é assíncrona: só redimensiona se o compacto ainda estiver à vista quando ela rodar. As variáveis
+      // CSS saem na tarefa, junto do MoveTo (revisão de 14/10/2026: na hora do clique a coluna saía de vista até o ScreenData)
+      geometria.aplicar({ redimensionar: () => est.efetivo === 'compacto' && compactar(), porCss: porLarguras, soSemMover, aoRecusar });
+      return true;
+    }
+    porLarguras();
+    if (est.efetivo === 'compacto' && janela.disponivel()) compactar();
+    return true;
+  }
+
+  // "Configurações da Riot" do painel B1: expande (o modal dela é de 1280) e, quando ele fechar, volta ao compacto
+  // (comportamento novo do passo 13, decisão técnica v; as outras janelas da Riot seguem a regra 7 de sempre)
+  function abrirConfigRiot() {
+    est.forcado = 'configurações da Riot (abertas por ti)';
+    est.configRiot = true;
+    resolver();
+    return est.efetivo !== 'compacto';
+  }
+  function configRiotFechou() {
+    if (!est.configRiot) return;
+    est.configRiot = false;
+    if (est.forcado === 'configurações da Riot (abertas por ti)') { est.forcado = null; resolver(); }
   }
 
   function mudarFase(a) {
@@ -492,8 +549,10 @@ export function criarRoteador({
   function estado() {
     return { fase: est.fase, info: { ...est.info }, seq: est.seq?.nome ?? null, destino: est.destino, efetivo: est.efetivo, motivo: est.motivo, tela: est.tela,
       override: est.override, forcado: est.forcado, janelaCompacta: janela.ehCompacta(), camada: !!camada.existe?.(),
-      telas: Object.fromEntries([...modulos].map(([k, v]) => [k, v.estado])) };
+      lateral: { ...est.lateral }, telas: Object.fromEntries([...modulos].map(([k, v]) => [k, v.estado])) };
   }
+  // tamanho CSS que a janela compacta deve ter agora (coluna + lateral) e a largura da esquerda (geometria)
+  const medidasJanela = () => { const [larg, alt] = tamanho(cfg.compacto?.larg, cfg.compacto?.alt, extra()); return { larg, alt, esq: est.lateral.esq, col: coluna() }; };
 
   return {
     aoFase(fase) {
@@ -514,6 +573,8 @@ export function criarRoteador({
       if (fase !== 'WaitingForStats' && fase !== 'PreEndOfGame') { est.seq = null; est.honraVista = false; }
       est.seqDesde = fase === 'PreEndOfGame' ? agora() : null;
       if (fase === 'PreEndOfGame') agendarSeq((prazoSemEtapa() ?? ESPERA_SEQ_MS) + 50);
+      // a lateral sabe da fase antes do resolver: o coach e a sala do time saem da largura antes de a janela encolher
+      gancho('aoFase', fase);
       resolver();
     },
     // /lol-pre-end-of-game/v1/currentSequenceEvent: name ('' = nenhuma etapa); Delete = ''
@@ -563,7 +624,36 @@ export function criarRoteador({
     estado,
     preCarregar() { for (const nome of Object.keys(TELAS)) carregar(nome); },
     montada: () => (montagem ? { nome: montagem.nome, ctx: montagem.ctx } : null),
+    // passo 13: largura da lateral (estado único) e as Configurações da Riot abertas pelo painel
+    pedirLateral, larguraLateral: () => ({ ...est.lateral }), medidasJanela, abrirConfigRiot, configRiotFechou,
+    partes: () => (est.efetivo === 'compacto' ? camada.partes?.() || null : null),
   };
+}
+
+// Arrastar a janela compacta pelo topo da camada (Window.MoveTo, px físicos): sempre sobra um pedaço do topo à vista. Base e
+// limites pela tela da geometria (ScreenData); sem ela, a conta antiga com window.screenX/screen.*. Cada MoveTo do arrasto vai
+// para a geometria (anotarPosicao) e o fim relê a tela: sem isso o 2º arrasto saltava de volta ao lugar do 1º e a decisão 1
+// ("abre só se couber sem mover") usava a posição velha (revisão de 14/10/2026). escala: o ponteiro anda em px da página, a
+// janela em px físicos (× zoomScale [S], ARMADILHAS § Client). Testável: tools/teste-compacto-lateral.mjs.
+export function criarArrastoJanela({ geometria, janela, medidas = () => null, win = globalThis.window, raf }) {
+  const telaViva = () => { const t = geometria?.tela?.(); return t && !t.minimizada ? t : null; };
+  return criarArrasto({
+    posicao: () => { const t = telaViva(); return t ? [t.x, t.y] : [Number(win?.screenX ?? win?.screenLeft), Number(win?.screenY ?? win?.screenTop)]; },
+    mover: (x, y) => { janela.mover(x, y); geometria?.anotarPosicao?.(x, y); },
+    escala: () => telaViva()?.z || 1,
+    aoSoltar: () => { geometria?.reler?.().catch?.(() => {}); },
+    limites: () => {
+      const t = telaViva();
+      if (t) {
+        const w = (medidas()?.larg || Number(win?.innerWidth) || 420) * t.z;
+        return { minX: t.L - (w - 120), maxX: t.L + t.W - 120, minY: t.T, maxY: t.T + t.H - 60 };
+      }
+      const s = win?.screen || {}, x0 = Number(s.availLeft) || 0, y0 = Number(s.availTop) || 0;
+      const aw = Number(s.availWidth), ah = Number(s.availHeight), w = Number(win?.outerWidth) || Number(win?.innerWidth) || 420;
+      return { minX: x0 - (w - 120), maxX: Number.isFinite(aw) ? x0 + aw - 120 : undefined, minY: y0, maxY: Number.isFinite(ah) ? y0 + ah - 60 : undefined };
+    },
+    ...(raf ? { raf } : {}),
+  });
 }
 
 // Liga tudo no client. servicos: o que as telas usam do resto do plugin (fila rápida, winrate, runas, pós-jogo...).
@@ -572,23 +662,21 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   const invocar = invocadorRiot(window);
   const janela = criarJanela({ invocar, medir: () => [window.innerWidth, window.innerHeight] });
   let rot = null;
-  // arrastar pelo topo da camada (Window.MoveTo; unidade [S]): sempre sobra um pedaço do topo à vista
-  const tela = () => globalThis.screen || {};
-  const arrasto = criarArrasto({
-    posicao: () => [Number(window.screenX ?? window.screenLeft), Number(window.screenY ?? window.screenTop)],
+  // passo 13: onde a janela fica quando a lateral abre/fecha (ScreenData da Riot; px físicos no MoveTo, CSS no ResizeTo)
+  const geometria = criarGeometria({
+    lerTela: () => lerTelaRiot(window),
     mover: (x, y) => janela.mover(x, y),
-    limites: () => {
-      const s = tela(), x0 = Number(s.availLeft) || 0, y0 = Number(s.availTop) || 0;
-      const aw = Number(s.availWidth), ah = Number(s.availHeight), w = Number(window.innerWidth) || 420;
-      return { minX: x0 - (w - 120), maxX: Number.isFinite(aw) ? x0 + aw - 120 : undefined, minY: y0, maxY: Number.isFinite(ah) ? y0 + ah - 60 : undefined };
-    },
-    raf: fn => requestAnimationFrame(fn),
+    medidas: () => rot?.medidasJanela() || null,
+    log: (...a) => console.log('[lol-client] compacto:', ...a),
+    ativo: () => rot?.estado().efetivo === 'compacto',
   });
+  const arrasto = criarArrastoJanela({ geometria, janela, medidas: () => rot?.medidasJanela() || null, win: window, raf: fn => requestAnimationFrame(fn) });
   const camada = criarCamada({
     doc,
     arrasto,
     aoExpandir: () => rot?.expandir(),
-    aoMinimizar: () => janela.minimizar(),
+    // "–": a conversa marcada como lida deixa de ser a ativa do client antes de sumir (senão as mensagens chegam já lidas)
+    aoMinimizar: () => { try { lateral.aoOculto(); } catch { /* segue */ } janela.minimizar(); },
     aoFechar: () => janela.sair(),
     avisoFechar: () => (rot?.estado().fase === 'ChampSelect'
       ? 'fechar o client agora é dodge: perde PDL e fica um tempo sem poder buscar. fechar mesmo assim?'
@@ -596,10 +684,16 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   });
   const botao = criarBotaoModo({ doc, aoClicar: () => rot?.compactar(), raf: fn => requestAnimationFrame(fn) });
   const vigia = criarVigiaModais({ doc, aoModal: d => rot?.aoModal(d) });
+  // passo 13: lateral (chat ao lado, configurações à esquerda, coach da seleção). Escrita só por clique dele
+  const lateral = criarLateral({
+    cfg, rot: () => rot, doc, lcu: lcuPadrao, servicos, geometria, definir: servicos.definir || (() => {}),
+    avisar: (m, erro) => avisarPadrao(m, erro), log: (...a) => console.log('[lol-client] compacto:', ...a),
+    abrirConfigRiot: () => abrirConfigRiot(),
+  });
   rot = criarRoteador({
-    cfg, janela, camada,
+    cfg, janela, camada, geometria, lateral,
     carregarTela: nome => import(TELAS[nome]),
-    servicos: { context, ...servicos },
+    servicos: { context, ...servicos, lateral },
     assinar: (uri, cb) => context.socket.observe(uri, cb),
     classe: ligado => doc.documentElement.classList.toggle(CLASSE, ligado),
     modalAberto: () => vigia.aberto(),
@@ -612,6 +706,28 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     // botão "▣ modo compacto" só no client normal; na seleção a barra da Riot não aparece: botão flutuante
     aoAplicar: e => botao.sincronizar(!!cfg.compacto?.ligado && e.efetivo === 'expandido', { flutuante: e.fase === 'ChampSelect' }),
   });
+
+  // "Configurações da Riot" do painel B1 (passo 13): expande, abre o modal dela (rcp.whenReady('rcp-fe-lol-settings').show(), o
+  // mesmo da engrenagem; existe no 16.20, nunca chamado antes: [S]) e, quando o .lol-settings-container sai da página (a Riot
+  // desanexa o modal ao fechar: ARMADILHAS § Client), volta ao compacto. Sem modal em 5 s: avisa e segue vigiando até 10 min.
+  let vigiaCfg = null;
+  function abrirConfigRiot() {
+    rot.abrirConfigRiot();
+    const inicio = Date.now();
+    let visto = false, avisou = false;
+    (async () => {
+      try { const s = await globalThis.rcp?.whenReady?.('rcp-fe-lol-settings'); if (typeof s?.show === 'function') { s.show(); return; } } catch (e) { console.error('[lol-client] compacto: configurações da Riot', e); }
+      avisarPadrao('abre a engrenagem ⚙ no topo do client: ao fechar as configurações, o compacto volta', false);
+    })();
+    clearInterval(vigiaCfg);
+    vigiaCfg = setInterval(() => {
+      const aberto = !!doc.querySelector('.lol-settings-container');
+      if (aberto) visto = true;
+      else if (visto) { clearInterval(vigiaCfg); vigiaCfg = null; rot.configRiotFechou(); return; }
+      if (!visto && !avisou && Date.now() - inicio > 5000) { avisou = true; avisarPadrao('as Configurações da Riot não abriram sozinhas: usa a engrenagem ⚙ no topo', true); }
+      if (Date.now() - inicio > 600000) { clearInterval(vigiaCfg); vigiaCfg = null; }
+    }, 500);
+  }
 
   const lerSessao = () => lcuPadrao('GET', '/lol-gameflow/v1/session').then(r => { if (r.ok && r.json) rot.aoSessao(r.json); });
   // etapa do fim de partida (honra x celebrações, passo 12): evento + leitura ao entrar no PreEndOfGame
@@ -654,6 +770,7 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   // DOM só depois do DOMContentLoaded (o Pengu chama init antes do <body>: ARMADILHAS § Client)
   const ligarDom = () => {
     estilo('lc-compacto-estilo', CSS, doc);
+    estilo('lc-lt-estilo', CSS_LATERAL, doc);
     botao.ligar();
     vigia.ligar();
     // popup do ready check que volta (aceite manual): sai da tela compacta e expande
@@ -680,6 +797,8 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
       tResize = setTimeout(() => rot.reavaliar(), 300);
       tResize2 = setTimeout(() => rot.reavaliar(), GRACA_MEDIDA_MS + 200);
     });
+    // janela minimizada ou escondida por outro caminho (barra de tarefas, Win+D): devolve a conversa ativa (revisão de 14/10/2026)
+    doc.addEventListener('visibilitychange', () => { if (doc.visibilityState === 'hidden') { try { lateral.aoOculto(); } catch { /* segue */ } } });
     rot.preCarregar();
     rot.marcarPronto();
   };
@@ -696,8 +815,10 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   // (node tools/cdp.mjs eval com window.__lolClient.compacto.modais(); só tag e classe, nunca texto)
   return {
     ...rot,
-    sincronizar() { rot.sincronizar(); chat.mudou(); }, // cfg mudou: roteador + aviso ao coletor se a chave virou
+    // cfg mudou: roteador + lateral (configurações repintam, chat desligado fecha) + aviso ao coletor se a chave virou
+    sincronizar() { rot.sincronizar(); lateral.sincronizar(); chat.mudou(); },
     modais: () => vigia.historico(),
+    lateral, geometria: () => geometria.estado(),
   };
 }
 
@@ -718,13 +839,21 @@ export function expandirAntes({ compacto, abrir, aVista = () => !!globalThis.doc
 
 export const CHAT_REAVISO_MS = 60000;
 // aviso do modo ao coletor (testável). coletor: fetch do coach.js (injetado; sem ele, o padrão da chat-ponte)
+// Passo 13: com o chat ao lado ligado (compacto.chatLateral), as janelas do Edge do coletor não abrem conversa nova sozinhas
+// (senão a conversa abriria em dobro). O corpo leva {compacto, lateral}: o coletor de hoje só lê `compacto`, então com a lateral
+// ligada vai compacto:false (o único jeito, sem mexer no coletor, de calar a abertura automática); o campo `lateral` é para o
+// coletor depois do patch (roadmap passo 13, "mudança do coletor"). chave = o que foi avisado (muda = avisa de novo).
 export function criarAvisoChat({ cfg, coletor, repetir = setInterval, intervaloMs = CHAT_REAVISO_MS }) {
   let ultimo = null;
+  const valor = () => { const ligado = !!cfg.compacto?.ligado, lat = lateralLigada(cfg); return { compacto: ligado && !lat, lateral: lat }; };
+  const chave = () => JSON.stringify(valor());
   const avisar = () => {
-    ultimo = !!cfg.compacto?.ligado;
-    try { return Promise.resolve(coletor ? avisarModo(ultimo, coletor) : avisarModo(ultimo)).catch(() => false); } catch { return Promise.resolve(false); }
+    const v = valor();
+    ultimo = chave();
+    try { return Promise.resolve(coletor ? avisarModo(v.compacto, coletor, { lateral: v.lateral }) : avisarModo(v.compacto, undefined, { lateral: v.lateral })).catch(() => false); }
+    catch { return Promise.resolve(false); }
   };
   const id = repetir(() => { if (cfg.compacto?.ligado) avisar(); }, intervaloMs);
   try { id?.unref?.(); } catch { /* browser: número */ }
-  return { avisar, mudou: () => (!!cfg.compacto?.ligado !== ultimo ? avisar() : Promise.resolve(null)), ultimo: () => ultimo };
+  return { avisar, mudou: () => (chave() !== ultimo ? avisar() : Promise.resolve(null)), ultimo: () => (ultimo === null ? null : JSON.parse(ultimo).compacto) };
 }

@@ -133,13 +133,20 @@ function montar(painel, cfg, definir, restaurar) {
     catch (e) { console.error('[lol-client] bloco', nome, e); corpo.replaceChildren(ui.explica('Erro ao montar este bloco.')); }
   }
 
-  const botao = el('lol-uikit-flat-button-secondary', { class: 'lc-restaurar', texto: 'Restaurar padrão do lol-client' });
-  botao.addEventListener('click', restaurar);
-  add(el('div', { class: 'lol-settings-general-row lc-rodape' }, botao));
+  // sem restaurar (painel do compacto, passo 13 B1): "restaurar padrão" fica só no client normal (um clique errado apagaria tudo)
+  if (restaurar) {
+    const botao = el('lol-uikit-flat-button-secondary', { class: 'lc-restaurar', texto: 'Restaurar padrão do lol-client' });
+    botao.addEventListener('click', restaurar);
+    add(el('div', { class: 'lol-settings-general-row lc-rodape' }, botao));
+  }
   painel.scrollTop = topo;
   // o foco do input clicado (desanexado na remontagem) faz o scrollable rolar depois: segura de novo no quadro seguinte
-  requestAnimationFrame(() => { if (Math.abs(painel.scrollTop - topo) > 1) painel.scrollTop = topo; });
+  if (typeof requestAnimationFrame === 'function') requestAnimationFrame(() => { if (Math.abs(painel.scrollTop - topo) > 1) painel.scrollTop = topo; });
 }
+
+// Os mesmos blocos e chaves dentro do painel de configurações do client compacto (compacto/lateral-config.js, passo 13 B1):
+// mesmo cfg, gravado na hora pelo definir; sem o "restaurar padrão".
+export function montarPainel(painel, { cfg, definir }) { montar(painel, cfg, definir, null); }
 
 // liga a seção; cfg/definir/aoMudar/restaurar vêm do config.js
 export function iniciarConfiguracoes({ cfg, definir, aoMudar, restaurar }) {

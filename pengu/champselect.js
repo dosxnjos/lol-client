@@ -220,5 +220,8 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
     // eventos e alvo: diagnóstico para o teste ao vivo (o socket entrega? qual campo trouxe o campeão?)
     estado: () => ({ partidas: partidas.size, carregando: !!carregando, ultimaLeitura, falhou, eventos, alvo: meu(ultimaSessao) }),
     estatisticas: (championId, posicao) => estatisticasCampeao([...partidas.values()], championId, posicao),
+    // coach do coletor para o selo completo do compacto (passo 13 B2): roda mesmo com "Winrate com o campeão" desligado (o
+    // desenhar() volta cedo e nunca chamaria o lerCoach). Só GET /draft/<id>; sem coletor, nada
+    lerCoach: id => (Number(id) > 0 ? lerCoach(Number(id)) : Promise.resolve()),
   };
 }

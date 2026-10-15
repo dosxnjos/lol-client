@@ -102,7 +102,10 @@ export function avisar(msg, erro = false, doc = globalThis.document) {
     if (camada) {
       camada.querySelector?.('.lc-cp-aviso')?.remove();
       const el = h('div', { doc, class: 'lc-cp-aviso' + (erro ? ' lc-cp-erro' : ''), role: 'status' }, texto);
-      camada.appendChild(el);
+      // dentro da coluna compacta (passo 13: com a lateral aberta a camada tem 1080+ px; o aviso fica sobre a coluna)
+      let alvo = null;
+      try { alvo = camada.querySelector?.('.lc-cp-coluna') || null; } catch { alvo = null; }
+      (alvo || camada).appendChild(el);
       setTimeout(() => el.remove(), 4500);
       return;
     }
