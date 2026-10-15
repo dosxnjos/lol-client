@@ -25,6 +25,7 @@ LOCKFILE_PADRAO = Path(r"C:\Games\Riot Games\League of Legends\lockfile")
 DADOS = banco.RAIZ / "dados"
 TRAVA = DADOS / "coletor.lock"
 LOG = DADOS / "coletor.log"
+FALHA = DADOS / "coletor-falha.log"   # faulthandler + "Fatal Python error" (vida.py); vazio = nenhuma queda nativa
 EVENTOS = (
     "OnJsonApiEvent_lol-gameflow_v1_gameflow-phase",
     "OnJsonApiEvent_lol-end-of-game_v1_eog-stats-block",
@@ -64,16 +65,10 @@ def configurar_log(console=False):
         log.addHandler(s)
     log.setLevel(logging.INFO)
     # thread que morre com exceção não tratada ia só para o stderr (nenhum, na tarefa agendada): sem isto
-    # um atalho, overlay ou leitor morto não deixava rastro (13/10/2026, F8/F9 mudos no treino)
-    import threading
-    anterior = threading.excepthook
-
-    def _thread_morreu(args):
-        if args.exc_type is not SystemExit:
-            log.error("thread %s morreu: %s: %s", getattr(args.thread, "name", "?"), args.exc_type.__name__,
-                      args.exc_value, exc_info=(args.exc_type, args.exc_value, args.exc_traceback))
-        anterior(args)
-    threading.excepthook = _thread_morreu
+    # um atalho, overlay ou leitor morto não deixava rastro (13/10/2026, F8/F9 mudos no treino). Desde 15/10/2026
+    # também o fio principal e a exceção "ignorada" de callback ctypes (vida.ganchos; o resto da vida: principal())
+    import vida
+    vida.ganchos(log)
 
 
 # ---------- lockfile e LCU ----------
@@ -435,6 +430,9 @@ def pid_vivo(pid, trava_ts=None):
         k.CloseHandle(h)
 
 
+_orfa = [None]   # pid da trava órfã que este processo removeu (a instância anterior morreu sem "encerrado")
+
+
 def travar():
     """True se esta é a única instância; remove trava órfã"""
     DADOS.mkdir(parents=True, exist_ok=True)
@@ -454,6 +452,7 @@ def travar():
                 log.info("outra instância em execução (pid %d); saindo", pid)
                 return False
             log.info("trava órfã (pid %s) removida", pid or "?")
+            _orfa[0] = pid or "?"
             TRAVA.unlink(missing_ok=True)
     return False
 
@@ -523,6 +522,7 @@ class Coletor:
         self.buscando = None  # task da partida nova após EndOfGame
         self.cs = RetratoChampSelect()
         self.fila_atual = None
+        self.fase_atual = self.partida_atual = None   # última fase do gameflow (batimento do vida.py)
         self.ultima_cs = None  # chave do último retrato, para ligar o game_id
         self.chat = _chat_padrao(coach, lambda: self.lcu)  # janelas do chat (tela 5); None sem coach/servidor
 
@@ -696,6 +696,7 @@ class Coletor:
         except Exception as e:
             log.warning("snapshot de LP falhou: %s", e)
         log.info("fase %s (partida %s)", fase, gid)
+        self.fase_atual, self.partida_atual = fase, gid   # o batimento (vida) lê
         self.fila_atual = fila or self.fila_atual
         if fase in FASES_LOBBY or (fase == "ChampSelect" and not self.cs.prefs):
             await self.ler_preferidas()
@@ -769,23 +770,37 @@ def principal():
             print(json.dumps(r, ensure_ascii=False))
         return 0
 
+    import vida
+    anterior, bat_anterior = vida.ultimo_registro(LOG)   # antes de esta instância escrever no log
     if not travar():
         return 0
     log.info("iniciado (pid %d, ocioso %g min)", os.getpid(), args.ocioso_min)
+    if _orfa[0] is not None and anterior:
+        # a anterior morreu seca: TerminateProcess de fora (schtasks /end, Stop-Process, taskkill) ou queda nativa
+        # (aí o dados/coletor-falha.log tem a pilha). O batimento é de 1 min: a morte foi até 1 min depois dele
+        log.warning("a instância anterior (pid %s) parou sem 'encerrado': última linha às %s (%s), último batimento "
+                    "%s; queda nativa deixaria pilha em %s", _orfa[0], anterior[0], anterior[1][:80],
+                    bat_anterior or "nenhum", FALHA.name)
     motivo = "erro"
     coach = None
+    col = None
+    vida.ligar(log, falha=FALHA, estado=lambda: {"fase": getattr(col, "fase_atual", None),
+                                                 "partida": getattr(col, "partida_atual", None)})
     try:
         if not args.sem_coach:
             import coach_vivo
             coach = coach_vivo.Coach(db=args.db, liveclient=args.liveclient, porta=args.porta_painel,
                                      **({"config": args.config} if args.config else {}))
             coach.iniciar()
-        motivo = asyncio.run(Coletor(args, coach).rodar())
+        col = Coletor(args, coach)
+        motivo = asyncio.run(col.rodar())
     except KeyboardInterrupt:
         motivo = "interrompido"
-    except Exception:
+    except Exception as e:
+        motivo = f"erro: {type(e).__name__}"
         log.exception("falha no laço principal")
     finally:
+        vida.saindo(motivo)          # o atexit escreve "coletor saindo (motivo)" depois do "encerrado"
         if coach is not None:
             try:
                 coach.encerrar()

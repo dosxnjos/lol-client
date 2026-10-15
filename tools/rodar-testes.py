@@ -54,6 +54,8 @@ TESTES = [
     [PY, "tools/teste-tags.py"],
     [PY, "tools/teste-traumas.py"],
     [PY, "tools/teste-draft.py"],
+    [PY, "tools/teste-vida.py"],           # registro de queda do coletor (pythonw filho que cai de propósito)
+    [PY, "tools/teste-vigia.py"],          # vigia: decisão e rodada sem tarefa (as tarefas de teste: --real, à mão)
     [PY, "tools/teste-mentor.py", "--seco"],
     [PY, "tools/teste-mentor.py", "--offline"],
     # ponta a ponta (coletor + coach + simulador tocando a partida gravada a 20x, ~2 min; portas 8766/2996)

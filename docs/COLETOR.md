@@ -19,7 +19,55 @@ Visão de uso (o que o coach faz, ligar e desligar, instalar e desinstalar): [RE
    `--ocioso-min` (padrão 10) → grava "encerrado (ocioso …)" e sai com rc 0.
 
 Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fase …",
-"backfill: …" e "encerrado (motivo)".
+"backfill: …", "encerrado (motivo)" e "coletor saindo (motivo; vivo há N min)". Morte e vigia: § Vida, queda e vigia.
+
+## Vida, queda e vigia (15/10/2026)
+
+O coletor morreu calado às 02:37:27 de 15/10/2026 no meio de uma partida (sem "encerrado", sem Traceback, sem evento
+no log de Aplicativo) e só voltou às 03:07, à mão. **Causa provada:** outra sessão de agente (executor da central no
+unclick) subiu um `http.server` na 8765 para conferir um HTML, levou 404 (quem respondeu foi o servidor local do
+coletor) e na limpeza rodou `Get-NetTCPConnection -LocalPort 8791,8765 -State Listen | Stop-Process -Force` às
+02:37:27,261; a última linha do coletor é de 02:37:27,734. `Stop-Process -Force` é `TerminateProcess`: não roda
+`finally`, `atexit` nem faulthandler. Calibrado no mesmo dia: um `pythonw` lançado pelo Agendador que cai de verdade
+(access violation fora do ctypes, `Py_FatalError`) deixa os eventos 1000 e 1001 no log de Aplicativo; ausência
+deles + trava órfã = morte por fora. Armadilhas: [ARMADILHAS](ARMADILHAS.md) § Windows.
+
+- **`coletor\vida.py`** (ligado no `principal()`): `faulthandler` (todos os fios) em `dados\coletor-falha.log`, com o
+  `stderr` do C apontado para o mesmo arquivo (`_wfreopen` do UCRT: é onde sai o "Fatal Python error", que no
+  `pythonw` não tem arquivo); o arquivo passou de 256 KB ao subir = vira `.1`. `sys.excepthook`, `threading.excepthook`
+  ("thread X morreu") e `sys.unraisablehook` ("exceção ignorada", a de callback ctypes das janelas) no log, a mesma
+  exceção (tipo + linha) com pilha no máximo 1 vez por minuto e as caladas contadas na linha seguinte; com o `stderr`
+  no arquivo de falha a pilha não se repete lá (o log tem o filtro `SemSegredo`, o arquivo não);
+  `atexit` com "coletor saindo (motivo)". Teto com o coletor vivo: a cada batimento, arquivo de falha que cresceu =
+  aviso no log (1 a cada 10 min) e, passou de 256 KB, cópia para `.1` e zerado no mesmo fd. **Batimento** a cada 60 s: `batimento: fase InProgress, partida N, threads
+  T, mem M MB, handles H, gdi G, user U, vivo há X min` (GDI/USER crescendo = vazamento das janelas
+  `UpdateLayeredWindow`). Morte por fora não escreve nada: a hora dela é até 1 min depois do último batimento.
+- **Quem sobe depois** e acha trava órfã escreve `a instância anterior (pid X) parou sem 'encerrado': última linha às
+  …, último batimento …`. `coletor-falha.log` com pilha depois do último cabeçalho e nenhuma linha do coletor depois
+  dela = queda nativa; só o cabeçalho "faulthandler ligado" = nenhuma. O faulthandler no Windows também imprime
+  exceção que alguém tratou (access violation dentro de chamada ctypes vira `OSError`): pilha com o coletor seguindo
+  vivo no log não é queda.
+- **Vigia** (`tools\vigia-coletor.py`, tarefa `lol-client-vigia`, `pythonw`, oculta, só logado, sem admin, a cada
+  3 min, uma instância por vez): com `LeagueClientUx.exe` aberto e a trava sem dono vivo (`coletor.pid_vivo`), roda
+  `schtasks /run /tn lol-client-coletor` (o `IgnoreNew` da tarefa + a trava = nunca dois coletores), espera a trava
+  nova 20 s e registra. **Nunca** mata nada (nem coletor vivo, nem quem ocupa a 8765: o coletor sobe sem o servidor
+  local e o vigia diz quem ocupa); **não sobe** pausado (`dados\vigia.pausa`), com porta de teste ouvindo (8766, 2996,
+  2998: ensaio e simulador), com prova do projeto rodando (linha de comando de python com `rodar-testes.py`,
+  `ensaio-coach.py`, `tools\teste-…`, `--porta-painel`…, lida só na hora de subir; valor de `--senha`/`--token` sai
+  `***` no log), com `coletor\coletor.py` vivo sem trava viva (subindo antes do `travar()` ou lançado fora da tarefa:
+  outro `/run` seria um segundo coletor), com a tarefa do coletor marcada "Running" (o `/run` seria ignorado) nem
+  depois de 3 subidas em 30 min (aí 1 a cada 15 min). Coletor vivo há > 5 min sem batimento: avisa 1 vez a cada 30 min (travado, ou código de antes
+  do batimento), nunca mata. Processos e portas pelo Windows (Toolhelp, `GetExtendedTcpTable`): nada conecta na 8765.
+  Registro: `dados\vigia.log` (só o que muda), `dados\vigia.json` (última rodada, subidas) e, ao subir, uma linha
+  `WARNING vigia: coletor fora com o client aberto (…); subindo pela tarefa lol-client-coletor` no `coletor.log`,
+  logo antes do "iniciado".
+
+| o quê | comando |
+| --- | --- |
+| instalar / remover o vigia (sem admin) | `python tools\vigia-coletor.py instalar` · `... remover` |
+| estado (tarefa, última rodada, coletor, quem ouve na 8765) | `python tools\vigia-coletor.py estado` |
+| pausar antes de derrubar o coletor de propósito (prova contra o client real) | `python tools\vigia-coletor.py pausar [min]` (padrão 60) · `... retomar` |
+| provas (`--real`: pela tarefa agendada, tarefas `lol-client-teste-queda`, `lol-client-vigia-teste` e `lol-client-coletor-teste`, removidas no fim) | `python tools\teste-vida.py [--real]` · `python tools\teste-vigia.py [--real]` |
 
 ## Comandos
 
@@ -35,7 +83,7 @@ Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fa
 | ensaio ponta a ponta sem o client (§ Coach na partida) | `python tools\ensaio-coach.py [--velocidade 10] [--sem-prints]` |
 | coletor contra o simulador (banco e porta de teste; nunca com o coletor real de pé na mesma trava) | `python coletor\coletor.py --liveclient http://127.0.0.1:2998 --db temp\x.db --porta-painel 8766` |
 | instalar / remover o gatilho | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\instalar-gatilho.ps1` (ou `remover-gatilho.ps1`) |
-| parar o coletor agora | `schtasks /end /tn lol-client-coletor` |
+| parar o coletor agora (com o vigia instalado e o client aberto, ele sobe de novo em até 3 min: `vigia-coletor.py pausar` antes) | `schtasks /end /tn lol-client-coletor` |
 | MCP | `claude mcp add --scope user lol-client -- python C:\Dev\lol-client\mcp\servidor.py` (remover: `claude mcp remove --scope user lol-client`) |
 
 `--lockfile` explícito desliga a busca do lockfile pela linha de comando do client.

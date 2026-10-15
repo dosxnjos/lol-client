@@ -728,7 +728,8 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   mesmo contexto de DPI (`AvisoPartida.clicar_por_mensagem`).
 - **Thread que morre não deixa rastro** → exceção não tratada numa thread vai só para o stderr, que a
   tarefa agendada não guarda (atalho, overlay, Tk). `coletor.configurar_log` põe `threading.excepthook`
-  no log ("thread X morreu"), e o overlay e o atalho logam a própria morte (13/10/2026).
+  no log ("thread X morreu"), e o overlay e o atalho logam a própria morte (13/10/2026). Desde 15/10/2026 também o
+  fio principal e a exceção "ignorada" de callback ctypes (`vida.ganchos`).
 - **Prova que abre janela, rodada com o jogo aberto, pinta por cima da partida** (13/10/2026, sessão da vitrine:
   `(tasklist | grep … || echo fechado) && rodar-testes` seguiu com o jogo aberto; a moldura do `teste-alertas` em
   (40, 40, 480, 270) por ~2 s, duas vezes, e o Tk escondido do ensaio nasceu durante a partida) → o
@@ -789,7 +790,26 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **Saída do `schtasks` sai quebrada** ("ÒXITO") → vem na página OEM (cp850 no pt-BR): ler com `encoding="oem"`.
   Para o estado da tarefa, `Get-ScheduledTask`/`Get-ScheduledTaskInfo` (o texto do `schtasks /query` é traduzido).
 - **Parar o coletor com `schtasks /end`** não grava "encerrado" (morte seca) e deixa a trava;
-  a próxima instância vê o pid morto e remove ("trava órfã").
+  a próxima instância vê o pid morto e remove ("trava órfã"). Com o vigia instalado e o client aberto, ele volta em
+  até 3 min: `python tools\vigia-coletor.py pausar` antes ([COLETOR](COLETOR.md) § Vida, queda e vigia).
+- **Coletor morre calado no meio da partida, sem Traceback nem evento do Windows** (15/10/2026, 02:37:27) → outra
+  sessão de agente matou "quem ouve na 8765": `Get-NetTCPConnection -LocalPort 8765 -State Listen | Stop-Process
+  -Force` depois de um `python -m http.server 8765` que levou 404 (o servidor local do coletor respondeu). A 8765 é do
+  coletor: antes de matar dono de porta, `GET http://127.0.0.1:8765/estado` diz se é ele. `TerminateProcess` não roda
+  `finally`/`atexit`/faulthandler: só o batimento de 60 s (`vida.py`) dá a hora; o vigia sobe de novo.
+- **Queda nativa do `pythonw` sem rastro?** Não: lançado pelo Agendador, access violation fora do ctypes e
+  `Py_FatalError` deixam os eventos 1000/1001 no log de Aplicativo (medido em 15/10/2026). Sem eles + trava órfã =
+  morte por fora. Lançado pelo Git Bash não vale como medida: o modo de erro herdado (`SEM_NOGPFAULTERRORBOX`) cala o
+  WER. Access violation **dentro** de chamada ctypes vira `OSError` (o ctypes tem guarda SEH), não queda.
+- **`faulthandler.enable(file=…)` não pega o "Fatal Python error"** → o `Py_FatalError` escreve no `fileno(stderr)`
+  do C, que no `pythonw` não tem arquivo (medido: arquivo do faulthandler vazio). O `vida.py` reabre o `stderr` do
+  UCRT no `coletor-falha.log` (`_wfreopen`); prova pela tarefa agendada: `teste-vida.py --real`.
+- **"Windows fatal exception: access violation" no `coletor-falha.log` com o coletor vivo** → não é queda: no Windows
+  o faulthandler é handler vetorial e imprime até a exceção que o ctypes trata e vira `OSError` (medido em 15/10/2026:
+  `ctypes.string_at(0)` num `try` = um dump de todos os fios por chamada). Queda é pilha sem linha do coletor depois.
+  Sem teto, o arquivo crescia sem fim num coletor de horas: o batimento avisa e gira (`vida._vigiar_falha`).
+- **Exceção ignorada em laço enche o log** (wndproc ctypes que lança a cada mensagem) → `vida.ganchos` loga a mesma
+  (tipo + linha) com pilha 1 vez por minuto e conta as caladas; prova `teste-vida.py` ("50 exceções ignoradas").
 - **Coletor sai com "outra instância em execução" sem haver outra** → a trava órfã tinha um pid
   que o Windows reaproveitou para outro python (há dezenas vivos: MCPs, maestro). `pid_vivo`
   compara a criação do processo com o mtime da trava: nascido depois dela = órfã (13/10/2026).

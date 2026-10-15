@@ -20,6 +20,8 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   (o coletor lê `isAutofilled`). Plano: [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,
   com rede de segurança na página; `cancel-champ-select` não cancela e o client põe hover sozinho.
+- A 8765 é do coletor: nunca matar dono de porta sem `GET /estado`; derrubar o coletor de propósito = `python
+  tools/vigia-coletor.py pausar` antes, senão o vigia sobe de novo ([COLETOR](docs/COLETOR.md) § Vida, queda e vigia).
 - Coach ao vivo (`coletor/coach_vivo.py`): provar com `python tools/ensaio-coach.py` (sem client, banco e
   portas de teste); nunca rodar o `coletor.py` de teste contra `dados/` com o coletor real de pé.
 - Print do overlay/moldura só pelo modo vitrine (`tools/vitrine.py`); nunca desligar `WDA_EXCLUDEFROMCAPTURE` nem

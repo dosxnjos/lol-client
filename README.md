@@ -30,14 +30,17 @@ painel, overlay), coisa que a Riot não aprova para produtos: risco da conta ass
 O client abre → o Windows grava o evento 4688 → a tarefa agendada `lol-client-coletor` roda
 `pythonw coletor\coletor.py` → o coletor sobe o servidor local `127.0.0.1:8765` (painel, `/estado`,
 `/config`, `/mentor`, `/draft`…) e liga cada parte do coach pela fase do jogo (`coletor\coach_vivo.py`).
-Ele sai sozinho 10 min depois do client fechar. Ciclo inteiro e o que liga em cada fase:
-[COLETOR](docs/COLETOR.md) § Ciclo de vida e § Coach na partida.
+Ele sai sozinho 10 min depois do client fechar. Se ele cair com o client aberto, a tarefa `lol-client-vigia`
+(a cada 3 min) sobe de novo pela mesma tarefa. Ciclo inteiro e o que liga em cada fase:
+[COLETOR](docs/COLETOR.md) § Ciclo de vida, § Vigia e § Coach na partida.
 
 ## Instalar (uma vez)
 
 1. Python 3.14 e as bibliotecas: `python -m pip install --user websockets mss opencv-python numpy scipy pillow mcp`
    (Node só para os testes do plugin).
 2. Gatilho: `powershell -NoProfile -ExecutionPolicy Bypass -File tools\instalar-gatilho.ps1` (PowerShell elevado).
+   Vigia (sobe o coletor que caiu com o client aberto; sem admin): `python tools\vigia-coletor.py instalar`
+   (conferir: `... estado`).
 3. Plugin: Pengu Loader 1.1.6 em `C:\Program Files\Pengu Loader` + junção
    `cmd /c mklink /J "C:\Program Files\Pengu Loader\plugins\lol-client" "C:\Dev\lol-client\pengu"`;
    recarregar a interface só em `None`/`Lobby`.
@@ -142,6 +145,7 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | todas as provas offline (inclui o ensaio a 20x; ~4 min) | `python tools\rodar-testes.py` |
 | ensaio ponta a ponta sem o client (banco copiado, portas 8766/2996) | `python tools\ensaio-coach.py` |
 | simulador da Live Client (porta 2998) | `python tools\simular-liveclient.py` |
+| registro de queda e vigia do coletor (`--real`: pela tarefa agendada, com tarefas de teste de outro nome, removidas no fim) | `python tools\teste-vida.py` · `python tools\teste-vigia.py` |
 | medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
 | chat em janelas fora do client (tela 5 do compacto: lista de amigos e uma janela por conversa, LCU e janelas falsas; `--prints` tira o print das 2 páginas sem abrir janela; `--real` abre 2 janelas do Edge e mede foco e posição, só com o jogo fechado) | `python tools\teste-chat-janelas.py` |
 
@@ -149,7 +153,8 @@ Pegadinhas medidas: [ARMADILHAS](docs/ARMADILHAS.md). Regras do pós-jogo: [INSI
 
 ## Desinstalar tudo
 
-1. Parar o coletor: `schtasks /end /tn lol-client-coletor`.
+1. Vigia: `python tools\vigia-coletor.py remover` (antes de parar o coletor: senão ele sobe de novo em até
+   3 min com o client aberto). Parar o coletor: `schtasks /end /tn lol-client-coletor`.
 2. Gatilho: `tools\remover-gatilho.ps1` (PowerShell elevado): apaga a tarefa e devolve a auditoria de
    criação de processo ao estado salvo.
 3. Plugin: `cmd /c rmdir "C:\Program Files\Pengu Loader\plugins\lol-client"` (é junção: `rmdir` apaga
