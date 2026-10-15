@@ -16,7 +16,7 @@
 #   - nada de SetForegroundWindow (ARMADILHAS § Windows): o foco fica com o Windows.
 # Rotas: GET /chat/amigos | /chat/conversa/<k> (páginas), /chat/chat.css|js, /chat/api/amigos,
 # /chat/api/conversa/<k>, /chat/estado; POST /chat/abrir/<k|amigos>, /chat/fechar/<k|amigos>,
-# /chat/minimizar/<k|amigos>, /chat/enviar/<k> {texto}, /chat/convidar/<k>, /chat/lida/<k>, /chat/plugin {compacto}.
+# /chat/minimizar/<k|amigos>, /chat/enviar/<k> {texto}, /chat/convidar/<k>, /chat/lida/<k>, /chat/plugin {compacto, lateral}.
 # <k> = chave opaca (sha1 do pid do amigo): o pid não vai para url, histórico do Edge nem log.
 #   prova: python tools/teste-chat-janelas.py  (LCU e janelas falsas; --real abre uma janela do Edge de verdade)
 import ctypes
@@ -382,6 +382,7 @@ class ChatJanelas:
         self._fase = None
         self.compacto = None         # o plugin diz se o client compacto está ligado (POST /chat/plugin)
         self.lista_aberta = False    # a lista de amigos foi aberta nesta sessão do client
+        self.lateral = False         # chat ao lado do compacto (passo 13): o plugin mostra a conversa, aqui não abre
         self._porta = None
         self._me = None
         self._sem_client_desde = None
@@ -422,6 +423,7 @@ class ChatJanelas:
                     self._me = None
                     self.compacto = None
                     self.lista_aberta = False
+                    self.lateral = False
                     self._naolidas = None
             self._porta = porta
         return lcu
@@ -648,10 +650,12 @@ class ChatJanelas:
         """conversa nova pode abrir sozinha: compacto ligado (o plugin disse) ou, sem o plugin ter dito nada ainda
         (coletor reiniciou: compacto=None), a lista de amigos aberta nesta sessão. {compacto: false} vence sempre: é o
         que o bloco "Client compacto" das Configurações promete ("o coletor deixa de abrir conversa nova sozinho")"""
-        return self.compacto is True or (self.compacto is None and self.lista_aberta)
+        return not self.lateral and (self.compacto is True or (self.compacto is None and self.lista_aberta))
 
     def pode_abrir_sozinha(self):
         """(bool, motivo)"""
+        if self.lateral:
+            return False, "chat ao lado do compacto (o plugin mostra a conversa)"
         if not self.abre_sozinha_ligado():
             return False, "client compacto desligado (o chat do client mostra)"
         fase = self._fase
@@ -899,6 +903,7 @@ class ChatJanelas:
             corpo = {}
         if rota == "/chat/plugin":
             self.compacto = bool(corpo.get("compacto"))
+            self.lateral = bool(corpo.get("lateral"))
             self._acordar.set()
             return 200, {"ok": True}
         if len(partes) != 3:

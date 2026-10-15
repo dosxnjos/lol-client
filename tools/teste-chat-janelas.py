@@ -463,6 +463,13 @@ def principal():
         chat.compacto = True
         caso("compacto desligado ({compacto:false}) não abre sozinho nem com a lista aberta; sem aviso (None) a lista vale",
              desligado[0] is False and "desligado" in desligado[1] and sem_aviso[0] is True, (desligado, sem_aviso))
+        # chat ao lado do compacto (passo 13): {compacto:true, lateral:true} = o plugin mostra a conversa; aqui nada abre
+        st = post("/chat/plugin", {"compacto": True, "lateral": True})[0]
+        com_lateral = chat.pode_abrir_sozinha()
+        post("/chat/plugin", {"compacto": True})
+        caso("{compacto:true, lateral:true} não abre nada sozinho (senão a conversa abre em dobro); sem lateral volta a abrir",
+             st == 200 and com_lateral[0] is False and "ao lado" in com_lateral[1] and not chat.lateral
+             and chat.pode_abrir_sozinha()[0] is True, (com_lateral, chat.lateral))
         n = len(jan.lancadas)
         post(f"/chat/abrir/{k_de(5)}")
         chat.processar()
@@ -608,13 +615,13 @@ console.log(JSON.stringify(r));
              r.get("fora", {}).get("fora") is True and r.get("abrirFora", {}).get("fora") is True and r.get("abrir", {}).get("ok"))
         caso("chat-ponte: rotas e corpos certos", r.get("chamadas") == [
             ["/chat/estado", "GET", None], ["/chat/estado", "GET", None], ["/chat/abrir/amigos", "POST", {}],
-            ["/chat/abrir/amigos", "POST", {}], ["/chat/plugin", "POST", {"compacto": True}]] and r.get("modo") is True,
+            ["/chat/abrir/amigos", "POST", {}], ["/chat/plugin", "POST", {"compacto": True, "lateral": False}]] and r.get("modo") is True,
              r.get("chamadas"))
         caso("chat-ponte: não lidas pela LCU só das conversas diretas", r.get("lcu") == 2, r.get("lcu"))
         caso("chat-ponte: modo avisado com o coletor fora é reenviado pelo 💬 quando ele volta (uma vez)",
              r.get("modoFora") is False and r.get("ch2") == [
-                 ["/chat/plugin", "POST", {"compacto": True}], ["/chat/estado", "GET", None], ["/chat/estado", "GET", None],
-                 ["/chat/plugin", "POST", {"compacto": True}], ["/chat/estado", "GET", None]], r.get("ch2"))
+                 ["/chat/plugin", "POST", {"compacto": True, "lateral": False}], ["/chat/estado", "GET", None], ["/chat/estado", "GET", None],
+                 ["/chat/plugin", "POST", {"compacto": True, "lateral": False}], ["/chat/estado", "GET", None]], r.get("ch2"))
         p = subprocess.run(["node", "--check", str(RAIZ / "painel" / "chat" / "chat.js")], capture_output=True, text=True)
         caso("chat.js sem erro de sintaxe (node --check)", p.returncode == 0, p.stderr[-300:])
         # "marcar como lida" (PUT conversations/active [S]) só depois de interação de verdade na janela aberta sozinha
