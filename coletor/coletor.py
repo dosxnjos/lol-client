@@ -714,6 +714,9 @@ class Coletor:
         log.info("fase %s (partida %s)", fase, gid)
         self.fase_atual, self.partida_atual = fase, gid   # o batimento (vida) lê
         self.fila_atual = fila or self.fila_atual
+        if fase == "InProgress":
+            import travadas      # medidor de travadas: processo próprio, sai quando o jogo fecha (COLETOR § Medidor)
+            travadas.iniciar(gid, db=getattr(self.args, "db", None))   # só com o banco real (ensaio/teste: não)
         if fase in FASES_LOBBY or (fase == "ChampSelect" and not self.cs.prefs):
             await self.ler_preferidas()
         if self.cs.ativo and fase in FASES_JOGO:

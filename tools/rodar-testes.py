@@ -59,6 +59,7 @@ TESTES = [
     [PY, "tools/teste-draft.py"],
     [PY, "tools/teste-vida.py"],           # registro de queda do coletor (pythonw filho que cai de propósito)
     [PY, "tools/teste-vigia.py"],          # vigia: decisão e rodada sem tarefa (as tarefas de teste: --real, à mão)
+    [PY, "tools/teste-medir-travadas.py"],  # medidor de travadas (logs da Riot, classificação, gancho; mede 8 s)
     [PY, "tools/teste-mentor.py", "--seco"],
     [PY, "tools/teste-mentor.py", "--offline"],
     # ponta a ponta (coletor + coach + simulador tocando a partida gravada a 20x, ~2 min; portas 8766/2996)

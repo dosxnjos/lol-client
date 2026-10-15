@@ -912,6 +912,23 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   http.server 8765` de teste subiu na mesma porta do `servidor_local` (127.0.0.1:8765): no Windows os dois
   dividem a porta (SO_REUSEADDR) e o intruso rouba parte das requisições. Servidor de teste: porta 0 ou 8799,
   nunca 8765/8766, e encerrar ao terminar.
+- **"O jogo travou 2–5 s e o ping foi a 300" não é o PC nem o coach** (partida 3293420970, 15/10/2026, 2:07 de jogo)
+  → nos logs da Riot a imagem seguiu a 59,8 fps, com pior quadro de 145 ms e `app update delayed` zerado. O RTT da
+  janela de 10 s subiu de 16 para 122 ms, com ~1,5 s sem chegar pacote e **zero perdidos**: é latência de rede. Essas
+  subidas já existiam em 12/10, antes do projeto existir, e não acompanham a carga dos agentes. Na partida, o coletor
+  só fala com localhost e faz 1 chamada à Riot API. Quem prova onde nasce a latência é o medidor
+  ([COLETOR](COLETOR.md) § Medidor de travadas; diagnóstico no [plano](../roadmap/2026-10-15-travadas-na-partida.md)).
+- **Hora errada ao cruzar o `*_netstats.csv` com o relato** → a coluna `game.time` é o **fim** da janela de 10 s
+  (`stats.duration`), contada a partir da linha `GAMESTATE_SPAWN to GAMESTATE_GAMELOOP` do r3dlog, e não do
+  "Logging started". O "2:07" do Gabriel cai na janela 2:06.6–2:16.6, que termina às 12:44:46.
+- **A linha `Command Line` do `*_r3dlog.txt` leva a credencial do Riot Client e a chave da partida** → nunca copiar
+  para arquivo, log, doc ou chat. O IP e a porta do servidor ficam na coluna `network.peer_address`/`peer_port` do
+  netstats, que não tem segredo (`medir-travadas.servidor_da_pasta`).
+- **O servidor da partida (UDP) não responde a ping nem a TCP** (45.7.37.2, medido em 15/10/2026: ICMP 100% perdido,
+  TCP 7316/443/80 sem resposta). O traceroute para no salto 9 (201.16.1.19, cerca de 14 ms), e alguns saltos
+  respondem ao TTL esgotado mas não ao ping direto. O medidor pinga o último salto que responde ao ping direto.
+- **`PdhGetFormattedCounterArrayW` "sem dados"** → o `PDH_MORE_DATA` (0x800007D2) chega pelo ctypes como `int`
+  negativo. Por isso a comparação é com `& 0xFFFFFFFF`; sem ela, a rede por interface sai vazia sem dar erro.
 
 ## Voz pré-gravada (bancada de vozes, `tools/bancada-vozes.py`, 13/10/2026)
 

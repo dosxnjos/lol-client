@@ -781,6 +781,67 @@ carimba em UTC).
 | prova (rota, origem, saneamento, rotação, relatório) | `python tools\teste-expansoes.py` |
 | prova do lado do plugin (cada caminho de saída, volta, privacidade, fila sem coletor) | `node tools\teste-compacto-expansoes.mjs` |
 
+## Medidor de travadas (`tools\medir-travadas.py`, 15/10/2026)
+
+Para as quedas de 1–5 s na partida (ping do jogo indo a ~300 ms e caindo). O diagnóstico de 15/10 e o porquê estão no
+[plano](../roadmap/2026-10-15-travadas-na-partida.md): nos logs da Riot a imagem seguiu a 60 fps e a latência subiu
+sem perder pacote, o que aponta para a rede. Faltava saber **onde** na rede, e é isso que o medidor responde.
+
+- **Quem liga:** o coletor, no `InProgress` (`coletor\travadas.py`, gancho de 2 linhas no `Coletor.fase`). Ele lança um
+  `pythonw` próprio, sem janela e com prioridade abaixo do normal, e não espera. Só liga com o banco real
+  (`dados\lol.db`), então ensaio e simulador não ligam. Roda um por vez (mutex `Local\lol-client-medir-travadas`; o
+  `Reconnect` não abre outro). Fecha sozinho quando `League of Legends.exe` some há 10 s. Também fecha se o jogo
+  não abrir em 5 min, e o teto é de 2 h.
+- **Desligar:** criar `dados\medidor-travadas.desligado`. **À mão:** `python tools\medir-travadas.py medir`. Para
+  fechar antes da hora: `... parar`. Para refazer o resumo da última medição: `... resumo`.
+- **O que mede a cada 1 s** (só ctypes; o único processo filho é o `netsh`, a cada 3 s):
+  - ping ICMP em paralelo para:
+    - o **roteador** (rota padrão);
+    - o **1º salto do provedor**;
+    - o **último salto que responde** no caminho até o servidor da partida;
+    - **1.1.1.1** como referência externa;
+    - o próprio **servidor**. Ele não responde a ping nem a TCP (medido em 15/10), por isso existe o "último salto".
+  - O IP do servidor vem da coluna `network.peer_address` do `*_netstats.csv` da pasta mais nova do GameLogs. Nunca vem
+    da linha `Command Line` do r3dlog, que leva credencial do client e chave da partida
+    ([ARMADILHAS](ARMADILHAS.md) § Windows).
+  - Os saltos saem de um traceroute ICMP (TTL crescente), feito uma vez quando o servidor aparece.
+  - **CPU total, disco e rede:** pelo PDH com contadores em inglês. Disco: % ocupado, MB/s e ms por transferência.
+    Rede: KB/s de entrada e de saída por interface.
+  - **Processos (a cada 2 s):** os 5 que mais usam CPU e os 5 que mais fazem I/O (arquivo + rede), lidos com
+    `NtQuerySystemInformation` numa chamada só. Junto vai a CPU do jogo.
+  - **Wi-Fi:** estado, banda, canal, rádio, taxas, sinal e RSSI. O BSSID fica só em hash de 8 caracteres; SSID e
+    perfil nunca são gravados. Troca de BSSID ou de canal vira `marcas`.
+- **Evento:** ping acima de 150 ms, destino que costuma responder (≥ 90%) ficando sem resposta, CPU acima de 90%, ou
+  o próprio medidor acordando 1,5 s ou mais atrasado (`atraso_s`). Ele roda abaixo do normal, então esse atraso
+  significa que o PC ficou sem folga de CPU. Volta lenta também deixa rastro em `trab_s`.
+- **Custo medido:** cerca de 0,2% da máquina (1,2 s de CPU em 45 s) e uns 2 MB de jsonl por partida. Os arquivos com
+  mais de 30 dias são apagados quando o medidor começa.
+- **Saída:**
+  - `dados\travadas-<data>.jsonl` com as linhas `inicio`, `saltos`, `a` (amostra), `fim` (motivo e custo) e `resumo`;
+  - `dados\travadas-<data>-<HHMM>.txt` com o resumo legível;
+  - `dados\medidor-travadas-erro.log` só se o medidor quebrar (no `pythonw` não existe stderr).
+- **Junta ao fim:**
+  - **Netstats:** o netstats da partida que cruzou a medição. Cada linha é uma janela de 10 s e o `game.time` marca o
+    **fim** da janela. A hora local sai da linha `GAMESTATE_SPAWN to GAMESTATE_GAMELOOP` do r3dlog.
+  - **Picos:** janelas com RTT de pelo menos 60 ms ou com pacote perdido. Cada uma traz uma estimativa de "segundos
+    sem pacote", calculada pelo déficit de `packets_received` em relação à mediana.
+  - **Quadros:** FPS médio, pior quadro e histograma.
+  - **Wi-Fi:** os eventos do WLAN-AutoConfig 8001, 8003, 11004, 11005 e 11010.
+- **Classificação de cada pico:** compara as amostras daquela janela com a mediana de cada destino. Um valor conta
+  como alto quando passa de 3× a mediana e também de mediana + 50 ms, ou quando o destino fica sem resposta.
+
+| o que o resumo diz | quer dizer |
+| --- | --- |
+| Wi-Fi da casa | o roteador já respondeu devagar: o atraso nasce entre o PC e o roteador (sinal, canal, interferência, varredura do adaptador) |
+| internet/provedor | roteador normal, provedor, caminho ou 1.1.1.1 lentos: o atraso está depois do roteador |
+| o PC | rede normal e CPU acima de 90%, ou o medidor sem CPU por 1,5 s ou mais |
+| depois do provedor (Riot) | roteador, provedor e caminho normais e só o jogo lento: trecho final ou servidor da Riot |
+| "algo competindo" | o PC trafegava mais de 1 MB/s naquele momento (upload ou download de outro programa) |
+
+| o quê | comando |
+| --- | --- |
+| prova (netsh pt-BR, logs da Riot, classificação, WLAN, gancho, nada da Command Line; E10 mede 8 s de verdade com o jogo fechado) | `python tools\teste-medir-travadas.py` |
+
 ## Segurança: token da LCU no log Security
 
 O gatilho só filtra por `NewProcessName`; não precisa da linha de comando. Mas, com
