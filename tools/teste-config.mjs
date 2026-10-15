@@ -18,14 +18,14 @@ const recarregar = () => JSON.parse(JSON.stringify(carregar()));
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 const casos = [
-  ['sem nada salvo: padrão {voz:[], tela:[]}', carregarCom(null), c => igual(c.coach.avisosDesligados, { voz: [], tela: [] })],
+  ['sem nada salvo: padrão {voz:[voltou], tela:[]}', carregarCom(null), c => igual(c.coach.avisosDesligados, { voz: ['adversario_voltou'], tela: [] })],
   ['lista antiga migra para os dois', carregarCom({ coach: { avisosDesligados: ['gank', 'mid_sumiu'] } }),
     c => igual(c.coach.avisosDesligados, { voz: ['gank', 'mid_sumiu'], tela: ['gank', 'mid_sumiu'] })],
   ['formato novo fica como está', carregarCom({ coach: { avisosDesligados: { voz: ['gank'], tela: [] }, voz: false } }),
     c => igual(c.coach.avisosDesligados, { voz: ['gank'], tela: [] }) && c.coach.voz === false],
   ['lista vazia antiga vira {[], []}', carregarCom({ coach: { avisosDesligados: [] } }),
     c => igual(c.coach.avisosDesligados, { voz: [], tela: [] })],
-  ['padrão não é alterado pela carga', null, () => igual(PADRAO.coach.avisosDesligados, { voz: [], tela: [] })
+  ['padrão não é alterado pela carga', null, () => igual(PADRAO.coach.avisosDesligados, { voz: ['adversario_voltou'], tela: [] })
     && cfg.coach.avisosDesligados !== PADRAO.coach.avisosDesligados],
   ['migrar(null) não quebra', migrar(null), r => r === null],
   // chaves novas de 13/10/2026 (contrato plugin <-> coach): config salva antes delas ganha os padrões

@@ -55,7 +55,8 @@ export const PADRAO = {
   coach: {
     painelAoVivo: true, amostrasAoVivo: true, voz: true, tomVoz: 'serio', minimapa: true, overlayMinimapa: true,
     alertasTela: true, feiticos: true, carregamento: true, mentor: true, mentorModelo: 'sonnet', mentorEffort: 'medium',
-    avisosDesligados: { voz: [], tela: [] }, // tipos calados por destino ("tela" = painel + moldura)
+    // tipos calados por destino ("tela" = painel + moldura); "voltou" sem voz = padrão do coletor (servidor_local.py)
+    avisosDesligados: { voz: ['adversario_voltou'], tela: [] },
     aceiteFlutuante: true, // janelinha aceitar/recusar fora do client (coletor); aceiteAtrasoS vai junto, derivado (coach.js)
     // regras de aviso da calibração de 14/10/2026 viram escolha (pedido do Gabriel, 14/10/2026; roadmap/2026-10-14-
     // calibrar-avisos.md passo 7). Padrão = o comportamento daquele dia. Chave nova sem valor antigo: entra pela mescla,
