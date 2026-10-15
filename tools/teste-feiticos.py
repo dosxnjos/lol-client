@@ -42,6 +42,135 @@ def live(gt, inimigos):
     return {"activePlayer": {"riotId": "Zac"}, "gameData": {"gameTime": gt}, "allPlayers": [eu] + inimigos}
 
 
+def recorte_chat(live_fn):
+    """LeitorChat com tela, captura e OCR falsos: recorte sem linha "mm:ss" por RECALIBRAR_PRINTS prints = recalibra
+    pelas FAIXAS_CALIBRAR; chat vazio de verdade = espera dobrando; recorte certo = nunca recalibra"""
+    import logging
+
+    from PIL import Image
+    VELHA = (1405, 791, 1877, 961)            # dados/calibracao-chat.json de 13/10 (o recorte em uso em 15/10)
+    ESQUERDA = (20, 800, 500, 975)            # o chat no canto de baixo à esquerda (onde o LoL põe por padrão)
+    marca = {(0, 620): "esquerda", (1000, 620): "direita"}   # pixel de canto de cada faixa: diz qual faixa o OCR lê
+
+    def tela_falsa():
+        im = Image.new("RGB", (2560, 1080))
+        im.putpixel((0, 620), (0, 255, 0))
+        im.putpixel((1000, 620), (0, 0, 255))
+        return im
+
+    class Cena:
+        """chat: retângulo onde o chat está (None = chat vazio, sem linha nenhuma); conta as leituras"""
+        def __init__(self, chat):
+            self.chat, self.ultimo, self.faixas, self.recortes = chat, None, [], 0
+
+        def captura(self, caixa=None):
+            self.ultimo = caixa
+            t = tela_falsa()
+            return t if caixa is None else t.crop(caixa)
+
+        def dentro(self, caixa):
+            if not self.chat or not caixa:
+                return False
+            cx, cy = (caixa[0] + caixa[2]) / 2, (caixa[1] + caixa[3]) / 2
+            return self.chat[0] <= cx <= self.chat[2] and self.chat[1] <= cy <= self.chat[3]
+
+        def ler(self, im, escala=3):
+            if im.size == (1150, 460):            # faixa da calibração (as duas têm este tamanho em 2560×1080)
+                qual = "esquerda" if im.getpixel((0, 0)) == (0, 255, 0) else "direita"
+                self.faixas.append(qual)
+                x0, y0 = next(k for k, v in marca.items() if v == qual)
+                if not self.chat or not (x0 <= self.chat[0] < x0 + 1150):
+                    return [{"t": "Renekton 166", "p": [{"t": "Renekton", "x": 5, "y": 5, "w": 60, "h": 12}]}]
+                y = self.chat[3] - 30 - y0
+                return [{"t": f"09:1{i} Eu (Renekton): Malphite usou Flash",
+                         "p": [{"t": f"09:1{i}", "x": self.chat[0] + 10 - x0, "y": y - 20 * (1 - i), "w": 40, "h": 14},
+                               {"t": "Flash", "x": self.chat[0] + 380 - x0, "y": y - 20 * (1 - i), "w": 50, "h": 14}]}
+                        for i in (0, 1)]
+            self.recortes += 1
+            if self.dentro(self.ultimo):
+                return [{"t": "09:15 Eu (Renekton): Malphite usou Flash", "p": []}]
+            return [{"t": "Renekton", "p": []}] if self.chat else []
+
+        def parar(self):
+            pass
+
+    log_f = logging.getLogger("coletor.feiticos")
+    msgs = []
+
+    class Coleta(logging.Handler):
+        def emit(self, r):
+            msgs.append(r.getMessage())
+    h = Coleta()
+    log_f.addHandler(h)
+    nivel = log_f.level
+    log_f.setLevel(logging.INFO)
+    malphite = [jogador("Malphite", "CHAOS", "TOP", ("Flash", "Teleporte"))]
+
+    def leitor(cena, pasta):
+        cal = Path(pasta) / "calibracao-chat.json"
+        F.gravar_calibracao(VELHA, (2560, 1080), cal)
+        f = F.Feiticos()
+        f.atualizar(live_fn(560.0, malphite))
+        return F.LeitorChat(f, ocr=cena, calibracao=cal, captura=cena.captura, na_tela=lambda: True), f, cal
+    try:
+        # A. chat no canto esquerdo, recorte velho no meio: 19 prints nada; no 20º recalibra; no 21º lê o ping
+        with tempfile.TemporaryDirectory() as tmp:
+            cena = Cena(ESQUERDA)
+            lt, f, cal = leitor(cena, tmp)
+            novos = [len(lt.passo(560.0 + 3 * i)) for i in range(22)]
+            salvo = F.ler_calibracao(cal, (2560, 1080))
+        confere("3293420970: recorte velho sem o chat por 20 prints recalibra para o canto esquerdo e lê o ping",
+                lt.caixa == (18, 797, 490, 967) and salvo == lt.caixa and novos.index(1) == 20 and sum(novos) == 1
+                and lt.contagem["recalibrou"] == 1 and cena.faixas == ["direita", "esquerda"],
+                f"caixa {lt.caixa}, salvo {salvo}, novos por print {novos}, faixas {cena.faixas}, {lt.contagem}")
+        confere("3293420970: o log diz o recorte em uso e a troca (sem texto do chat)",
+                any("calibração salva" in m and str(VELHA) in m for m in msgs)
+                and any("recalibrado para (18, 797, 490, 967)" in m for m in msgs)
+                and not any("Malphite" in m for m in msgs), str(msgs[-3:]))
+        # B. lado oposto: chat no lugar mas vazio (início da partida): tenta aos 20, aos 60 (espera dobrou), não aos 40
+        msgs.clear()
+        with tempfile.TemporaryDirectory() as tmp:
+            cena = Cena(None)
+            lt, f, cal = leitor(cena, tmp)
+            for i in range(100):
+                lt.passo(560.0 + 3 * i)
+        confere("3293420970: chat vazio de verdade: o recorte fica e a espera dobra (tentativas aos 20 e 60 prints)",
+                lt.caixa == VELHA and lt.contagem["recalibrar_falhou"] == 2 and len(cena.faixas) == 4
+                and lt.contagem["prints"] == 100 and lt._espera == 80,
+                f"caixa {lt.caixa}, faixas lidas {cena.faixas}, {lt.contagem}, espera {lt._espera}")
+        # C. lado oposto: recorte certo (chat onde a calibração diz) = nunca recalibra, lê no 1º print
+        with tempfile.TemporaryDirectory() as tmp:
+            cena = Cena(VELHA)
+            lt, f, cal = leitor(cena, tmp)
+            novos = [len(lt.passo(560.0 + 3 * i)) for i in range(50)]
+        confere("3293420970: recorte certo: 50 prints sem recalibrar, gasto no 1º print, contagem de linhas com horário",
+                cena.faixas == [] and novos[0] == 1 and sum(novos) == 1 and lt.contagem["com_horario"] == 50,
+                f"faixas {cena.faixas}, novos {novos[:3]}…, {lt.contagem}")
+        # D. jogo fora da tela: não lê e conta
+        with tempfile.TemporaryDirectory() as tmp:
+            cena = Cena(VELHA)
+            lt, f, cal = leitor(cena, tmp)
+            lt.na_tela = lambda: False
+            r = [lt.passo(560.0 + 3 * i) for i in range(5)]
+        confere("3293420970: jogo fora da tela = nada lido, conta no resumo", r == [[]] * 5 and cena.recortes == 0
+                and lt.contagem["fora_da_tela"] == 5, f"{lt.contagem}")
+        # E. a calibração procura nas duas faixas, cada uma abaixo do máximo do OCR do Windows (2600 px com a escala 2)
+        confere("faixas da calibração cabem no OCR do Windows (≤ 2600 px na escala 2)",
+                all((f_[2] - f_[0]) * 2 <= 2600 and (f_[3] - f_[1]) * 2 <= 2600 for f_ in F.FAIXAS_CALIBRAR)
+                and F.FAIXAS_CALIBRAR[0] == F.FAIXA_CALIBRAR, str(F.FAIXAS_CALIBRAR))
+        # F. processar_linhas conta os pings reconhecidos (o resumo do coach no log)
+        f = F.Feiticos()
+        f.atualizar(live_fn(560.0, malphite))
+        f.processar_linhas(["09:15 Eu (Renekton): Malphite usou Flash", "09:16 Amigo (Ahri): Malphite Flash",
+                            "09:17 Renekton abateu Malphite"], 560.0)
+        confere("processar_linhas: 'pings' conta os reconhecidos (com e sem 'usou'), não as outras linhas",
+                f.ultima_leitura.get("pings") == 2 and F.com_horario(["09:15 a", "continua", "x", "[Equipe] 09:16 b"]) == 2,
+                str(f.ultima_leitura))
+    finally:
+        log_f.removeHandler(h)
+        log_f.setLevel(nivel)
+
+
 def main():
     # 1. fórmula
     confere("recarga Flash com 3158 = 300 × 100/110", abs(F.recarga(300, 10) - 300 * 100 / 110) < 1e-9,
@@ -461,6 +590,11 @@ def main():
     dt = time.monotonic() - t0
     confere("OCR sem resposta em 0,3 s: mata o processo e avisa (thread não fica presa)",
             erro is not None and "sem resposta" in erro and dt < 2 and ocr_t.proc is None, f"{dt:.2f} s · {erro}")
+
+    # 6b. partida 3293420970 (15/10/2026): de 14/10 ~19h em diante, 9 ranqueadas sem um ping lido, nenhum erro no log e
+    #     nada que dissesse se o recorte via o chat. O recorte calibrado em 13/10 valia para sempre: chat movido = OCR
+    #     lendo nada calado. Tela falsa: cada região com uma cor; o OCR falso "lê" o chat só onde ele está de verdade
+    recorte_chat(live)
 
     # 7. gravação real: OCR das telas + Live Client tocadas na ordem
     if "--sem-gravacao" not in sys.argv and (GRAVACAO / "telas").exists():

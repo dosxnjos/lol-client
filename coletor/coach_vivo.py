@@ -30,6 +30,7 @@ log = logging.getLogger("coletor.coach")
 FASES_LIGA = ("InProgress", "Reconnect")
 FASES_TELA_FORA = ("WaitingForStats", "PreEndOfGame")   # jogo acabou, client ainda no fim da partida
 OCR_S = 3.0              # passo do OCR do chat (feitiços)
+RESUMO_CHAT_S = 300.0    # resumo do OCR do chat no log a cada 5 min de partida e no fim (só contagens, nunca texto)
 PREVISAO_S = 10          # uma previsão do jungler gravada a cada 10 s de gameTime (revisão no pós-jogo)
 ROTA_CURTA = {"TOP": "top", "MIDDLE": "mid", "BOTTOM": "bot", "UTILITY": "bot"}
 GANK_OUTRA_S = 30.0   # gank de outra rota: no máximo 1 a cada 30 s de jogo (o da minha rota não espera)
@@ -187,6 +188,10 @@ class _Partida:
         self.ticks = []                   # duração de cada passo do laço (ms), para o ensaio medir
         self._fonte_ov = None             # overlay_minimapa.fonte_jungler, quando cap e jungler existem
         self._n_retorno = 0               # chave única de cada retorno de atalho (F8/F7) e do chat
+        # leituras de ping de feitiço no chat nesta partida (a mesma linha fica na tela e é relida a cada print: conta
+        # leitura, não ping distinto; o distinto é "novos") para o resumo do log com o LeitorChat.contagem
+        self.chat_lido = {"pings": 0, "novos": 0, "sem_usou": 0}
+        self._resumo_chat_em = time.monotonic()
         # o retorno sai da thread que observa a tecla por esta fila: publicar pode esperar a janela da moldura
         # nascer (até 5 s), e a thread do F7 parada perderia batidas, o segurar e o fim da janela de 1,2 s
         self._fila_retorno = queue.Queue()
@@ -357,6 +362,10 @@ class _Partida:
                 self.coach.avisa("atalho F7", e)
         if leitor is not None:
             try:
+                self._resumo_chat(leitor, fim=True)
+            except Exception as e:
+                self.coach.avisa("OCR do chat", e)
+            try:
                 leitor.parar()
             except Exception as e:
                 self.coach.avisa("OCR do chat", e)
@@ -417,6 +426,24 @@ class _Partida:
                 self._lido_no_chat(novos)
             except Exception as e:
                 self.coach.avisa("OCR do chat", e)
+            if time.monotonic() - self._resumo_chat_em >= RESUMO_CHAT_S:
+                self._resumo_chat(leitor)
+
+    def _resumo_chat(self, leitor, fim=False):
+        """uma linha de contagens do OCR do chat (partida 3293420970: 9 ranqueadas sem um ping lido e o log não dizia
+        se o OCR rodava, se o recorte via o chat ou se ninguém pingou). Nunca o texto lido: tem nome de jogador"""
+        self._resumo_chat_em = time.monotonic()
+        c = dict(getattr(leitor, "contagem", None) or {})
+        if not c:
+            return None
+        lido = self.chat_lido
+        linha = (f"{c.get('prints', 0)} prints ({c.get('fora_da_tela', 0)} com o jogo fora da tela), {c.get('linhas', 0)} "
+                 f"linhas lidas, {c.get('com_horario', 0)} com horário, {lido['pings']} leituras de ping de feitiço "
+                 f"({lido['novos']} gastos novos, {lido['sem_usou']} sem 'usou'); recalibrou {c.get('recalibrou', 0)} "
+                 f"({c.get('recalibrar_falhou', 0)} tentativas sem outro recorte, {c.get('sem_recorte', 0)} prints sem "
+                 f"recorte), recorte {getattr(leitor, 'caixa', None)}")
+        log.info("coach: chat %s: %s", "na partida" if fim else "até agora", linha)
+        return linha
 
     def _lido_no_chat(self, novos):
         """gasto NOVO lido no chat (o processar_linhas já tira a repetição da linha que segue na tela): log com o
@@ -427,8 +454,11 @@ class _Partida:
         with self.trava_f:
             leitura = dict(getattr(self.f, "ultima_leitura", None) or {})
             # consome: o LeitorChat.passo volta [] sem ler (jogo fora da tela) e a leitura velha relogaria a cada 3 s
-            self.f.ultima_leitura = {"novos": 0, "confirmados": 0, "sem_usou": []}
+            self.f.ultima_leitura = {"novos": 0, "confirmados": 0, "sem_usou": [], "pings": 0}
             rotas = {u["inimigo"]: self.f.rota_de(u["inimigo"]) for u in novos or []}
+        self.chat_lido["pings"] += leitura.get("pings", 0)
+        self.chat_lido["novos"] += len(novos or [])
+        self.chat_lido["sem_usou"] += len(leitura.get("sem_usou") or [])
         for p in leitura.get("sem_usou") or []:
             log.info("coach: chat -> ping sem 'usou' ignorado: %s %s às %s", p["inimigo"], p["feitico"], mmss(p["ts"]))
         for u in novos or []:

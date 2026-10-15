@@ -334,6 +334,123 @@ def caso_visto_minimapa():
          adv2["atual"] is True and adv2["vistoHaS"] == 1, f"adv {adv2}")
 
 
+def caso_relato_3293420970():
+    """partida 3293420970 (15/10/2026). (3) "o inimigo está morto e está constando dados de que ele não foi visto há
+    tanto tempo [...] é óbvio que se ele está morto ele não vai ser visto": morto não é dado parado e o painel diz
+    quando ele volta. (1) o OCR do chat não deixava rastro nenhum no log: o fim da partida resume as contagens"""
+    import logging
+
+    import ao_vivo
+    import coach_vivo
+    import feiticos
+
+    def amostra(gt, cs_adv, morto=False, renascer=0.0):
+        return {"activePlayer": {"riotId": "Eu#BR1", "currentGold": 300}, "gameData": {"gameTime": gt},
+                "events": {"Events": [{"EventID": 0, "EventName": "GameStart", "EventTime": 0.0}]},
+                "allPlayers": [
+                    {"championName": "Renekton", "team": "ORDER", "position": "TOP", "riotId": "Eu#BR1", "level": 11,
+                     "items": [{"itemID": 3071}], "scores": {"creepScore": 110}},
+                    {"championName": "Malphite", "team": "CHAOS", "position": "TOP", "riotId": "Ele#BR1", "level": 11,
+                     "items": [{"itemID": 3068}], "scores": {"creepScore": cs_adv}, "isDead": morto,
+                     "respawnTimer": renascer}]}
+    ep = ao_vivo.EstadoPartida()
+    ep.atualizar(amostra(790.0, 90))
+    ep.atualizar(amostra(800.0, 100))                     # visto aos 800 (o farm mudou)
+    for gt in range(801, 841):                             # morre aos 801, 35 s para renascer
+        est = ep.atualizar(amostra(float(gt), 100, morto=gt <= 836, renascer=max(0.0, 836 - gt)))
+        if gt == 830:
+            morto = (dict(est["rota"]["adv"]), dict(est["rota"]["cor"]), dict(est["ameaca"]))
+    est = ep.atualizar(amostra(870.0, 100))                # renasceu aos 837 e sumiu: 33 s sem notícia
+    adv, cor, am = morto
+    caso("3293420970: adversário morto = dado atual (não 'visto há 30 s: dados parados') e o tempo para renascer",
+         adv["morto"] is True and adv["atual"] is True and adv["vistoHaS"] == 0 and adv["renascerS"] == 6.0
+         and cor["cs"] != "velho" and am["atual"] is True and am["morto"] is True,
+         f"adv {adv}; cor {cor}; ameaça atual={am.get('atual')} morto={am.get('morto')}")
+    adv2 = est["rota"]["adv"]
+    caso("3293420970: lado oposto: renasceu e sumiu = 'visto há' conta da hora em que renasceu (não da morte)",
+         adv2["morto"] is False and adv2["atual"] is False and adv2["vistoHaS"] == 870 - 836,
+         f"adv {adv2}")
+
+    # o fim da partida resume o OCR do chat no log (contagens e o recorte, nunca o texto)
+    log_coach = logging.getLogger("coletor.coach")
+    log_coach.propagate = False
+    linhas_log = []
+
+    class Coleta(logging.Handler):
+        def emit(self, r):
+            linhas_log.append(r.getMessage())
+    coleta = Coleta()
+    log_coach.addHandler(coleta)
+    nivel = log_coach.level
+    log_coach.setLevel(logging.INFO)
+
+    class Peca:
+        ligado = True
+        ao_mostrar = ao_desenhar = ao_alternar = _thread = None
+
+        def __init__(self, *a, **k):
+            pass
+
+        def __getattr__(self, nome):
+            return lambda *a, **k: None
+
+    class Janela:
+        def fase(self, f):
+            pass
+
+        def fechar(self):
+            pass
+
+    class Ocr:
+        def ler(self, im, escala=3):
+            return [{"t": "09:15 Eu (Renekton): Malphite usou Flash", "p": []}, {"t": "09:16 X abateu Y", "p": []}]
+
+        def parar(self):
+            pass
+
+    def sem(*a):
+        raise RuntimeError("fora do teste")
+    from PIL import Image
+    with tempfile.TemporaryDirectory() as tmp:
+        arq = Path(tmp) / "config.json"
+        arq.write_text(json.dumps({"voz": False, "minimapa": False, "feiticos": False, "carregamento": False,
+                                   "mentor": False, "amostrasAoVivo": False, "painelAoVivo": False}), encoding="utf-8")
+        cal = Path(tmp) / "calibracao-chat.json"
+        feiticos.gravar_calibracao((1405, 791, 1877, 961), (2560, 1080), cal)
+        fab = {"voz": Peca, "moldura": Peca, "overlay": Peca, "estatico": sem, "mentor": sem, "captura": sem,
+               "janela": lambda url, ligado: Janela()}
+        c = coach_vivo.Coach(db=Path(tmp) / "lol.db", config=arq, liveclient="http://127.0.0.1:9", fabricas=fab)
+        p = c.iniciar_partida(9004, 420)
+        p.relogio.atualizar(560.0)
+        with p.trava_f:
+            p.f = feiticos.Feiticos()
+            p.f.atualizar({"activePlayer": {"riotId": "Renekton"}, "gameData": {"gameTime": 560.0},
+                           "allPlayers": [{"championName": "Renekton", "team": "ORDER", "position": "TOP",
+                                           "riotId": "Renekton"},
+                                          {"championName": "Malphite", "team": "CHAOS", "position": "TOP",
+                                           "riotId": "Malphite", "summonerSpells": {
+                                               "summonerSpellOne": {"displayName": "Flash"},
+                                               "summonerSpellTwo": {"displayName": "Teleporte"}}}]})
+        p.leitor = feiticos.LeitorChat(coach_vivo._FeiticosTravado(p), ocr=Ocr(), calibracao=cal,
+                                       captura=lambda caixa=None: Image.new("RGB", (2560, 1080) if caixa is None else
+                                                                            (caixa[2] - caixa[0], caixa[3] - caixa[1])),
+                                       na_tela=lambda: True)
+        for gt in (560.0, 563.0, 566.0):
+            p._lido_no_chat(p.leitor.passo(gt))
+        c.encerrar_partida()
+    log_coach.propagate = True
+    log_coach.removeHandler(coleta)
+    log_coach.setLevel(nivel)
+    resumo = [ln for ln in linhas_log if ln.startswith("coach: chat na partida")]
+    caso("3293420970: fim da partida resume o chat no log (prints, linhas com horário, pings, recorte), sem o texto",
+         len(resumo) == 1 and "3 prints" in resumo[0] and "6 com horário" in resumo[0]
+         # o mesmo ping relido em 3 prints: 3 leituras e 1 gasto novo (revisão: "3 pings" fazia parecer 3 pings)
+         and "3 leituras de ping de feitiço" in resumo[0] and "1 gastos novos" in resumo[0]
+         and "0 tentativas sem outro recorte" in resumo[0] and "0 prints sem recorte" in resumo[0]
+         and "(1405, 791, 1877, 961)" in resumo[0] and "Eu (" not in resumo[0],
+         f"{resumo}")
+
+
 def caso_chat_feitico():
     """partida 3293149183 (14/10/2026): o log dizia "coach: chat -> N gasto(s) de feitiço" a cada ~3 s (a linha do
     ping fica na tela 2 min e o processar_linhas devolvia também os repetidos) e nada aparecia na tela. Agora: 1
@@ -981,6 +1098,7 @@ def principal():
     caso_ouro_rota()
     caso_visto_minimapa()
     caso_chat_feitico()
+    caso_relato_3293420970()
     caso_atalho_f7()
     caso_catalogo()
     caso_fila_voz()

@@ -1,6 +1,7 @@
 // painel da 2ª tela (plano v2, passo 10): consulta /estado a cada 1 s e redesenha os 4 blocos fixos
 // (Tua rota · Ameaça · Teu padrão · Time e objetivos) + a faixa de 1 aviso. Sem build, sem rede externa.
 // Dado de inimigo parado na fog chega com atual=false: aparece cinza com "visto há Xs", nunca como atual.
+// Inimigo morto não é dado parado (atual=true no coletor): aparece "morto, volta em Ns".
 'use strict';
 
 const $ = id => document.getElementById(id);
@@ -17,6 +18,8 @@ const milhar = n => Math.round(n).toLocaleString('pt-BR');
 const sinal = n => (n > 0 ? '+' : n < 0 ? '−' : '') + milhar(Math.abs(n));
 const mil = n => n >= 1000 ? (n / 1000).toLocaleString('pt-BR', { maximumFractionDigits: 1 }) + ' mil' : milhar(n);
 const ha = s => s === null || s === undefined ? '? (sem leitura ainda)' : s >= 60 ? `${Math.floor(s / 60)} min ${String(s % 60).padStart(2, '0')} s` : `${s} s`;
+// inimigo morto: "morto, volta em 23 s" (respawnTimer da Live Client); sem o tempo, só "morto"
+const volta = s => s > 0 ? `morto, volta em ${ha(Math.ceil(s))}` : 'morto';
 
 function el(tag, cls, texto) {
   const e = document.createElement(tag);
@@ -68,7 +71,9 @@ function desenharRota(e) {
     metrica('farm', sinal(d.cs), `${eu.cs} x ${adv.cs}`, c.cs),
     metrica('nível', sinal(d.nivel), `${eu.nivel} x ${adv.nivel}`, c.nivel));
   const rod = [`bolso ${milhar(r.bolso)}`];
-  if (velho) rod.unshift(`${adv.nome} visto há ${ha(adv.vistoHaS)}: dados dele parados`);
+  // morto: o coletor já conta como dado atual (nível e farm não andam); o rodapé diz quando ele volta
+  if (adv.morto) rod.unshift(`${adv.nome} ${volta(adv.renascerS)}`);
+  else if (velho) rod.unshift(`${adv.nome} visto há ${ha(adv.vistoHaS)}: dados dele parados`);
   $('rota-rodape').textContent = rod.join(' · ');
   $('rota-rodape').className = 'rodape' + (velho ? ' amarelo' : '');
   if (!velho && c.ouro === 'vermelho') $('b-rota').classList.add('alerta');
@@ -105,7 +110,7 @@ function desenharAmeaca(e) {
   $('ameaca-linha').textContent = `${a.k}/${a.d}/${a.a} · ${mil(a.ouroEstimado)} em itens`;
   chips.append(chip(`dano ${a.dano}`, a.dano === 'AP' ? 'azul' : a.dano === 'AD' ? 'vermelho' : ''));
   if (a.minhaRota) { chips.append(chip('tua rota: evita 1x1', 'vermelho')); $('b-ameaca').classList.add('alerta'); }
-  if (a.morto) chips.append(chip(`morto: ${a.renascerS} s`, 'verde'));
+  if (a.morto) chips.append(chip(volta(a.renascerS), 'verde'));
   else if (!a.atual) chips.append(chip(`visto há ${ha(a.vistoHaS)}`, 'velho'));
   chips.append(chip(`nível ${a.nivel}${a.atual ? '' : '?'}`, a.atual ? '' : 'velho'));
   // jungler inimigo (jungler.py): distribuição honesta, nunca posição certa

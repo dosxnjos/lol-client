@@ -29,6 +29,24 @@ FADE_INICIO = 0.6                             # alfa logo depois da beirada chei
 # piso do pulso (alfa da janela inteira): com 0,45 o azul escurecido no vale ficava apagado sobre o mapa escuro
 # (revisão 14/10/2026; a lição do efe9087: degradê/pulso não podem sumir com a borda)
 PULSO_MIN = 0.6
+# um piscar só (mostrar(pulsos=1)): recado azul que não pede ação ("Malphite voltou"). Pedido do Gabriel, partida
+# 3293420970 (15/10/2026): "não precisa ficar tanto tempo, pode ser uma pulsada única". Cheio por UM_PULSO_CHEIO
+# (dá para ler o rótulo) e some suave até UM_PULSO_S
+UM_PULSO_S = 1.0
+UM_PULSO_CHEIO = 0.45
+
+
+def alfa_pulso(t, duracao, pulsos=None, ciclo=0.7):
+    """alfa da janela inteira (0..1) t s depois de aparecer. pulsos=None: pulsa entre 1 e PULSO_MIN (~0,7 s por
+    ciclo) até `duracao`; pulsos=1: cheio até UM_PULSO_CHEIO·duração e cai a 0 com curva suave em `duracao`"""
+    if t >= duracao:
+        return 0.0
+    if pulsos == 1:
+        cheio = UM_PULSO_CHEIO * duracao
+        if t <= cheio:
+            return 1.0
+        return 0.5 + 0.5 * math.cos(math.pi * (t - cheio) / (duracao - cheio))
+    return PULSO_MIN + (1 - PULSO_MIN) * (0.5 + 0.5 * math.cos(2 * math.pi * t / ciclo))
 
 WS_POPUP = 0x80000000
 WS_EX_LAYERED, WS_EX_TRANSPARENT, WS_EX_TOPMOST = 0x00080000, 0x00000020, 0x00000008
@@ -299,9 +317,12 @@ class Moldura:
             raise RuntimeError("janela da moldura não nasceu")
         return self
 
-    def mostrar(self, cor, rotulo, duracao=None):
+    def mostrar(self, cor, rotulo, duracao=None, pulsos=None):
+        """pulsos=1: um piscar só, UM_PULSO_S (o "voltou" azul); None: pulsando por `duracao` (DURACAO)"""
         self.iniciar()
-        self._fila.put((cor, " ".join(str(rotulo).split()[:3]), duracao or self.DURACAO))
+        if pulsos == 1:
+            duracao = duracao or UM_PULSO_S
+        self._fila.put((cor, " ".join(str(rotulo).split()[:3]), duracao or self.DURACAO, pulsos))
         user32.PostMessageW(self.hwnd, WM_APP, 0, 0)
 
     def parar(self):
@@ -366,7 +387,7 @@ class Moldura:
         if not self.forcar and not janela_do_jogo():
             self.descartados += 1
             return
-        cor, rotulo, dur = pedido
+        cor, rotulo, dur, pulsos = pedido
         x, y, l, a = self._area()
         t0 = time.perf_counter()
         bgra = premultiplicar(renderizar(l, a, cor, rotulo, self.espessura))
@@ -378,7 +399,7 @@ class Moldura:
         user32.SetWindowPos(self.hwnd, HWND_TOPMOST, 0, 0, 0, 0, SWP_NOACTIVATE | SWP_NOMOVE | SWP_NOSIZE)
         self.medidas.append((time.perf_counter() - t0) * 1000)
         agora = time.monotonic()
-        self._atual = (cor, rotulo, agora, agora + dur)
+        self._atual = (cor, rotulo, agora, agora + dur, pulsos)
         self.exibidos.append((agora, cor, rotulo))
         if self.ao_mostrar is not None:   # só enfileira (vitrine); nunca segura o fio da janela
             try:
@@ -388,13 +409,12 @@ class Moldura:
                     self.log.warning("moldura: gancho da vitrine falhou: %s", e)
 
     def _pulsar(self, agora):
-        cor, rotulo, t0, fim = self._atual
+        cor, rotulo, t0, fim, pulsos = self._atual
         if agora >= fim or (not self.forcar and not janela_do_jogo()):
             self._atual = None
             user32.ShowWindow(self.hwnd, SW_HIDE)
             return
-        alfa = PULSO_MIN + (1 - PULSO_MIN) * (0.5 + 0.5 * math.cos(2 * math.pi * (agora - t0) / self.CICLO))
-        _Superficie.pulsar(self.hwnd, 255 * alfa)
+        _Superficie.pulsar(self.hwnd, 255 * alfa_pulso(agora - t0, fim - t0, pulsos, self.CICLO))
 
     def _wndproc(self, hwnd, msg, wp, lp):
         try:

@@ -49,8 +49,10 @@ CONFIG_PADRAO = {
     "mentor": True,            # passo 20
     "mentorModelo": "sonnet",  # passo 20: vencedor da comparação de 13/10/2026 (sonnet, effort medium)
     "mentorEffort": "medium",
-    # tipos calados por destino (avisos.TIPOS_LIGAVEIS; "tela" = painel + moldura); lista antiga = os dois
-    "avisosDesligados": {"voz": [], "tela": []},
+    # tipos calados por destino (avisos.TIPOS_LIGAVEIS; "tela" = painel + moldura); lista antiga = os dois.
+    # "adversario_voltou" nasce sem voz (pedido do Gabriel, 15/10/2026: "não precisa nem de aviso de voz"); a caixa
+    # da voz nas Configurações liga de novo. Mesmo padrão no PADRAO.coach do plugin (pengu/config.js, VERSAO 4)
+    "avisosDesligados": {"voz": ["adversario_voltou"], "tela": []},
     # plano voz/foco, passo 2b: janelinha de "partida encontrada" fora do client (coletor/aviso_partida.py)
     "aceiteFlutuante": True,
     # atraso do aceite automático do plugin, espelhado (cfg.aceite.atrasoS); None = aceite automático
@@ -85,7 +87,9 @@ def ler_config(caminho=CONFIG):
         salvo = {}
     cfg = {k: (salvo[k] if isinstance(salvo, dict) and type(salvo.get(k)) is type(v) else v)
            for k, v in CONFIG_PADRAO.items()}
-    cfg["avisosDesligados"] = _desligados(salvo.get("avisosDesligados") if isinstance(salvo, dict) else None)
+    d = salvo.get("avisosDesligados") if isinstance(salvo, dict) else None
+    # nada salvo = o padrão (antes virava {[], []} e o padrão do CONFIG_PADRAO nunca valia); salvo = a escolha dele
+    cfg["avisosDesligados"] = _desligados(CONFIG_PADRAO["avisosDesligados"] if d is None else d)
     if isinstance(salvo, dict) and "aceiteAtrasoS" in salvo:   # número ou null: o teste de tipo acima não serve
         a = _atraso(salvo["aceiteAtrasoS"])
         cfg["aceiteAtrasoS"] = CONFIG_PADRAO["aceiteAtrasoS"] if a is _INVALIDO else a

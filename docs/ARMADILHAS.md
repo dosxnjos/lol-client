@@ -630,6 +630,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   <feitiço> às mm:ss` (nunca a linha crua: tem nome de jogador) e a moldura mostra "top sem flash"; ping sem
   "usou" vai ao log como `ping sem 'usou' ignorado`. O Flash do Malphite que ele marcou não entrou: sem a linha
   crua no log não dá para saber se foi a variante sem "usou" (a próxima partida diz).
+- **OCR do chat lendo nada, calado, partidas a fio** (14/10 ~19h a 15/10/2026: 9 ranqueadas sem um ping lido; nas 4
+  anteriores todas tinham) → o recorte de `dados\calibracao-chat.json` (13/10) valia para sempre e o laço só logava
+  quando achava ping ou dava erro: OCR rodando sobre um recorte sem o chat não deixava rastro. A causa exata (chat
+  movido, escala, HUD) não deu para provar depois: nenhum print da tela daquelas partidas. Hoje o `LeitorChat`
+  recalibra quando o recorte passa ~60 s sem linha `mm:ss` e o coach resume as contagens no log (a cada 5 min e no fim):
+  [COLETOR](COLETOR.md) § Feitiços, "Recorte que não vê o chat". Laço que lê e não acha nada também tem de dizer isso.
 - **Painel pós-jogo não deixa rastro de sucesso** → `fechar()` remove `#lc-posjogo` sem log; depois
   que o Gabriel fecha, não dá para provar de fora que abriu sozinho (13/10/2026).
 - **Overlay próprio aparece no print do minimapa** → o `mss` (BitBlt com `CAPTUREBLT`) captura
@@ -893,6 +899,14 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   no nível 16", "curar do suporte voltou", "dragão em um minuto"); a transcrição repete trechos do áudio do
   sistema (até o "A destruição" do anunciador saiu 5 vezes). Repetição se confere no `dados\coletor.log`
   (`aviso voz …`), nunca só na transcrição.
+- **"O jungler chegando no top" 2 vezes em 17 s** (partida 3293420970, 15/10/2026, log 12:46:37 e 12:46:54; a
+  transcrição do Reco mostrava 6, as outras 4 são eco) → "chegou" = reapareceu na faixa depois de ≥ 3 s fora de vista,
+  e a moita na rota faz isso no mesmo mergulho; a chave do intruso barrava só 15 s e a fala urgente só 10 s. Hoje o
+  intruso repete a chave em 30 s (`TIPOS["intruso"]["repetir"]`); a volta de verdade depois de recuar e outro inimigo
+  na mesma rota seguem avisando (`teste-alertas`, `relato_3293420970`).
+- **"Visto há 1 min: dados dele parados" com o adversário morto** (mesma partida) → o "visto" era só a assinatura
+  nível/itens/farm, que não muda com ele morto. Morto (`isDead`) agora é dado atual e o painel diz "morto, volta em N s"
+  ([COLETOR](COLETOR.md) § Ao vivo; `teste-coach`, `teste-painel.mjs`).
 - **Filtro de repetição que cala o aviso certo** (revisão 14/10/2026) → "mesma frase em 60 s" calava o gank
   urgente da minha rota depois do mesmo texto vindo de outra rota (urgente hoje: 10 s); "mid indo" ligado ao
   "mid sumiu" **aceito** morria quando o motor barrava o sumiu por intervalo/teto (hoje: liga pela relevância);

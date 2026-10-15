@@ -24,11 +24,15 @@ CORES = {"vermelho": (235, 45, 45), "amarelo": (245, 200, 40), "azul": (60, 145,
 # m moldura), cor e ícone (o painel desenha). Ajuste aqui, não espalhado pelo código.
 # Opcionais, por TIPO e independentes da chave (calibração de 14/10/2026: a chave do mid_sumiu mudava a cada
 # sumiço e o `repetir` nunca valia; 25 molduras numa partida): intervalo (s mínimos entre dois avisos aceitos do
-# tipo com os mesmos destinos) e teto (avisos aceitos por partida; o motor é um por partida).
+# tipo com os mesmos destinos) e teto (avisos aceitos por partida; o motor é um por partida). pulsos (opcional):
+# quantas vezes a borda pisca (1 = um piscar curto, Moldura.mostrar(pulsos=1)); sem ele, a borda de ~2 s pulsando.
 TIPOS = {
     "gank":              dict(prio=100, validade=6, repetir=60, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
     "intruso_grupo":     dict(prio=95, validade=6, repetir=15, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
-    "intruso":           dict(prio=85, validade=6, repetir=15, urgente=False, destinos="vpm", cor="amarelo", icone="perigo"),
+    # intruso repetir 15 -> 30 (partida 3293420970, 15/10/2026: o jungler entrou no top, sumiu na moita e "chegou" de
+    # novo 17 s depois: 2 falas "o jungler chegando no top" do mesmo mergulho; a volta de verdade depois de recuar
+    # passa de 30 s)
+    "intruso":           dict(prio=85, validade=6, repetir=30, urgente=False, destinos="vpm", cor="amarelo", icone="perigo"),
     "jungler_apareceu":  dict(prio=80, validade=5, repetir=20, urgente=False, destinos="vpm", cor="vermelho", icone="olho",
                               intervalo=20),
     "mid_indo":          dict(prio=70, validade=6, repetir=20, urgente=False, destinos="vpm", cor="amarelo", icone="seta",
@@ -38,7 +42,11 @@ TIPOS = {
     "janela_objetivo":   dict(prio=55, validade=10, repetir=45, urgente=False, destinos="vp", cor="verde", icone="objetivo"),
     "objetivo_60s":      dict(prio=50, validade=20, repetir=120, urgente=False, destinos="vp", cor="azul", icone="relogio"),
     "mortes_cedo":       dict(prio=45, validade=30, repetir=900, urgente=False, destinos="vp", cor="amarelo", icone="caveira"),
-    "adversario_voltou": dict(prio=40, validade=6, repetir=30, urgente=False, destinos="vpm", cor="azul", icone="olho"),
+    # pulsos=1: a borda pisca uma vez só e some (Moldura.UM_PULSO_S), em vez dos ~2 s pulsando; sem voz por padrão
+    # (servidor_local.CONFIG_PADRAO avisosDesligados.voz; a caixa da voz nas Configurações liga de novo). Pedido do
+    # Gabriel, partida 3293420970 (15/10/2026): "pode ser uma pulsada única. E aí não precisa nem de aviso de voz"
+    "adversario_voltou": dict(prio=40, validade=6, repetir=30, urgente=False, destinos="vpm", cor="azul", icone="olho",
+                              pulsos=1),
     "inimigo_fed":       dict(prio=35, validade=20, repetir=120, urgente=False, destinos="vp", cor="amarelo", icone="espada"),
     "ouro_guardado":     dict(prio=30, validade=20, repetir=120, urgente=False, destinos="vp", cor="amarelo", icone="moeda"),
     # retorno dos atalhos (o próprio Gabriel apertou a tecla), nunca vermelho (vermelho é perigo; foi o que
@@ -572,7 +580,11 @@ class MotorAvisos:
             if destino == "voz" and self.voz is not None:
                 self.voz.falar(a.fala, urgente=a.urgente, prioridade=a.prio)
             elif destino == "moldura" and self.moldura is not None:
-                self.moldura.mostrar(a.cor, a.rotulo)
+                pulsos = TIPOS.get(a.tipo, {}).get("pulsos")
+                if pulsos:   # só com pulsos: a moldura falsa dos testes e a vitrine seguem com (cor, rotulo)
+                    self.moldura.mostrar(a.cor, a.rotulo, pulsos=pulsos)
+                else:
+                    self.moldura.mostrar(a.cor, a.rotulo)
         except Exception as e:  # consumidor quebrado não derruba o laço ao vivo
             if self.log:
                 self.log.warning("aviso %s → %s falhou: %s", a.chave, destino, e)

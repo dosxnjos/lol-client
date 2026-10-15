@@ -39,8 +39,9 @@ class MolduraFalsa:
     def __init__(self):
         self.mostradas = []
 
-    def mostrar(self, cor, rotulo):
+    def mostrar(self, cor, rotulo, pulsos=None):
         self.mostradas.append((cor, rotulo))
+        self.pulsos = getattr(self, "pulsos", []) + [pulsos]
 
 
 def caso(nome, ok, detalhe=""):
@@ -218,6 +219,87 @@ def relato_3293149183_voltou():
     cat = set(avisos.catalogo())
     caso("3293149183: 'o top apareceu no mid' e 'o atirador apareceu no top' estão no catálogo",
          {"o top apareceu no mid", "o atirador apareceu no top"} <= cat, f"{len(cat)} falas")
+
+
+def relato_3293420970():
+    """partida 3293420970 (15/10/2026, Renekton top contra Malphite). (2) "A pulsada quando meu inimigo voltou pra lane
+    não precisa ficar tanto tempo, pode ser uma pulsada única. E aí não precisa nem de aviso de voz." (4) o log tem 2
+    falas "o jungler chegando no top" em 17 s (12:46:37 e 12:46:54: o mesmo mergulho, ele sumiu na moita e voltou)."""
+    import tempfile
+
+    import moldura as M
+    import servidor_local
+    # 2a. o "voltou" pede 1 pulso à moldura; os outros tipos seguem sem (a borda de ~2 s pulsando)
+    def r(t):
+        return [("Riven", TOP_ROTA_2)] if t <= 5 or t >= 40 else []
+    m, mol, s = rodar("Illaoi", r, 45)
+    caso("3293420970: 'Riven voltou' pede à moldura 1 pulso só", mol.mostradas == [("azul", "Riven voltou")]
+         and mol.pulsos == [1], f"{mol.mostradas} pulsos {getattr(mol, 'pulsos', None)}")
+    m, mol, s = rodar("Illaoi", lambda t: [("Riven", TOP_ROTA_2)] + ([("Ekko", TOP_FUNDO)] if t >= 5 else []), 12)
+    caso("3293420970: lado oposto: o intruso (perigo) segue com a borda pulsando (sem pulsos)",
+         mol.mostradas and getattr(mol, "pulsos", None) == [None], f"{mol.mostradas} pulsos {getattr(mol, 'pulsos', None)}")
+    # 2b. sem voz por padrão (config sem nada salvo = padrão novo); a caixa da voz liga de novo
+    with tempfile.TemporaryDirectory() as tmp:
+        padrao = servidor_local.ler_config(Path(tmp) / "nao-existe.json")["avisosDesligados"]
+
+    def voltou(desligados):
+        motor = MotorAvisos(textos=TEXTOS, moldura=MolduraFalsa())
+        motor.configurar(desligados=desligados)
+        aceito = motor.publicar(Aviso("adversario_voltou", {"campeao": "Malphite", "rota": "top", "zona": "no top",
+                                                            "zc": "top", "zt": "top"}, "Malphite"), 100.0)
+        motor.tick(101.0)
+        return aceito, sorted(d for _, d, _ in motor.emitidos)
+    ac, dst = voltou(padrao)
+    caso("3293420970: 'voltou' com a config padrão sai só na borda e no painel, sem voz", ac and dst == ["moldura"],
+         f"padrão {padrao}; destinos {dst}")
+    ac, dst = voltou({"voz": [], "tela": []})
+    caso("3293420970: caixa da voz ligada nas Configurações = 'o top voltou pra rota' falado de novo",
+         ac and dst == ["moldura", "voz"], f"destinos {dst}")
+    # 2c. o pulso: 1 = cheio para ler o rótulo e some uma vez; sem pulsos = o de antes (nunca abaixo do piso)
+    d1 = M.UM_PULSO_S
+    um = [M.alfa_pulso(t, d1, 1) for t in (0, 0.2, 0.44, 0.6, 0.8, 0.99, 1.0, 1.5)]
+    desce = all(a >= b for a, b in zip(um, um[1:]))
+    caso("3293420970: 1 pulso = cheio até ~0,45 s, cai sem subir de novo e some em 1 s",
+         um[0] == 1 and um[2] == 1 and desce and um[5] < 0.01 and um[6] == 0 and um[7] == 0 and d1 <= 1.2,
+         f"{[round(a, 2) for a in um]}")
+    pul = [M.alfa_pulso(t / 20, 2.0) for t in range(40)]
+    subidas = sum(1 for i in range(1, len(pul) - 1) if pul[i - 1] > pul[i] < pul[i + 1])   # vales: pulsou de novo
+    caso("3293420970: sem pulsos = a borda de 2 s pulsando de antes (piso PULSO_MIN, volta a subir)",
+         min(pul) >= M.PULSO_MIN - 1e-9 and max(pul) == 1 and subidas >= 2, f"min {min(pul):.2f}, subidas {subidas}")
+    # Moldura.mostrar(pulsos=1) leva a duração curta para a fila (sem abrir janela)
+    mm = M.Moldura()
+    mm.iniciar = lambda: mm
+    mm.hwnd = 0
+    mm.mostrar("azul", "Malphite voltou", pulsos=1)
+    mm.mostrar("vermelho", "gank top")
+    p1, p2 = mm._fila.get_nowait(), mm._fila.get_nowait()
+    caso("3293420970: Moldura.mostrar(pulsos=1) = UM_PULSO_S; sem pulsos = DURACAO",
+         p1 == ("azul", "Malphite voltou", M.UM_PULSO_S, 1) and p2 == ("vermelho", "gank top", M.Moldura.DURACAO, None),
+         f"{p1} {p2}")
+
+    # 4. o jungler entra no top, some na moita (≥ SUMIR_S) e "chega" de novo 17 s depois: o mesmo mergulho, 1 aviso
+    def mergulho(volta, outro=None):
+        def r(t):
+            v = [("Riven", TOP_ROTA_2)]
+            if 5 <= t <= 8 or t >= volta:
+                v.append(("Ekko", TOP_FUNDO))
+            if outro and t >= outro:
+                v.append(("Yasuo", TOP_ROTA))
+            return v
+        return r
+    m, mol, s = rodar("Illaoi", mergulho(22), 30)
+    falas = [(int(t), a.fala) for t, a in s if a.tipo == "intruso"]
+    caso("3293420970: jungler entra no top, some na moita e volta 17 s depois → 1 'o jungler chegando no top'",
+         falas == [(5, "o jungler chegando no top")], f"{falas}")
+    m, mol, s = rodar("Illaoi", mergulho(40), 45)
+    falas = [(int(t), a.fala) for t, a in s if a.tipo == "intruso"]
+    caso("3293420970: lado oposto: volta 35 s depois (recuou e voltou) → avisa de novo",
+         falas == [(5, "o jungler chegando no top"), (40, "o jungler chegando no top")], f"{falas}")
+    m, mol, s = rodar("Illaoi", lambda t: [("Riven", TOP_ROTA_2)] + ([("Ekko", TOP_FUNDO)] if 5 <= t <= 8 else [])
+                      + ([("Yasuo", (2600, 11000))] if t >= 22 else []), 30)
+    tipos = [(int(t), a.tipo, a.fala) for t, a in s]
+    caso("3293420970: lado oposto: OUTRO inimigo chegando no top 17 s depois avisa (a chave é por campeão)",
+         (22, "intruso", "o mid chegando no top") in tipos, f"{tipos}")
 
 
 def relato_3293149183_rajada():
@@ -879,7 +961,7 @@ def extra_destinos():
     ok = (lido["avisosDesligados"] == {"voz": ["ouro_guardado"], "tela": ["ouro_guardado"]} and lido["voz"] is False
           and salvo["avisosDesligados"] == {"voz": ["mid_sumiu"], "tela": ["mid_sumiu"]}
           and salvo2["avisosDesligados"] == {"voz": ["gank"], "tela": []}
-          and padrao["avisosDesligados"] == {"voz": [], "tela": []}
+          and padrao["avisosDesligados"] == {"voz": ["adversario_voltou"], "tela": []}   # 15/10/2026: "voltou" sem voz
           and padrao["avisosDesligados"] is not servidor_local.CONFIG_PADRAO["avisosDesligados"])
     caso("extra: servidor_local migra a lista salva e a lista do plugin antigo para {voz, tela}", ok,
          f"lido {lido['avisosDesligados']}, salvo {salvo['avisosDesligados']}, salvo2 {salvo2['avisosDesligados']}")
@@ -1084,6 +1166,7 @@ def principal():
     relato_3293149183_voltou()
     relato_3293149183_rajada()
     relato_3293149183_moldura()
+    relato_3293420970()
     extra_pausa()
     extra_morto()
     extra_lista_acumulada()

@@ -315,7 +315,10 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   `carregando` (resposta com `gameTime` ~0 e sem `GameStart`), `jogo`, `fim` (`GameEnd`); 10 s sem
   resposta → `{"partida": false}`. Inimigo: nível, itens e farm congelam na fog → `vistoHaS` = tempo
   desde a última mudança (ou desde um abate dele com aliado envolvido); > 30 s = `atual: false` e o
-  painel mostra cinza "visto há Xs". Com o minimapa ligado, a última detecção dele também conta
+  painel mostra cinza "visto há Xs". **Morto não é dado parado** (15/10/2026, partida 3293420970: "é óbvio que se
+  ele está morto ele não vai ser visto"): com `isDead` o "visto" é agora (`atual: true`), o bloco da rota leva
+  `morto`/`renascerS` e o painel diz "<campeão> morto, volta em N s" (`respawnTimer`); o "visto há" volta a contar
+  quando ele renasce. Com o minimapa ligado, a última detecção dele também conta
   (`ao_vivo.mesclar_vistos`, no passo do coach; 14/10/2026: o farm da Live Client anda de 10 em 10 e o adversário
   à vista no minimapa ficava "dados dele parados" até chegar na tela do Gabriel); ela refaz os blocos da rota e
   da ameaça (cópias feitas no `atualizar`). Ouro estimado = `priceTotal` do `items.json` da LCU (cache em
@@ -347,6 +350,7 @@ A ligação no `coletor.py` é o `coach_vivo.Coach` (§ Coach na partida); `--li
 | laço + servidor avulsos | `python coletor\ao_vivo.py --liveclient http://127.0.0.1:2998 --db temp\ao_vivo.db --game-id 1` |
 | atualizar o catálogo (client aberto) | `python coletor\ao_vivo.py --baixar-catalogo` |
 | abrir/fechar a janela | `python coletor\janela_painel.py --teste` |
+| texto dos blocos do painel (DOM falso) | `node tools\teste-painel.mjs` |
 
 ## Avisos ao vivo: voz e moldura (plano v2, passos 12 e 15c)
 
@@ -390,7 +394,8 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   `ORDER`/`CHAOS` (ou 100/200), `x`/`y` em unidades do mapa (0–14870 × 0–14980, origem na base azul),
   `visto_em` = `gameTime` do quadro. `quadro_valido=False` quando o jogo não está na tela: pausa (e
   2 s de ressincronia ao voltar). Morto não "some" (`mortos`).
-- **Regras**: anti-spam por `tipo:chave` (`repetir`; gank 60 s); por **tipo**, independente da chave,
+- **Regras**: anti-spam por `tipo:chave` (`repetir`; gank 60 s; intruso 30 s desde 15/10/2026: o jungler que some
+  na moita e reaparece na mesma rota em 17 s é o mesmo mergulho, partida 3293420970); por **tipo**, independente da chave,
   `intervalo` (contado por tipo, destinos e `Aviso.grupo`) e `teto` por partida (`TIPOS`: `mid_sumiu` 120 s e 4, `jungler_apareceu` 20 s, `mid_indo` 30 s;
   calibração de 14/10/2026); a voz não repete a **mesma frase** em 60 s (`REPETIR_FALA_S`, qualquer tipo, fora
   o retorno de atalho; `suprimidos["fala_repetida"]`), urgente só em 10 s (`REPETIR_FALA_URGENTE_S`: o mesmo
@@ -438,7 +443,11 @@ motor.configurar(tom=, voz=, moldura=, painel=, desligados={"voz": [...], "tela"
   rota dele, "o top voltou pra rota"; em outra, "o top apareceu no mid" (molde `adversario_outra_rota`), salvo
   quando ele entra na rota onde eu estou (é intruso) ou é o mid que tinha sumido (o "mid indo X" já diz), só na fase
   de rotas (até 14:00, `MID_JANELA`) e, entre duas faixas, na de centro mais perto
-  (`AlertasPosicao._adversario_voltou`, partida 3293149183). Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
+  (`AlertasPosicao._adversario_voltou`, partida 3293149183). Desde 15/10/2026 (partida 3293420970: "pode ser uma
+  pulsada única. E aí não precisa nem de aviso de voz") a borda dele **pisca uma vez** (`TIPOS[...]["pulsos"] = 1` →
+  `Moldura.mostrar(pulsos=1)`, `UM_PULSO_S` 1 s) e ele nasce **sem voz** (`servidor_local.CONFIG_PADRAO`
+  `avisosDesligados.voz = ["adversario_voltou"]`; a caixa da voz do tipo nas Configurações liga de novo; o plugin
+  precisa do mesmo padrão e da migração `VERSAO` 4 no `pengu/config.js`, senão manda a lista vazia salva). Rota vigiada = a de onde estou (`onde_estou`, acima); jungler sem ícone numa rota não vigia
   nada (com o ícone numa rota, o jungler deles chegando = vermelho urgente, o contra-gank).
   Na minha rota, intruso vence "mid indo".
 - **Escolhas nas Configurações** (pedido do Gabriel de 14/10/2026; [plano](../roadmap/2026-10-14-calibrar-avisos.md)
@@ -499,7 +508,7 @@ versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Mar
   `dados\voz-agendada.json`.
 - **Moldura** (`coletor\moldura.py`): janela própria de tela inteira, click-through
   (`WS_EX_LAYERED|TRANSPARENT|TOPMOST|TOOLWINDOW|NOACTIVATE`), borda pulsando + rótulo no canto por
-  2 s, só com "League of Legends (TM) Client" em primeiro plano, e **fora do print**
+  2 s (tipo com `pulsos=1` no `TIPOS`: um piscar só de 1 s, cheio até 0,45 s e some, `moldura.alfa_pulso`), só com "League of Legends (TM) Client" em primeiro plano, e **fora do print**
   (`WDA_EXCLUDEFROMCAPTURE`, [ARMADILHAS](ARMADILHAS.md) § Tela). Desde 14/10/2026 (pedido do Gabriel: "fade
   transparente em direção ao centro" e "cores levemente mais escurecidas") é `UpdateLayeredWindow` com alfa por px:
   `renderizar` (RGBA) = 12 px da beirada na cor cheia (`CORES_MOLDURA`, 80% de `CORES`) e um degradê até 0 em 10%
@@ -532,6 +541,18 @@ versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Mar
   relida a cada print só confirma, `ultima_leitura`); o coach loga `coach: chat -> gasto novo: <campeão> <feitiço>
   às mm:ss (<rota>)` e mostra "<rota> sem flash" (verde) na moldura, sem voz (a voz fala quando ele volta); ping
   sem "usou" não liga cronômetro e vai 1 vez ao log (`ping sem 'usou' ignorado`). Antes: "N gasto(s)" a cada 3 s.
+- **Recorte que não vê o chat** (15/10/2026, partida 3293420970: de 14/10 ~19h em diante 9 ranqueadas sem um ping
+  lido e o log mudo): o recorte salvo valia para sempre. Hoje o `LeitorChat` conta, por print, as linhas que começam
+  com `mm:ss` (kill, objetivo e ping têm horário); `RECALIBRAR_PRINTS` 20 prints seguidos (~60 s) sem nenhuma com o
+  jogo na tela = procura de novo nas `FAIXAS_CALIBRAR` (a da HUD dele e o canto de baixo à esquerda, onde o LoL põe o
+  chat por padrão; cada uma × 2 cabe nos 2600 px do OCR do Windows), troca e grava se achou outro recorte
+  (`chat: recorte ... recalibrado para ...`, aviso); sem outro (chat vazio de verdade), a espera dobra até
+  `RECALIBRAR_MAX` 160 prints. No log: `chat: recorte (...) da calibração salva` no 1º print e o resumo do coach a
+  cada 5 min e no fim da partida (`coach: chat na partida: N prints (M com o jogo fora da tela), L linhas lidas, H com
+  horário, P leituras de ping de feitiço (G gastos novos, S sem 'usou'); recalibrou R (T tentativas sem outro recorte,
+  Q prints sem recorte), recorte (...)`), só contagens, nunca o texto. P conta leitura (a mesma linha relida a cada
+  print); o ping distinto é G. Lendo: H = 0 com prints > 0 = o recorte não vê o chat; H > 0 e P = 0 = ninguém pingou
+  feitiço; P > 0 e G = 0 = só repetidos/sem "usou"; Q > 0 = sem calibração salva para esta resolução e nenhuma achada.
 - **Como o F7 funciona** (desde 14/10/2026; antes F9 por `RegisterHotKey`, que não dispara com o jogo na frente e o
   F9 é tecla do LoL dele, [ARMADILHAS](ARMADILHAS.md) § Windows): `coletor\teclas.py` **observa** o teclado
   (`GetAsyncKeyState` a cada 25 ms, só com o jogo em primeiro plano; nada é enviado nem comido, a tecla também vai

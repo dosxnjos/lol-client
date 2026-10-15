@@ -50,6 +50,15 @@ DESFAZ_PRAZO_S = 60
 # chat em 2560x1080 nesta HUD (MEDICAO § 4): reserva quando a calibração ainda não achou linha
 CAIXA_RESERVA = (1400, 815, 1900, 985)
 FAIXA_CALIBRAR = (1000, 620, 2150, 1080)   # onde procurar o chat (fora do minimapa, x >= 2179)
+# onde procurar, em ordem: a faixa da HUD dele (chat movido para a direita do meio) e o canto de baixo à esquerda (onde
+# o LoL põe o chat por padrão: HUD reiniciada). Cada faixa × 2 (escala do OCR) fica abaixo de 2600 px, o máximo do
+# Windows.Media.Ocr (OcrEngine.MaxImageDimension)
+FAIXAS_CALIBRAR = (FAIXA_CALIBRAR, (0, 620, 1150, 1080))
+# recorte sem nenhuma linha "mm:ss" por este número de prints seguidos com o jogo na tela (~60 s a 3 s por print) =
+# chat fora do recorte: recalibra. Partida 3293420970 (15/10/2026): o recorte de 13/10 era usado para sempre e, de
+# 14/10 ~19h em diante, 9 ranqueadas seguidas sem um único ping lido e nada no log que dissesse por quê
+RECALIBRAR_PRINTS = 20
+RECALIBRAR_MAX = 160    # entre tentativas que não acharam outro recorte, a espera dobra até isto (~8 min)
 TITULO_JOGO = "League of Legends (TM) Client"
 
 
@@ -212,10 +221,17 @@ def _ts_norm(texto):
     return t if re.fullmatch(r"\d\d:\d\d", t) and int(t[3:]) < 60 else None
 
 
-def calibrar_chat(tela, ocr, faixa=FAIXA_CALIBRAR):
+def calibrar_chat(tela, ocr, faixa=None):
     """tela = print inteiro do monitor do jogo (PIL). Acha as linhas do chat pelo horário mm:ss no
     começo e devolve a caixa (x0, y0, x1, y1) em px da tela, ou None (sem linha de chat: jogo fora da
-    tela, chat vazio). O chat cresce para cima a partir da base: a caixa vai da base até 170 px acima."""
+    tela, chat vazio). O chat cresce para cima a partir da base: a caixa vai da base até 170 px acima.
+    faixa None = FAIXAS_CALIBRAR em ordem (a 1ª que achar)."""
+    if faixa is None:
+        for f in FAIXAS_CALIBRAR:
+            c = calibrar_chat(tela, ocr, f)
+            if c:
+                return c
+        return None
     x0, y0, x1, y1 = faixa
     x1, y1 = min(x1, tela.width), min(y1, tela.height)
     linhas = ocr.ler(tela.crop((x0, y0, x1, y1)), escala=2)
@@ -462,11 +478,12 @@ class Feiticos:
         novos, confirmados (repetição) e os pings sem "usou" vistos pela 1ª vez (não ligam cronômetro, mas vão ao
         log: é o candidato a "marquei e não funcionou" que ainda não tem prova)."""
         gt = self.gt if gt is None else gt
-        out, confirmados, sem_usou = [], 0, []
+        out, confirmados, sem_usou, pings = [], 0, [], 0
         for e in juntar_linhas(textos):
             p = ler_ping(e, list(self.inimigos), list(self.base) + list(SEM_CRONOMETRO))
             if not p:
                 continue
+            pings += 1   # ping de feitiço reconhecido no print (novo, repetido, velho ou sem "usou"): o resumo do log
             if not (-2 <= gt - p["ts"] <= LINHA_VELHA):
                 continue
             if not p["usou"]:
@@ -480,7 +497,7 @@ class Feiticos:
                 out.append(u)
             elif u:
                 confirmados += 1
-        self.ultima_leitura = {"novos": len(out), "confirmados": confirmados, "sem_usou": sem_usou}
+        self.ultima_leitura = {"novos": len(out), "confirmados": confirmados, "sem_usou": sem_usou, "pings": pings}
         return out
 
     def previa(self, n):
@@ -677,10 +694,23 @@ def capturar(caixa=None, monitor=None):
         return Image.frombytes("RGB", g.size, g.bgra, "raw", "BGRX")
 
 
+def com_horario(textos):
+    """quantas linhas (já juntadas) de um print começam com "mm:ss": chat dentro do recorte. Kill, objetivo e ping
+    têm horário; recorte sem nenhuma por RECALIBRAR_PRINTS prints = o chat não está ali"""
+    return sum(1 for e in juntar_linhas(textos) if _ts_norm(_CANAL.sub("", e)))
+
+
+def _mesma_caixa(a, b, tol=12):
+    return bool(a and b) and all(abs(p - q) <= tol for p, q in zip(a, b))
+
+
 class LeitorChat:
     """laço do OCR do chat: passo(gt) a cada ~3 s durante a partida (o integrador chama).
     Pausa sem o jogo em primeiro plano; calibra o recorte no 1º print com linha de chat e guarda em
-    dados/calibracao-chat.json (a posição do chat é da HUD, não está no game.cfg)."""
+    dados/calibracao-chat.json (a posição do chat é da HUD, não está no game.cfg). Recorte sem linha "mm:ss" por
+    RECALIBRAR_PRINTS prints seguidos (chat movido, escala trocada, HUD reiniciada) = recalibra pelas FAIXAS_CALIBRAR;
+    sem outro recorte, a espera dobra até RECALIBRAR_MAX. `contagem` (prints, fora da tela, linhas, com horário,
+    recalibrações) vai ao resumo do coach no log: antes, OCR que não lia nada não deixava rastro nenhum."""
 
     def __init__(self, feiticos, ocr=None, calibracao=CALIBRACAO_PADRAO, captura=capturar, na_tela=jogo_na_tela):
         self.f = feiticos
@@ -688,22 +718,62 @@ class LeitorChat:
         self.calibracao = calibracao
         self.captura, self.na_tela = captura, na_tela
         self.caixa = None
+        self.contagem = {"prints": 0, "fora_da_tela": 0, "sem_recorte": 0, "linhas": 0, "com_horario": 0,
+                         "recalibrou": 0, "recalibrar_falhou": 0}
+        self._sem_horario = 0               # prints seguidos com o jogo na tela e nenhuma linha "mm:ss" no recorte
+        self._espera = RECALIBRAR_PRINTS
 
     def passo(self, gt=None):
         if not self.na_tela():
+            self.contagem["fora_da_tela"] += 1
             return []
         if not self.caixa:
             tela = self.captura()
             self.caixa = ler_calibracao(self.calibracao, tela.size)
-            if not self.caixa:
+            if self.caixa:
+                log.info("chat: recorte %s da calibração salva (tela %dx%d)", self.caixa, *tela.size)
+            else:
                 c = calibrar_chat(tela, self.ocr)
                 if not c:
+                    self.contagem["sem_recorte"] += 1
                     return []
                 self.caixa = c
                 gravar_calibracao(c, tela.size, self.calibracao)
+                log.info("chat: recorte %s calibrado agora (tela %dx%d)", c, *tela.size)
         im = self.captura(self.caixa)
-        linhas = self.ocr.ler(im, escala=3)
-        return self.f.processar_linhas([ln["t"] for ln in linhas], gt)
+        textos = [ln["t"] for ln in self.ocr.ler(im, escala=3)]
+        n = com_horario(textos)
+        self.contagem["prints"] += 1
+        self.contagem["linhas"] += len(textos)
+        self.contagem["com_horario"] += n
+        if n:
+            self._sem_horario, self._espera = 0, RECALIBRAR_PRINTS
+        else:
+            self._sem_horario += 1
+            if self._sem_horario >= self._espera:
+                self._recalibrar()
+        return self.f.processar_linhas(textos, gt)
+
+    def _recalibrar(self):
+        """o recorte não vê o chat há _espera prints: procura de novo nas FAIXAS_CALIBRAR (print inteiro, só em
+        memória). Achou outro = troca e grava; o mesmo ou nenhum = segue e dobra a espera (chat vazio de verdade)"""
+        sem, antes = self._sem_horario, self.caixa
+        self._sem_horario = 0
+        tela = self.captura()
+        c = calibrar_chat(tela, self.ocr)
+        if c and not _mesma_caixa(c, antes):
+            self.caixa, self._espera = c, RECALIBRAR_PRINTS
+            gravar_calibracao(c, tela.size, self.calibracao)
+            self.contagem["recalibrou"] += 1
+            log.warning("chat: recorte %s sem linha com horário em %d prints seguidos: recalibrado para %s",
+                        antes, sem, c)
+            return c
+        self.contagem["recalibrar_falhou"] += 1
+        self._espera = min(self._espera * 2, RECALIBRAR_MAX)
+        log.warning("chat: recorte %s sem linha com horário em %d prints seguidos; a calibração %s (próxima tentativa "
+                    "em %d prints)", antes, sem, "achou o mesmo recorte" if c else "não achou o chat na tela",
+                    self._espera)
+        return None
 
     def parar(self):
         self.ocr.parar()

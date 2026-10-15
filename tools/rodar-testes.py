@@ -44,6 +44,7 @@ TESTES = [
     [PY, "tools/teste-coach.py"],
     [PY, "tools/teste-pacote-voz.py"],
     [PY, "tools/teste-alertas.py"],
+    ["node", "tools/teste-painel.mjs"],    # painel da 2ª tela em DOM falso (inimigo morto: "morto, volta em N s")
     [PY, "tools/teste-vitrine.py"],
     [PY, "tools/teste-aviso-partida.py"],
     [PY, "tools/teste-minimapa.py"],

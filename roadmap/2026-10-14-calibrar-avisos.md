@@ -3,7 +3,9 @@
 - **Data:** 14/10/2026 · **Alvo:** `coletor/avisos.py` (motor e `AlertasPosicao`), `coletor/coach_vivo.py` (gank),
   `coletor/overlay_minimapa.py` (janela e desenho), `coletor/vitrine.py` (composição), provas em `tools/`; passo 7:
   `coletor/servidor_local.py` (esquema da config), `pengu/config.js` e `pengu/blocos.js` (Configurações); passo 10:
-  `coletor/teclas.py`, `coletor/feiticos.py` (`Atalhos`), `coletor/avisos.py` (retorno), `coletor/coach_vivo.py`
+  `coletor/teclas.py`, `coletor/feiticos.py` (`Atalhos`), `coletor/avisos.py` (retorno), `coletor/coach_vivo.py`;
+  passo 11: `avisos.py`, `moldura.py`, `servidor_local.py`, `ao_vivo.py`, `painel/painel.js`, `feiticos.py` (`LeitorChat`),
+  `coach_vivo.py`
 - **Continua:** [voz pré-gravada e foco](2026-10-13-voz-pregravada-e-foco.md) (o catálogo de falas de lá não muda)
 - **Fora:** `pengu/posjogo/**` e `coletor/mentor.py` (outra frente mexe neles)
 
@@ -96,6 +98,10 @@ Quem decidiu: o agente executor (opus, técnico). Reverter = `git revert` do com
 | D36 | (passo 10) retorno novo só na moldura, fora do `valores_catalogo` (catálogo da voz inalterado: 476, `76d3c16afdfb`): `selecionado` "flash: <rota>?" (sem posição na Live Client, o nome do campeão no rótulo; a voz nunca tem nome), `nada_a_desfazer` "nada a desfazer", `cancelado` "nada marcado"; o `armado` "flash: 1-5" sai. Voz só no marcado e no desfeito, as frases que já existiam | alta | — |
 | D37 | (passo 10, revisão adversarial achado 1, fable) o segurar F7 desfaz a **última ação do F7** (pilha `Feiticos._pilha_f7`, copiada na troca da tabela em `_montar_feiticos`), não "a marcação mais nova do atalho" em `usos`: a 1ª versão, com a batida caindo num gasto que o chat já tinha (dedupe), apagava a marcação certa de **outro** inimigo, e apagava gasto do F7 que um aliado tinha confirmado no chat. Gasto que o chat viu (`uso["chat"]`, antes ou depois) nunca se apaga: retorno `do_chat` "<rota>: chat confirmou" (só moldura). Prazo `DESFAZ_PRAZO_S` 60 s depois da ação (achado 4: F7 segurado sem querer minutos depois apagava a certa). Rótulo do desfeito diz qual: "desfeito: <rota>" (a voz segue "marcação desfeita"; catálogo inalterado, 476 `76d3c16afdfb` medido) | alta | ele querer desfazer depois de 60 s (subir o prazo) ou querer apagar um gasto que o chat leu errado (hoje não dá; exigiria outro gesto, ex.: segurar 3 s) |
 | D38 | (passo 10, revisão adversarial achado 2, fable) a batida do F7 (`selecionado`) sai na moldura **na hora, por cima de alerta** (`Aviso.imediato`): o retorno esperava `GAP_MOLDURA` 2,5 s sem alerta e a marcação sai 1,2 s depois de soltar, então com gank na tela ele nunca via "flash: mid?" antes de marcar (contradizia a D34). Não mexe em `_ultima_moldura`: o alerta seguinte entra como entraria. Custo assumido: bater F7 no meio de um gank troca a borda vermelha pela azul (a voz do gank segue; foi ele que apertou) | média | ele perder um gank por causa do rótulo: rótulo da batida na cor da borda atual em vez de azul, ou segurar o fim da janela até o rótulo aparecer |
+| D39 | (passo 11) `adversario_voltou` com **1 pulso** (`TIPOS[...]["pulsos"]=1` → `Moldura.mostrar(pulsos=1)`: cheio 0,45 s, some em 1 s, `moldura.alfa_pulso`) e **sem voz por padrão** pela config (`avisosDesligados.voz=["adversario_voltou"]` no `CONFIG_PADRAO` e, pela frente do plugin, no `PADRAO.coach` + migração `VERSAO` 4), não pelos `destinos` do tipo: tirar o `v` dos destinos faria a caixa da voz nas Configurações não ligar mais. Vale também para "o top apareceu no mid" (mesmo tipo). Frase do catálogo não muda | alta | ele querer a borda de antes: tirar `pulsos` do tipo; a voz: a caixa nas Configurações |
+| D40 | (passo 11) intruso `repetir` 15 → 30 s (o mesmo campeão na mesma rota): o jungler que some na moita e reaparece em 17 s é o mesmo mergulho (log 12:46:37/12:46:54); a volta de verdade depois de recuar passa de 30 s. Gank (60 s) e o corte da fala urgente (10 s) não mudam | média | um 2º mergulho real do mesmo jungler entre 15 e 30 s calado numa partida medida: voltar a 15 e cortar só a voz |
+| D41 | (passo 11) inimigo morto (`isDead`) = "visto" agora no `ao_vivo` (nível e farm não andam morto; sabemos onde ele está); o bloco da rota leva `morto`/`renascerS` e o painel diz "<campeão> morto, volta em N s". O "visto há" volta a contar do renascer. Itens comprados morto, na fonte, ficam como estavam (a Live Client só mostra item visto) | alta | — |
+| D42 | (passo 11) OCR do chat: recalibra quando o recorte passa `RECALIBRAR_PRINTS` 20 prints (~60 s) com o jogo na tela sem nenhuma linha `mm:ss`, procurando nas `FAIXAS_CALIBRAR` (a da HUD dele e o canto de baixo à esquerda); sem outro recorte a espera dobra até 160 prints; resumo de contagens no log a cada 5 min e no fim. Não grava print nem texto | média | recalibrar demais com o chat vazio no começo (custo: 1 OCR de faixa por tentativa, ~0,2 s abaixo do normal): subir `RECALIBRAR_PRINTS` |
 | D31 | (passo 9) `eog` sem `multiUserChatPassword`/`mucJwtDto`/`password`/`jwt` (`banco.SEGREDOS`, em qualquer profundidade): filtrado no `gravar_eog`, limpo no `abrir()` e pela CLI com backup antes; `secure_delete` + `wal_checkpoint(TRUNCATE)` para os bytes antigos não ficarem nas páginas livres nem no `-wal` | alta | — |
 
 Espelho do mapa: a geometria das rotas é absoluta (rota top = canto de cima à esquerda para os dois times);
@@ -367,6 +373,87 @@ nomes relativos. Nenhuma regra nova cita "top" fixo: tudo sai da rota onde estou
       (blind, ARAM) o rótulo da batida mostra o **nome do campeão** (a rota seria mentira); retorno "nada a desfazer"
       e "nada marcado" para todo segurar ter resposta na tela. Fica de fora: confirmar a seleção ao sair do jogo no
       meio da janela marca do mesmo jeito (a escolha foi feita no jogo).
+
+11. **Relato da partida 3293420970** (15/10/2026, ~12:41–13:13, top de Renekton contra Malphite, coletor de pé desde
+    06:00 com o código de `e2c6c62`; log `dados\coletor.log` 12:41:03–13:13:18; transcrição do Reco
+    `gravacao_reco_2026-10-15_12-41-15.txt`, áudio só). Executor que nunca viu a conversa: o Gabriel jogou gravando
+    (queria medir travadas do jogo, outra frente) e falou 4 coisas desta frente. Em palavras dele:
+    1. "Acho que o coletor de spells utilizadas não está funcionando."
+    2. "A pulsada quando meu inimigo voltou pra lane não precisa ficar tanto tempo, pode ser uma pulsada única. E aí
+       não precisa nem de aviso de voz."
+    3. "O inimigo está morto e está constando dados de que ele não foi visto há tanto tempo. Esse texto pode ser
+       melhorado, e talvez até a lógica, porque é óbvio que se ele está morto ele não vai ser visto."
+    4. (na transcrição) "o jungler chegando no top" 6 vezes seguidas e "gank provável no top" em sequência.
+    - Decisões D39–D42 na tabela acima.
+    - **Causas, com evidência:**
+      - (1) Na partida **nenhuma** linha `coach: chat ->`, nenhum `feitico_voltou`, nenhum `atalho: F7 recebido` (o F7
+        estava observado: `atalho: F7 observado` 12:41:03, `F7 solto` 13:13:05; ele não apertou, ou o note mandou outra
+        tecla: a sonda sem Fn do passo 10 segue sem resultado) e nenhum `OCR do chat falhou`. O log inteiro: linhas de
+        chat em 13/10 20h e 14/10 10h–16h (as 4 partidas medidas antes), **zero** nas 9 ranqueadas de 14/10 19:08 a
+        15/10 12:41. O caminho funciona fora do jogo: `teste-feiticos.py` com a gravação de 13/10 dá os 3 gastos certos
+        hoje; o jogo estava na frente (o minimapa, que usa o mesmo teste de janela, rodou a partida toda); `_Avisa`
+        loga erro do OCR (1 vez por minuto) e houve 1 só em 15/10 02:27 (timeout). Logo o OCR rodou e não reconheceu
+        nada, e o laço não registrava o que lia. O recorte é o de `dados\calibracao-chat.json` de **13/10 14:03**
+        (1405, 791, 1877, 961), usado para sempre: nunca recalibra. Hipótese mais provável: o chat saiu desse recorte
+        (no `game.cfg` de hoje `ChatScale=37`, `NativeOffsetX=0.6879`, `NativeOffsetY=0.6213`; sem os valores de 14/10
+        para comparar). **Sem prova** de qual mudança: nenhum print da tela dessas partidas (a vitrine gravou só até
+        14/10 15:16; o Reco grava só áudio). Não é patch (16.20.8248524 em todas) nem resolução (minimapa 347 px em
+        (2197, 716) igual).
+      - (2) `adversario_voltou` saía com a borda de 2 s pulsando (~3 pulsos, `CICLO` 0,7) e voz "o top voltou pra
+        rota" (5 falas e 7 bordas na partida).
+      - (3) `ao_vivo`: "visto" = mudança de nível/itens/farm; morto nada muda, e o bloco da rota dizia "visto há X:
+        dados dele parados" (amarelo, números cinza) com ele morto; o bloco da ameaça já tinha "morto: N s".
+      - (4) Log: "o jungler chegando no top" **2** vezes em 17 s (12:46:37 e 12:46:54, intruso vermelho urgente, mesma
+        chave `Ekko:rota_top`: ele sumiu na moita e "chegou" de novo; `repetir` 15 s, fala urgente 10 s); as outras 4
+        da transcrição são eco do Reco (ARMADILHAS). "Gank provável no top" real: 12:52:48 e 12:53:52 (**64 s**, passou
+        dos 60 s do gank: regra cumprida) e 12:57:56 (gank de outra rota); as outras da transcrição são eco.
+    - **Correções:** `avisos.TIPOS` (`adversario_voltou` `pulsos=1`; intruso `repetir` 30), `MotorAvisos._emitir`
+      (passa `pulsos` à moldura), `moldura.py` (`alfa_pulso`, `UM_PULSO_S`, `mostrar(pulsos=)`), `servidor_local`
+      (`CONFIG_PADRAO.avisosDesligados.voz` e o `ler_config` sem nada salvo usa o padrão), `ao_vivo` (morto = visto;
+      `rota.adv.morto/renascerS`), `painel.js` ("morto, volta em N s" na rota e na ameaça), `feiticos` (`com_horario`,
+      `LeitorChat.contagem`, `_recalibrar`, `FAIXAS_CALIBRAR`, `pings` no `ultima_leitura`), `coach_vivo`
+      (`_resumo_chat` a cada `RESUMO_CHAT_S` 300 s e no `_parar_feiticos`).
+    - **Provas** (vermelhas no `HEAD` 0db79ed, rodadas numa worktree dele com os testes novos):
+      `python tools\teste-alertas.py --sem-janela` (`relato_3293420970`: 1 pulso pedido, intruso sem pulsos, voz
+      calada no padrão e ligada pela caixa, curva do pulso, `Moldura.mostrar(pulsos=1)` sem janela, jungler de volta
+      em 17 s = 1 aviso e em 35 s = 2, outro inimigo em 17 s avisa; no HEAD: pulsos `[None]`, padrão `{[], []}` com
+      voz, `UM_PULSO_S` inexistente, falas em 5 e 22 s), `python tools\teste-feiticos.py --sem-gravacao` (recorte
+      velho sem o chat recalibra no 20º print para o canto esquerdo e lê o ping no 21º; chat vazio = tentativas aos
+      20 e 60 prints, recorte mantido; recorte certo nunca recalibra; jogo fora da tela conta; faixas cabem no OCR;
+      `pings`; no HEAD: `LeitorChat` sem `contagem`), `python tools\teste-coach.py` (`caso_relato_3293420970`: morto =
+      atual com `renascerS`, o "visto há" conta do renascer, resumo do chat no fim da partida sem o texto; no HEAD:
+      `KeyError: 'morto'`), `node tools\teste-painel.mjs` (novo: rodapé "Malphite morto, volta em 23 s", ameaça
+      "morto, volta em 23 s", vivo sumido segue "visto há 40 s"; no HEAD os 3 casos de morto falham).
+    - **Sem prova (próxima partida):** a causa exata do (1); a próxima partida diz no log: `chat: recorte (...) da
+      calibração salva` no 1º print, `recalibrado para` se o chat estiver noutro lugar, e o resumo `coach: chat na
+      partida: ...` (H = 0 = o recorte não vê o chat; H > 0 e 0 leituras de ping = ninguém pingou). Se o resumo der H = 0
+      **e** a recalibração "não achou o chat na tela", o chat está fora das duas faixas ou o OCR não lê na escala atual
+      (`ChatScale` 37): aí um print da tela com o chat aberto resolve. O F7 in-game segue sem prova (passo 10). A
+      borda de 1 pulso: a janela real foi medida na área de trabalho com o `League of Legends.exe` fechado (cheia até
+      ~0,45 s, some em 1 s); na tela do jogo, sem prova.
+    - **Revisão adversarial (passo 11, opus):** conferido no log e no código; 1 achado corrigido: o resumo do chat dizia
+      "N pings de feitiço" contando a mesma linha relida a cada print (no `teste-coach`, 1 ping em 3 prints = "3
+      pings"): virou "N leituras de ping de feitiço" e ganhou as tentativas de recalibração sem outro recorte e os
+      prints sem recorte (vermelho com a linha antiga numa cópia, verde agora). Hipótese alternativa descartada: as
+      partidas sem leitura começam logo depois do `d6b8040` (14/10 18:31, que mexeu no chat), mas o caminho do print
+      ao `processar_linhas` e ao log de gasto novo é o mesmo de antes (o `teste-feiticos` com a gravação de 13/10 passa
+      pelo mesmo `processar_linhas`), e a janela de tempo do ping (`LINHA_VELHA`) e o `RelogioJogo` não mudaram.
+      Conta que sustenta "o chat não saiu do lugar na horizontal": `NativeOffsetX` 0,6879 × (2560 − ~480 px de
+      chat) ≈ 1430, a margem do recorte de 13/10 (1405 + 12). Então a escala (`ChatScale` 37, letra que o OCR não lê
+      ou chat que mudou de altura) pesa tanto quanto o chat movido. O resumo novo não separa os dois sozinho: H = 0 com
+      "não achou o chat na tela" vale para os dois, e aí só o print da tela com o chat aberto decide.
+    - **Falta (orquestrador / frente do `pengu/**`):** `pengu/config.js`: `PADRAO.coach.avisosDesligados = { voz:
+      ['adversario_voltou'], tela: [] }`, `VERSAO = 4` e em `migrar`: `if (versao < 4) { const v =
+      salvo.coach?.avisosDesligados?.voz; if (Array.isArray(v) && !v.includes('adversario_voltou'))
+      v.push('adversario_voltou'); }` (uma vez só, como as anteriores; depois ele liga pela caixa e fica); o
+      `tools/teste-config.mjs` espera `{ voz: [], tela: [] }` no padrão (linhas 21 e 28) e passa a esperar a lista nova.
+      Sem isso o plugin manda a lista salva vazia no `POST /config` e a voz do "voltou" segue. Reiniciar o coletor no
+      lobby.
+    - **O que o pedido não dizia:** completei: o "apareceu no mid" (mesmo tipo) também pisca 1 vez e sai sem voz, um
+      recado azul só; o `ler_config` sem nada salvo passa a usar o padrão do `CONFIG_PADRAO` (antes virava `{[], []}`
+      e o padrão nunca valia); o bloco da ameaça também diz "morto, volta em N s" (era "morto: 22.4 s"); o resumo do
+      chat no log serve para o próximo "não está funcionando" ter resposta sem adivinhar. Fica de fora: gank top
+      repetido em 64 s (dentro da regra de 60 s; mudar pede outra calibração).
 
 ## O que o overlay mostra (para o Gabriel)
 

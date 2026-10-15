@@ -325,7 +325,10 @@ class EstadoPartida:
                 visto_gt = gt if ant[0] != assin else ant[1]
             if i in vistos_ev:
                 visto_gt = max(visto_gt or 0, vistos_ev[i])
-            if aliado:
+            # morto: sabemos onde ele está e que nível/farm não andam até renascer; não é "dado parado" (Gabriel,
+            # partida 3293420970: "o inimigo está morto e está constando que ele não foi visto há tanto tempo"). O
+            # "visto há" volta a contar quando ele renasce na fonte
+            if aliado or p.get("isDead"):
                 visto_gt = gt
             self.visto[chave] = (assin, visto_gt)
             ha = 0 if aliado or fase == "carregando" else (None if visto_gt is None else max(0, gt - visto_gt))
@@ -384,7 +387,8 @@ class EstadoPartida:
         out = {"eu": {k: eu[k] for k in ("nome", "campeao", "rota", "nivel", "cs", "ouroEstimado")},
                "bolso": bolso, "adv": None, "diff": None, "cor": {}}
         if adv:
-            out["adv"] = {k: adv[k] for k in ("nome", "campeao", "nivel", "cs", "ouroEstimado", "vistoHaS", "atual")}
+            out["adv"] = {k: adv.get(k) for k in ("nome", "campeao", "nivel", "cs", "ouroEstimado", "vistoHaS", "atual",
+                                                  "morto", "renascerS")}
             # itens do adversário só chegam quando ele é visto: nunca visto ou sem item = ouro dele desconhecido (no começo
             # da partida a conta dava "+500", o item inicial do Gabriel contra o inventário vazio; 14/10/2026)
             ouro_ok = adv.get("vistoGt") is not None and bool(adv.get("itens"))
