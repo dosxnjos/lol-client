@@ -1091,7 +1091,9 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     no `MoveTo`, não no fim da tarefa; troca de tela já no compacto, fora da partida e com a janela pequena vai pela fila da
     geometria (`pelaGeometria` em `index.js`). Reverte se o pós-jogo voltar a encolher a lateral. Prova: dois casos novos em
     `teste-compacto-lateral.mjs` ("⚙ aberta numa partida inteira", "⚙ fechada nos quadros antes do ResizeTo"), vermelhos antes
-    (coluna cortada no #121; janela em 1090 em vez de 640) e com cada parte desfeita numa cópia; 117/117 e as outras suítes verdes.
+    (coluna cortada no #121; janela em 1090 em vez de 640); numa cópia, desfazer `pintada` ou `pelaGeometria` deixa o 1º vermelho;
+    o estado no `MoveTo` é redundante com `pintada` (desfeito sozinho segue 117/117; fica por deixar o estado honesto); 117/117 e
+    as outras suítes verdes.
     **Correção do registro:** o traço não decide (xiv): com 0, `css` e `move` saem no mesmo ms do JS; quem chega primeiro na tela
     só vídeo ou captura em alta taxa mostra. Também só o client: perto da borda direita o `ResizeTo` primeiro passa da borda do
     monitor até o `MoveTo` (na 2ª tela, visível por 1+ quadro); `windowWidth` físico confirmado no `centerWithinMainWindow` da Riot.
