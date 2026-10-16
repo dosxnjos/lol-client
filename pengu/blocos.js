@@ -227,7 +227,5 @@ export const blocoCompacto = (corpo, { cfg, definir, ui }) => corpo.append(
     !!cfg.compacto?.ligado, v => definir('compacto.ligado', v)),
   ui.caixa('compacto.inicioCompacto', 'Abrir cada fase no compacto', 'Desligado: cada fase começa no client normal e o botão "▣ modo compacto" leva ao compacto. ARAM, reconectar, celebrações e janelas próprias da Riot abrem o client normal de qualquer jeito.',
     !!cfg.compacto?.inicioCompacto, v => definir('compacto.inicioCompacto', v)),
-  ui.caixa('compacto.chatLateral', 'Chat ao lado do compacto', 'O 💬 alarga o client para a direita com a lista de amigos; a conversa abre mais à direita. Substitui as janelas do chat do coletor (elas deixam de abrir conversa sozinhas). Desligado: o 💬 volta a abrir as janelas próprias.',
-    cfg.compacto?.chatLateral !== false, v => definir('compacto.chatLateral', v)),
-  ui.caixa('compacto.conversaSozinha', 'Abrir a conversa sozinha com mensagem nova', 'Só se couber sem mover a janela e nunca na seleção de campeões (no lobby, no início e no pós-jogo). Desligado: mensagem nova só conta no 💬.',
-    cfg.compacto?.conversaSozinha !== false, v => definir('compacto.conversaSozinha', v)));
+  ui.caixa('compacto.chatLateral', 'Chat e amigos ao lado do compacto', 'O 💬 alarga o client para a direita com as conversas recentes e a última conversa aberta; o 👥 mostra a lista de amigos. Mensagem nova só aparece nos recentes e no contador: nada abre sozinho. Substitui as janelas do chat do coletor (elas deixam de abrir conversa sozinhas). Desligado: o 💬 volta a abrir as janelas próprias.',
+    cfg.compacto?.chatLateral !== false, v => definir('compacto.chatLateral', v)));

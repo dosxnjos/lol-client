@@ -220,6 +220,27 @@ Técnicas (a opção mais reversível; confiança e o que reverteria):
 
 ## Etapa 1 — chat: 💬 com recentes e conversa, ✕, botão de amigos, nada sozinho
 
+**Estado (16/10/2026, tarde): construída, sem commit (o orquestrador commita).** Feito: estado novo da lateral
+(`painel: null|'chat'|'coach'`, `anterior`, `conversa`, `rascunhos: Map`); `talvezAbrirSozinha`, `desfazerAuto`,
+`FASES_ABRE_SOZINHA`, `MAX_CONVERSAS`, abas, `lembrarCoach` e a chave `conversaSozinha` removidos; recentes
+(`limparConversas`, `verRecentes`, `criarRecentes` em `lateral-chat.js`) com a sala do time na 1ª linha na seleção (e fora
+da lista de amigos); uma view de conversa para todas as 1:1 (`reiniciar`, `limpar:false` quando ele troca no meio do envio);
+💬 = `alternarChat`, 👥 = `botaoAmigos` (`data-a="lista-amigos"`, porque `amigos` já é a lista do lobby) logo depois do 💬;
+"+ convidar" abre a lista; textos e chave atualizados; README, ARMADILHAS e `CLAUDE.md` atualizados.
+Decisões tomadas na execução: (a) "lida" também no clique do amigo na lista (o mesmo gesto que põe a conversa à vista;
+decisão 4 só citava o recente); (b) monitor estreito: 👥/💬 com o painel aberto mas escondido **mostram** em vez de fechar;
+(c) com 3 botões no topo os ícones ficam mais justos (o 👥 cortava "FINALIZAÇÃO" na seleção, medido no harness);
+(d) [[DECISAO]] do coach voltando sozinho adotada como recomendado (nunca volta; reversível). Provas: `teste-compacto-lateral`
+129/129 (mutações no scratchpad: abrir sozinho com o painel aberto e com ele fechado ficam vermelhas), bateria node do plugin
+verde, `teste-textos` 9/9, prints `temp/compacto-harness/2026-10-16-etapa1-*.png` (cliques reais do Playwright).
+**Só o client real prova:** PUT/DELETE `conversations/active` aceitos no clique do recente; fotos do perfil nos recentes; altura
+1/3 com fonte e escala reais; `:has` no CEF 108 do client; o envio de rascunho guardado depois de trocar de conversa.
+**Revisão adversarial (16/10/2026, antes do commit):** mutações conferidas (tirar `isTrusted` de "lida" e do Enter, abrir sozinho
+com o painel fechado e trocar de conversa sozinho: todas vermelhas). Corrigido: envio em voo com troca de conversa (A → B → A
+deixava o texto enviado como rascunho; a falha de A aparecia na conversa de B), comparação pela chave `k`, 2 casos novos (131/131).
+Ficou: o 👥 também entrou no topo do lobby, pós-jogo e honra (título não medido nessas telas; só a seleção foi medida); na seleção
+o relógio lê `/conversations` 2 vezes por volta (`lerConversas` e `lerSala`).
+
 Arquivos: `compacto/lateral.js`, `compacto/lateral-chat.js`, `compacto/chat-botao.js`, telas que chamam `botaoChat`
 (`tela-lobby.js` `cabecalho`, `tela-champselect.js`, `tela-posjogo.js`, `tela-honra.js`), `pengu/config.js`,
 `pengu/blocos.js`, `tools/teste-compacto-lateral.mjs`, `tools/teste-compacto.mjs`, README, ARMADILHAS.

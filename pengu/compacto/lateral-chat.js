@@ -3,6 +3,9 @@
 // mais para a direita"). Lista de amigos, conversa 1:1 e a sala do time na seleção ("chat do time entra sim", 14/10 ~20:00).
 // Quem abre, fecha e decide a largura é compacto/lateral.js; aqui só dados (funções puras, portadas 1:1 de
 // coletor/chat_janelas.py) e o desenho de cada painel. Importável no node: nada de DOM no topo.
+// Etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md (16/10/2026): o painel de chat ganha os RECENTES (verRecentes,
+// criarRecentes: conversas 1:1 pela última mensagem) em cima e a conversa escolhida embaixo; a lista de amigos (👥) não tem mais
+// a sala do time (ela é a 1ª linha dos recentes na seleção).
 //
 // Linhas que não se cruzam:
 // - escrita só por clique ou Enter dele (evento com isTrusted): enviar, convidar, "lida". Rotas e corpos do front da Riot (lidos
@@ -125,6 +128,55 @@ export function verAmigos({ amigos = [], conversas = [], lobby = null, convidado
 
 const ehEntrouSaiu = m => String(m.type || '').toLowerCase() === 'system' && /^(joined|left)_room$/.test(String(m.body || '').trim());
 
+// ---------- recentes (etapa 1 de 2026-10-16) ----------
+// da lista da LCU (GET /lol-chat/v1/conversations) só o que a lateral usa. Conversa 1:1: id, pid, nome, não lidas e da
+// lastMessage só remetente, texto, hora e tipo (medido em 16/10/2026: as 1:1 TAMBÉM trazem password e mucJwtDto; nunca ficam).
+// Sala de grupo: só id e type.
+export function limparConversas(lista) {
+  return (Array.isArray(lista) ? lista : []).filter(c => c && typeof c === 'object').map(c => {
+    if (!ehConversaDireta(c)) return { id: String(c.id ?? ''), type: String(c.type ?? '') };
+    const lm = c.lastMessage && typeof c.lastMessage === 'object' ? c.lastMessage : null;
+    return { id: String(c.id), pid: String(c.pid || c.id), type: 'chat', unreadMessageCount: Math.max(0, Number(c.unreadMessageCount) || 0), gameName: String(c.gameName || c.name || ''),
+      lastMessage: lm ? { fromId: lm.fromId, fromPid: lm.fromPid, fromPuuid: lm.fromPuuid, body: typeof lm.body === 'string' ? lm.body : '', timestamp: String(lm.timestamp || ''),
+        type: String(lm.type || '') } : null };
+  });
+}
+// hora curta da última mensagem: hoje = "19:58"; outro dia = "14/10"
+export function quandoCurto(ts, agoraMs = Date.now()) {
+  const t = Date.parse(ts || '');
+  if (!Number.isFinite(t)) return '';
+  const d = new Date(t), a = new Date(agoraMs);
+  const p2 = n => String(n).padStart(2, '0');
+  if (d.toDateString() === a.toDateString()) return `${p2(d.getHours())}:${p2(d.getMinutes())}`;
+  return `${p2(d.getDate())}/${p2(d.getMonth() + 1)}`;
+}
+// conversas diretas (limparConversas) + amigos (verAmigos: foto e status) + eu -> [{k, pid, conv, nome, trecho, deMim, quando, hora,
+// un, icone, dot, campeao, txt}], da última mensagem mais nova para a mais velha; conversa sem mensagem no fim (por nome).
+// "joined_room"/"left_room" de sistema não viram trecho.
+export function verRecentes({ conversas = [], amigos = null, eu = null, agoraMs = Date.now() } = {}) {
+  const meus = new Set([eu?.id, eu?.pid, eu?.puuid].filter(Boolean).map(String));
+  const porPid = new Map();
+  if (amigos && amigos.ok !== false) for (const a of [...(amigos.online || []), ...(amigos.offline || [])]) porPid.set(String(a.pid).toLowerCase(), a);
+  const out = [];
+  for (const c of Array.isArray(conversas) ? conversas : []) {
+    if (!ehConversaDireta(c)) continue;
+    const pid = String(c.pid || c.id || '');
+    if (!pid) continue;
+    const a = porPid.get(pid.toLowerCase()) || null;
+    const lm = c.lastMessage && typeof c.lastMessage === 'object' ? c.lastMessage : null;
+    const tipo = String(lm?.type || 'chat').toLowerCase();
+    const sis = !lm || ehEntrouSaiu(lm) || (tipo !== 'chat' && tipo !== 'groupchat');
+    const deMim = !!lm && [lm.fromId, lm.fromPid, lm.fromPuuid].filter(Boolean).some(v => meus.has(String(v)));
+    const t = Date.parse(lm?.timestamp || '');
+    const corpo = sis ? '' : String(lm.body || '').replace(/\s+/g, ' ').trim();
+    out.push({ k: `c:${pid.toLowerCase()}`, pid, conv: String(c.id || ''), nome: String(c.gameName || a?.nome || 'amigo'), trecho: corpo ? (deMim ? `você: ${corpo}` : corpo) : '',
+      deMim, quando: Number.isFinite(t) ? t : null, hora: quandoCurto(lm?.timestamp, agoraMs), un: Math.max(0, Number(c.unreadMessageCount) || 0),
+      icone: a?.icone || 0, dot: a?.dot || 'off', campeao: a?.campeao || 0, txt: a?.txt || '' });
+  }
+  const cmp = (x, y) => x.nome.localeCompare(y.nome, 'pt-BR', { sensitivity: 'base' });
+  return out.sort((x, y) => (x.quando === null) - (y.quando === null) || (y.quando ?? 0) - (x.quando ?? 0) || cmp(x, y));
+}
+
 // mensagens -> [{id, eu, texto, quando, sis}] (as MSGS_MAX últimas). eu = {id, puuid, pid, summonerId}
 export function lerConversa(msgs, eu) {
   const meus = new Set([eu?.id, eu?.pid, eu?.puuid].filter(Boolean).map(String));
@@ -189,10 +241,10 @@ function avatar(a, doc) {
     h('i', { doc, style: { background: DOT[a.dot] || DOT.off } }));
 }
 
-// Lista de amigos. amb = {doc, seguro, aoAmigo(a), aoConvidar(a, ev), aoPedidos(), aoTime()} -> {el, pintar(dados), busca()}
+// Lista de amigos (👥). amb = {doc, seguro, aoAmigo(a, ev), aoConvidar(a, ev), aoPedidos(), aoFechar()} -> {el, pintar(dados), busca()}
 export function criarListaAmigos(amb) {
   const { doc } = amb;
-  let dados = null, filtro = '', offAberto = false, assinatura = '', time = null;
+  let dados = null, filtro = '', offAberto = false, assinatura = '';
   const busca = h('input', { doc, class: 'lc-lt-busca', placeholder: 'buscar amigo', autocomplete: 'off', spellcheck: 'false', dataset: { a: 'lt-busca' } });
   busca.addEventListener('input', () => { filtro = String(busca.value || ''); pintar(dados, true); });
   busca.addEventListener('keydown', e => e.stopPropagation?.()); // teclas da busca não vão para os atalhos da Riot
@@ -213,12 +265,12 @@ export function criarListaAmigos(amb) {
       on: { click: amb.seguro(e => amb.aoConvidar?.(a, e)) } }, a.convidar.rotulo || 'convidar') : null,
     a.un ? h('span', { doc, class: 'lc-lt-un' }, a.un > 99 ? '99+' : String(a.un)) : null));
 
-  // dados = verAmigos(...) + {ok, motivo, pedidos, total}; time = {naoLidas} na seleção (null fora dela)
-  function pintar(d, forcar = false, salaTime = time) {
-    dados = d; time = salaTime;
+  // dados = verAmigos(...) + {ok, motivo, pedidos, total}
+  function pintar(d, forcar = false) {
+    dados = d;
     const f = filtro.trim().toLocaleLowerCase('pt-BR');
     const sig = JSON.stringify([d && d.ok ? [d.online.map(a => [a.pid, a.un, a.txt, a.dot, a.aberta, a.convidar?.rotulo, a.convidar?.ok, a.campeao, a.icone]), d.offline.length,
-      offAberto || f ? d.offline.map(a => [a.pid, a.un, a.aberta]) : 0, d.pedidos] : d?.motivo ?? null, f, offAberto, time ? time.naoLidas : null]);
+      offAberto || f ? d.offline.map(a => [a.pid, a.un, a.aberta]) : 0, d.pedidos] : d?.motivo ?? null, f, offAberto]);
     if (!forcar && sig === assinatura) return;
     assinatura = sig;
     if (!d || !d.ok) {
@@ -230,8 +282,6 @@ export function criarListaAmigos(amb) {
     sub.textContent = `${d.online.length} online de ${d.online.length + d.offline.length}`;
     const casa = a => !f || a.nome.toLocaleLowerCase('pt-BR').includes(f);
     const filhos = [];
-    if (time) filhos.push(h('button', { doc, class: 'lc-lt-sala', dataset: { a: 'lt-sala-time' }, title: 'chat do seu time na seleção (só campeão e posição)',
-      on: { click: amb.seguro(e => amb.aoTime?.(e)) } }, '🗨 sala do time', time.naoLidas ? h('span', { doc, class: 'lc-lt-un' }, String(time.naoLidas)) : null));
     if (d.pedidos > 0) filhos.push(h('button', { doc, class: 'lc-lt-pedidos', dataset: { a: 'lt-pedidos' }, title: 'aceitar ou recusar é no client normal',
       on: { click: amb.seguro(e => amb.aoPedidos?.(e)) } }, `${d.pedidos} ${d.pedidos === 1 ? 'pedido' : 'pedidos'} de amizade`, h('span', { doc }, 'abrir ⤢')));
     for (const g of d.grupos) {
@@ -250,8 +300,10 @@ export function criarListaAmigos(amb) {
   return { el, pintar, busca, estado: () => ({ filtro, offAberto }) };
 }
 
-// Uma conversa (aba do painel). amb = {doc, seguro, enviar(texto) -> Promise<{ok, motivo}>, aoInteragir(ev)}. O campo e o botão
-// nascem uma vez (ARMADILHAS: campo recriado tira o foco no meio da digitação); repinta só as mensagens.
+// Uma conversa (parte de baixo do painel de chat). amb = {doc, seguro, enviar(texto) -> Promise<{ok, motivo, limpar?}>, aoInteragir(ev)}.
+// O campo e o botão nascem uma vez (ARMADILHAS: campo recriado tira o foco no meio da digitação); repinta só as mensagens. A mesma
+// view serve a todas as conversas 1:1 (etapa 1 de 2026-10-16): quem troca de conversa chama reiniciar() e repõe o rascunho no campo;
+// enviar devolve limpar:false quando ele já trocou de conversa no meio do envio (o campo é o da outra: nem limpa nem mostra erro).
 export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)', semMensagens = 'sem mensagens ainda' } = {}) {
   const { doc } = amb;
   let enviando = false, assinatura = '', mudo = false, erro = '';
@@ -269,8 +321,9 @@ export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)',
     enviando = true; bt.disabled = true;
     let r;
     try { r = await amb.enviar(texto); } finally { enviando = false; bt.disabled = mudo; }
-    if (r?.ok) { if (String(input.value || '').trim() === texto) input.value = ''; erro = ''; }
-    else erro = `não enviou: ${r?.motivo || 'erro'}`;
+    if (r?.ok) { if (r.limpar !== false && String(input.value || '').trim() === texto) input.value = ''; erro = ''; }
+    else if (r?.limpar !== false) erro = `não enviou: ${r?.motivo || 'erro'}`; // limpar:false = o campo já é de outra conversa
+    // (o erro do envio de A não pode aparecer na conversa de B: quem chamou avisa; revisão de 16/10/2026)
     pintarErro();
   };
   const pintarErro = () => { el.querySelector?.('.lc-lt-erro')?.remove(); if (erro) el.insertBefore(h('div', { doc, class: 'lc-lt-erro' }, erro), en); };
@@ -280,14 +333,15 @@ export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)',
     return undefined;
   }));
   bt.addEventListener('click', amb.seguro(e => enviar(e)));
-  // linhas = [{id, eu, texto, quando, sis}] ou da sala do time [{id, quem, texto}]; desenhar(l) -> elemento
-  function pintar(linhas, { motivo = '', bloqueado = false, desenhar = null } = {}) {
+  // linhas = [{id, eu, texto, quando, sis}] ou da sala do time [{id, quem, texto}]; desenhar(l) -> elemento; chave = de quem é a
+  // conversa (a view é a mesma para todas: trocar de conversa sempre repinta)
+  function pintar(linhas, { motivo = '', bloqueado = false, desenhar = null, chave = '' } = {}) {
     if (bloqueado !== mudo) {
       mudo = bloqueado;
       if (mudo) el.insertBefore(bloq, en); else bloq.remove();
     }
     input.disabled = mudo; bt.disabled = mudo || enviando;
-    const sig = JSON.stringify([motivo, (linhas || []).length, (linhas || []).at(-1)?.id ?? '', (linhas || []).at(-1)?.texto ?? '']);
+    const sig = JSON.stringify([chave, motivo, (linhas || []).length, (linhas || []).at(-1)?.id ?? '', (linhas || []).at(-1)?.texto ?? '']);
     if (sig === assinatura) return;
     assinatura = sig;
     let noFim = true;
@@ -300,7 +354,48 @@ export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)',
   }
   el.addEventListener('pointerdown', e => amb.aoInteragir?.(e), true);
   el.addEventListener('keydown', e => amb.aoInteragir?.(e), true);
-  return { el, input, bt, pintar, enviar, focar: () => { try { input.focus({ preventScroll: true }); } catch { /* sem DOM */ } } };
+  // outra conversa no mesmo campo: some o erro da anterior, troca o placeholder e o texto (o rascunho dela)
+  function reiniciar({ placeholder: ph, texto = '' } = {}) {
+    erro = ''; pintarErro(); assinatura = '';
+    if (ph) input.placeholder = ph;
+    input.value = texto;
+  }
+  return { el, input, bt, pintar, enviar, reiniciar, focar: () => { try { input.focus({ preventScroll: true }); } catch { /* sem DOM */ } } };
+}
+
+// Recentes (parte de cima do painel de chat; etapa 1 de 2026-10-16). amb = {doc, seguro, aoAbrir(r, ev)} -> {el, pintar(itens, {ativa, time})}.
+// itens = verRecentes(...); time = {un} na seleção (a sala do time é a 1ª linha), null fora dela. As linhas só são recriadas quando
+// algo delas muda (o relógio repinta a cada 1,5 s: linha recriada entre o pointerdown e o click perde o clique).
+export function criarRecentes(amb) {
+  const { doc } = amb;
+  let assinatura = '';
+  const el = h('div', { doc, class: 'lc-lt-rec', dataset: { a: 'lt-recentes' } });
+  const abrir = r => amb.seguro(e => amb.aoAbrir?.(r, e));
+  const linha = (r, ativa) => h('div', { doc, class: 'lc-lt-recente' + (r.k === ativa ? ' lc-lt-on' : '') + (r.un ? ' lc-lt-nova' : ''), dataset: { a: 'lt-recente', k: r.k },
+    title: r.txt ? `${r.nome} · ${r.txt}` : r.nome, on: { click: abrir(r) } },
+  avatar({ nome: r.nome, icone: r.icone, campeao: r.campeao, dot: r.dot }, doc),
+  h('div', { doc, class: 'lc-lt-nm' }, h('span', { doc }, r.nome), h('small', { doc }, r.trecho || ' ')),
+  h('span', { doc, class: 'lc-lt-rdir' }, h('small', { doc }, r.hora || ''), r.un ? h('span', { doc, class: 'lc-lt-un' }, r.un > 99 ? '99+' : String(r.un)) : null));
+  const linhaTime = (t, ativa) => h('div', { doc, class: 'lc-lt-recente lc-lt-rtime' + (ativa === 'time' ? ' lc-lt-on' : '') + (t.un ? ' lc-lt-nova' : ''),
+    dataset: { a: 'lt-recente', k: 'time' }, title: 'chat do seu time na seleção (só campeão e posição)', on: { click: abrir({ k: 'time', tipo: 'time' }) } },
+  h('span', { doc, class: 'lc-lt-av lc-lt-avtime' }, '🗨'),
+  h('div', { doc, class: 'lc-lt-nm' }, h('span', { doc }, 'sala do time'), h('small', { doc }, 'só campeão e posição de quem fala')),
+  h('span', { doc, class: 'lc-lt-rdir' }, t.un ? h('span', { doc, class: 'lc-lt-un' }, t.un > 99 ? '99+' : String(t.un)) : null));
+  function pintar(itens, { ativa = null, time = null } = {}) {
+    const lista = Array.isArray(itens) ? itens : [];
+    const sig = JSON.stringify([lista.map(r => [r.k, r.nome, r.trecho, r.hora, r.un, r.icone, r.dot, r.campeao, r.txt]), ativa, time ? time.un : null]);
+    if (sig === assinatura) return;
+    assinatura = sig;
+    const filhos = [];
+    if (time) filhos.push(linhaTime(time, ativa));
+    filhos.push(...lista.map(r => linha(r, ativa)));
+    if (!filhos.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhuma conversa recente: abra uma pela lista de amigos (👥)'));
+    let topo = 0;
+    try { topo = el.scrollTop || 0; } catch { /* sem layout */ }
+    el.replaceChildren(...filhos);
+    try { el.scrollTop = topo; } catch { /* sem layout */ }
+  }
+  return { el, pintar };
 }
 
 // linha da sala do time: foto do campeão + posição (nunca nome)
@@ -351,10 +446,23 @@ export const CSS_CHAT_LATERAL = `
   display:inline-grid; place-items:center; line-height:1; margin-left:6px; }
 #lc-compacto .lc-lt-conv { background:none; border:1px solid var(--lc-ouro-esc); color:var(--lc-ouro); font:inherit; font-size:10.5px; height:20px; padding:0 6px; cursor:pointer; }
 #lc-compacto .lc-lt-conv.lc-lt-off { border-color:var(--lc-linha); color:var(--lc-mudo); cursor:help; }
-#lc-compacto .lc-lt-pedidos, #lc-compacto .lc-lt-sala { display:flex; justify-content:space-between; align-items:center; width:calc(100% - 20px); margin:4px 10px;
+#lc-compacto .lc-lt-pedidos { display:flex; justify-content:space-between; align-items:center; width:calc(100% - 20px); margin:4px 10px;
   padding:6px 9px; background:none; border:1px dashed var(--lc-ouro-esc); color:var(--lc-ouro2); font:inherit; font-size:12px; cursor:pointer; text-align:left; }
-#lc-compacto .lc-lt-sala { border-style:solid; border-color:var(--lc-azul2); background:rgba(10,200,185,.06); }
 #lc-compacto .lc-lt-pedidos span { color:var(--lc-ouro); font-size:11px; }
+#lc-compacto .lc-lt-chat { flex:1; min-height:0; display:flex; flex-direction:column; }
+#lc-compacto .lc-lt-rec { flex:1; min-height:0; overflow:auto; padding:4px 0; }
+#lc-compacto .lc-lt-chat.lc-lt-com-conversa .lc-lt-rec { flex:0 0 33%; border-bottom:1px solid var(--lc-linha2); }
+#lc-compacto .lc-lt-baixo { display:none; flex:1; min-height:0; flex-direction:column; }
+#lc-compacto .lc-lt-chat.lc-lt-com-conversa .lc-lt-baixo { display:flex; }
+#lc-compacto .lc-lt-ccab { height:38px; flex:none; display:flex; align-items:center; gap:8px; padding:0 8px 0 12px; border-bottom:1px solid var(--lc-linha2); background:#0b1520; }
+#lc-compacto .lc-lt-ccorpo { flex:1; min-height:0; display:flex; flex-direction:column; }
+#lc-compacto .lc-lt-recente { display:grid; grid-template-columns:30px 1fr auto; gap:8px; align-items:center; padding:5px 12px; cursor:pointer; border-left:2px solid transparent; }
+#lc-compacto .lc-lt-recente:hover { background:rgba(255,255,255,.03); }
+#lc-compacto .lc-lt-recente.lc-lt-on { background:rgba(10,200,185,.08); border-left-color:var(--lc-azul); }
+#lc-compacto .lc-lt-recente.lc-lt-nova .lc-lt-nm small { color:#e8e2d0; }
+#lc-compacto .lc-lt-rdir { display:flex; flex-direction:column; align-items:flex-end; gap:3px; }
+#lc-compacto .lc-lt-rdir small { font-size:10.5px; color:var(--lc-mudo); }
+#lc-compacto .lc-lt-avtime { background:rgba(10,200,185,.12); border-color:var(--lc-azul2); font-size:13px; }
 #lc-compacto .lc-lt-vazio { padding:18px 12px; color:var(--lc-mudo); font-size:12px; }
 #lc-compacto .lc-lt-conversa { flex:1; min-height:0; display:flex; flex-direction:column; }
 #lc-compacto .lc-lt-ms { flex:1; min-height:0; overflow:auto; padding:10px; display:flex; flex-direction:column; gap:6px; user-select:text; }

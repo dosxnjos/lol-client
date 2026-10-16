@@ -1,6 +1,9 @@
 // Testa a lateral do client compacto (roadmap/2026-10-13-client-compacto.md, passo 13; parecer do Gabriel de 14/10/2026 ~20:00):
 // chat ao lado (A1/A2), sala do time na seleção, configurações à esquerda (B1), coach da seleção (B2), "📊 última partida" (B3) e
 // as 3 travas do roteador (LIMITES.larg, LARGURA_COMPACTA_MAX, noTamanho na troca de tela) com o estado único de largura.
+// Etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md (16/10/2026): 💬 = painel de chat (recentes em cima, a conversa
+// embaixo, ✕ da conversa), 👥 = lista de amigos, 📊 no lugar do chat; nada do chat abre sozinho em fase nenhuma; rascunho por
+// conversa; "lida" no clique dele (recente, amigo ou a própria conversa) e DELETE ao sair de vista.
 // Sem o client: roteador e lateral de verdade, janela falsa que faz o que o client faz (ResizeTo em px CSS mantendo o canto,
 // MoveTo e ScreenData em px físicos, escala 1,25), LCU falsa (tools/lcu-falsa.mjs) e DOM mínimo feito aqui.
 // O que segura: abrir e fechar qualquer painel, em TODA ordem e em 4 lugares do monitor, nunca deixa a janela fora do monitor,
@@ -12,11 +15,12 @@ import { criarJanela, invocadorRiot, criarCamada, tamanho, LATERAL_MAX, CSS as C
 import { criarRoteador, criarArrastoJanela, CLASSE, geometriaAtiva } from '../pengu/compacto/index.js';
 import { lcu as lcuReal } from '../pengu/compacto/comum.js';
 import { criarGeometria, lerTelaRiot, posicaoAlvo, cabeSemMover, normalizarTela } from '../pengu/compacto/geometria.js';
-import { criarLateral, layout, MAX_CONVERSAS } from '../pengu/compacto/lateral.js';
-import { verAmigos, statusAmigo, lerSalaTime, elencoTime, acharSalaTime, lobbyParaConvite, pedidosRecebidos, lerConversa } from '../pengu/compacto/lateral-chat.js';
+import { criarLateral, layout } from '../pengu/compacto/lateral.js';
+import { verAmigos, statusAmigo, lerSalaTime, elencoTime, acharSalaTime, lobbyParaConvite, pedidosRecebidos, lerConversa, limparConversas, verRecentes,
+  quandoCurto } from '../pengu/compacto/lateral-chat.js';
 import { modeloSelo, meuNaSessao } from '../pengu/compacto/lateral-coach.js';
 import { linhaUltima } from '../pengu/compacto/tela-lobby.js';
-import { botaoCoach, botaoConfig } from '../pengu/compacto/chat-botao.js';
+import { botaoCoach, botaoConfig, botaoChat, botaoAmigos } from '../pengu/compacto/chat-botao.js';
 import { PADRAO } from '../pengu/config.js';
 
 // ---------- DOM mínimo (o dos outros testes do compacto; append(null) quebra, como seria "null" na tela) ----------
@@ -251,7 +255,12 @@ function rotasPadrao(est) {
     'GET /lol-lobby/v2/lobby': () => (est.lobby === null ? { status: 404, json: { message: 'sem lobby' } } : est.lobby),
     'POST /lol-lobby/v2/lobby/invitations': { status: 200, json: [] },
     [`GET /lol-chat/v1/conversations/${encodeURIComponent('a1@br1.pvp.net')}/messages`]: () => est.msgsA1,
-    [`POST /lol-chat/v1/conversations/${encodeURIComponent('a1@br1.pvp.net')}/messages`]: c => { est.msgsA1.push({ id: 'n' + est.msgsA1.length, ...c, fromId: 'eu@br1.pvp.net' }); return { status: 200, json: {} }; },
+    // est.segurar: promessa que segura a resposta (envio em voo); est.recusar: status de erro da LCU
+    [`POST /lol-chat/v1/conversations/${encodeURIComponent('a1@br1.pvp.net')}/messages`]: async c => {
+      if (est.segurar) await est.segurar;
+      if (est.recusar) return { status: est.recusar, json: {} };
+      est.msgsA1.push({ id: 'n' + est.msgsA1.length, ...c, fromId: 'eu@br1.pvp.net' }); return { status: 200, json: {} };
+    },
     [`POST /lol-chat/v1/conversations/${encodeURIComponent('a2@br1.pvp.net')}/messages`]: () => (est.conv2 ? { status: 200, json: {} } : { status: 404, json: {} }),
     'POST /lol-chat/v1/conversations': c => { est.conv2 = c; return { status: 200, json: c }; },
     'PUT /lol-chat/v1/conversations/active': { status: 204 },
@@ -273,7 +282,9 @@ function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ 
   const doc = novoDoc();
   globalThis.document = doc;
   const win = quadros ? janelaQuadros({ x, mon: MONITORES[mon] || mon, ...quadros }) : janelaFalsa({ x, mon: MONITORES[mon] || mon, canto });
-  const est = { amigos: AMIGOS(), conversas: [{ id: 'a1@br1.pvp.net', pid: 'a1@br1.pvp.net', type: 'chat', unreadMessageCount: 0, gameName: 'amigo 1' },
+  // a 1:1 também traz password e mucJwtDto (medido em 16/10/2026): nunca podem sair da leitura
+  const est = { amigos: AMIGOS(), conversas: [{ id: 'a1@br1.pvp.net', pid: 'a1@br1.pvp.net', type: 'chat', unreadMessageCount: 0, gameName: 'amigo 1', password: NUNCA,
+    mucJwtDto: { jwt: NUNCA }, lastMessage: { id: 'm1', type: 'chat', body: 'bora uma duo?', fromId: 'a1@br1.pvp.net', timestamp: '2026-10-14T19:58:00.000Z' } },
     { id: SALA_CS, type: 'championSelect', extra: { campo: NUNCA } }],
   msgsA1: [{ id: 'm1', type: 'chat', body: 'bora uma duo?', fromId: 'a1@br1.pvp.net', timestamp: '2026-10-14T19:58:00.000Z' }],
   msgsCS: [{ id: 'j', type: 'system', body: 'joined_room', fromPuuid: 'p-al0' },
@@ -283,7 +294,7 @@ function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ 
   lobby: { localMember: { isLeader: true, puuid: 'puuid-eu', summonerId: 111 }, members: [{ puuid: 'puuid-eu', summonerId: 111 }] }, sessao: null, mudo: false, conv2: null };
   const falsa = lcuFalsa(rotasPadrao(est));
   const lcu = (m, u, c) => lcuReal(m, u, c, falsa.fetch);
-  const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680, chatLateral: true, conversaSozinha: true, ...cfgCompacto }, aceite: { ligado: true }, traumas: { ligado: true } };
+  const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680, chatLateral: true, ...cfgCompacto }, aceite: { ligado: true }, traumas: { ligado: true } };
   let agoraMs = 1_000_000;
   const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => (quadros ? [win.vista, win.h] : [win.w, win.h]), agora: () => agoraMs });
   const s = { doc, win, est, falsa, cfg, avisos: [], logs: [], agora: () => agoraMs, avancar: ms => { agoraMs += ms; } };
@@ -388,11 +399,12 @@ function conferir(s) {
     cabeSemMover(t, 1080) && !cabeSemMover({ ...t, x: 1400 }, 1080) && !cabeSemMover({ ...t, minimizada: true }, 420));
   caso('ScreenData minimizado (screenX −32000) é marcado e não move nada', normalizarTela({ screenX: -32000, screenY: -32000, screenAvailLeft: 0, screenAvailTop: 0,
     screenAvailWidth: 2560, screenAvailHeight: 1020, zoomScale: 1.25 }).minimizada === true && normalizarTela(null) === null);
-  caso('layout: lista 300 + painel 360 à direita, configurações 360 à esquerda; monitor estreito divide a vaga (conversa no lugar da lista)',
-    igual(layout({ lista: true, abas: [{}], config: true }, { util: 4000, col: 420 }), { esq: 360, dir: 660, lista: true, painel: true, config: true, estreito: false, total: 1440, cabe: true })
-      && layout({ lista: true, abas: [{}], vistaEstreita: 'painel' }, { util: 1024, col: 420 }).dir === 360
-      && layout({ lista: true, abas: [{}], vistaEstreita: 'painel' }, { util: 1024, col: 420 }).painel === true
-      && layout({ lista: true, abas: [{}], vistaEstreita: 'lista' }, { util: 1024, col: 420 }).lista === true);
+  caso('layout: lista 300 + painel 360 à direita, configurações 360 à esquerda; monitor estreito divide a vaga (chat no lugar da lista)',
+    igual(layout({ lista: true, painel: 'chat', config: true }, { util: 4000, col: 420 }), { esq: 360, dir: 660, lista: true, painel: true, config: true, estreito: false, total: 1440, cabe: true })
+      && layout({ lista: true, painel: 'chat', vistaEstreita: 'painel' }, { util: 1024, col: 420 }).dir === 360
+      && layout({ lista: true, painel: 'coach', vistaEstreita: 'painel' }, { util: 1024, col: 420 }).painel === true
+      && layout({ lista: true, painel: 'chat', vistaEstreita: 'lista' }, { util: 1024, col: 420 }).lista === true
+      && layout({ lista: false, painel: null }, { util: 4000, col: 420 }).dir === 0);
 }
 
 // =================== 3. roteador + lateral: abrir e fechar ===================
@@ -404,9 +416,10 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
   s.ancora = s.win.x;
   caso('entra no compacto em 420×680 sem mexer na posição (âncora = onde a janela está)', s.win.w === 420 && s.win.h === 680 && s.win.x === 640 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   await s.passo(() => s.lat.alternarLista());
-  caso('💬: a janela alarga para a direita (420 → 720) com a lista; coluna parada', s.win.w === 720 && s.win.x === 640 && s.partes().dir.children[0]?.dataset.painel === 'lista' && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
+  caso('👥: a janela alarga para a direita (420 → 720) com a lista; coluna parada', s.win.w === 720 && s.win.x === 640 && s.partes().dir.children[0]?.dataset.painel === 'lista' && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   await s.passo(() => s.lat.abrirConversa(A1));
-  caso('amigo clicado: a conversa abre mais à direita (720 → 1080), coluna parada', s.win.w === 1080 && s.win.x === 640 && s.partes().dir.children.length === 2 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
+  caso('amigo clicado: o chat abre mais à direita (720 → 1080) com a conversa dele embaixo dos recentes, coluna parada', s.win.w === 1080 && s.win.x === 640 && s.partes().dir.children.length === 2
+    && s.lat.estado().painel === 'chat' && s.lat.estado().conversa?.pid === A1.pid && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   const nPedidos = s.win.pedidos.length;
   await s.passo(() => s.lat.alternarConfig());
   const cfgPed = s.win.pedidos.slice(nPedidos).map(p => p.name);
@@ -419,8 +432,13 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
   caso('fechar as configurações: anda e só então encolhe; coluna volta ao mesmo lugar (x 640)', s.win.w === 1080 && s.win.x === 640 && igual(ped2, ['Window.MoveTo', 'Window.ResizeTo']), JSON.stringify([s.win, ped2]));
   await s.passo(() => s.lat.alternarLista());
   caso('✕ da lista com a conversa aberta: fica 780 (coluna + conversa)', s.win.w === 780 && conferir(s).length === 0, JSON.stringify(s.win));
-  await s.passo(() => s.lat.fecharAba('c:a1@br1.pvp.net'));
-  caso('✕ da conversa: volta a 420 e a coluna na âncora', s.win.w === 420 && s.win.x === 640 && conferir(s).length === 0, JSON.stringify(s.win));
+  const nX = s.win.pedidos.length;
+  await s.passo(() => s.lat.fecharConversa());
+  caso('✕ da conversa: fecha só a conversa; o chat fica com os recentes na altura toda, largura e posição iguais (780, nenhum pedido à janela)',
+    s.win.w === 780 && s.win.x === 640 && s.lat.estado().painel === 'chat' && s.lat.estado().conversa === null && s.win.pedidos.length === nX
+      && !s.partes().dir.querySelector('[data-a="lt-chat"]')?.classList.contains('lc-lt-com-conversa') && conferir(s).length === 0, JSON.stringify([s.win, s.lat.estado().conversa]));
+  await s.passo(() => s.lat.fecharPainel());
+  caso('✕ do chat: volta a 420 e a coluna na âncora', s.win.w === 420 && s.win.x === 640 && conferir(s).length === 0, JSON.stringify(s.win));
   // troca de tela não encolhe a lateral (trava 3)
   await s.passo(() => s.lat.alternarLista());
   const n3 = s.win.pedidos.length;
@@ -447,7 +465,8 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
 const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes([...l.slice(0, i), ...l.slice(i + 1)]).map(r => [x, ...r])));
 {
   const ABRE = { lista: s => s.lat.alternarLista(), conversa: s => s.lat.abrirConversa(A1), config: s => s.lat.alternarConfig() };
-  const FECHA = { lista: s => s.lat.alternarLista(), conversa: s => s.lat.fecharAba('c:a1@br1.pvp.net'), config: s => s.lat.alternarConfig() };
+  // "conversa": abre = amigo clicado (chat com a conversa); fecha = 💬 de novo (o painel inteiro; o ✕ da conversa não muda a largura)
+  const FECHA = { lista: s => s.lat.alternarLista(), conversa: s => s.lat.alternarChat(), config: s => s.lat.alternarConfig() };
   const LUGARES = [['meio', 640], ['borda direita', 1900], ['borda esquerda', 0], ['monitor pequeno', 300]];
   let n = 0;
   const falhas = [];
@@ -465,10 +484,10 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
         if (erros.length) { falhas.push(`${lugar} ${abre}/${fecha} depois de ${op.join(' ')}: ${erros.join('; ')}`); break; }
       }
       // fecha o que sobrou aberto (monitor pequeno) e confere a volta à âncora
-      const e = s.lat.estado();
-      if (e.config) await s.passo(() => s.lat.alternarConfig());
-      if (e.lista) await s.passo(() => s.lat.alternarLista());
-      for (const a of s.lat.estado().abas) await s.passo(() => s.lat.fecharAba(a.k));
+      // (o painel antes da lista: no monitor estreito o 👥 com a lista escondida a mostra em vez de fechar)
+      if (s.lat.estado().config) await s.passo(() => s.lat.alternarConfig());
+      if (s.lat.estado().painel) await s.passo(() => s.lat.fecharPainel());
+      if (s.lat.estado().lista) await s.passo(() => s.lat.alternarLista());
       if (s.win.w !== 420 || Math.abs(s.win.x - s.ancora) > 2) falhas.push(`${lugar} ${abre}/${fecha}: no fim w ${s.win.w} x ${s.win.x} âncora ${s.ancora}`);
     }
   }
@@ -479,7 +498,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   // sequências aleatórias (semente fixa) com arrasto dele, expandir/compactar e troca de tela no meio
   let semente = 20261014;
   const rnd = n => { semente = (semente * 1103515245 + 12345) % 2147483648; return semente % n; };
-  const OPS = ['lista', 'conversa', 'conversa2', 'config', 'fechaConversa', 'fechaConversa2', 'arrasta', 'expandeVolta', 'fase'];
+  const OPS = ['lista', 'conversa', 'conversa2', 'config', 'fechaConversa', 'chat', 'arrasta', 'expandeVolta', 'fase'];
   const falhas = [];
   let passos = 0;
   for (let k = 0; k < 60; k++) {
@@ -495,8 +514,8 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
       else if (op === 'conversa') await s.passo(() => s.lat.abrirConversa(A1));
       else if (op === 'conversa2') await s.passo(() => s.lat.abrirConversa(A2));
       else if (op === 'config') await s.passo(() => s.lat.alternarConfig());
-      else if (op === 'fechaConversa') await s.passo(() => s.lat.fecharAba('c:a1@br1.pvp.net'));
-      else if (op === 'fechaConversa2') await s.passo(() => s.lat.fecharAba('c:a2@br1.pvp.net'));
+      else if (op === 'fechaConversa') await s.passo(() => s.lat.fecharConversa());
+      else if (op === 'chat') await s.passo(() => s.lat.alternarChat());
       else if (op === 'arrasta') {
         // ele arrasta pelo topo (dentro do monitor), pelo arrasto de verdade (criarArrastoJanela): a coluna vira a âncora nova.
         // Antes este passo punha s.win.x direto e não pegava a posição velha da geometria (revisão de 14/10/2026)
@@ -528,7 +547,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
     await s.ir('Lobby');
     s.ancora = s.win.x;
     for (const op of [...abre, ...abre]) {
-      await s.passo(() => (op === 'lista' ? s.lat.alternarLista() : op === 'config' ? s.lat.alternarConfig() : (s.lat.estado().abas.length ? s.lat.fecharAba('c:a1@br1.pvp.net') : s.lat.abrirConversa(A1))));
+      await s.passo(() => (op === 'lista' ? s.lat.alternarLista() : op === 'config' ? s.lat.alternarConfig() : (s.lat.estado().painel ? s.lat.alternarChat() : s.lat.abrirConversa(A1))));
       const erros = conferir(s);
       if (erros.length) { falhas.push(`${abre} depois de ${op}: ${erros.join('; ')}`); break; }
     }
@@ -536,14 +555,13 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   caso('ResizeTo que cresce pelo centro (o [S] do client): a geometria relê o ScreenData e devolve a coluna à âncora, em toda ordem', falhas.length === 0, falhas.slice(0, 2).join(' | '));
 }
 {
-  // conversas: a 4ª fecha a mais antiga que não está à vista
+  // trocar de conversa: uma conversa por vez embaixo dos recentes (sem abas); o painel continua 360
   const s = cenario();
   await s.ir('Lobby');
   for (const i of [1, 2, 3, 4]) await s.passo(() => s.lat.abrirConversa({ pid: `x${i}@br1.pvp.net`, nome: `amigo ${i}` }));
-  const ks = s.lat.estado().abas.map(a => a.k);
-  caso(`até ${MAX_CONVERSAS} conversas: a 4ª fecha a mais antiga; o painel continua 360 (abas, nunca passa de 1080)`,
-    ks.length === MAX_CONVERSAS && !ks.includes('c:x1@br1.pvp.net') && s.win.w === 780, JSON.stringify([ks, s.win.w]));
-  // monitor pequeno: lista + conversa não cabem → a conversa entra no lugar da lista (←)
+  caso('4 conversas abertas em seguida: a última clicada fica embaixo dos recentes, sem abas; o painel continua 360 (780)',
+    s.lat.estado().conversa?.pid === 'x4@br1.pvp.net' && s.win.w === 780 && !s.partes().dir.querySelector('[data-a="lt-aba"]'), JSON.stringify([s.lat.estado().conversa, s.win.w]));
+  // monitor pequeno: lista + chat não cabem → o chat entra no lugar da lista (←)
   const p = cenario({ mon: 'pequeno', x: 0 });
   await p.ir('Lobby');
   await p.passo(() => p.lat.alternarLista());
@@ -555,7 +573,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
     l1.estreito && l1.painel && !l1.lista && l2.lista && !l2.painel && p.win.w === 720, JSON.stringify([l1, l2, p.win.w]));
   await p.passo(() => p.lat.alternarConfig());
   caso('monitor pequeno: abrir as configurações quando não cabe com o chat fecha o chat (o que ele abriu por último vence) e avisa',
-    p.lat.estado().config && !p.lat.estado().lista && p.lat.estado().abas.length === 0 && p.win.w === 780 && p.avisos.some(([m]) => /o chat fechou/.test(m)), JSON.stringify([p.lat.estado(), p.avisos]));
+    p.lat.estado().config && !p.lat.estado().lista && p.lat.estado().painel === null && p.win.w === 780 && p.avisos.some(([m]) => /o chat fechou/.test(m)), JSON.stringify([p.lat.estado(), p.avisos]));
   globalThis.document = ANTES.document;
 }
 
@@ -573,16 +591,23 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   await tick(8); await s.geo.ocioso(); await tick(4);
   caso('seleção: a conversa aberta segue ao lado (780) e a coluna não anda', s.win.w === 780 && s.win.x === 640 && s.rot.estado().tela === 'champselect', JSON.stringify([s.win, s.rot.estado().tela]));
   // mensagem nova na seleção: nunca abre nada sozinha
-  await s.passo(() => s.lat.fecharAba('c:a1@br1.pvp.net'));
-  s.lat.talvezAbrirSozinha(await s.lat.lerConversas());
+  await s.passo(() => s.lat.fecharPainel());
   s.est.conversas[0].unreadMessageCount = 2;
-  await s.passo(async () => s.lat.talvezAbrirSozinha(await s.lat.lerConversas()));
-  caso('decisão 1: mensagem nova na seleção não abre nada (a coluna não anda embaixo do mouse perto do TRAVAR)', s.lat.estado().abas.length === 0 && s.win.w === 420, JSON.stringify(s.lat.estado().abas));
-  // 📊 coach
+  for (let i = 0; i < 6; i++) await s.passo(() => s.lat.volta());
+  caso('mensagem nova na seleção não abre nada (a coluna não anda embaixo do mouse perto do TRAVAR)', s.lat.estado().painel === null && s.win.w === 420, JSON.stringify(s.lat.estado()));
+  // 📊 coach (do painel fechado)
   await s.passo(() => s.lat.alternarCoach());
-  caso('📊: o coach abre ao lado (780) só no clique', s.win.w === 780 && s.lat.estado().abas.some(a => a.k === 'coach'), JSON.stringify(s.lat.estado()));
-  // sala do time
-  await s.passo(() => s.lat.abrirTime());
+  caso('📊: o coach abre ao lado (780) só no clique', s.win.w === 780 && s.lat.estado().painel === 'coach' && s.lat.estado().anterior === null, JSON.stringify(s.lat.estado()));
+  await s.passo(() => s.lat.alternarCoach());
+  caso('📊 de novo: o coach fecha e volta ao que estava (painel fechado, 420)', s.lat.estado().painel === null && s.win.w === 420, JSON.stringify(s.lat.estado()));
+  // chat na seleção: a sala do time é a 1ª linha dos recentes (nada abre sozinho)
+  await s.passo(() => s.lat.alternarChat());
+  await s.passo(() => s.lat.volta()); await s.passo(() => s.lat.volta());
+  const linhas1 = s.partes().dir.querySelectorAll('[data-a="lt-recente"]');
+  caso('seleção: o 💬 abre os recentes com a sala do time na 1ª linha; a sala não abre sozinha (embaixo segue a última conversa que ele abriu)',
+    linhas1[0]?.dataset.k === 'time' && linhas1.length >= 2 && s.lat.estado().conversa?.pid === A1.pid, JSON.stringify([linhas1.map(n => n.dataset.k), s.lat.estado().conversa]));
+  // sala do time: clique na 1ª linha
+  linhas1[0].click();
   await s.passo(() => s.lat.volta());
   const texto = s.partes().dir.textContent;
   caso('sala do time: quem fala aparece como campeão/posição ("Selva", "Meio", "aliado"); nome oculto nunca na tela; da sala ficam só id e type',
@@ -600,15 +625,26 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   ta.disparar('keydown', { key: 'Enter', isTrusted: false });
   await tick(8);
   caso('sala do time: Enter sintético (isTrusted false) não envia', s.falsa.escritas().length === nEsc);
+  // 📊 por cima do chat (sala do time aberta, com rascunho): fechar o coach volta ao chat com a mesma conversa e o rascunho
+  ta.value = 'rascunho do time'; ta.disparar('input');
+  await s.passo(() => s.lat.alternarCoach());
+  const noCoach = s.lat.estado();
+  await s.passo(() => s.lat.alternarCoach());
+  const voltou = s.lat.estado();
+  const taDepois = s.partes().dir.querySelector('[data-a="lt-texto"]');
+  caso('📊 no lugar do chat (mesma largura) e, fechado, volta ao chat com a sala do time e o rascunho dela',
+    noCoach.painel === 'coach' && noCoach.anterior === 'chat' && voltou.painel === 'chat' && voltou.conversa?.k === 'time' && taDepois === ta && ta.value === 'rascunho do time' && s.win.w === 780,
+    JSON.stringify([noCoach.painel, noCoach.anterior, voltou.painel, voltou.conversa, ta.value]));
+  ta.value = ''; ta.disparar('input');
   // em partida (passo 14): tela compacta "jogo" só com a coluna (420); a lateral some e guarda; coach e sala do time saem do estado
   await s.passo(() => s.lat.abrirConversa(A1));
   const nPart = s.win.pedidos.length;
   await s.ir('InProgress');
   const naPartida = s.win.pedidos.slice(nPart).map(p => p.name);
-  caso('em partida: tela compacta "jogo" em 420 (lateral fora da janela), coach e sala do time saem, a conversa fica guardada',
+  caso('em partida: tela compacta "jogo" em 420 (lateral fora da janela), a sala do time sai, o chat com a conversa fica guardado',
     s.win.w === 420 && s.rot.estado().tela === 'jogo' && !!s.doc.getElementById('lc-compacto') && s.partes().dir.children.length === 0
-      && igual(s.rot.estado().lateral, { esq: 0, dir: 0 }) && igual(s.lat.estado().abas.map(a => a.k), ['c:a1@br1.pvp.net']) && s.lat.estado().lembrarCoach === true,
-    JSON.stringify([s.win, s.rot.estado().lateral, s.lat.estado().abas]));
+      && igual(s.rot.estado().lateral, { esq: 0, dir: 0 }) && s.lat.estado().painel === 'chat' && s.lat.estado().conversa?.k === 'c:a1@br1.pvp.net',
+    JSON.stringify([s.win, s.rot.estado().lateral, s.lat.estado()]));
   caso('em partida: a janela só recebe ResizeTo (nada de MoveTo/CenterToScreen com o jogo abrindo)', naPartida.length >= 1 && naPartida.every(n => n === 'Window.ResizeTo'), naPartida.join());
   const leiturasAntes = s.falsa.chamadas?.length ?? null;
   await s.passo(() => s.lat.volta());
@@ -618,20 +654,20 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   s.ancora = xJogo;
   caso('decisão 2: depois da partida a lateral volta (pós-jogo 780 com a conversa ao lado)', s.win.w === 780 && s.rot.estado().tela === 'posjogo' && s.partes().dir.children.length === 1 && conferir(s).length === 0,
     JSON.stringify([s.win, conferir(s)]));
-  // próxima seleção: o coach volta aberto (ele deixou aberto) só se couber sem mover
+  // decisão 5 do plano de 16/10: o coach deixado aberto numa seleção NÃO volta sozinho na seguinte (antes voltava se coubesse)
   await s.ir('Lobby');
-  await s.passo(() => s.lat.fecharAba('c:a1@br1.pvp.net'));
+  await s.passo(() => s.lat.fecharPainel());
   s.rot.aoFase('ChampSelect');
   s.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
   await tick(8); await s.geo.ocioso(); await tick(4);
-  caso('próxima seleção: o coach volta aberto porque ele deixou aberto (cabe sem mover)', s.lat.estado().abas.some(a => a.k === 'coach') && s.win.w === 780, JSON.stringify([s.lat.estado().abas, s.win]));
+  await s.passo(() => s.lat.alternarCoach());
   await s.ir('Lobby');
-  s.win.x = 2560 - 420 * 1.25; // encostada à direita: o coach não cabe sem mover
-  await s.passo(() => s.lat.alternarLista()); await s.passo(() => s.lat.alternarLista()); // relê a tela (geometria)
+  const foraDaSelecao = s.lat.estado();
   s.rot.aoFase('ChampSelect');
   s.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
   await tick(8); await s.geo.ocioso(); await tick(4);
-  caso('próxima seleção encostada à direita: o coach NÃO abre sozinho (precisaria mover a janela)', !s.lat.estado().abas.some(a => a.k === 'coach') && s.win.w === 420, JSON.stringify([s.lat.estado().abas, s.win]));
+  caso('coach aberto ao sair da seleção: sai e volta ao que cobria (fechado); na seleção seguinte NÃO volta sozinho (só pelo 📊)',
+    foraDaSelecao.painel === null && s.lat.estado().painel === null && s.win.w === 420, JSON.stringify([foraDaSelecao.painel, s.lat.estado().painel, s.win.w]));
   globalThis.document = ANTES.document;
 }
 
@@ -682,30 +718,70 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   globalThis.document = ANTES.document;
 }
 
-// =================== 6. decisão 1: mensagem nova ===================
+// =================== 6. nada sozinho: mensagem nova só muda contador, ordem e selo ===================
+// Pedido de 16/10/2026: "eu não quero que a janela abra sozinha com a mensagem. Apenas mostra a notificação e só abra por meio do
+// botão. E se eu já estiver em outra conversa, não muda nada". Toda fase × {painel fechado, aberto noutra conversa, aberto sem
+// conversa}: painel, conversa, lista, largura, posição, foco e pedidos à janela iguais antes e depois; nenhuma escrita na LCU.
+const FASES_CHAT = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'EndOfGame', 'PreEndOfGame'];
+const irFase = async (s, fase) => {
+  if (fase === 'ChampSelect') s.est.sessao = sessaoCS(0, 58, 24);
+  s.rot.aoFase(fase);
+  if (fase === 'ChampSelect') s.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
+  await tick(8); await s.geo.ocioso(); await tick(4);
+};
+// a5 chama: conversa nova, mais recente que a do a1
+const chegaMensagem = s => {
+  const c = s.est.conversas.find(x => x.id === 'a5@br1.pvp.net');
+  if (c) { c.unreadMessageCount += 1; c.lastMessage = { ...c.lastMessage, id: 'z' + c.unreadMessageCount, body: 'bora?' }; return; }
+  s.est.conversas.push({ id: 'a5@br1.pvp.net', pid: 'a5@br1.pvp.net', type: 'chat', unreadMessageCount: 1, gameName: 'amigo 5', password: NUNCA,
+    lastMessage: { id: 'z1', type: 'chat', body: 'tá on?', fromId: 'a5@br1.pvp.net', timestamp: '2026-10-16T12:00:00.000Z' } });
+};
+// foco: identidade do elemento (o mesmo campo), não o conteúdo
+const idsFoco = new WeakMap();
+let nFoco = 0;
+const idFoco = el => (el ? (idsFoco.get(el) ?? (idsFoco.set(el, ++nFoco), nFoco)) : null);
+const foto = s => ({ e: (({ painel, conversa, lista, config, anterior }) => ({ painel, conversa: conversa?.k ?? null, lista, config, anterior }))(s.lat.estado()),
+  w: s.win.w, x: s.win.x, ativo: idFoco(s.doc.ativo), pedidos: s.win.pedidos.length, escritas: s.falsa.escritas().length, rot: { ...s.rot.estado().lateral } });
+async function nadaSozinho() {
+  const falhas = [], vistos = [];
+  for (const fase of FASES_CHAT) for (const como of ['fechado', 'outra conversa', 'sem conversa']) {
+    const s = cenario();
+    await s.ir('Lobby');
+    await s.lcu('GET', '/lol-chat/v1/me');
+    if (fase !== 'Lobby') await irFase(s, fase);
+    if (como === 'outra conversa') await s.passo(() => s.lat.abrirConversa(A2));
+    if (como === 'sem conversa') await s.passo(() => s.lat.alternarChat());
+    for (let i = 0; i < 3; i++) await s.passo(() => s.lat.volta());
+    const antes = foto(s);
+    chegaMensagem(s);
+    for (let i = 0; i < 8; i++) { await s.passo(() => s.lat.volta()); if (i === 3) chegaMensagem(s); }
+    const depois = foto(s);
+    vistos.push(`${fase}/${como}: ${s.rot.estado().efetivo}`);
+    if (!igual(antes, depois)) { falhas.push(`${fase} ${como}: ${JSON.stringify(antes)} → ${JSON.stringify(depois)}`); continue; }
+    if (como !== 'fechado' && s.rot.estado().efetivo === 'compacto') {
+      // o painel à vista: quem chamou sobe nos recentes com as não lidas (o 💬 conta pelo chat-botao)
+      const r = s.lat.recentes();
+      const linha = s.partes().dir.querySelector('[data-a="lt-recente"][data-k="c:a5@br1.pvp.net"]');
+      if (r[0]?.pid !== 'a5@br1.pvp.net' || r[0]?.un !== 2 || !linha?.querySelector('.lc-lt-un') || linha.querySelector('.lc-lt-un').textContent !== '2')
+        falhas.push(`${fase} ${como}: recentes ${JSON.stringify(r.map(x => [x.pid, x.un]))}`);
+    }
+    globalThis.document = ANTES.document;
+  }
+  return { falhas, vistos };
+}
 {
-  const novaMsg = async s => { s.est.conversas[0].unreadMessageCount += 1; s.est.conversas[0].lastMessage = { fromId: 'a1@br1.pvp.net' }; await s.passo(async () => s.lat.talvezAbrirSozinha(await s.lat.lerConversas())); };
-  const prepara = async s => { await s.ir('Lobby'); await s.lcu('GET', '/lol-chat/v1/me'); await s.lat.volta(); s.lat.talvezAbrirSozinha(await s.lat.lerConversas()); };
+  const { falhas, vistos } = await nadaSozinho();
+  const compactos = vistos.filter(v => v.endsWith(': compacto')).length;
+  caso(`nada sozinho: mensagem nova em ${FASES_CHAT.length} fases × 3 estados do chat (fechado, noutra conversa, sem conversa; ${compactos} de ${vistos.length} com o compacto à vista): painel, conversa, largura, posição, foco e pedidos iguais; quem chama sobe nos recentes com o selo`,
+    falhas.length === 0 && vistos.length === FASES_CHAT.length * 3, falhas.slice(0, 3).join(' | ') || vistos.join(', '));
+  // a lista de amigos aberta também não abre conversa (antes: a leitura dos amigos chamava a abertura automática)
   const s = cenario();
-  await prepara(s);
-  await novaMsg(s);
-  const a = s.lat.estado();
-  caso('lobby com espaço: mensagem nova abre a conversa ao lado sem mover a janela (coluna parada, sem foco no campo)',
-    a.abas.some(x => x.k === 'c:a1@br1.pvp.net') && s.win.w === 780 && s.win.x === 640 && !s.doc.ativo, JSON.stringify([a.abas, s.win, !!s.doc.ativo]));
-  caso('mensagem nova aberta sozinha não marca como lida (nenhum PUT active sem clique ou tecla dele)', !s.falsa.escritas().some(c => c.url.includes('conversations/active')), JSON.stringify(s.falsa.escritas()));
-  const d = cenario({ x: 2560 - 420 * 1.25 });
-  await prepara(d);
-  await novaMsg(d);
-  caso('encostada à direita: mensagem nova NÃO abre (teria de mover a janela); só conta', d.lat.estado().abas.length === 0 && d.win.w === 420, JSON.stringify(d.lat.estado().abas));
-  const o = cenario({ cfgCompacto: { conversaSozinha: false } });
-  await prepara(o);
-  await novaMsg(o);
-  caso('chave "abrir a conversa sozinha" desligada: nada abre', o.lat.estado().abas.length === 0);
-  const m = cenario();
-  await prepara(m);
-  m.est.conversas[0].unreadMessageCount += 1; m.est.conversas[0].lastMessage = { fromId: 'eu@br1.pvp.net' };
-  await m.passo(async () => m.lat.talvezAbrirSozinha(await m.lat.lerConversas()));
-  caso('última mensagem é minha (mandada pelo chat da Riot): nada abre', m.lat.estado().abas.length === 0, JSON.stringify(m.lat.estado().abas));
+  await s.ir('Lobby');
+  await s.passo(() => s.lat.alternarLista());
+  const antes = foto(s);
+  chegaMensagem(s);
+  for (let i = 0; i < 8; i++) await s.passo(() => s.lat.volta());
+  caso('nada sozinho com a lista de amigos aberta (antes a leitura dos amigos chamava a abertura automática): nada muda', igual(antes, foto(s)), JSON.stringify([antes, foto(s)]));
   globalThis.document = ANTES.document;
 }
 
@@ -729,18 +805,24 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   caso('convidar: clique dele manda o corpo da Riot [{toSummonerId}] (invitePlayer do rcp-fe-lol-parties)', inv && igual(inv.corpo, [{ toSummonerId: 201 }]), JSON.stringify(inv));
   const listaAgora = s.partes().dir.querySelector('[data-painel="lista"]');
   caso('amigo em partida não tem "convidar"', [...listaAgora.querySelectorAll('[data-a="lt-amigo"]')].find(n => n.dataset.pid === 'a2@br1.pvp.net')?.querySelector('[data-a="lt-convidar"]') === null);
-  // conversa: clique no amigo abre; Enter envia com o corpo do client; "lida" só depois de interação dele
-  [...listaAgora.querySelectorAll('[data-a="lt-amigo"]')].find(n => n.dataset.pid === 'a1@br1.pvp.net').click();
+  // conversa: clique sintético no amigo abre sem "lida"; clique dele abre e já marca (decisão 4 do plano de 16/10); Enter envia
+  const linhaA1 = () => [...s.partes().dir.querySelectorAll('[data-a="lt-amigo"]')].find(n => n.dataset.pid === 'a1@br1.pvp.net');
+  s.est.conversas[0].unreadMessageCount = 1;
+  linhaA1().click({ isTrusted: false });
   await tick(10); await s.geo.ocioso(); await tick(6);
   const painel = s.partes().dir.querySelector('[data-painel="painel"]');
-  caso('conversa aberta pelo clique: mensagens à vista, nenhum PUT active ainda', /bora uma duo\?/.test(painel.textContent) && !s.falsa.escritas().some(c => c.url.endsWith('/active')), painel.textContent.slice(0, 200));
+  caso('clique sintético (isTrusted false) no amigo: a conversa abre ao lado, mas nenhum PUT active', /bora uma duo\?/.test(painel.textContent) && !s.falsa.escritas().some(c => c.url.endsWith('/active')),
+    painel.textContent.slice(0, 200));
+  await s.passo(() => s.lat.fecharConversa());
+  linhaA1().click();
+  await tick(10); await s.geo.ocioso(); await tick(6);
+  const put = s.falsa.escritas().find(c => c.url === '/lol-chat/v1/conversations/active');
+  caso('"lida": o clique dele no amigo põe a conversa à vista e a torna a ativa do client (PUT conversations/active {id}, setActive da Riot)',
+    put && put.metodo === 'PUT' && igual(put.corpo, { id: 'a1@br1.pvp.net' }) && s.lat.recentes().find(r => r.pid === 'a1@br1.pvp.net')?.un === 0, JSON.stringify([put, s.lat.recentes()]));
   const campo = painel.querySelector('[data-a="lt-texto"]');
-  s.est.conversas[0].unreadMessageCount = 1;
-  await s.lat.lerConversas();
   campo.disparar('pointerdown');
   await tick(6);
-  const put = s.falsa.escritas().find(c => c.url === '/lol-chat/v1/conversations/active');
-  caso('"lida": clique dele na conversa vira a ativa do client (PUT conversations/active {id}, setActive da Riot)', put && put.metodo === 'PUT' && igual(put.corpo, { id: 'a1@br1.pvp.net' }), JSON.stringify(put));
+  caso('"lida": interagir de novo com a conversa já ativa não repete o PUT', s.falsa.escritas().filter(c => c.url.endsWith('/active')).length === 1, JSON.stringify(s.falsa.escritas()));
   campo.value = 'bora';
   campo.disparar('keydown', { key: 'Enter' });
   await tick(14);
@@ -749,8 +831,8 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   await s.passo(() => s.lat.volta());
   const campo2 = s.partes().dir.querySelector('[data-a="lt-texto"]');
   caso('o campo de texto é o mesmo depois de repintar (não perde o foco no meio da digitação)', campo2 === campo);
-  await s.passo(() => s.lat.fecharAba('c:a1@br1.pvp.net'));
-  caso('fechar a aba que ele marcou como ativa devolve (DELETE conversations/active, o mesmo da Riot)', s.falsa.escritas().some(c => c.metodo === 'DELETE' && c.url === '/lol-chat/v1/conversations/active'));
+  await s.passo(() => s.lat.fecharConversa());
+  caso('✕ da conversa que ele marcou como ativa devolve (DELETE conversations/active, o mesmo da Riot)', s.falsa.escritas().some(c => c.metodo === 'DELETE' && c.url === '/lol-chat/v1/conversations/active'));
   // amigo sem conversa ainda: cria pelo corpo do client e tenta uma vez
   await s.passo(() => s.lat.abrirConversa(A2));
   const c2 = s.partes().dir.querySelector('[data-a="lt-texto"]');
@@ -778,7 +860,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   await s.passo(() => s.lat.abrirConversa(A1));
   s.cfg.compacto.chatLateral = false;
   await s.passo(() => s.lat.sincronizar());
-  caso('desligar a chave com a conversa aberta: lista e conversa fecham na hora (420)', s.win.w === 420 && s.lat.estado().abas.length === 0 && !s.lat.estado().lista, JSON.stringify(s.lat.estado()));
+  caso('desligar a chave com o chat aberto: lista e chat fecham na hora (420)', s.win.w === 420 && s.lat.estado().painel === null && !s.lat.estado().lista, JSON.stringify(s.lat.estado()));
   // ⚙ com o cfg de verdade (PADRAO): os blocos da seção lol-client, sem "restaurar padrão"
   const r = cenario();
   const cfgReal = JSON.parse(JSON.stringify(PADRAO));
@@ -847,11 +929,49 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   const ctx = { extras: doc.createElement('div'), seguro: f => f, servicos: { lateral: { alternarCoach: () => { chamado += 'coach'; }, alternarConfig: () => { chamado += 'config'; } } } };
   botaoCoach(ctx).click(); botaoConfig(ctx).click();
   caso('📊 e ⚙ chamam a lateral; sem lateral não existem', chamado === 'coachconfig' && botaoCoach({ extras: doc.createElement('div'), servicos: {} }) === null);
+  // 💬 e 👥 (etapa 1 de 2026-10-16): 💬 = painel de chat; 👥 logo depois dele = lista de amigos; sem o chat ao lado, nada de 👥
+  globalThis.document = doc;
+  const cx = (lat, extra = {}) => ({ extras: doc.createElement('div'), seguro: f => f, servicos: { lateral: lat }, lcu: async () => ({ ok: true, status: 200, json: [] }),
+    observar: () => {}, intervalo: () => {}, vivo: () => true, expandir: () => { chamado += 'expandir'; }, avisar: () => {}, ...extra });
+  chamado = '';
+  const latOn = { ligada: () => true, alternarChat: () => { chamado += 'chat'; }, alternarLista: () => { chamado += 'lista'; } };
+  const c1 = cx(latOn);
+  const tempo = doc.createElement('span'); c1.extras.append(tempo);
+  const b1 = botaoChat(c1);
+  const ordem = c1.extras.children.map(n => n.dataset.a || 'tempo');
+  b1.click(); await tick(4);
+  c1.extras.children[2].click(); await tick(4);
+  const c2 = cx({ ligada: () => false, alternarChat: () => { chamado += 'X'; }, alternarLista: () => { chamado += 'X'; } }, { servicos: { lateral: { ligada: () => false, alternarLista: () => {} }, coletor: async () => ({ status: 202, dados: { ok: true } }) } });
+  botaoChat(c2);
+  caso('💬 abre/fecha o painel de chat e o 👥 (logo depois do 💬) a lista; com o chat ao lado desligado não há 👥',
+    igual(ordem, ['tempo', 'chat', 'lista-amigos']) && chamado === 'chatlista' && c2.extras.children.length === 1 && botaoAmigos(cx({ ligada: () => false, alternarLista: () => {} })) === null
+      && /chat/.test(b1.getAttribute('title')), JSON.stringify([ordem, chamado, c2.extras.children.length]));
+  globalThis.document = ANTES.document;
+}
+{
+  // recentes: ordem pela última mensagem, sem password/mucJwtDto, "você: " na minha, sistema sem trecho, foto do amigo pelo pid
+  const cru = [
+    { id: 'b@x', pid: 'b@x', type: 'chat', unreadMessageCount: 0, gameName: 'amigo b', password: NUNCA, mucJwtDto: { jwt: NUNCA }, lastMessage: { body: 'oi', fromId: 'eu', timestamp: '2026-10-16T10:00:00.000Z', type: 'chat' } },
+    { id: 'a@x', pid: 'a@x', type: 'chat', unreadMessageCount: 3, gameName: 'amigo a', password: NUNCA, lastMessage: { body: 'bora\numa', fromId: 'a@x', timestamp: '2026-10-16T11:00:00.000Z', type: 'chat' } },
+    { id: 'c@x', pid: 'c@x', type: 'chat', unreadMessageCount: 0, gameName: 'amigo c', lastMessage: { body: 'joined_room', type: 'system', timestamp: '2026-10-16T12:00:00.000Z' } },
+    { id: 'd@x', pid: 'd@x', type: 'chat', unreadMessageCount: 0, gameName: 'amigo d' },
+    { id: SALA_CS, type: 'championSelect', password: NUNCA, unreadMessageCount: 9 },
+    { id: 'lobby1@lol-lobby.br1.pvp.net', type: 'chat', password: NUNCA } ];
+  const limpas = limparConversas(cru);
+  const amigos = { ok: true, online: [{ pid: 'a@x', icone: 29, dot: 'chat', campeao: 0, txt: 'online', nome: 'amigo a' }], offline: [] };
+  const r = verRecentes({ conversas: limpas, amigos, eu: { id: 'eu' }, agoraMs: Date.parse('2026-10-16T12:30:00.000Z') });
+  caso('recentes: ordem pela última mensagem (mais nova em cima), sem mensagem no fim; só 1:1 (sala da seleção e do lobby fora)',
+    igual(r.map(x => x.pid), ['c@x', 'a@x', 'b@x', 'd@x']), JSON.stringify(r.map(x => x.pid)));
+  caso('recentes: password e mucJwtDto nunca saem da leitura (nem das 1:1, que também trazem)', !JSON.stringify(limpas).includes(NUNCA) && !JSON.stringify(r).includes(NUNCA)
+    && !JSON.stringify(limpas).includes('mucJwtDto') && !JSON.stringify(limpas).includes('password'));
+  caso('recentes: trecho em 1 linha, "você: " na minha, "joined_room" sem trecho, foto/status do amigo pelo pid, não lidas',
+    r[1].trecho === 'bora uma' && r[1].un === 3 && r[1].icone === 29 && r[1].dot === 'chat' && r[2].trecho === 'você: oi' && r[0].trecho === '' && r[3].trecho === '' && r[3].dot === 'off',
+    JSON.stringify(r));
+  const hoje = Date.parse('2026-10-16T20:00:00');
+  caso('hora curta: hoje "HH:MM", outro dia "DD/MM", lixo vazio', /^\d\d:\d\d$/.test(quandoCurto('2026-10-16T19:58:00', hoje)) && quandoCurto('2026-10-14T19:58:00', hoje) === '14/10' && quandoCurto('x', hoje) === '');
 }
 
 // =================== 10. revisão adversarial de 14/10/2026 ===================
-const novaMsgDe = async (s, i = 0) => { s.est.conversas[i].unreadMessageCount += 1; s.est.conversas[i].lastMessage = { fromId: s.est.conversas[i].id }; await s.passo(async () => s.lat.talvezAbrirSozinha(await s.lat.lerConversas())); };
-const preparaMsg = async s => { await s.ir('Lobby'); await s.lcu('GET', '/lol-chat/v1/me'); await s.lat.volta(); s.lat.talvezAbrirSozinha(await s.lat.lerConversas()); };
 const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
 {
   // achado 1, sintoma A: o 2º arrasto partia da posição do 1º (a geometria só relia a tela na tarefa dela)
@@ -880,41 +1000,17 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   globalThis.document = ANTES.document;
 }
 {
-  // achado 1, sintoma B: arrastou para perto da borda direita e chegou mensagem: a conta velha dizia "cabe" e a janela andava
+  // achado 1, sintoma B (era a abertura automática perto da borda direita): hoje nada abre, a janela não recebe nenhum pedido
   const s = cenario();
-  await preparaMsg(s);
+  await s.ir('Lobby');
+  await s.lcu('GET', '/lol-chat/v1/me');
   await s.arrastar(Math.round((PERTO_DIREITA - s.win.x) / 1.25));
   const xArr = s.win.x;
   const n = s.win.pedidos.length;
-  await novaMsgDe(s);
-  caso('decisão 1 depois de arrastar para a borda direita: mensagem nova NÃO abre e a janela não anda', s.lat.estado().abas.length === 0 && s.win.w === 420 && s.win.x === xArr
-    && !s.win.pedidos.slice(n).some(p => p.name === 'Window.MoveTo'), JSON.stringify([s.lat.estado().abas, s.win.x, xArr, s.win.pedidos.slice(n)]));
-  // garantia: a janela foi para a borda SEM a geometria saber (a última tela lida diz que cabe): a tarefa relê, recusa e desfaz
-  const g = cenario();
-  await preparaMsg(g);
-  g.win.x = PERTO_DIREITA;
-  const n2 = g.win.pedidos.length;
-  await novaMsgDe(g);
-  caso('decisão 1 garantida na geometria: tela velha diz "cabe", a releitura diz "teria de mover" → nenhuma aba, nenhum MoveTo, largura de volta a 420',
-    g.lat.estado().abas.length === 0 && g.win.w === 420 && g.win.x === PERTO_DIREITA && !g.win.pedidos.slice(n2).some(p => p.name === 'Window.MoveTo')
-      && !g.win.pedidos.slice(n2).some(p => p.name === 'Window.ResizeTo' && p.params[0] !== 420) && g.geo.estado().recusas >= 1 && conferir(g).length === 0,
-    JSON.stringify([g.lat.estado().abas, g.win, g.win.pedidos.slice(n2), g.geo.estado().recusas]));
-  // o coach lembrado volta na próxima seleção pela mesma garantia
-  const champ = { partidas: () => [], estatisticas: () => ({ geral: { n: 0 } }), coach: () => ({}), lerCoach: async () => {}, estado: () => ({}) };
-  const c = cenario({ champ });
-  await c.ir('Lobby');
-  c.est.sessao = sessaoCS(58);
-  c.rot.aoFase('ChampSelect'); c.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
-  await tick(8); await c.geo.ocioso();
-  await c.passo(() => c.lat.alternarCoach());
-  await c.ir('Lobby');
-  c.win.x = PERTO_DIREITA; // sem reler: a geometria ainda acha que a janela está em 640
-  const n3 = c.win.pedidos.length;
-  c.rot.aoFase('ChampSelect'); c.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
-  await tick(8); await c.geo.ocioso(); await tick(8); await c.geo.ocioso();
-  caso('coach lembrado na próxima seleção com a tela velha: a geometria recusa, o coach não abre, a coluna não anda; segue lembrado para o 📊',
-    !c.lat.estado().abas.some(a => a.k === 'coach') && c.lat.estado().lembrarCoach === true && c.win.x === PERTO_DIREITA && c.win.w === 420
-      && !c.win.pedidos.slice(n3).some(p => p.name === 'Window.MoveTo'), JSON.stringify([c.lat.estado().abas, c.win, c.win.pedidos.slice(n3)]));
+  chegaMensagem(s);
+  for (let i = 0; i < 6; i++) await s.passo(() => s.lat.volta());
+  caso('mensagem nova depois de arrastar para a borda direita: nada abre, nenhum pedido à janela', s.lat.estado().painel === null && s.win.w === 420 && s.win.x === xArr
+    && s.win.pedidos.length === n, JSON.stringify([s.lat.estado().painel, s.win.x, xArr, s.win.pedidos.slice(n)]));
   globalThis.document = ANTES.document;
 }
 {
@@ -967,7 +1063,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
     await s.ir('Lobby');
     s.ancora = s.win.x;
     for (const op of [...abre, ...abre]) {
-      await s.passo(() => (op === 'lista' ? s.lat.alternarLista() : op === 'config' ? s.lat.alternarConfig() : (s.lat.estado().abas.length ? s.lat.fecharAba('c:a1@br1.pvp.net') : s.lat.abrirConversa(A1))));
+      await s.passo(() => (op === 'lista' ? s.lat.alternarLista() : op === 'config' ? s.lat.alternarConfig() : (s.lat.estado().painel ? s.lat.alternarChat() : s.lat.abrirConversa(A1))));
       await tick(4);
       const erros = conferir(s);
       if (erros.length) { falhas.push(`${abre} depois de ${op}: ${erros.join('; ')}`); break; }
@@ -990,7 +1086,41 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   await abrirEMarcar(a);
   const p1 = puts(a);
   await a.passo(() => a.lat.abrirConversa(A2));
-  caso('lida: clicou na conversa A (PUT) e foi para a aba B → DELETE (A deixa de ser a ativa do client)', p1 === 1 && deletes(a) === 1 && a.lat.estado().ativaPorMim === null, JSON.stringify(a.falsa.escritas()));
+  caso('lida: clicou na conversa A (PUT) e foi para a conversa B → DELETE (A deixa de ser a ativa do client)', p1 === 1 && deletes(a) === 1 && a.lat.estado().ativaPorMim === null, JSON.stringify(a.falsa.escritas()));
+  // os outros jeitos de a conversa sair de vista no chat novo: ✕ da conversa, ✕/💬 do painel, 📊 por cima, monitor estreito na lista
+  const saidas = {
+    '✕ da conversa': async s => s.passo(() => s.lat.fecharConversa()),
+    '💬 fecha o painel': async s => s.passo(() => s.lat.alternarChat()),
+    '✕ do painel': async s => s.passo(() => s.lat.fecharPainel()),
+  };
+  const ruins = [];
+  for (const [nome, sair] of Object.entries(saidas)) {
+    const s = cenario();
+    await abrirEMarcar(s);
+    await sair(s);
+    if (puts(s) !== 1 || deletes(s) !== 1 || s.lat.estado().ativaPorMim !== null) ruins.push(`${nome}: ${JSON.stringify(s.falsa.escritas())}`);
+    globalThis.document = ANTES.document;
+  }
+  {
+    const s = cenario({ champ: { partidas: () => [], estatisticas: () => ({ geral: { n: 0 } }), coach: () => ({}), lerCoach: async () => {}, estado: () => ({}) } });
+    await abrirEMarcar(s);
+    await irFase(s, 'ChampSelect');
+    await s.passo(() => s.lat.alternarCoach());
+    if (deletes(s) !== 1) ruins.push(`📊 por cima: ${JSON.stringify(s.falsa.escritas())}`);
+    globalThis.document = ANTES.document;
+  }
+  {
+    const s = cenario({ mon: 'pequeno', x: 0 });
+    await s.ir('Lobby');
+    await s.passo(() => s.lat.alternarLista());
+    await s.passo(() => s.lat.abrirConversa(A1));
+    s.partes().dir.querySelector('[data-a="lt-texto"]').disparar('pointerdown'); await tick(6);
+    await s.passo(() => s.lat.voltarLista());
+    if (puts(s) !== 1 || deletes(s) !== 1) ruins.push(`monitor estreito, ← lista: ${JSON.stringify(s.falsa.escritas())}`);
+    globalThis.document = ANTES.document;
+  }
+  caso('lida: ✕ da conversa, 💬 ou ✕ fechando o painel, 📊 por cima e ← da lista no monitor estreito → DELETE (só sai de vista, a Riot recebe de volta)',
+    ruins.length === 0, ruins.join(' | '));
   const b = cenario();
   await abrirEMarcar(b);
   await b.ir('InProgress');
@@ -1025,40 +1155,180 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
       && !JSON.stringify(acharSalaTime([velha, nova], ses('nova'))).includes(NUNCA));
 }
 {
-  // achado 8: fechar o chat por falta de espaço não deixa a conversa velha no mapa
+  // achado 8 (no chat novo): ⚙ fechou o chat por falta de espaço; o 💬 de novo traz a mesma conversa com o rascunho
   const p = cenario({ mon: 'pequeno', x: 0 });
   await p.ir('Lobby');
   await p.passo(() => p.lat.abrirConversa(A1));
-  const campoVelho = p.partes().dir.querySelector('[data-a="lt-texto"]');
+  const campo = p.partes().dir.querySelector('[data-a="lt-texto"]');
+  campo.value = 'meio escrito'; campo.disparar('input');
   await p.passo(() => p.lat.alternarConfig());
+  const fechou = p.lat.estado().painel === null;
   await p.passo(() => p.lat.alternarConfig());
-  await p.passo(() => p.lat.abrirConversa(A1));
-  const campoNovo = p.partes().dir.querySelector('[data-a="lt-texto"]');
-  caso('monitor pequeno: ⚙ fechou o chat; reabrir o mesmo amigo cria a conversa de novo (não a view velha presa à aba velha)', campoNovo && campoNovo !== campoVelho, String(campoNovo === campoVelho));
+  await p.passo(() => p.lat.alternarChat());
+  const campo2 = p.partes().dir.querySelector('[data-a="lt-texto"]');
+  caso('monitor pequeno: ⚙ fechou o chat; o 💬 de novo abre a mesma conversa (a última aberta) com o rascunho no campo',
+    fechou && p.lat.estado().conversa?.pid === A1.pid && campo2?.value === 'meio escrito', JSON.stringify([fechou, p.lat.estado().conversa, campo2?.value]));
   globalThis.document = ANTES.document;
 }
 {
-  // achado 9: o relógio não recria os botões das abas
+  // achado 9 (no chat novo): o relógio não recria as linhas dos recentes (o clique não se perde) e o clique troca a conversa
+  const s = cenario();
+  s.est.conversas.push({ id: 'a2@br1.pvp.net', pid: 'a2@br1.pvp.net', type: 'chat', unreadMessageCount: 0, gameName: 'amigo 2',
+    lastMessage: { type: 'chat', body: 'gg', fromId: 'a2@br1.pvp.net', timestamp: '2026-10-15T10:00:00.000Z' } });
+  await s.ir('Lobby');
+  await s.passo(() => s.lat.alternarChat());
+  await s.passo(() => s.lat.volta()); await s.passo(() => s.lat.volta());
+  const l1 = s.partes().dir.querySelector('[data-a="lt-recente"][data-k="c:a2@br1.pvp.net"]');
+  await s.passo(() => s.lat.volta()); await s.passo(() => s.lat.volta());
+  const l2 = s.partes().dir.querySelector('[data-a="lt-recente"][data-k="c:a2@br1.pvp.net"]');
+  l2.click(); await tick(6); await s.geo.ocioso(); await tick(6);
+  const ks = s.partes().dir.querySelectorAll('[data-a="lt-recente"]').map(n => n.dataset.k);
+  caso('recentes: o relógio não recria as linhas (o clique não se perde); a ordem é da última mensagem; o clique abre a conversa embaixo',
+    l1 && l1 === l2 && s.lat.estado().conversa?.pid === 'a2@br1.pvp.net' && igual(ks, ['c:a2@br1.pvp.net', 'c:a1@br1.pvp.net'])
+      && s.partes().dir.querySelector('[data-a="lt-chat"]').classList.contains('lc-lt-com-conversa'), JSON.stringify([!!l1, l1 === l2, s.lat.estado().conversa, ks]));
+  globalThis.document = ANTES.document;
+}
+{
+  // 💬 abre com a última conversa aberta; ✕ dela esquece (decisão 3 do plano de 16/10); 👥 abre/fecha sem mexer no chat
   const s = cenario();
   await s.ir('Lobby');
+  s.ancora = s.win.x;
+  await s.passo(() => s.lat.alternarChat());
+  const vazio = s.lat.estado();
   await s.passo(() => s.lat.abrirConversa(A1));
-  await s.passo(() => s.lat.abrirConversa(A2));
-  const aba1 = s.partes().dir.querySelector('[data-a="lt-aba"]');
-  await s.passo(() => s.lat.volta()); await s.passo(() => s.lat.volta());
-  const aba2 = s.partes().dir.querySelector('[data-a="lt-aba"]');
-  aba2.click(); await tick(6);
-  caso('abas: o relógio não recria os botões (o clique não se perde) e o clique troca a aba', aba1 === aba2 && s.lat.estado().ativa === aba1.dataset.k, JSON.stringify([aba1 === aba2, s.lat.estado().ativa]));
+  await s.passo(() => s.lat.alternarChat());
+  await s.passo(() => s.lat.alternarChat());
+  const reaberto = s.lat.estado();
+  await s.passo(() => s.lat.alternarLista());
+  const comLista = { e: s.lat.estado(), w: s.win.w };
+  await s.passo(() => s.lat.alternarLista());
+  const semLista = { e: s.lat.estado(), w: s.win.w };
+  await s.passo(() => s.lat.fecharConversa());
+  await s.passo(() => s.lat.alternarChat());
+  await s.passo(() => s.lat.alternarChat());
+  caso('💬 sem conversa ainda = só recentes; com conversa aberta, fechar e reabrir o 💬 mostra a mesma (a última aberta); depois do ✕ dela, o 💬 abre só com os recentes',
+    vazio.painel === 'chat' && vazio.conversa === null && reaberto.painel === 'chat' && reaberto.ultima === A1.pid && s.lat.estado().painel === 'chat' && s.lat.estado().conversa === null,
+    JSON.stringify([vazio, reaberto.ultima, s.lat.estado().conversa]));
+  caso('👥 abre e fecha a lista (1080 ↔ 780) sem mexer no chat (painel e conversa iguais)', comLista.w === 1080 && semLista.w === 780 && comLista.e.lista && !semLista.e.lista
+    && comLista.e.painel === 'chat' && semLista.e.conversa?.pid === A1.pid && conferir(s).length === 0, JSON.stringify([comLista, semLista]));
   globalThis.document = ANTES.document;
 }
 {
-  // achado 10: com 3 conversas abertas, mensagem nova só conta
+  // monitor estreito: 👥 com a lista escondida atrás do chat mostra a lista; 💬 com o chat escondido mostra o chat (não fecham)
+  const p = cenario({ mon: 'pequeno', x: 0 });
+  await p.ir('Lobby');
+  await p.passo(() => p.lat.alternarLista());
+  await p.passo(() => p.lat.abrirConversa(A1));
+  await p.passo(() => p.lat.alternarLista());
+  const l1 = p.lat.layout();
+  await p.passo(() => p.lat.alternarChat());
+  const l2 = p.lat.layout();
+  caso('monitor estreito: 👥 mostra a lista escondida e 💬 mostra o chat escondido (o clique não fecha o que não está à vista)',
+    l1.estreito && l1.lista && !l1.painel && l2.painel && !l2.lista && p.lat.estado().lista && p.lat.estado().painel === 'chat' && p.win.w === 780, JSON.stringify([l1, l2]));
+  globalThis.document = ANTES.document;
+}
+{
+  // rascunho por conversa (decisão 6): troca, ✕, fechar e reabrir guardam; envio ok apaga; nunca vai para storage, coletor ou log
+  const espia = [];
+  const storage = nome => ({ setItem: (k, v) => espia.push([nome, k, v]), getItem: () => null, removeItem: () => {} });
+  const antesLS = globalThis.localStorage, antesSS = globalThis.sessionStorage, antesDS = globalThis.DataStore;
+  globalThis.localStorage = storage('localStorage'); globalThis.sessionStorage = storage('sessionStorage');
+  globalThis.DataStore = { set: (k, v) => espia.push(['DataStore', k, v]), get: () => null };
   const s = cenario();
-  s.est.conversas.push({ id: 'a4@br1.pvp.net', pid: 'a4@br1.pvp.net', type: 'chat', unreadMessageCount: 0, gameName: 'amigo 4' });
-  await preparaMsg(s);
-  for (const i of [1, 2, 3]) await s.passo(() => s.lat.abrirConversa({ pid: `x${i}@br1.pvp.net`, nome: `amigo ${i}` }));
-  const antes = s.lat.estado().abas.map(a => a.k);
-  await novaMsgDe(s, 2);
-  caso(`${MAX_CONVERSAS} conversas abertas por ele: mensagem nova não abre (não fecha uma dele)`, igual(s.lat.estado().abas.map(a => a.k), antes), JSON.stringify(s.lat.estado().abas.map(a => a.k)));
+  await s.ir('Lobby');
+  const campo = () => s.partes().dir.querySelector('[data-a="lt-texto"]');
+  const digitar = t => { const c = campo(); c.value = t; c.disparar('input'); };
+  await s.passo(() => s.lat.abrirConversa(A1));
+  digitar('texto pro a1');
+  await s.passo(() => s.lat.abrirConversa(A2));
+  const emA2 = campo().value;
+  digitar('para o a2');
+  await s.passo(() => s.lat.abrirConversa(A1));
+  const voltaA1 = campo().value;
+  await s.passo(() => s.lat.fecharConversa());
+  await s.passo(() => s.lat.abrirConversa(A1));
+  const depoisX = campo().value;
+  await s.passo(() => s.lat.alternarChat());
+  await s.passo(() => s.lat.alternarChat());
+  const depoisPainel = campo().value;
+  caso('rascunho: trocar de conversa guarda o texto de cada uma (a2 nasce vazio); ✕ da conversa e fechar/reabrir o 💬 guardam',
+    emA2 === '' && voltaA1 === 'texto pro a1' && depoisX === 'texto pro a1' && depoisPainel === 'texto pro a1' && s.lat.estado().rascunhos === 2,
+    JSON.stringify([emA2, voltaA1, depoisX, depoisPainel, s.lat.estado().rascunhos]));
+  campo().disparar('keydown', { key: 'Enter' });
+  await tick(16);
+  const enviado = s.falsa.escritas().find(c => c.metodo === 'POST' && c.url.includes(encodeURIComponent('a1@br1.pvp.net')));
+  await s.passo(() => s.lat.abrirConversa(A2));
+  const a2Ainda = campo().value;
+  await s.passo(() => s.lat.abrirConversa(A1));
+  caso('rascunho: o envio ok apaga o rascunho daquela conversa (campo vazio ao voltar) e o da outra fica',
+    enviado?.corpo?.body === 'texto pro a1' && campo().value === '' && a2Ainda === 'para o a2' && s.lat.estado().rascunhos === 1, JSON.stringify([enviado?.corpo, campo().value, a2Ainda]));
+  const vazou = [...espia, ...s.logs.map(l => ['log', l])].filter(x => JSON.stringify(x).includes('texto pro a1') || JSON.stringify(x).includes('para o a2'));
+  caso('rascunho: nada do texto vai para localStorage, sessionStorage, DataStore ou log (só o Map da página)', vazou.length === 0, JSON.stringify(vazou));
+  globalThis.localStorage = antesLS; globalThis.sessionStorage = antesSS; globalThis.DataStore = antesDS;
+  globalThis.document = ANTES.document;
+}
+{
+  // revisão de 16/10/2026: trocar de conversa com o envio ainda em voo. (1) A → B → A e o envio dá certo: o campo de A (o rascunho
+  // reposto = o texto já enviado) limpa; antes a comparação era pelo objeto da conversa e o texto enviado ficava no campo como
+  // rascunho (um Enter mandava de novo). (2) A → B e o envio de A falha: o erro não aparece na conversa de B; vira aviso com o
+  // nome de A e o rascunho de A segue guardado
+  const segura = s => { let soltar; s.est.segurar = new Promise(r => { soltar = r; }); return () => { s.est.segurar = null; soltar(); }; };
+  const s = cenario();
+  await s.ir('Lobby');
+  const campo = () => s.partes().dir.querySelector('[data-a="lt-texto"]');
+  await s.passo(() => s.lat.abrirConversa(A1));
+  campo().value = 'vai'; campo().disparar('input');
+  const soltar = segura(s);
+  campo().disparar('keydown', { key: 'Enter' });
+  await tick(4);
+  await s.passo(() => s.lat.abrirConversa(A2));
+  await s.passo(() => s.lat.abrirConversa(A1));
+  const reposto = campo().value;
+  soltar();
+  await tick(16);
+  const posts = s.falsa.escritas().filter(c => c.metodo === 'POST' && c.url.includes(encodeURIComponent('a1@br1.pvp.net')));
+  caso('envio em voo, A → B → A: deu certo e o campo de A limpa (o texto enviado não fica como rascunho); 1 POST só',
+    reposto === 'vai' && campo().value === '' && s.lat.estado().rascunhos === 0 && posts.length === 1, JSON.stringify([reposto, campo().value, s.lat.estado().rascunhos, posts.length]));
+  // (2) falha com ele já na conversa de B
+  campo().value = 'de novo'; campo().disparar('input');
+  const soltar2 = segura(s);
+  s.est.recusar = 500;
+  campo().disparar('keydown', { key: 'Enter' });
+  await tick(4);
+  await s.passo(() => s.lat.abrirConversa(A2));
+  soltar2();
+  await tick(16);
+  const erroEmB = s.partes().dir.querySelector('.lc-lt-erro')?.textContent || '';
+  const aviso = s.avisos.find(([m]) => /amigo 1/.test(m) && /não foi enviada/.test(m));
+  s.est.recusar = 0;
+  await s.passo(() => s.lat.abrirConversa(A1));
+  caso('envio em voo, A → B e o envio de A falha: nenhum erro na conversa de B, aviso com o nome de A, rascunho de A guardado',
+    erroEmB === '' && !!aviso && campo().value === 'de novo', JSON.stringify([erroEmB, aviso, campo().value]));
+  globalThis.document = ANTES.document;
+}
+{
+  // recente: clique dele = abre e marca "lida" (PUT active); clique sintético = abre sem escrever; tecla/clique falso na conversa nada
+  const s = cenario();
+  s.est.conversas[0].unreadMessageCount = 2;
+  await s.ir('Lobby');
+  await s.passo(() => s.lat.alternarChat());
+  await s.passo(() => s.lat.volta()); await s.passo(() => s.lat.volta());
+  const linha = () => s.partes().dir.querySelector('[data-a="lt-recente"][data-k="c:a1@br1.pvp.net"]');
+  const seloAntes = linha()?.querySelector('.lc-lt-un')?.textContent;
+  linha().click({ isTrusted: false });
+  await tick(8); await s.geo.ocioso(); await tick(6);
+  const abriuSemEscrever = s.lat.estado().conversa?.pid === A1.pid && s.falsa.escritas().length === 0;
+  s.partes().dir.querySelector('[data-a="lt-texto"]').disparar('pointerdown', { isTrusted: false });
+  s.partes().dir.querySelector('[data-a="lt-texto"]').disparar('keydown', { key: 'a', isTrusted: false });
+  await tick(6);
+  const nadaFalso = s.falsa.escritas().length === 0;
+  await s.passo(() => s.lat.fecharConversa());
+  linha().click();
+  await tick(8); await s.geo.ocioso(); await tick(6);
+  const put = s.falsa.escritas().filter(c => c.metodo === 'PUT' && c.url === '/lol-chat/v1/conversations/active');
+  caso('recente com 2 não lidas: clique sintético abre sem escrever (nem a interação falsa na conversa); o clique dele abre e marca lida (PUT active {id}), o selo some',
+    seloAntes === '2' && abriuSemEscrever && nadaFalso && put.length === 1 && igual(put[0].corpo, { id: 'a1@br1.pvp.net' }) && !linha()?.querySelector('.lc-lt-un'),
+    JSON.stringify([seloAntes, abriuSemEscrever, nadaFalso, s.falsa.escritas()]));
   globalThis.document = ANTES.document;
 }
 
@@ -1108,7 +1378,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   for (const abre of permutacoes(['lista', 'conversa', 'config'])) {
     const p = await base();
     for (const op of [...abre, ...abre]) {
-      const r = await abrirFechar(p, [() => (op === 'lista' ? p.lat.alternarLista() : op === 'config' ? p.lat.alternarConfig() : (p.lat.estado().abas.length ? p.lat.fecharAba('c:a1@br1.pvp.net') : p.lat.abrirConversa(A1)))]);
+      const r = await abrirFechar(p, [() => (op === 'lista' ? p.lat.alternarLista() : op === 'config' ? p.lat.alternarConfig() : (p.lat.estado().painel ? p.lat.alternarChat() : p.lat.abrirConversa(A1)))]);
       const e = conferir(p);
       if (r.length || e.length) { falhas.push(`${abre} em ${op}: ${[...r, ...e].slice(0, 2).join('; ')}`); break; }
     }

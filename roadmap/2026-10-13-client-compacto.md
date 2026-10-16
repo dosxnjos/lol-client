@@ -1306,6 +1306,7 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     sem mover a janela e nunca na seleção", chave `compacto.conversaSozinha`): palavras dele, "eu não quero que a janela
     abra sozinha com a mensagem. Apenas mostra a notificação e só abra por meio do botão". Nada do chat abre nem troca de
     foco sozinho, em fase nenhuma; 💬 passa a abrir recentes + conversa e um botão novo de amigos abre a lista.
+    Etapa 1 (chat) construída em 16/10/2026 (estado no plano próprio); etapas 2 (amigos) e 3 (perfil) pendentes.
 
 ## Revisão da construção (13/10/2026)
 

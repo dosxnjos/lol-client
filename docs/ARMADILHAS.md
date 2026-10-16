@@ -83,7 +83,20 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   - o traço não diz quem chega primeiro na tela (CSS e `MoveTo` saem no mesmo ms do JS): `MOVE_APOS_CSS_QUADROS` só se decide
     por vídeo/captura em alta taxa. Perto da borda direita, o `ResizeTo` primeiro passa da borda do monitor até o `MoveTo` [S].
 - **Mensagem chega já lida e ele nunca vê** → a conversa marcada como lida (`PUT conversations/active`) seguia a ativa do client
-  depois de trocar de aba, ir para a partida ou minimizar. `lateral.conferirAtiva` devolve (`DELETE`) quando ela sai de vista.
+  depois de trocar de aba, ir para a partida ou minimizar. `lateral.conferirAtiva` devolve (`DELETE`) quando ela sai de vista
+  (desde 16/10/2026 também: ✕ da conversa, fechar o painel, 📊 por cima, ← da lista no monitor estreito).
+- **Conversa que abre sozinha** (relato de 16/10/2026: "eu não quero que a janela abra sozinha com a mensagem") → a decisão 1
+  do passo 13 abria a conversa ao lado quando cabia. Saiu inteira (`talvezAbrirSozinha`, `conversaSozinha`, coach lembrado):
+  mensagem nova só muda contador, ordem e selo dos recentes. Prova: "nada sozinho" de `teste-compacto-lateral.mjs` (7 fases ×
+  3 estados do chat); religar uma abertura no `volta()` deixa o caso vermelho.
+- **Nome da fase cortado no topo da seleção** ("FINALIZAÇÃ", harness de 16/10/2026) → o 👥 ao lado do 💬 pôs 3 botões no topo
+  (📊 💬 👥) e sobraram 91 px para os 97 px de "FINALIZAÇÃO". Com 3 botões nas `.lc-cp-extras` os ícones ficam mais justos
+  (`CSS_CHAT` de `chat-botao.js`, `:has`, CEF 108). Botão novo no topo: medir o título da seleção no harness.
+- **`data-a="amigos"` já existe** → é a lista de convite dentro da tela do lobby (`tela-lobby.js`, sem a lateral). O botão 👥 é
+  `data-a="lista-amigos"`; teste ou CSS que procure `[data-a="amigos"]` pega a lista do lobby.
+- **Texto já enviado volta como rascunho / erro de A na conversa de B** (revisão de 16/10/2026) → uma view de conversa serve a
+  todas as 1:1 e cada troca cria outro objeto em `e.conversa`: comparar "é a mesma conversa?" pelo objeto falha em A → B → A
+  com o envio em voo. Comparar pela chave `k` (`enviarConversa`); com ele noutra conversa, a falha vira aviso com o nome.
 - **Compacto parado em "lendo o lobby", botões mortos (14/10/2026)** → no boot a Riot tira o `#lc-compacto` do `<body>` e
   põe uma **cópia** sem ouvintes; a tela seguia pintando no original, fora da página. Medido com 1 só `montar()` no
   registro. `criarCamada.conectada()` + roteador que remonta + vigia dos filhos do `<body>` (e intervalo de 2 s).
@@ -465,6 +478,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
     mensagem em nome dele (`servidor_local.origem_chat_ok`).
   - `{compacto: false}` do plugin vence a lista de amigos aberta: conversa nova não abre sozinha (o bloco das
     Configurações promete isso); sem aviso ainda (`None`, coletor reiniciou), a lista aberta vale.
+  - **as 1:1 também trazem `password` e `mucJwtDto`** (medido em 16/10/2026, 5 conversas em plena partida), não só as salas:
+    toda leitura da lista passa por `lateral-chat.limparConversas` (da 1:1 ficam id, pid, nome, não lidas e da `lastMessage`
+    só remetente, `body`, `timestamp` e `type`). Os recentes do 💬 saem dessa `lastMessage` (ordem por `timestamp`, trecho
+    do `body`); `joined_room`/`left_room` de sistema não viram trecho.
 - **Timeout de leitura da LCU não vira `URLError`** → sai `TimeoutError` cru do `getresponse`
   (e `ConnectionResetError`, `JSONDecodeError` com corpo cortado). Quem só pega `HTTPError` morre
   no 1º engasgo; o `Gravador.get()` pega tudo e conta `erro_lcu`.

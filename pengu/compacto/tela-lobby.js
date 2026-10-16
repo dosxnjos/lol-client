@@ -548,7 +548,8 @@ async function responderConvite(s, ctx, id, acao) {
   } finally { s.ocupado = false; s.pintar(); }
 }
 
-// "+ convidar": a lista de amigos em janela própria (coletor); sem ela, a lista dentro desta tela
+// "+ convidar": a lista de amigos ao lado (a do 👥, chat ao lado ligado) ou em janela própria (coletor); sem as duas, a lista
+// dentro desta tela
 async function abrirConvidar(s, ctx) {
   if (await abrirChat(ctx)) return;
   if (!ctx.vivo()) return;
