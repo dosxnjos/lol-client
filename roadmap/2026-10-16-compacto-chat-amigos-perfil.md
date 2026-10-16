@@ -1,12 +1,19 @@
 # Plano — compacto: chat com recentes, amigos com grupos e menu, perfil (2026-10-16)
 
-Plano para um executor que nunca viu a conversa. Só planejamento e medição: **nada aqui foi construído**. Projeto
+Plano para um executor que nunca viu a conversa. **Estado (16/10/2026, noite): as 3 etapas construídas, revisadas e
+commitadas** (`ce75959` chat, `a30fdf5` amigos, `8262356` + `e7512a4` perfil); o que cada uma fez e o que só o client real
+prova está no bloco "Estado" de cada etapa (o sidecar `.d/` não foi criado). Conferência de completude (16/10/2026, noite,
+jogo fechado): `rodar-testes.py` 53/53 sem as 3 provas de porta fixa fora de 0/8831-8840 (`teste-aviso-partida` 8797,
+`teste-expansoes` 8798, `ensaio-coach` 8766/2996; nenhuma toca este plano); `compacto-importar.js` no CEF real antes da recarga
+deu erro de ligação (cópia de boot do `comum.js`, ARMADILHAS § Client e Pengu): repetir depois de recarregar, esperado sem
+`ERRO`. Abaixo, o plano como foi escrito. Projeto
 `C:\Dev\lol-client`, plugin Pengu em `pengu/compacto/`. Antes do 1º Edit: hub `C:\Dev\cerebro\projetos\lol-client.md`,
 `CLAUDE.md`, `docs/ARMADILHAS.md` (§ Client e Pengu, § LCU), `docs/TEXTOS-DA-INTERFACE.md` e o passo 13 do
 [plano do compacto](2026-10-13-client-compacto.md) (a lateral nasceu lá; este plano muda a regra dela).
 
 Três etapas independentes, nesta ordem, cada uma com commit próprio: **1 chat**, **2 amigos**, **3 perfil**.
-Relatório de execução de cada etapa no sidecar `roadmap/2026-10-16-compacto-chat-amigos-perfil.d/`, nunca neste corpo.
+Relatório de execução de cada etapa: previsto no sidecar `roadmap/2026-10-16-compacto-chat-amigos-perfil.d/`; na
+execução ficou no bloco "Estado" de cada etapa (o sidecar não foi criado).
 
 ## Pedido (palavras do Gabriel, 16/10/2026 de manhã, várias mensagens; a última corrige as anteriores)
 
@@ -220,7 +227,7 @@ Técnicas (a opção mais reversível; confiança e o que reverteria):
 
 ## Etapa 1 — chat: 💬 com recentes e conversa, ✕, botão de amigos, nada sozinho
 
-**Estado (16/10/2026, tarde): construída, sem commit (o orquestrador commita).** Feito: estado novo da lateral
+**Estado (16/10/2026, tarde): construída, revisada e commitada (`ce75959`).** Feito: estado novo da lateral
 (`painel: null|'chat'|'coach'`, `anterior`, `conversa`, `rascunhos: Map`); `talvezAbrirSozinha`, `desfazerAuto`,
 `FASES_ABRE_SOZINHA`, `MAX_CONVERSAS`, abas, `lembrarCoach` e a chave `conversaSozinha` removidos; recentes
 (`limparConversas`, `verRecentes`, `criarRecentes` em `lateral-chat.js`) com a sala do time na 1ª linha na seleção (e fora
@@ -572,7 +579,7 @@ salvar tudo sempre, fundo com vídeo), `teste-compacto-lateral.mjs`, `teste-comp
   item que expande | dono: gabriel
 - [[DECISAO]] coach 📊 voltando sozinho na seleção seguinte (hoje volta se ele deixou aberto) | opções: nunca volta sozinho /
   volta só com o painel fechado e sem mudar a largura | recomendo: nunca (decisão 5; mesmo espírito do "nada sozinho") |
-  dono: gabriel
+  dono: gabriel — **adotada como recomendado na etapa 1** (16/10/2026, reversível): o 📊 só abre por clique.
 
 ## O que o pedido não dizia
 

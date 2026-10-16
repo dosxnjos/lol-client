@@ -14,6 +14,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **`cdp.mjs` mira na página errada** → com o DevTools do client aberto, ele também é `type: "page"` e
   pode vir primeiro na `/json/list`; o `eval` roda no DevTools. Mirar na página cuja url tem `/index.html`
   e não começa com `devtools://` (corrigido 13/10/2026). A url da página traz a credencial: nunca logar.
+- **`compacto-importar.js` dá "does not provide an export named …" antes da recarga** (16/10/2026, `perfilSalvo`) → o `?v=` só
+  renova o módulo do topo; os `import './comum.js'` internos pegam a cópia carregada no boot do client (sem o export novo). Não é
+  defeito do código: vale só depois de recarregar a interface. Sem recarga, o erro de ligação ainda prova que o arquivo passou no
+  parser do CEF 108 (erro de sintaxe viria antes).
 - **Botão Confirmar do Modo de Treino não clica** → a altura fixa da coluna larga (360 px, `z-index: 2`)
   valia para todo cartão selecionado; o do Treino não tem lista de filas e a caixa vazia cobria o botão.
   A regra só vale com `:has(.parties-game-type-card-categories)` (13/10/2026). Trocar o CSS ao vivo: o
