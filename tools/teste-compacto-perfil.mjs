@@ -6,6 +6,8 @@
 // O que segura: os corpos do identity customizer da Riot (_saveIcon, _saveRegalia, _savePreferences) ao pé da letra, só as chamadas
 // que mudaram, só no "salvar" com o clique dele; escolher não escreve; o perfil de amigo só lê (GET), respeita o perfil privado e
 // só oferece o replay de terceiro quando a Riot oferece; o fundo usa a imagem (nunca o vídeo) e some com a chave desligada.
+// Seção 6 (revisão de 16/10/2026): emblema nunca repete, "assistir" do perfil segue a chave de espectador, o 📊 volta quando o chat ao
+// lado desliga, o rascunho sobrevive ao perfil; e a "colheita" (seção 4) reprova cor de texto da coluna abaixo de 4,5:1 sobre o véu.
 // uso: node tools/teste-compacto-perfil.mjs
 import { readFileSync } from 'node:fs';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
