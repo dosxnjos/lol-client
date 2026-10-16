@@ -870,7 +870,7 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     - **B3** (`tela-lobby.js` + `posjogo/index.js` `estadoAnalise()` lendo o cache da análise, e `analisarUltima` no retorno do
       `iniciarPosjogo`): linha "📊 última partida" abaixo da dica: pronta/vista → "⤢ reabrir", analisando → cinza, falhou →
       "tentar de novo", nunca → "analisar"; some no ready check (`esquecerAnalises`) até a próxima partida; expande antes de abrir.
-    - **Decisão 1** (mensagem nova): abre a conversa sozinha só com o compacto à vista, em `None`/`Lobby`/`EndOfGame`, com a
+    - **Decisão 1** (mensagem nova; **substituída em 16/10/2026**, passo 18: nada abre sozinho): abre a conversa sozinha só com o compacto à vista, em `None`/`Lobby`/`EndOfGame`, com a
       chave ligada, última mensagem não minha e se couber sem mover (`cabeSemMover` com a tela lida); nunca dá foco nem marca lida.
     **Decisões técnicas (opus, 14/10/2026):** (vi) coletor: o plugin manda `POST /chat/plugin {compacto: ligado && !lateral,
     lateral}`; o coletor de hoje só lê `compacto`, então com a lateral ligada as janelas do Edge param de abrir conversa sozinhas
@@ -1300,6 +1300,12 @@ plugin empurra, coletor só exibe e devolve o texto digitado). Armadilhas que va
     para eog sem `isPlayerTeam` (todo mundo sairia vermelho): agora o aliado é o time com `isLocalPlayer`; caso novo prova o
     time dele em 2º (lado vermelho) e sem a flag. Conferido sem mudança: assistir só fica clicável no estado `watch` (replay
     baixado); a faixa só mostra nome que o eog já mostra; chroma só da skin marcada, só os liberados, só por clique.
+18. [ ] **Chat com recentes, amigos com grupos e menu, perfil (pedido de 16/10/2026, manhã).** Plano próprio:
+    [2026-10-16-compacto-chat-amigos-perfil.md](2026-10-16-compacto-chat-amigos-perfil.md) (3 etapas: chat, amigos,
+    perfil). **Substituída em 16/10/2026** a decisão 1 do passo 13 ("mensagem nova abre a conversa sozinha só se couber
+    sem mover a janela e nunca na seleção", chave `compacto.conversaSozinha`): palavras dele, "eu não quero que a janela
+    abra sozinha com a mensagem. Apenas mostra a notificação e só abra por meio do botão". Nada do chat abre nem troca de
+    foco sozinho, em fase nenhuma; 💬 passa a abrir recentes + conversa e um botão novo de amigos abre a lista.
 
 ## Revisão da construção (13/10/2026)
 
