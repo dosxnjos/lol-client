@@ -36,6 +36,7 @@ TESTES = [
     ["node", "tools/teste-replay.mjs"],   # baixar/assistir replay no pós-jogo (pengu/replay.js, 15/10/2026)
     ["node", "tools/teste-compacto-fim-de-partida.mjs"],
     ["node", "tools/teste-compacto-lateral.mjs"],
+    ["node", "tools/teste-compacto-amigos.mjs"],   # grupos, menu do clique direito e arrastar para convidar (16/10/2026)
     ["node", "tools/teste-compacto-jogo.mjs"],   # partida em andamento (passo 14)
     ["node", "tools/teste-compacto-expansoes.mjs"],   # registro das saídas do compacto (passo 15)
     ["node", "tools/teste-textos.mjs"],   # tom dos textos da interface (docs/TEXTOS-DA-INTERFACE.md, 15/10/2026)

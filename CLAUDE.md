@@ -15,6 +15,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   Fim de partida (voto, prosseguir, adicionar, denunciar, sala, replay): só clique dele, rota e corpo do front da Riot (ARMADILHAS § LCU).
   Partida (`tela-jogo.js`): sozinho nada de `MoveTo`/`ux-show` (geometria só com `geometriaAtiva`); em `InProgress` sem foco nada mexe na janela, nem `CenterToScreen` (`podeMexer`, ARMADILHAS § Client).
   Lateral (💬, 👥, ⚙, 📊): largura só pelo `est.lateral` do roteador, posição só pela `compacto/geometria.js` (px físicos; `MoveTo` fora dela = `anotarPosicao`); nada do chat abre nem muda de foco sozinho, em fase nenhuma (16/10/2026); provar com `teste-compacto-lateral.mjs`.
+  Amigos (pastas, menu, arrastar): regra e corpos só em `compacto/amigos.js`; convite só na fase `Lobby` com lobby criado (a lista nunca cria lobby); provar com `teste-compacto-amigos.mjs`.
   Ordem CSS/`ResizeTo`/`MoveTo` só pela fila da geometria, partindo da esquerda pintada (ARMADILHAS § Client, "Pisca ao abrir ⚙").
   Saída do compacto só pelo `resolver()` (o registro das expansões compara antes/depois); `est.forcado` só por `forcar(motivo, tipo)`; texto de camada da Riot só por `expansoes.textoSeguro` (vocabulário, nunca nome) ([COLETOR](docs/COLETOR.md) § Registro das expansões).
 - Texto de interface (`pengu/**`, `painel/**`): tom de produto, impessoal ou "você", nunca "tu"/gíria/1ª pessoa do app;

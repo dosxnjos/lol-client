@@ -94,6 +94,19 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   (`CSS_CHAT` de `chat-botao.js`, `:has`, CEF 108). Botão novo no topo: medir o título da seleção no harness.
 - **`data-a="amigos"` já existe** → é a lista de convite dentro da tela do lobby (`tela-lobby.js`, sem a lateral). O botão 👥 é
   `data-a="lista-amigos"`; teste ou CSS que procure `[data-a="amigos"]` pega a lista do lobby.
+- **Menu do clique direito, diálogo ou campo que somem sozinhos na lista de amigos** (etapa 2 de 16/10/2026) → o corpo da lista é
+  recriado a cada leitura (3 s) e levava junto o que estivesse dentro dele. Menu, diálogo e campo moram no `.lc-lt-sobre`, irmão do
+  corpo, e a lista não repinta enquanto um deles está aberto ou há arrasto em andamento (`congelado`; repinta ao fechar). Prova:
+  "o menu aberto sobrevive à releitura" e "arrasto em andamento" de `teste-compacto-amigos.mjs`.
+- **Soltar o amigo na coluna não chega (e o motivo nunca aparece)** → sem `preventDefault` no `dragover` o navegador não entrega o
+  `drop`. A coluna faz `preventDefault` sempre que o arrasto é de amigo, marca verde ou cinza com a faixa do motivo, e só o `drop` com
+  `isTrusted` convida. O dado do arrasto fica em `st.arrasto` da lateral (o `dataTransfer` só leva um MIME próprio, nunca `text/plain`,
+  que entraria como texto no campo do chat). Medido no harness com o arrasto real do Chromium (Playwright `dragTo`), não no CEF 108 [S].
+- **Lista de amigos parada depois de um arrasto / marca da coluna piscando** (revisão de 16/10/2026) → (1) a lista não repinta com
+  `st.arrasto` de pé, e só `dragend`/`drop` o limpavam: o Chromium não manda `dragend` se a origem sai do documento, e soltar fora da
+  janela pode não chegar. Durante um arrasto nativo não há `pointerdown`: o próximo clique na camada limpa o arrasto preso. (2) o
+  `dragleave` entre filhos da coluna chega com `relatedTarget` null: a marca só sai quando o ponteiro deixa o retângulo da coluna.
+  Prova: "arrasto sem dragend" e "dragleave entre filhos" de `teste-compacto-amigos.mjs`.
 - **Texto já enviado volta como rascunho / erro de A na conversa de B** (revisão de 16/10/2026) → uma view de conversa serve a
   todas as 1:1 e cada troca cria outro objeto em `e.conversa`: comparar "é a mesma conversa?" pelo objeto falha em A → B → A
   com o envio em voo. Comparar pela chave `k` (`enviarConversa`); com ele noutra conversa, a falha vira aviso com o nome.
@@ -488,6 +501,22 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Sequência de derrotas zerando à meia-noite** → `sessao_hoje()` lia só desde 00:00 e o `_tilt()`
   encadeia por pausa < 2 h: na faixa 00–06h (a pior) o alerta de 3+ derrotas não disparava. Hoje a
   sessão em andamento atravessa a meia-noite (`servidor._sessao`).
+- **Amigo na pasta errada / "Offline" com gente da Tropa** (medido 16/10/2026) → a lista da Riot agrupa por `displayGroupId`, não por
+  `groupId`: offline vai para OFFLINE (10000) e celular para MOBILE (10001), com o `groupId` de sempre (0, 1…). Ordem das pastas =
+  `priority` decrescente, empate pelo nome (`_groupSort`); o `**Default` ("Geral") não é meta. Mover de pasta grava `groupId`.
+- **Amigos: rotas e corpos do front da Riot** (rcp-fe-lol-social 16.20, roster v2 em Ember, lido 16/10/2026; **nenhum enviado ao client
+  real**: a 1ª prova é um clique dele) → recolher `PUT /lol-chat/v1/friend-groups/{id}` com o grupo inteiro e `collapsed` trocado;
+  reordenar = `moveGroup` + `saveGroupOrder` (`priority = length − índice`, PUT só nos não meta que mudaram; o módulo velho usava
+  `100 − n`); criar `POST /lol-chat/v1/friend-groups {name, priority: maior+1}`, renomear PUT do grupo, excluir `DELETE …/{id}` (a Riot
+  exclui sem perguntar; o compacto confirma); mover/anotação `PUT /lol-chat/v1/friends/{id}` com o amigo inteiro; desfazer `DELETE
+  /lol-chat/v1/friends/{id}`; bloquear `POST /lol-chat/v1/blocked-players {summonerId, puuid}`; denunciar `POST
+  /lol-player-report-sender/v1/direct-message-reports {offenderPuuid}` (só com `…/client-config/lol.client_settings.dm_reporting.enabled`
+  [S] e mensagem recebida dele); assistir `POST /lol-spectator/v1/spectate/launch {dropInSpectateGameId: name (≠ gameName),
+  gameQueueType, allowObserveMode: isObservable, puuid, spectatorKey}` depois de `GET …/can-spectate/{puuid}/{chave}`. O PUT de grupo
+  da Riot leva também o `isDefault: true` que o front acrescenta no Geral; o compacto manda o grupo como lido (sem ele) [S].
+- **Convite que a Riot acende e depois recusa** → `canInviteToGame` aceita amigo em partida, mas o `invitePlayer` do parties recusa
+  quem não está `chat`/`away` (`checkIfPlayerAvailable`) com um aviso. No compacto o item, o botão e o soltar ficam cinza com o motivo
+  (`amigos.podeConvidar`), e só na fase `Lobby` com lobby criado: `GET /lol-lobby/v2/lobby` segue 200 na fila e na seleção.
 - **Fim de partida: rotas e corpos do front da Riot** (rcp-fe-lol-postgame / -shared-components / -social 16.20, lidos no
   `assets.wad` em 14/10/2026; nenhum enviado ao client real ainda) → honra: `POST /lol-honor/v1/honor {recipientPuuid,
   honorType:"HEART"}`, pronto `POST /lol-honor/v1/ballot` sem corpo, `honoredPlayers` = `[{recipientPuuid}]`,

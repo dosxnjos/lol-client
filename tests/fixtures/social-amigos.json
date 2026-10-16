@@ -1,0 +1,39 @@
+{
+  "_origem": "Montada à mão no formato medido em 16/10/2026 (roadmap/2026-10-16-compacto-chat-amigos-perfil.md § Medição): os 4 grupos e as prioridades reais (Tropa 1/4, **Default 0/3 não meta, MOBILE 10001/2 meta recolhido, OFFLINE 10000/1 meta), as chaves dos amigos e do lol{}. Nomes, puuids, ids e chaves de espectador inventados ('amigo N').",
+  "eu": { "id": "eu@br1.pvp.net", "pid": "eu@br1.pvp.net", "puuid": "puuid-eu", "summonerId": 111, "gameName": "Xerekton", "product": "league_of_legends", "platformId": "BR1" },
+  "grupos": [
+    { "id": 10000, "name": "OFFLINE", "priority": 1, "isMetaGroup": true, "isLocalized": false, "collapsed": false },
+    { "id": 0, "name": "**Default", "priority": 3, "isMetaGroup": false, "isLocalized": false, "collapsed": false },
+    { "id": 10001, "name": "MOBILE", "priority": 2, "isMetaGroup": true, "isLocalized": false, "collapsed": true },
+    { "id": 1, "name": "Tropa", "priority": 4, "isMetaGroup": false, "isLocalized": false, "collapsed": false }
+  ],
+  "amigos": [
+    { "id": "a1@br1.pvp.net", "pid": "a1@br1.pvp.net", "puuid": "pa1", "summonerId": 201, "name": "amigo1nome", "gameName": "amigo 1", "gameTag": "BR1", "groupId": 1, "groupName": "Tropa",
+      "displayGroupId": 1, "displayGroupName": "Tropa", "note": "", "isP2PConversationMuted": false, "availability": "chat", "product": "league_of_legends", "platformId": "BR1", "icon": 29,
+      "lol": { "gameStatus": "outOfGame", "puuid": "pa1" } },
+    { "id": "a2@br1.pvp.net", "pid": "a2@br1.pvp.net", "puuid": "pa2", "summonerId": 202, "name": "amigo2nome", "gameName": "amigo 2", "gameTag": "BR1", "groupId": 0, "groupName": "**Default",
+      "displayGroupId": 0, "displayGroupName": "**Default", "note": "", "isP2PConversationMuted": false, "availability": "dnd", "product": "league_of_legends", "platformId": "BR1", "icon": 7,
+      "lol": { "gameStatus": "inGame", "queueId": "420", "gameQueueType": "RANKED_SOLO_5x5", "isObservable": "ALL", "spectatorKey": "chave-espectador-a2", "puuid": "pa2", "championId": "58", "timeStamp": "0" } },
+    { "id": "a3@br1.pvp.net", "pid": "a3@br1.pvp.net", "puuid": "pa3", "summonerId": 203, "name": "amigo3nome", "gameName": "amigo 3", "gameTag": "BR1", "groupId": 0, "groupName": "**Default",
+      "displayGroupId": 10000, "displayGroupName": "OFFLINE", "note": "", "isP2PConversationMuted": false, "availability": "offline", "product": "", "platformId": "", "icon": 1, "lol": {} },
+    { "id": "a4@br1.pvp.net", "pid": "a4@br1.pvp.net", "puuid": "pa4", "summonerId": 204, "name": "amigo4nome", "gameName": "amigo 4", "gameTag": "BR1", "groupId": 1, "groupName": "Tropa",
+      "displayGroupId": 10001, "displayGroupName": "MOBILE", "note": "", "isP2PConversationMuted": false, "availability": "mobile", "product": "league_of_legends", "platformId": "BR1", "icon": 2, "lol": {} },
+    { "id": "a5@br1.pvp.net", "pid": "a5@br1.pvp.net", "puuid": "pa5", "summonerId": 205, "name": "amigo5nome", "gameName": "amigo 5", "gameTag": "BR1", "groupId": 0, "groupName": "**Default",
+      "displayGroupId": 0, "displayGroupName": "**Default", "note": "joga de suporte", "isP2PConversationMuted": false, "availability": "away", "product": "league_of_legends", "platformId": "BR1", "icon": 3,
+      "lol": { "gameStatus": "outOfGame", "puuid": "pa5" } },
+    { "id": "a6@br1.pvp.net", "pid": "a6@br1.pvp.net", "puuid": "pa6", "summonerId": 206, "name": "amigo6nome", "gameName": "amigo 6", "gameTag": "BR1", "groupId": 0, "groupName": "**Default",
+      "displayGroupId": 0, "displayGroupName": "**Default", "note": "", "isP2PConversationMuted": false, "availability": "dnd", "product": "league_of_legends", "platformId": "BR1", "icon": 4,
+      "lol": { "gameStatus": "inQueue", "queueId": "440", "puuid": "pa6" } },
+    { "id": "a7@br1.pvp.net", "pid": "a7@br1.pvp.net", "puuid": "pa7", "summonerId": 207, "name": "amigo7nome", "gameName": "amigo 7", "gameTag": "BR1", "groupId": 1, "groupName": "Tropa",
+      "displayGroupId": 1, "displayGroupName": "Tropa", "note": "", "isP2PConversationMuted": false, "availability": "dnd", "product": "league_of_legends", "platformId": "BR1", "icon": 5,
+      "lol": { "gameStatus": "spectating", "gameQueueType": "RANKED_FLEX_SR", "isObservable": "ALL", "spectatorKey": "chave-espectador-a7", "puuid": "pa7",
+        "dropInSpectateGameId": "jogo-assistido-a7", "spectatingTargetPuuid": "puuid-assistido-a7" } },
+    { "id": "a8@br1.pvp.net", "pid": "a8@br1.pvp.net", "puuid": "pa8", "summonerId": 208, "name": "amigo8nome", "gameName": "amigo 8", "gameTag": "BR1", "groupId": 0, "groupName": "**Default",
+      "displayGroupId": 0, "displayGroupName": "**Default", "note": "", "isP2PConversationMuted": false, "availability": "chat", "product": "valorant", "productName": "VALORANT", "platformId": "BR1", "icon": 6, "lol": {} },
+    { "id": "a9@br1.pvp.net", "pid": "a9@br1.pvp.net", "puuid": "pa9", "summonerId": 209, "name": "amigo9nome", "gameName": "amigo 9", "gameTag": "BR1", "groupId": 0, "groupName": "**Default",
+      "displayGroupId": 0, "displayGroupName": "**Default", "note": "", "isP2PConversationMuted": false, "availability": "dnd", "product": "league_of_legends", "platformId": "BR1", "icon": 8,
+      "lol": { "gameStatus": "inGame", "queueId": "0", "gameQueueType": "PRACTICE_GAME", "isObservable": "ALL", "spectatorKey": "chave-espectador-a9", "puuid": "pa9" } }
+  ],
+  "lobby": { "localMember": { "isLeader": true, "allowedInviteOthers": true, "puuid": "puuid-eu", "summonerId": 111 }, "members": [{ "puuid": "puuid-eu", "summonerId": 111 }],
+    "gameConfig": { "queueId": 420, "maxLobbySize": 5 } }
+}

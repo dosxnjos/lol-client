@@ -890,9 +890,11 @@ async function nadaSozinho() {
 // =================== 9. puros: lista, sala do time, coach, última partida ===================
 {
   const v = verAmigos({ amigos: AMIGOS(), conversas: [{ id: 'a1@br1.pvp.net', pid: 'a1@br1.pvp.net', type: 'chat', unreadMessageCount: 3 }, { id: SALA_CS, type: 'championSelect', unreadMessageCount: 9 }],
-    lobby: lobbyParaConvite({ ok: true, status: 200, json: { localMember: { isLeader: false, allowedInviteOthers: false }, members: [] } }) });
+    lobby: lobbyParaConvite({ ok: true, status: 200, json: { localMember: { isLeader: false, allowedInviteOthers: false }, members: [] } }), fase: 'Lobby' });
+  // (etapa 2 de 2026-10-16: o convite também depende da fase, só no Lobby; os grupos da Riot e o menu: teste-compacto-amigos.mjs.
+  // Aqui a LCU falsa não tem /friend-groups: a lista cai no desenho de antes, que fica provado nestes casos)
   caso('verAmigos: sala de grupo não conta como não lida; não-líder vê "convidar" cinza com o motivo; em partida sem convidar',
-    v.naoLidas === 3 && v.online[0].convidar.ok === false && /só o líder/.test(v.online[0].convidar.motivo) && v.online[1].convidar.mostra === false, JSON.stringify(v));
+    v.naoLidas === 3 && v.online[0].convidar.ok === false && /só o líder/.test(v.online[0].convidar.motivo) && v.online[1].convidar.mostra === false && v.secoes === null, JSON.stringify(v));
   caso('lobby: sem lobby = "abra o lobby antes"; erro = não sei (nunca convida)', lobbyParaConvite({ ok: false, status: 404 }).tem === false && lobbyParaConvite({ ok: false, status: 0 }).tem === null);
   caso('status: no celular, ausente, na fila, no lobby', statusAmigo({ availability: 'mobile' }).txt === 'no celular' && statusAmigo({ availability: 'away' }).txt === 'ausente'
     && statusAmigo({ availability: 'chat', lol: { gameStatus: 'inQueue', queueId: 440 } }).txt === 'na fila · Flex' && statusAmigo({ availability: 'chat', lol: { gameStatus: 'hosting_RANKED_SOLO_5x5' } }).txt === 'no lobby · Solo/Duo');

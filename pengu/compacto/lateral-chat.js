@@ -19,6 +19,7 @@
 //   nem da sessão é lido: nome oculto da ranqueada nunca aparece.
 import { h, esc, fotoCampeao } from './comum.js';
 import { corpoMensagem } from './chat-sala.js';
+import { podeConvidar, secoesAmigos } from './amigos.js';
 
 export const TEXTO_MAX = 500;
 export const MSGS_MAX = 100;
@@ -78,20 +79,28 @@ export function grupoDoAmigo(f) {
 }
 export const pidDe = f => String(f?.pid || f?.id || '');
 
-// lobby (GET /lol-lobby/v2/lobby) -> {tem, pode, motivo, membros:Set}: convidar só no lobby, como líder (ou convite liberado)
+// lobby (GET /lol-lobby/v2/lobby) -> {tem, pode, motivo, membros:Set, cheio}: convidar só no lobby, como líder (ou convite
+// liberado) e com vaga (currentPartyIsNotFull do parties: membros < gameConfig.maxLobbySize, quando ele vem)
 export function lobbyParaConvite(r) {
-  if (!r || r.status === 0 || (r.ok === false && r.status !== 404)) return { tem: null, pode: false, motivo: 'não foi possível ler o lobby', membros: new Set() };
+  if (!r || r.status === 0 || (r.ok === false && r.status !== 404)) return { tem: null, pode: false, motivo: 'não foi possível ler o lobby', membros: new Set(), cheio: false };
   const lob = r.ok ? r.json : null;
-  if (!lob || typeof lob !== 'object') return { tem: false, pode: false, motivo: 'abra o lobby antes (escolha a fila no compacto)', membros: new Set() };
+  if (!lob || typeof lob !== 'object') return { tem: false, pode: false, motivo: 'abra o lobby antes (escolha a fila no compacto)', membros: new Set(), cheio: false };
   const eu = lob.localMember || {};
   const membros = new Set();
   for (const m of lob.members || []) for (const c of ['puuid', 'summonerId']) if (m?.[c]) membros.add(String(m[c]));
   const pode = !!(eu.isLeader || eu.allowedInviteOthers);
-  return { tem: true, pode, motivo: pode ? '' : 'só o líder do grupo convida', membros };
+  const max = Number(lob.gameConfig?.maxLobbySize) || 0;
+  const cheio = max > 0 && (lob.members || []).length >= max;
+  return { tem: true, pode, motivo: pode ? '' : 'só o líder do grupo convida', membros, cheio };
 }
 
-// friends + conversas diretas + lobby -> {online, offline, grupos, naoLidas} (mesmas regras de chat_janelas.ver_amigos)
-export function verAmigos({ amigos = [], conversas = [], lobby = null, convidados = new Map(), abertas = new Set(), agoraMs = Date.now() } = {}) {
+// friends + conversas diretas + lobby (+ fase, eu e os grupos da Riot) -> {online, offline, grupos, secoes, naoLidas}. secoes
+// (etapa 2 de 2026-10-16): os grupos de GET /lol-chat/v1/friend-groups na ordem da Riot, amigos por displayGroupId (amigos.js);
+// sem a leitura dos grupos, null (a lista volta ao desenho de antes: online por nome de grupo e "offline" recolhido).
+// item.convite = a regra única de convite (amigos.podeConvidar: menu, soltar na coluna); item.convidar = o botão da linha (só
+// para quem está livre: chat/ausente e fora do grupo)
+export function verAmigos({ amigos = [], conversas = [], lobby = null, convidados = new Map(), abertas = new Set(), agoraMs = Date.now(), fase = null, eu = null,
+  grupos = null } = {}) {
   const porPid = new Map();
   for (const c of conversas) if (ehConversaDireta(c)) porPid.set(String(c.pid || c.id || '').toLowerCase(), c);
   const lob = lobby || { tem: false, pode: false, motivo: 'abra o lobby antes', membros: new Set() };
@@ -104,26 +113,26 @@ export function verAmigos({ amigos = [], conversas = [], lobby = null, convidado
     const conv = porPid.get(pid.toLowerCase());
     const un = Math.max(0, Number(conv?.unreadMessageCount) || 0);
     const lol = f.lol && typeof f.lol === 'object' ? f.lol : {};
+    const gid = Number(f.displayGroupId ?? f.groupId);
     const item = { pid, conv: conv ? String(conv.id) : '', nome: String(f.gameName || f.name || '?'), dot: st.dot, txt: st.txt, cls: st.cls, un,
-      grupo: grupoDoAmigo(f), aberta: abertas.has(pid), icone: Number(f.icon) > 0 ? Number(f.icon) : 0,
-      campeao: String(lol.gameStatus || '') === 'inGame' && Number(lol.championId) > 0 ? Number(lol.championId) : 0,
+      grupo: grupoDoAmigo(f), grupoId: Number.isFinite(gid) ? gid : 0, nota: typeof f.note === 'string' ? f.note : '', aberta: abertas.has(pid),
+      icone: Number(f.icon) > 0 ? Number(f.icon) : 0, campeao: String(lol.gameStatus || '') === 'inGame' && Number(lol.championId) > 0 ? Number(lol.championId) : 0,
       summonerId: Number(f.summonerId) > 0 ? Number(f.summonerId) : 0 };
-    if (!st.online) { offline.push(item); continue; }
-    const noGrupo = [String(f.puuid || ''), String(f.summonerId || '')].some(v => v && lob.membros?.has(v));
-    const conv0 = convidados.get(pid);
-    if (noGrupo || st.ocupado) item.convidar = { mostra: false };
-    else if (conv0 !== undefined && agoraMs - conv0 < CONVITE_VALE_MS) item.convidar = { mostra: true, ok: false, rotulo: 'convidado', motivo: 'convite enviado' };
-    else if (!item.summonerId) item.convidar = { mostra: true, ok: false, rotulo: 'convidar', motivo: 'sem o id do amigo para convidar' };
-    else item.convidar = { mostra: true, ok: !!lob.pode, rotulo: 'convidar', motivo: lob.motivo || 'convidar para o seu grupo' };
+    item.convite = podeConvidar({ f, fase, lobby: lob, eu, convidados, agoraMs, valeMs: CONVITE_VALE_MS });
+    if (!st.online) { item.convidar = { mostra: false }; offline.push(item); continue; }
+    const noGrupo = item.convite.motivo === 'já está no seu grupo';
+    item.convidar = noGrupo || st.ocupado || !item.convite.mostra ? { mostra: false } : item.convite;
     online.push(item);
   }
   const cmp = (a, b) => a.nome.localeCompare(b.nome, 'pt-BR', { sensitivity: 'base' });
   online.sort((a, b) => (Math.min(b.un, 1) - Math.min(a.un, 1)) || ((ORDEM[a.dot] ?? 9) - (ORDEM[b.dot] ?? 9)) || cmp(a, b));
   offline.sort((a, b) => (Math.min(b.un, 1) - Math.min(a.un, 1)) || cmp(a, b));
-  const grupos = [];
-  for (const a of online) if (!grupos.includes(a.grupo)) grupos.push(a.grupo);
-  grupos.sort((a, b) => (a !== 'geral') - (b !== 'geral') || a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
-  return { online, offline, grupos, naoLidas: [...online, ...offline].reduce((s, a) => s + a.un, 0) };
+  const nomes = [];
+  for (const a of online) if (!nomes.includes(a.grupo)) nomes.push(a.grupo);
+  nomes.sort((a, b) => (a !== 'geral') - (b !== 'geral') || a.localeCompare(b, 'pt-BR', { sensitivity: 'base' }));
+  // dentro de cada grupo, a ordem de sempre: não lidas, status (online antes de offline), nome
+  const secoes = secoesAmigos(grupos, [...online, ...offline]);
+  return { online, offline, grupos: nomes, secoes, naoLidas: [...online, ...offline].reduce((s, a) => s + a.un, 0) };
 }
 
 const ehEntrouSaiu = m => String(m.type || '').toLowerCase() === 'system' && /^(joined|left)_room$/.test(String(m.body || '').trim());
@@ -244,20 +253,33 @@ function avatar(a, doc) {
 // Lista de amigos (👥). amb = {doc, seguro, aoAmigo(a, ev), aoConvidar(a, ev), aoPedidos(), aoFechar()} -> {el, pintar(dados), busca()}
 export function criarListaAmigos(amb) {
   const { doc } = amb;
-  let dados = null, filtro = '', offAberto = false, assinatura = '';
+  let dados = null, filtro = '', offAberto = false, assinatura = '', pendente = false;
   const busca = h('input', { doc, class: 'lc-lt-busca', placeholder: 'buscar amigo', autocomplete: 'off', spellcheck: 'false', dataset: { a: 'lt-busca' } });
   busca.addEventListener('input', () => { filtro = String(busca.value || ''); pintar(dados, true); });
   busca.addEventListener('keydown', e => e.stopPropagation?.()); // teclas da busca não vão para os atalhos da Riot
   const titulo = h('b', { doc }, 'amigos');
   const sub = h('small', { doc }, '');
   const corpo = h('div', { doc, class: 'lc-lt-lista', dataset: { a: 'lt-lista' } });
+  // etapa 2 de 2026-10-16: menu do clique direito, diálogos e campos (anotação, pasta) moram AO LADO do corpo, nunca dentro dele: o
+  // corpo é recriado no repintar e levaria junto o menu aberto e o foco do campo (ARMADILHAS "Campo de texto ou botão recriado")
+  const sobre = h('div', { doc, class: 'lc-lt-sobre', dataset: { a: 'lt-sobre' } });
+  const novaPasta = h('button', { doc, class: 'lc-lt-x lc-lt-npasta', title: 'criar pasta', dataset: { a: 'lt-nova-pasta' }, on: { click: amb.seguro(e => amb.aoNovaPasta?.(e)) } }, '＋');
   const el = h('section', { doc, class: 'lc-lt-pn lc-lt-amigos', dataset: { painel: 'lista' } },
-    h('header', { doc, class: 'lc-lt-cab' }, h('div', { doc, class: 'lc-lt-tit' }, titulo, sub),
+    h('header', { doc, class: 'lc-lt-cab' }, h('div', { doc, class: 'lc-lt-tit' }, titulo, sub), novaPasta,
       h('button', { doc, class: 'lc-lt-x', title: 'fechar a lista', dataset: { a: 'lt-fechar-lista' }, on: { click: amb.seguro(e => amb.aoFechar?.(e)) } }, '✕')),
-    h('div', { doc, class: 'lc-lt-buscacx' }, busca), corpo);
+    h('div', { doc, class: 'lc-lt-buscacx' }, busca), corpo, sobre);
+  const arr = amb.arrasto || {};
+  // Shift+F10 ou a tecla de menu abrem o mesmo menu do clique direito (as teclas não vão para os atalhos da Riot)
+  const teclaMenu = e => e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey);
 
-  const linha = a => h('div', { doc, class: 'lc-lt-amigo' + (a.aberta ? ' lc-lt-on' : ''), dataset: { a: 'lt-amigo', pid: a.pid }, title: a.nome,
-    on: { click: amb.seguro(e => { if (e?.target?.closest?.('button')) return; amb.aoAmigo?.(a, e); }) } },
+  const linha = a => h('div', { doc, class: 'lc-lt-amigo' + (a.aberta ? ' lc-lt-on' : ''), dataset: { a: 'lt-amigo', pid: a.pid }, tabindex: '0', draggable: 'true',
+    title: a.nota ? `${a.nome} · ${a.nota}` : a.nome,
+    on: {
+      click: amb.seguro(e => { if (e?.target?.closest?.('button')) return; amb.aoAmigo?.(a, e); }),
+      contextmenu: amb.seguro(e => { e.preventDefault?.(); e.stopPropagation?.(); amb.aoMenuAmigo?.(a, e, e.currentTarget || e.target?.closest?.('[data-a="lt-amigo"]')); }),
+      keydown: amb.seguro(e => { if (!teclaMenu(e)) return; e.preventDefault?.(); e.stopPropagation?.(); amb.aoMenuAmigo?.(a, e, e.currentTarget || e.target); }),
+      dragstart: amb.seguro(e => arr.amigo?.(a, e)), dragend: amb.seguro(e => arr.fim?.(e)),
+    } },
   avatar(a, doc),
   h('div', { doc, class: 'lc-lt-nm' }, h('span', { doc }, a.nome), h('small', { doc, class: a.cls || undefined }, a.txt)),
   h('span', { doc, class: 'lc-lt-dir' },
@@ -265,14 +287,36 @@ export function criarListaAmigos(amb) {
       on: { click: amb.seguro(e => amb.aoConvidar?.(a, e)) } }, a.convidar.rotulo || 'convidar') : null,
     a.un ? h('span', { doc, class: 'lc-lt-un' }, a.un > 99 ? '99+' : String(a.un)) : null));
 
-  // dados = verAmigos(...) + {ok, motivo, pedidos, total}
+  // cabeçalho de um grupo da Riot: clique recolhe/abre (grava onde a Riot grava), clique direito = Renomear/Excluir pasta, arrastar =
+  // reordenar (só não meta), soltar um amigo = mover para a pasta
+  const cabecalho = (s, reordena, aberto) => h('div', { doc, class: 'lc-lt-grupo lc-lt-gcab' + (s.meta ? ' lc-lt-gmeta' : ''), role: 'button', tabindex: '0',
+    dataset: { a: 'lt-grupo', gid: String(s.id) }, draggable: reordena && !s.meta && !s.virtual ? 'true' : undefined,
+    title: s.meta ? 'pasta automática do client' : reordena ? 'clique para recolher; arraste para mudar a ordem' : 'clique para recolher',
+    on: {
+      click: amb.seguro(e => amb.aoRecolher?.(s, e)),
+      keydown: amb.seguro(e => {
+        if (teclaMenu(e)) { e.preventDefault?.(); e.stopPropagation?.(); amb.aoMenuGrupo?.(s, e, e.currentTarget || e.target); return; }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault?.(); e.stopPropagation?.(); amb.aoRecolher?.(s, e); }
+      }),
+      contextmenu: amb.seguro(e => { e.preventDefault?.(); e.stopPropagation?.(); amb.aoMenuGrupo?.(s, e, e.currentTarget || e.target); }),
+      dragstart: amb.seguro(e => arr.grupo?.(s, e)), dragend: amb.seguro(e => arr.fim?.(e)),
+      dragover: amb.seguro(e => { if (arr.sobreGrupo?.(s, e, e.currentTarget || e.target?.closest?.('[data-a="lt-grupo"]'))) e.preventDefault?.(); }),
+      dragleave: amb.seguro(e => arr.saiuGrupo?.(s, e, e.currentTarget || e.target)),
+      drop: amb.seguro(e => { e.preventDefault?.(); arr.soltarGrupo?.(s, e, e.currentTarget || e.target?.closest?.('[data-a="lt-grupo"]')); }),
+    } },
+  h('span', { doc, class: 'lc-lt-seta' }, aberto ? '▾' : '▸'), ' ', h('span', { doc }, s.rotulo), ' ', h('small', { doc }, `(${s.online}/${s.total})`));
+
+  // dados = verAmigos(...) + {ok, motivo, pedidos, reordena: {ok, motivo}}. Com menu, diálogo, campo ou arrasto em andamento
+  // (amb.congelado()), o corpo não é recriado: guarda os dados e repinta quando eles fecham (forcar)
   function pintar(d, forcar = false) {
     dados = d;
+    if (!forcar && amb.congelado?.()) { pendente = true; return; }
     const f = filtro.trim().toLocaleLowerCase('pt-BR');
-    const sig = JSON.stringify([d && d.ok ? [d.online.map(a => [a.pid, a.un, a.txt, a.dot, a.aberta, a.convidar?.rotulo, a.convidar?.ok, a.campeao, a.icone]), d.offline.length,
-      offAberto || f ? d.offline.map(a => [a.pid, a.un, a.aberta]) : 0, d.pedidos] : d?.motivo ?? null, f, offAberto]);
+    const linhaSig = a => [a.pid, a.un, a.txt, a.dot, a.aberta, a.convidar?.rotulo, a.convidar?.ok, a.campeao, a.icone, a.nota];
+    const sig = JSON.stringify([d && d.ok ? [d.secoes ? d.secoes.map(s => [s.id, s.rotulo, s.recolhido, s.online, s.total, s.recolhido && !f ? 0 : s.amigos.map(linhaSig)])
+      : [d.online.map(linhaSig), d.offline.length, offAberto || f ? d.offline.map(a => [a.pid, a.un, a.aberta]) : 0], d.pedidos, d.reordena?.ok] : d?.motivo ?? null, f, offAberto]);
     if (!forcar && sig === assinatura) return;
-    assinatura = sig;
+    assinatura = sig; pendente = false;
     if (!d || !d.ok) {
       titulo.textContent = 'amigos'; sub.textContent = '';
       corpo.replaceChildren(h('div', { doc, class: 'lc-lt-vazio' }, d ? d.motivo : 'carregando…'));
@@ -280,24 +324,39 @@ export function criarListaAmigos(amb) {
     }
     titulo.textContent = 'amigos';
     sub.textContent = `${d.online.length} online de ${d.online.length + d.offline.length}`;
+    novaPasta.disabled = !d.secoes;
+    novaPasta.setAttribute?.('title', d.secoes ? 'criar pasta' : 'não foi possível ler as pastas: use o client normal');
     const casa = a => !f || a.nome.toLocaleLowerCase('pt-BR').includes(f);
     const filhos = [];
     if (d.pedidos > 0) filhos.push(h('button', { doc, class: 'lc-lt-pedidos', dataset: { a: 'lt-pedidos' }, title: 'aceitar ou recusar é no client normal',
       on: { click: amb.seguro(e => amb.aoPedidos?.(e)) } }, `${d.pedidos} ${d.pedidos === 1 ? 'pedido' : 'pedidos'} de amizade`, h('span', { doc }, 'abrir ⤢')));
-    for (const g of d.grupos) {
-      const doGrupo = d.online.filter(a => a.grupo === g);
-      filhos.push(h('div', { doc, class: 'lc-lt-grupo' }, `${g} (${doGrupo.length})`), ...doGrupo.filter(casa).map(linha));
+    if (d.secoes) {
+      // grupos da Riot, na ordem dela (etapa 2): buscando, mostra quem casa em todos os grupos, recolhidos ou não
+      for (const s of d.secoes) {
+        const vis = s.amigos.filter(casa);
+        if (f && !vis.length) continue;
+        const aberto = !!f || !s.recolhido;
+        filhos.push(cabecalho(s, !!d.reordena?.ok, aberto), ...(aberto ? vis.map(linha) : []));
+      }
+      if (!d.secoes.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhum amigo'));
+    } else {
+      // sem a leitura das pastas: o desenho de antes (online por nome de grupo e "offline" recolhido aqui), sem reordenar nem mover
+      for (const g of d.grupos) {
+        const doGrupo = d.online.filter(a => a.grupo === g);
+        filhos.push(h('div', { doc, class: 'lc-lt-grupo' }, `${g} (${doGrupo.length})`), ...doGrupo.filter(casa).map(linha));
+      }
+      if (!d.online.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhum amigo online'));
+      filhos.push(h('button', { doc, class: 'lc-lt-grupo lc-lt-offbt', dataset: { a: 'lt-offline' }, on: { click: amb.seguro(() => { offAberto = !offAberto; pintar(dados, true); }) } },
+        `${offAberto || f ? '▾' : '▸'} offline (${d.offline.length})`));
+      if (offAberto || f) filhos.push(...d.offline.filter(casa).map(linha));
     }
-    if (!d.online.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhum amigo online'));
-    filhos.push(h('button', { doc, class: 'lc-lt-grupo lc-lt-offbt', dataset: { a: 'lt-offline' }, on: { click: amb.seguro(() => { offAberto = !offAberto; pintar(dados, true); }) } },
-      `${offAberto || f ? '▾' : '▸'} offline (${d.offline.length})`));
-    if (offAberto || f) filhos.push(...d.offline.filter(casa).map(linha));
     let topo = 0;
     try { topo = corpo.scrollTop || 0; } catch { /* sem layout */ }
     corpo.replaceChildren(...filhos);
     try { corpo.scrollTop = topo; } catch { /* sem layout */ }
   }
-  return { el, pintar, busca, estado: () => ({ filtro, offAberto }) };
+  const linhaDe = pid => [...(corpo.querySelectorAll?.('[data-a="lt-amigo"]') || [])].find(n => n.dataset.pid === pid) || null;
+  return { el, corpo, sobre, pintar, busca, linhaDe, dados: () => dados, soltarPendente: () => { if (pendente) pintar(dados, true); }, estado: () => ({ filtro, offAberto }) };
 }
 
 // Uma conversa (parte de baixo do painel de chat). amb = {doc, seguro, enviar(texto) -> Promise<{ok, motivo, limpar?}>, aoInteragir(ev)}.

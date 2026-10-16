@@ -303,6 +303,57 @@ Arquivos: `compacto/lateral.js`, `compacto/lateral-chat.js`, `compacto/chat-bota
 
 ## Etapa 2 — amigos: grupos, reordenar, menu do clique direito, arrastar para convidar
 
+**Estado (16/10/2026, tarde): construída, revisada (abaixo) e commitada na `main`.** Feito: `compacto/amigos.js` (puro: `ordenarGrupos`,
+`secoesAmigos`, `novaOrdem`, `podeReordenar`, `vaoDeSoltar`, `corpoRecolher`, `validarNomePasta`, `corpoNovaPasta`, `podeConvidar`,
+`itensMenu`, `itensMenuGrupo`, `corpoEspectar`, `lerPodeAssistir`, `recebeuMensagem`, rotas e textos da Riot); `compacto/amigos-menu.js`
+(menu, diálogo e campo, no `.lc-lt-sobre`, fora do corpo que repinta); `lateral-chat.js` (`verAmigos` com `fase`, `eu`, `grupos` ->
+`secoes`; `lobbyParaConvite` com `cheio`; lista com cabeçalhos de pasta, linha arrastável, Shift+F10, ＋ pasta, congela no menu/arrasto);
+`lateral.js` (lê `/friend-groups` junto dos amigos, guarda os amigos e grupos como lidos para os corpos, menu e ações, pastas, arrasto,
+coluna como alvo do soltar em `anexar`); teste novo `tools/teste-compacto-amigos.mjs` (registrado em `rodar-testes.py`) e fixture
+`tests/fixtures/social-amigos.json`; README, ARMADILHAS (§ Client 2 entradas, § LCU 3) e `CLAUDE.md` (1 linha).
+Rotas e corpos relidos no front 16.20 nesta etapa (social `34f2d9061fb95af6.js`, parties `63033b1005ac2ae0.js`, profiles
+`3e7da685a8f3eb46.js`): `toggleCollapse`, `moveGroup`/`saveGroupOrder` (v2), `setGroup`, `saveNote`/`updateFriend`, `removeFriend`,
+`friendRequestsService.blockPlayer`, `submitDirectMessageReport`, `spectatorService.spectateGame` (leva `spectatorKey`), `hasPrivateProfile`,
+`invitePlayer` + `checkIfPlayerAvailable`, `validateGroupName`, `dm_reporting.enabled` do client-config.
+Decisões tomadas na execução: (a) convite cinza com motivo para amigo em partida/seleção/fila (a Riot acende e o `invitePlayer` recusa
+depois com aviso); (b) rótulos das pastas automáticas = os da Riot ("Riot Mobile", "Offline"; o plano dizia "Celular"); (c) alvo do
+soltar ligado em `lateral.anexar(partes.coluna)` com `WeakSet` (não em `index.js`: a camada recria a coluna a cada montagem); (d) excluir
+pasta pede confirmação (a Riot v2 exclui direto); (e) amigo solto num cabeçalho de pasta = mover (o `dropped` da Riot), além do menu;
+(f) corpo dos PUTs de grupo = o grupo como lido, sem o `isDefault:true` que o front da Riot acrescenta no Geral [S]; (g) "Enviar
+mensagem" abre a conversa do chat da etapa 1 (a Riot já cria a conversa e a marca ativa; aqui a criação fica para o 1º envio, como
+hoje); (h) "Exibir perfil" expande e chama `showOverlay` do `rcp-fe-lol-profiles` (ponto de entrada que a etapa 3 troca); (i) renomear
+para o mesmo nome não escreve (a Riot v2 dá erro) e o nome vai sem espaços nas pontas; (j) sem `/friend-groups` a lista volta ao desenho
+de antes (offline recolhido aqui, sem ＋ pasta, sem Mover, sem arrastar pasta); (k) anotação e nome de pasta num campo no topo da lista
+(`.lc-lt-sobre`), não "na própria linha" como o plano dizia: a linha é recriada no repintar; (l) clique fora fecha menu e campo (como a
+Riot), o diálogo de confirmação só fecha pelos botões dele. Fora, como planejado: Dar presente ([[DECISAO]] abaixo),
+Silenciar, convites pelo Discord/Riot.
+Provas: `teste-compacto-amigos` 92/92 (mutações numa cópia no scratchpad, 15/15 vermelhas: `100 − n`, PUT em meta com prioridades com
+buraco, convite fora do Lobby, convite sem lobby nem líder, soltar na coluna e soltar pasta sem `isTrusted`, recolher e convidar pelo
+menu sem `isTrusted`, bloquear que também desfaz, denúncia antes do desfazer, espectador com `gameName`, menu dentro do corpo, lista que
+não congela no arrasto, ordem por nome, ✕ do diálogo que escreve); bateria node do plugin verde (`teste-compacto-lateral` 131/131 com o
+caso de convite agora na fase Lobby); `teste-textos` 9/9 (nenhuma exceção nova foi precisa). Prints (jogo fechado, harness em 8832,
+`temp/compacto-harness/2026-10-16-etapa2-*.png`): grupos, menu (clique direito real), diálogo Desfazer/Bloquear, coluna marcada
+(convida / motivo). No Chromium do Playwright, com gesto de verdade: clique direito → Assistir = `POST spectate/launch` com o corpo da
+Riot; Bloquear = só `POST blocked-players`; ✕ do diálogo = nada; arrastar amigo 1 até a coluna (`dragTo`) = `POST invitations`;
+arrastar Geral sobre a Tropa = exatamente os 2 PUTs do critério de aceite.
+**Só o client real prova:** toda escrita desta etapa (nenhuma foi enviada à LCU de verdade); o HTML5 DnD e o `isTrusted` do `drop` no
+CEF 108 dentro da camada; a fase do gameflow durante o espectador; `dm_reporting.enabled` (rota e formato do valor); `showOverlay` do
+perfil chamado pelo plugin; se a LCU aceita o PUT de grupo sem o `isDefault`; posição do menu perto do fim da lista na escala 1,25;
+se o `contextmenu` chega à linha (a Riot pode ouvir no `document` na captura); se a marca da coluna pisca no `dragleave` entre filhos
+(`relatedTarget` null no Chromium); Esc fecha o menu sem devolver o foco à linha.
+**Revisão adversarial (16/10/2026, antes do commit):** rotas e corpos conferidos de novo no front 16.20 (`confirmUnfriendOrBlockFriendHelper`:
+caixa "Também denunciar" só com `dmReportingEnabled && !alreadyReported`, sem exigir mensagem; `tryRemoveOrBlockFriend` → `blockPlayer
+({summonerId, puuid})`; `spectateGame` do serviço v2 com `spectatorKey`; `moveGroup`/`saveGroupOrder` v2 = `length − n`; `hasPrivateProfile`).
+Corrigido, cada um com teste que falhava antes (`teste-compacto-amigos` 92 → 97): (1) `dragend` perdido deixava `st.arrasto` preso e a
+lista congelada para sempre: o `pointerdown` da camada limpa o arrasto; (2) a marca da coluna saía a cada filho cruzado (`dragleave`
+com `relatedTarget` null): só sai fora do retângulo da coluna; (3) Esc agora devolve o foco à linha/cabeçalho que abriu o menu; (4)
+clique direito no diálogo e no campo só cortava a subida e podia abrir o menu nativo do CEF: agora `preventDefault` também; (5) guarda
+nova: launch recusado e can-spectate com erro não põem a chave do espectador em aviso nem log. Sem furo de `isTrusted`, de convite fora
+do Lobby, de abertura sozinha ou de geometria (a etapa não chama `ResizeTo`/`MoveTo`; `aoFase` só repinta a lista).
+Ficou para o client real (além da lista acima): o PUT de grupo sem o `isDefault:true` que o módulo velho põe no Geral; o
+`contextmenu` capturado pela Riot no `document`; o `dragend` e o `pointerdown` depois do arrasto no CEF 108; uma leitura de 3 s em voo
+durante recolher/reordenar pode mostrar a ordem antiga por até uma volta do relógio (a leitura seguinte acerta).
+
 Arquivos: `compacto/lateral-chat.js` (`verAmigos`, `criarListaAmigos`), `compacto/lateral.js`, novo
 `compacto/amigos-menu.js` (menu e diálogos), `compacto/index.js` (alvo do soltar na coluna), `tools/lcu-falsa.mjs`
 (rotas de escrita novas), teste novo `tools/teste-compacto-amigos.mjs`, fixture inventada `tests/fixtures/social-amigos.json`

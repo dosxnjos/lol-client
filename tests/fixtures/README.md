@@ -61,3 +61,10 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
   `eog-stats-block`, `champion-summary` recortado, mensagens do LCU, textos do saguão em pt-BR medidos em
   `/fe/lol-social/trans.json` (13/10/2026) e as linhas do chat no formato do template do client (Riot ID com as
   marcas bidi, linha de sistema, celebração, nome desconhecido, Ahri nos dois times). Usado por `tools/teste-chat-posjogo.mjs`.
+
+## Amigos do compacto (`tools/teste-compacto-amigos.mjs`)
+
+- `social-amigos.json`: **sintético** no formato medido em 16/10/2026 ([plano](../../roadmap/2026-10-16-compacto-chat-amigos-perfil.md)
+  § Medição): os 4 grupos com as prioridades reais (Tropa 1/4, `**Default` 0/3 não meta, MOBILE 10001/2 recolhido, OFFLINE 10000/1),
+  9 amigos `amigo N` (livre, em partida com chave de espectador, offline, celular, ausente com anotação, na fila, assistindo alguém,
+  outro jogo, personalizada), o "eu" e um lobby de líder. Nomes, puuids, ids e chaves inventados.
