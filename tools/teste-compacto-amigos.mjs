@@ -260,11 +260,11 @@ function cenario({ fase = 'Lobby', dm = false, semGrupos = false } = {}) {
   }
   for (const a of FX.amigos) { rotas[`PUT /lol-chat/v1/friends/${encodeURIComponent(a.id)}`] = ok(); rotas[`DELETE /lol-chat/v1/friends/${encodeURIComponent(a.id)}`] = ok(204); }
   const falsa = lcuFalsa(rotas);
-  const s = { doc, est, falsa, avisos: [], logs: [], expandiu: 0, perfis: [] };
+  const s = { doc, est, falsa, avisos: [], logs: [], expandiu: 0 };
   const cfg = { compacto: { ligado: true, chatLateral: true, larg: 420, alt: 680 } };
   const rot = { pedirLateral() {}, medidasJanela: () => ({ col: 420 }), expandir() { s.expandiu++; }, estado: () => ({}) };
   s.lat = criarLateral({ cfg, rot: () => rot, doc, lcu: (m, u, c) => lcuReal(m, u, c, falsa.fetch), avisar: (m, e) => s.avisos.push([m, !!e]), log: (...a) => s.logs.push(a.map(String).join(' ')),
-    repetir: () => 1, pararRepetir: () => {}, agora: () => 1e12, abrirPerfilRiot: async alvo => { s.perfis.push(alvo); return true; } });
+    repetir: () => 1, pararRepetir: () => {}, agora: () => 1e12 });
   const esq = new El('aside', doc), dir = new El('aside', doc), coluna = new El('div', doc), camada = new El('div', doc);
   coluna.classList.add('lc-cp-coluna');
   camada.append(esq, coluna, dir); doc.body.append(camada);
@@ -382,12 +382,15 @@ function cenario({ fase = 'Lobby', dm = false, semGrupos = false } = {}) {
   s.lista().querySelectorAll('[data-a="lt-m-mover-para"]').find(d => d.dataset.gid === '0').click(); await tick(12);
   caso('Mover › Geral (setGroup): PUT /lol-chat/v1/friends/{id} com o amigo inteiro e groupId 0',
     igual(s.escritas()[0], { m: 'PUT', u: `/lol-chat/v1/friends/${encodeURIComponent('a1@br1.pvp.net')}`, c: { ...amigo('a1@br1.pvp.net'), groupId: 0 } }) && s.escritas().length === 1, JSON.stringify(s.escritas()));
-  // perfil: expande e pede o overlay da Riot, sem escrita na LCU
+  // perfil (etapa 3): abre ao lado, no painel da direita, sem expandir e sem escrita na LCU (só GET)
   s.zerar();
   await s.menu('a2@br1.pvp.net');
-  s.item('perfil').click(); await tick();
-  caso('Exibir perfil: client normal + perfil da Riot (showOverlay {summonerId, puuid}); nenhuma escrita na LCU',
-    s.expandiu === 1 && igual(s.perfis, [{ summonerId: 202, puuid: 'pa2' }]) && s.escritas().length === 0, JSON.stringify([s.expandiu, s.perfis]));
+  s.item('perfil').click(); await tick(12);
+  const pf = s.lat.estado().perfil;
+  caso('Exibir perfil: o perfil dele ao lado (painel "perfil", puuid e summonerId do amigo), sem expandir e sem escrita na LCU',
+    s.expandiu === 0 && s.lat.estado().painel === 'perfil' && pf?.puuid === 'pa2' && pf?.summonerId === 202 && s.escritas().length === 0
+      && s.falsa.chamadas.some(c => c.url === '/lol-summoner/v2/summoners/puuid/pa2'), JSON.stringify([s.expandiu, s.lat.estado().painel, pf, s.escritas()]));
+  s.lat.fecharPainel(); await tick();
   // Esc fecha o menu
   await s.menu('a1@br1.pvp.net');
   s.doc.ativo = null;

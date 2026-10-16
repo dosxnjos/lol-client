@@ -12,7 +12,7 @@
 // - nome mostrado aqui é só de quem está no grupo dele, de quem o convidou e dos amigos (nada da seleção ranqueada).
 // Campo ausente ou estado desconhecido nunca quebra a tela: vira botão cinza com o motivo. Erro que escapa de
 // handler/timer/evento (ctx.seguro) devolve o client normal.
-import { h, fotoCampeao, campeoes, estilo, preferidasLobby } from './comum.js';
+import { h, fotoCampeao, campeoes, estilo, preferidasLobby, perfilSalvo } from './comum.js';
 import { buscarFilaRapida, Recusa, restricaoDura, FILAS_COM_POSICAO } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, avaliarFreios, textoFreios, derrotasSeguidasAgora, ehMadrugada, MEDICAO,
   JANELA_MS, ATUALIZANDO } from '../freios.js';
@@ -250,7 +250,15 @@ function avatar(id, letra, tam) {
 export function cabecalho(ctx, { agora = Date.now } = {}) {
   const sub = h('small', {}, cache.ranque?.texto || '');
   const nome = h('b', {}, cache.nome || '…');
-  const caixaAv = h('span', { class: 'lc-cp-avcx' }, avatar(cache.icone, cache.nome, 30));
+  // a foto abre o editor do perfil à esquerda (etapa 3 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md; só com a lateral). É
+  // botão com data-a: o arrasto da janela pelo topo ignora (criarArrasto: "button, input, [data-a]")
+  const lat = ctx.servicos?.lateral;
+  const editor = typeof lat?.alternarEditor === 'function';
+  if (perfilSalvo.em > cache.emCab && Number.isInteger(perfilSalvo.icone)) cache.icone = perfilSalvo.icone; // salvo depois da última leitura
+  const caixaAv = editor
+    ? h('button', { class: 'lc-cp-avcx lc-cp-avbt', title: 'editar o seu perfil: ícone, moldura, bandeira, emblemas e título', dataset: { a: 'meu-perfil' },
+      on: { click: ctx.seguro(() => lat.alternarEditor()) } }, avatar(cache.icone, cache.nome, 30))
+    : h('span', { class: 'lc-cp-avcx' }, avatar(cache.icone, cache.nome, 30));
   ctx.titulo.append(h('div', { class: 'lc-cp-id' }, caixaAv, h('div', {}, nome, sub)));
   botaoChat(ctx);
   botaoConfig(ctx); // ⚙ configurações à esquerda (passo 13 B1)
@@ -266,6 +274,13 @@ export function cabecalho(ctx, { agora = Date.now } = {}) {
     caixaAv.replaceChildren(avatar(cache.icone, cache.nome, 30));
   };
   lerCab().catch(() => {});
+  // ícone salvo no editor do compacto: a foto troca já (sem esperar a releitura de 60 s)
+  let vistoEm = perfilSalvo.em;
+  ctx.intervalo?.(() => {
+    if (perfilSalvo.em === vistoEm || !ctx.vivo()) return;
+    vistoEm = perfilSalvo.em;
+    if (Number.isInteger(perfilSalvo.icone)) { cache.icone = perfilSalvo.icone; caixaAv.replaceChildren(avatar(cache.icone, cache.nome, 30)); }
+  }, 1000);
   return { ranque: () => cache.ranque };
 }
 

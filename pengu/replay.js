@@ -172,8 +172,9 @@ export function criarReplay(amb) {
     } finally { st.lendo = false; pintar(); }
   }
 
+  // gesto dele: sem evento ou evento sintético não escreve (revisão de 16/10/2026: chamada sem evento passava; o deEle da lateral exige)
   async function baixar(e) {
-    if (e?.isTrusted === false || st.ocupado) return;
+    if (!e || e.isTrusted === false || st.ocupado) return;
     const gid = amb.gameId?.();
     if (!modelo?.baixar?.ok || !(Number(gid) > 0)) { if (modelo?.baixar?.motivo) avisar(`replay: ${modelo.baixar.motivo}`, true); return; }
     st.ocupado = true; pintar();
@@ -187,7 +188,7 @@ export function criarReplay(amb) {
   }
 
   async function assistir(e) {
-    if (e?.isTrusted === false || st.ocupado) return;
+    if (!e || e.isTrusted === false || st.ocupado) return;
     const gid = amb.gameId?.();
     if (!modelo?.assistir?.ok || !(Number(gid) > 0)) { if (modelo?.assistir?.motivo) avisar(`replay: ${modelo.assistir.motivo}`, true); return; }
     // clique de reflexo logo depois de abrir: o jogo já está subindo, não manda o watch de novo

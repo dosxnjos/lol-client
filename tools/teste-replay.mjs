@@ -101,6 +101,9 @@ function cenario({ meta = ok({ state: 'download', downloadProgress: 0, gameId: G
     && s.b().disabled === false && s.b().textContent === 'baixar replay' && s.a().style.display === 'none');
   s.b().click({ isTrusted: false }); await tick();
   caso('baixar: clique sintético (isTrusted false) não baixa', s.escritas().length === 0);
+  // revisão de 16/10/2026: chamada sem evento (código, não clique) também não escreve; antes passava (e?.isTrusted === false)
+  await s.linha.baixar(); await s.linha.assistir(); await tick();
+  caso('baixar/assistir chamados sem evento (sem o clique dele): nada sai', s.escritas().length === 0, JSON.stringify(s.escritas()));
   s.b().click(); await tick(12);
   caso('baixar: clique dele = POST download/graceful {componentType do fim de partida}; linha vira "baixando"',
     igual(s.falsa.escritas().map(c => [c.url, c.corpo]), [[R.baixar(true), { componentType: 'replay-button_end-of-game' }]]) && s.b().disabled === true && /baixando/.test(s.b().textContent)

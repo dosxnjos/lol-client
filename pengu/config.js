@@ -72,7 +72,8 @@ export const PADRAO = {
   // passo 13 (aprovado em 14/10/2026 ~20:00): chatLateral = chat (💬) e amigos (👥) ao lado da coluna (e as janelas do coletor
   // deixam de abrir conversa sozinhas). Entra pela mescla, sem VERSAO nova. A chave conversaSozinha saiu em 16/10/2026 (nada do
   // chat abre sozinho, pedido do Gabriel; roadmap/2026-10-16-compacto-chat-amigos-perfil.md): o valor salvo some na mescla.
-  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true },
+  // fundoPerfil (etapa 3 do mesmo plano, 16/10/2026): o fundo do perfil dele como fundo da coluna compacta (compacto/fundo.js).
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -227,6 +228,7 @@ const ALTERNAVEIS = [
   ['compacto.ligado', 'client compacto (botão e Ctrl+Shift+M)'],
   ['compacto.inicioCompacto', 'abrir cada fase no modo compacto'],
   ['compacto.chatLateral', 'chat ao lado do compacto'],
+  ['compacto.fundoPerfil', 'fundo do perfil no compacto'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],

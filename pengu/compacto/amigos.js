@@ -243,7 +243,7 @@ export function itensMenu(f, { grupos = null, convite = null, assistir = null, d
     const s = assistir || { estado: 'verificando' };
     if (s.estado !== 'erro') itens.push({ a: 'assistir', rotulo: TEXTOS_RIOT.assistir, off: s.estado !== 'ok', motivo: s.estado === 'verificando' ? 'verificando se a partida pode ser assistida' : s.dica || '' });
   }
-  itens.push({ a: 'perfil', rotulo: TEXTOS_RIOT.perfil, off: false, motivo: 'abre o perfil no client normal' });
+  itens.push({ a: 'perfil', rotulo: TEXTOS_RIOT.perfil, off: false, motivo: 'abrir o perfil ao lado (resumo e histórico)' });
   if (!discord) itens.push({ a: 'nota', rotulo: f.note ? TEXTOS_RIOT.notaEditar : TEXTOS_RIOT.notaNova, off: false, motivo: '' });
   // Mover: some se o grupo à vista do amigo é meta (offline, celular), se não há grupos lidos ou se só há 1
   const gs = Array.isArray(grupos) ? grupos.filter(g => !g.virtual) : null;

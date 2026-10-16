@@ -417,6 +417,73 @@ diálogo de bloquear, arrasto com a coluna marcada) com o jogo fechado.
 
 ## Etapa 3 — perfil: amigo (perfil, histórico, assistir), meu perfil (editor), fundo da coluna
 
+**Estado (16/10/2026, noite): construída, revisada (revisão adversarial abaixo) e commitada.** Feito: `compacto/perfil.js` (puro: `selecaoInicial`,
+`corpoIcone`/`corpoRegalia`/`corpoPreferencias` = `_saveIcon`/`_saveRegalia`/`_savePreferences` linha a linha, `chamadasSalvar`, `escolher*`,
+`opcoesMolduras`/`Bandeiras`/`Emblemas`/`Titulos`/`Icones`, `resumoJogador`, `ranquesDe`, `linhasHistorico`, `detalheJogo`, `replayOferecido`,
+`perfilPrivado`, `caminhoSeguro`; views `criarPerfilView` e `criarEditorView`); `compacto/fundo.js` (`urlFundo`, contraste WCAG, `VEU`,
+`TONS_FUNDO`, `criarFundo`); `lateral.js` (modo `perfil` no painel da direita com pilha de 1 como o 📊; `e.editor` à esquerda, um dos dois com a
+⚙; "Exibir perfil" e a foto do amigo abrem o perfil ao lado, sem expandir; ações do perfil = regra do menu); `lateral-chat.js` (foto do amigo
+`data-a="lt-foto"` = perfil, o resto da linha = conversa); `tela-lobby.js` (foto do topo vira botão `data-a="meu-perfil"` → editor; ícone salvo
+troca a foto na hora por `comum.perfilSalvo`); `index.js` (fundo ligado no `ligarDom`, `sincronizar`, `__lolClient.compacto.fundo()`);
+`config.js`/`blocos.js` (chave `compacto.fundoPerfil`, padrão ligada, Ctrl+K); `amigos.js` (dica do "Exibir perfil"); teste novo
+`tools/teste-compacto-perfil.mjs` (registrado em `rodar-testes.py`) e fixture inventada `tests/fixtures/perfil.json`; testes ajustados
+(`teste-compacto.mjs` padrão com `fundoPerfil`, `teste-compacto-lateral.mjs` layout com `editor`, `teste-compacto-amigos.mjs` "Exibir perfil"
+ao lado); README, ARMADILHAS (§ Client 3, § LCU 1 com 6 subitens), `CLAUDE.md` (1 linha). Front relido (16.20, `ler-wad.py`):
+shared-components `saveAndExit`, `_savePreferences`, `_saveRegalia`, `_saveIcon`, `_setCurrentSelections`, `prestigeBorders`/`rankedBorder`/
+`_getHighestNonFilteredEntry`, `defaultBanner`/`pastRankBanner`, `filteredChallenges`, `ownedIconsWithBaseSet`, ligação `bannerSkinsEnabled`;
+ember-libs `dataBindProperty` (default no null); profiles `hasPrivateProfile`, `backdropObserver`; match-history `_loadFriendData`,
+`shouldShowReplayButton`.
+Decisões tomadas na execução: (a) **[[DECISAO]] do replay de amigo adotada como recomendado** ("igual à Riot"), sem ficar fixa: o compacto
+segue a regra dela (`ThirdPersonAccessibleGameQueues`), então oferece sozinho se a Riot liberar a fila; o próprio histórico (atalho
+"histórico" do editor) tem baixar/assistir com o `criarReplay` de `pengu/replay.js` (componentType do histórico); reversível; (b)
+**correção do plano**: `bannerAccent` entra no corpo (a ligação da Riot tem `default: true` e o 404 medido vira true), o plano dizia "fora";
+(c) maestria top 3 fora (é POST); (d) **véu uniforme 0,84** em vez de gradiente, com 3 tons de texto mais claros só no modo fundo
+(`TONS_FUNDO`: mudo `#c4bead`, vermelho `#ff6f82`, cinza da intenção `#aab3ba`); os painéis das telas não mudaram; a imagem fica discreta
+(prints) e o texto passa até sobre branco puro; (e) sem opção "nenhum título" e sem "esvaziar posição de emblema" (a Riot também não tem;
+[S]); bandeiras de evento fora (`/v3/inventory/REGALIA_BANNER` 404); (f) a ⚙ não abre por cima de mudança não salva no editor (avisa); ✕ com
+pendência pede o 2º clique em 4 s; (g) perfil por cima do 📊 volta ao 📊 (pilha de 1) e, fora da seleção, fecha; (h) perfil de amigo fecha
+com "chat ao lado" desligado, o meu histórico fica; (i) fundo lido no boot (até 6 novas tentativas de 30 s se a LCU não responde) e a cada
+10 min, nunca sozinho noutra hora; (j) as escritas do "salvar" saem uma por vez, na ordem do `saveAndExit` (a Riot faz `Promise.all`); a que
+falha fica pendente e avisa com o status (a pendência é por chamada: o último corpo aceito de cada uma; revisão antes da entrega: regalia
+recusada + preferências aceitas na mesma moldura apagava a pendência da regalia); (k) o 💬, a conversa ou a sala do time no lugar do perfil
+fecham o perfil de verdade (`deixarPerfil`).
+**Contraste medido** (`temp/compacto-harness/contraste.html`, composição por pixel imagem → véu → fundos dos ancestrais → cor do texto,
+percentil 5 por bloco de texto; telas lobby, fila, seleção intenção e final, pós-jogo; splashes reais tiradas do `default-assets.wad` do
+rcp-be-lol-game-data por xxhash64 do caminho: Renekton 0/26/33 no lugar do fundo dele, Lux 0/7, Janna 1, Soraka 6, Seraphine 0, Sona 6,
+Kayle 1, mais branco puro e o fundo de sempre): véu 0,84 + tons = **0 falhas em 1716 medidas**, pior 4,85:1 ("Renekton", intenção, 11 px,
+sobre branco); véu 0,80 = 7 falhas (pior 4,24:1); 0,84 sem os tons = 94 falhas (pior 2,93:1); gradiente 0,6→0,88 = 431 falhas; o fundo de
+sempre (referência) = 0 falhas, pior 4,73:1. O teste node prova a garantia sem harness (toda cor da coluna ≥ 4,5:1 sobre branco puro).
+Provas: `teste-compacto-perfil` 75/75 (mutações numa cópia no scratchpad, 20/20 vermelhas: title numérico, challengeIds sem −1, salvar tudo
+sempre ×2, fundo com vídeo, salvar sem `isTrusted`, escolher que escreve, ✕ que salva, ✕ sem 2º clique, replay de terceiro sempre,
+privacidade ignorada, regalia sempre com prestígio, `bannerAccent` só com true, perfil sem gesto, foto que abre a conversa, preferências
+aceitas que apagam a regalia recusada, ícone 29, chave do fundo ignorada, ⚙ por cima de pendência, detalhe sem o Riot ID); bateria node do
+plugin `python tools/rodar-testes.py .mjs` 25/25 (rodada final, jogo fechado); `teste-textos` 9/9. Prints (jogo fechado, harness em 8833, `temp/compacto-harness/2026-10-16-etapa3-*.png`): fundo Renekton e Lux, editor (ícone e com 2
+alterações pendentes), perfil de amigo (resumo, histórico, partida). No Chromium do Playwright, com clique de verdade: foto do topo → editor;
+moldura de prestígio 300 + título B + "salvar" = exatamente `PUT regalia {prestige, blank, 13}` e `POST update-player-preferences {[101000,
+202000, −1], "50202", "1", "1", 300}`; escolher sem salvar = 0 escritas; clique direito → "Exibir perfil" = perfil ao lado, só GET; "assistir"
+no perfil = `POST spectate/launch` com o corpo do roster; foto do amigo 1 = perfil dele, conversa intacta.
+**Só o client real prova:** toda escrita desta etapa (ícone, regalia, preferências; nenhuma enviada à LCU de verdade), inclusive se a LCU
+aceita o `bannerAccent` com a config 404; o formato de `summary-player-data/player/{puuid}` [S], de `summoner-icons.json` (`id`, `title`), do
+inventário (`itemId`), de `challenges/local-player` (`levelToIconPath`) e de `lastSeasonHighestRank`; a imagem do fundo carregando no CEF 108
+pela LCU, o recorte na escala 1,25 e o custo de CPU do fundo; os 205 ícones na grade; o botão da foto dentro do topo que arrasta a janela
+(no harness o arrasto ignora `[data-a]`, como no código); se a Riot devolve o histórico de amigo com 20 jogos; o fundo de perfil real dele (o
+medido usa Renekton como substituto).
+**Revisão adversarial (16/10/2026, noite, antes do commit).** Conferido sem furo: os 3 corpos contra o front extraído de novo
+(`_saveIcon`/`_saveRegalia`/`_savePreferences`/`bannerSkinsEnabled default:true`), toda escrita com `deEle`/`isTrusted`, url no CSS só por
+`caminhoSeguro`, editor e ⚙ na mesma esquerda e pela mesma `pedirLateral` (nenhum `MoveTo`/`ResizeTo` novo), nada abre sozinho, conversa
+"ativa" solta quando o perfil cobre o chat (`conferirAtiva`). Corrigido, cada um com teste que falhava antes (mutação numa cópia: 5/5
+vermelhas): (1) **emblema repetido**: o mesmo desafio entrava em 2 posições e saía `challengeIds [X, X, −1]`; a Riot impede no `mouseUp`
+do `identity-customizer-token` → `escolherEmblema` recusa; (2) **"assistir" do perfil** ficava em "verificando" para sempre se o amigo
+entrava em partida com o perfil aberto (e o "pode" de uma partida valia para a seguinte) → can-spectate por chave de espectador no relógio
+(`conferirAssistir`); (3) "chat ao lado" desligado com o perfil por cima do 📊 sumia com o 📊 → volta ao 📊; (4) contraste: o teste usava
+uma lista de cores escrita à mão → "colheita" de todas as cores do CSS das telas; ela achou a dica do destaque da posição (`#5b6670`,
+2,2:1 sobre o véu) → tom `TONS_FUNDO.dica` no modo fundo; (5) `completei:` `pengu/replay.js` baixar/assistir chamados sem evento
+escreviam (o guarda era `e?.isTrusted === false`) → exige o evento, como o `deEle`. Textos: tooltips no infinitivo ("editar o seu
+perfil…", "abrir o perfil ao lado…"). Cobertura nova sem bug: o rascunho da conversa sobrevive ao perfil por cima (✕, 💬, "mensagem").
+Medido no client real (só GET, 16/10/2026): `summary-player-data/player/{puuid}` de um amigo = 200 com `title {itemId, name}` e
+`topChallenges [{id, name, currentLevel, levelToIconPath}]` (o [S] caiu; o caminho do ícone passa no `caminhoSeguro`). Fica para o
+client real o resto da lista acima. Fora do escopo, anotado: sem o fundo a dica da posição já fica entre 2,6:1 e 3,4:1 (anterior a esta etapa; não mexida).
+
 Arquivos: novo `compacto/perfil.js` (perfil de amigo e editor), `compacto/lateral.js` (modo `perfil` no painel da direita;
 editor no da esquerda), `compacto/tela-lobby.js` (clique na foto dele abre o editor), `compacto/index.js` (fundo da coluna),
 `pengu/config.js`/`blocos.js` (chave `compacto.fundoPerfil`, padrão ligada), teste novo `tools/teste-compacto-perfil.mjs`.
@@ -499,6 +566,7 @@ salvar tudo sempre, fundo com vídeo), `teste-compacto-lateral.mjs`, `teste-comp
   (lista `ThirdPersonAccessibleGameQueues` ausente nesta região), a rota por `gameId` existe mas nunca foi usada assim |
   opções: igual à Riot (não oferecer) / oferecer mesmo assim (risco de recusa do servidor e de ir além do que a Riot
   permite) | recomendo: igual à Riot; "Assistir partida" ao vivo (espectador) fica | dono: gabriel
+  — **adotada como recomendado na etapa 3** (16/10/2026, reversível): o compacto segue a lista da Riot; o próprio histórico tem replay.
 - [[DECISAO]] "Dar presente" no menu do amigo: a Riot abre a loja (gasta RP); a régua do projeto proíbe rota que gasta |
   opções: fora do menu / item que expande para o client normal na loja de presentes (nada comprado pelo plugin) | recomendo:
   item que expande | dono: gabriel

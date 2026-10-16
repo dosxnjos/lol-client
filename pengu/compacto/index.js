@@ -29,6 +29,7 @@ import { lcu as lcuPadrao, avisar as avisarPadrao, estilo, FASES_JOGO } from './
 import { avisarModo } from './chat-ponte.js';
 import { criarGeometria, lerTelaRiot, quadroDaPagina, esperarTamanhoDaPagina } from './geometria.js';
 import { criarLateral, CSS_LATERAL, lateralLigada } from './lateral.js';
+import { criarFundo } from './fundo.js';
 import { criarRegistroExpansoes, descreverCamada, textoSeguro, enviarAoColetor } from './expansoes.js';
 import { coletor as coletorPadrao } from '../coach.js';
 
@@ -879,6 +880,9 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     avisar: (m, erro) => avisarPadrao(m, erro), log: (...a) => console.log('[lol-client] compacto:', ...a),
     abrirConfigRiot: () => abrirConfigRiot(),
   });
+  // etapa 3 de 2026-10-16: o fundo do perfil dele como fundo da coluna (só GET; variável e classe no <html>, que sobrevivem à cópia
+  // da camada que a Riot faz no boot). Liga no ligarDom; a chave compacto.fundoPerfil vale na hora (sincronizar)
+  const fundo = criarFundo({ cfg, lcu: lcuPadrao, doc, log: (...a) => console.log('[lol-client] compacto:', ...a) });
   // passo 15: registro das expansões. Janela em px CSS (inner*) e a posição/monitor da geometria (px físicos, ScreenData);
   // envio ao coletor (POST /compacto/expansoes) com fila em memória: coletor fora ou sem a rota guarda e reenvia
   const registro = criarRegistroExpansoes({
@@ -975,6 +979,7 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   const ligarDom = () => {
     estilo('lc-compacto-estilo', CSS, doc);
     estilo('lc-lt-estilo', CSS_LATERAL, doc);
+    fundo.iniciar();
     botao.ligar();
     vigia.ligar();
     // registro das expansões: o ctx.expandir() de uma tela até GESTO_MS depois disto é dele (só o instante; nada do evento sai).
@@ -1030,8 +1035,10 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   return {
     ...rot,
     // cfg mudou: roteador + lateral (configurações repintam, chat desligado fecha) + aviso ao coletor se a chave virou
-    sincronizar() { rot.sincronizar(); lateral.sincronizar(); chat.mudou(); },
+    sincronizar() { rot.sincronizar(); lateral.sincronizar(); fundo.sincronizar(); chat.mudou(); },
     modais: () => vigia.historico(),
+    // etapa 3: o fundo da coluna (url à vista, último erro, leituras) — tools/cdp.mjs eval __lolClient.compacto.fundo()
+    fundo: () => fundo.estado(),
     // passo 15: expansão aberta, fila sem coletor, último envio e os 10 últimos eventos (tools/cdp.mjs eval)
     expansoes: () => registro.estado(),
     lateral, geometria: () => geometria.estado(),

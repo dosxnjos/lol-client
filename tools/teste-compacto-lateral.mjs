@@ -400,7 +400,10 @@ function conferir(s) {
   caso('ScreenData minimizado (screenX −32000) é marcado e não move nada', normalizarTela({ screenX: -32000, screenY: -32000, screenAvailLeft: 0, screenAvailTop: 0,
     screenAvailWidth: 2560, screenAvailHeight: 1020, zoomScale: 1.25 }).minimizada === true && normalizarTela(null) === null);
   caso('layout: lista 300 + painel 360 à direita, configurações 360 à esquerda; monitor estreito divide a vaga (chat no lugar da lista)',
-    igual(layout({ lista: true, painel: 'chat', config: true }, { util: 4000, col: 420 }), { esq: 360, dir: 660, lista: true, painel: true, config: true, estreito: false, total: 1440, cabe: true })
+    igual(layout({ lista: true, painel: 'chat', config: true }, { util: 4000, col: 420 }), { esq: 360, dir: 660, lista: true, painel: true, config: true, editor: false, estreito: false, total: 1440, cabe: true })
+      // etapa 3: o editor do perfil ocupa a mesma esquerda da ⚙ (um dos dois; com os dois pedidos, vale a ⚙) e o perfil, o painel
+      && igual(layout({ editor: true, painel: 'perfil' }, { util: 4000, col: 420 }), { esq: 360, dir: 360, lista: false, painel: true, config: false, editor: true, estreito: false, total: 1140, cabe: true })
+      && layout({ editor: true, config: true }, { util: 4000, col: 420 }).esq === 360 && layout({ editor: true, config: true }, { util: 4000, col: 420 }).editor === false
       && layout({ lista: true, painel: 'chat', vistaEstreita: 'painel' }, { util: 1024, col: 420 }).dir === 360
       && layout({ lista: true, painel: 'coach', vistaEstreita: 'painel' }, { util: 1024, col: 420 }).painel === true
       && layout({ lista: true, painel: 'chat', vistaEstreita: 'lista' }, { util: 1024, col: 420 }).lista === true

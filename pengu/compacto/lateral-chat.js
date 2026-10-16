@@ -271,16 +271,25 @@ export function criarListaAmigos(amb) {
   const arr = amb.arrasto || {};
   // Shift+F10 ou a tecla de menu abrem o mesmo menu do clique direito (as teclas não vão para os atalhos da Riot)
   const teclaMenu = e => e.key === 'ContextMenu' || (e.key === 'F10' && e.shiftKey);
+  // foto do amigo (etapa 3 de 2026-10-16): clique abre o perfil dele ao lado; o resto da linha abre a conversa
+  const foto = a => {
+    const av = avatar(a, doc);
+    if (typeof amb.aoPerfil !== 'function') return av;
+    av.dataset.a = 'lt-foto';
+    av.setAttribute('title', `ver o perfil de ${a.nome}`);
+    av.addEventListener('click', amb.seguro(e => { e?.stopPropagation?.(); amb.aoPerfil(a, e); }));
+    return av;
+  };
 
   const linha = a => h('div', { doc, class: 'lc-lt-amigo' + (a.aberta ? ' lc-lt-on' : ''), dataset: { a: 'lt-amigo', pid: a.pid }, tabindex: '0', draggable: 'true',
     title: a.nota ? `${a.nome} · ${a.nota}` : a.nome,
     on: {
-      click: amb.seguro(e => { if (e?.target?.closest?.('button')) return; amb.aoAmigo?.(a, e); }),
+      click: amb.seguro(e => { if (e?.target?.closest?.('button') || e?.target?.closest?.('[data-a="lt-foto"]')) return; amb.aoAmigo?.(a, e); }),
       contextmenu: amb.seguro(e => { e.preventDefault?.(); e.stopPropagation?.(); amb.aoMenuAmigo?.(a, e, e.currentTarget || e.target?.closest?.('[data-a="lt-amigo"]')); }),
       keydown: amb.seguro(e => { if (!teclaMenu(e)) return; e.preventDefault?.(); e.stopPropagation?.(); amb.aoMenuAmigo?.(a, e, e.currentTarget || e.target); }),
       dragstart: amb.seguro(e => arr.amigo?.(a, e)), dragend: amb.seguro(e => arr.fim?.(e)),
     } },
-  avatar(a, doc),
+  foto(a),
   h('div', { doc, class: 'lc-lt-nm' }, h('span', { doc }, a.nome), h('small', { doc, class: a.cls || undefined }, a.txt)),
   h('span', { doc, class: 'lc-lt-dir' },
     a.convidar?.mostra ? h('button', { doc, class: 'lc-lt-conv' + (a.convidar.ok ? '' : ' lc-lt-off'), title: a.convidar.motivo || '', dataset: { a: 'lt-convidar' },

@@ -107,6 +107,18 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   janela pode não chegar. Durante um arrasto nativo não há `pointerdown`: o próximo clique na camada limpa o arrasto preso. (2) o
   `dragleave` entre filhos da coluna chega com `relatedTarget` null: a marca só sai quando o ponteiro deixa o retângulo da coluna.
   Prova: "arrasto sem dragend" e "dragleave entre filhos" de `teste-compacto-amigos.mjs`.
+- **Fundo do perfil que some depois do boot ou de uma troca de tela** (etapa 3 de 16/10/2026) → a Riot troca o `#lc-compacto` por uma
+  cópia no boot e a coluna é recriada a cada montagem: variável na camada se perderia. `--lc-cp-fundo` e a classe `lc-cp-com-fundo` vão
+  no `<html>` (`compacto/fundo.js`); diagnóstico: `__lolClient.compacto.fundo()`.
+- **Texto ilegível com o fundo do perfil** (medido em 16/10/2026, `temp/compacto-harness/contraste.html`, 5 telas × 10 splashes reais
+  + branco) → véu em gradiente mais leve no alto falhava (há texto em toda a altura) e o "mudo" `#a09b8c`, o vermelho e o cinza da
+  intenção caíam abaixo de 4,5:1 até com véu 0,84. Véu uniforme 0,84 + esses três tons um passo mais claros só no modo fundo
+  (`TONS_FUNDO`) = 0 falhas em 1716 medidas, pior 4,85:1. A dica do destaque da posição na seleção (`#5b6670`, 2,2:1; fora das telas medidas
+  no harness: ela aparece só nos 3,5 s do destaque) também sobe de tom (revisão de 16/10/2026). Cor de texto nova na coluna: a "colheita" de
+  `teste-compacto-perfil.mjs` lê todas as cores do CSS das telas e reprova a que não passa (isentas: desligado e fundo opaco próprio).
+- **Editor do perfil que grava ao fechar** → no client da Riot o Esc e o ✕ do identity customizer chamam `saveAndExit` (salva tudo). No
+  compacto só o "salvar" (clique dele) grava, e só as chamadas que mudaram; ✕ com mudança não salva pede o 2º clique e descarta. A ⚙
+  não abre por cima de mudança não salva (as duas dividem a esquerda).
 - **Texto já enviado volta como rascunho / erro de A na conversa de B** (revisão de 16/10/2026) → uma view de conversa serve a
   todas as 1:1 e cada troca cria outro objeto em `e.conversa`: comparar "é a mesma conversa?" pelo objeto falha em A → B → A
   com o envio em voo. Comparar pela chave `k` (`enviarConversa`); com ele noutra conversa, a falha vira aviso com o nome.
@@ -514,6 +526,29 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   [S] e mensagem recebida dele); assistir `POST /lol-spectator/v1/spectate/launch {dropInSpectateGameId: name (≠ gameName),
   gameQueueType, allowObserveMode: isObservable, puuid, spectatorKey}` depois de `GET …/can-spectate/{puuid}/{chave}`. O PUT de grupo
   da Riot leva também o `isDefault: true` que o front acrescenta no Geral; o compacto manda o grupo como lido (sem ele) [S].
+- **Perfil: rotas e corpos do front da Riot** (rcp-fe-lol-shared-components 16.20, identity customizer; -profiles; -match-history; lidos
+  16/10/2026, **nenhuma escrita enviada ao client real**) → ícone `PUT /lol-summoner/v1/current-summoner/icon {profileIconId}` (só se mudou);
+  regalia `PUT /lol-regalia/v2/current-summoner/regalia {preferredCrestType, preferredBannerType, selectedPrestigeCrest}` (moldura de ranque:
+  sem `selectedPrestigeCrest`); preferências `POST /lol-challenges/v1/update-player-preferences {challengeIds[3] (−1 vazio, só com emblema),
+  title (String do itemId; itemId 0 ou −1 = sem a chave), bannerAccent, crestBorder "1"/"2", prestigeCrestBorderLevel}` (prestígio k ↔
+  `PRESTIGE_LEVELS[k−1]`: 9 ↔ 200, medido). Corpos em `compacto/perfil.js`, prova em `teste-compacto-perfil.mjs`.
+  - `bannerAccent` vai mesmo com `/lol-platform-config/v1/namespaces/Regalia/BannerSkinsEnabled` dando 404: a ligação da Riot tem
+    `default: true` e o ember-data-binding (rcp-fe-ember-libs) aplica o default quando a leitura volta null. Só `false` explícito tira.
+  - maestria top 3 do perfil (`/lol-champion-mastery/v1/{puuid}/champion-mastery-view/top`) é **POST** (405 no GET): fora do perfil do
+    compacto (abrir perfil não escreve).
+  - replay de partida de outro jogador: a Riot só mostra o botão com a fila em `Replays.ThirdPersonAccessibleGameQueues` (ausente aqui,
+    medido): o compacto segue a mesma regra (`replayOferecido`); o próprio histórico tem replay (componentType `replay-button_match-history`).
+  - perfil privado = `profile-privacy-enabled` "ENABLED" **e** `summoners/{summonerId}.privacy` "PRIVATE" (hasPrivateProfile); hoje "DISABLED".
+  - título e emblemas de outro jogador: `GET /lol-challenges/v1/summary-player-data/player/{puuid}` (o ViewRegaliaService da Riot usa;
+    medido em 16/10/2026 num amigo: 200, `title {itemId, name}`, `topChallenges [{id, name, currentLevel, levelToIconPath}]`): resposta torta =
+    a faixa sai sem eles.
+  - **emblema repetido** (revisão de 16/10/2026) → o `_assignToken` da Riot não impede o mesmo desafio em duas posições; quem impede é o
+    `mouseUp` do `identity-customizer-token` (ignora o já escolhido). Sem isso o compacto mandava `challengeIds [X, X, −1]`, corpo que o
+    front nunca manda: `escolherEmblema` recusa o já posto.
+  - **"assistir" do perfil preso em "verificando"** (revisão de 16/10/2026) → o can-spectate saía só ao abrir o perfil: amigo que entrava em
+    partida depois ficava cinza para sempre, e o "pode" de uma partida valia para a seguinte. O GET sai por chave de espectador
+    (`puuid|spectatorKey`), de novo só quando ela muda (`conferirAssistir` em `lateral.js`).
+  - fundo de perfil: `backdropImage` de `/lol-collections/v1/inventories/{summonerId}/backdrop`; o `backdropVideo` nunca é lido (CPU).
 - **Convite que a Riot acende e depois recusa** → `canInviteToGame` aceita amigo em partida, mas o `invitePlayer` do parties recusa
   quem não está `chat`/`away` (`checkIfPlayerAvailable`) com um aviso. No compacto o item, o botão e o soltar ficam cinza com o motivo
   (`amigos.podeConvidar`), e só na fase `Lobby` com lobby criado: `GET /lol-lobby/v2/lobby` segue 200 na fila e na seleção.

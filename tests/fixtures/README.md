@@ -68,3 +68,10 @@ e `tools/teste-winrate.mjs` (selo do champ select, padrão sem argumento).
   § Medição): os 4 grupos com as prioridades reais (Tropa 1/4, `**Default` 0/3 não meta, MOBILE 10001/2 recolhido, OFFLINE 10000/1),
   9 amigos `amigo N` (livre, em partida com chave de espectador, offline, celular, ausente com anotação, na fila, assistindo alguém,
   outro jogo, personalizada), o "eu" e um lobby de líder. Nomes, puuids, ids e chaves inventados.
+
+## Perfil do compacto (`tools/teste-compacto-perfil.mjs`)
+
+- `perfil.json`: **sintético** no formato medido em 16/10/2026 (mesmo plano, § Medição e etapa 3): o meu invocador, regalia (prestígio 9 ↔
+  nível 200), summary-player-data (título, 2 emblemas, bannerId/crestId), desafios (um sem nível), títulos, inventário de ícones (com o 29),
+  catálogo, ranque; do amigo 2 (o `pa2`/202 de `social-amigos.json`): invocador, ranque, summary, backdrop (imagem + vídeo), 3 partidas do
+  histórico (vitória, derrota, remake) e o detalhe de uma com os 10. Nomes, puuids e caminhos inventados.

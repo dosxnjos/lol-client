@@ -166,12 +166,13 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const { carregar, classes, PADRAO } = await import('../pengu/config.js');
   const c1 = JSON.parse(JSON.stringify(carregar()));
   // passo 13 (14/10/2026): chatLateral entra ligado (A1); conversaSozinha saiu em 16/10/2026 (nada do chat abre sozinho)
-  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, chatLateral} (sem conversaSozinha)',
-    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true }), JSON.stringify(c1.compacto));
+  // fundoPerfil (etapa 3 de 2026-10-16): o fundo do perfil na coluna, ligado por padrão
+  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, chatLateral, fundoPerfil} (sem conversaSozinha)',
+    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true }), JSON.stringify(c1.compacto));
   salvo = { versao: 3, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, conversaSozinha: true } };
   const cVelha = JSON.parse(JSON.stringify(carregar()));
-  caso('config: conversaSozinha salva antes de 16/10/2026 some na mescla (chave fora do padrão)', !('conversaSozinha' in cVelha.compacto) && cVelha.compacto.chatLateral === true,
-    JSON.stringify(cVelha.compacto));
+  caso('config: conversaSozinha salva antes de 16/10/2026 some na mescla (chave fora do padrão); fundoPerfil entra ligado na config salva sem ele',
+    !('conversaSozinha' in cVelha.compacto) && cVelha.compacto.chatLateral === true && cVelha.compacto.fundoPerfil === true, JSON.stringify(cVelha.compacto));
   // 14/10/2026: barra de rolagem na tela 3 com 640. A config salva do Gabriel tem 640 (o padrão antigo; não há campo nas
   // Configurações): sem migração, o padrão novo nunca chegava nele
   salvo = { versao: 3, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 } };

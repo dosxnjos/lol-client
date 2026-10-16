@@ -18,11 +18,14 @@
 // criar/renomear/excluir pasta, gravando onde a Riot grava), o menu do clique direito com os itens do roster da Riot e arrastar um
 // amigo até a coluna = convite para o lobby (só com o lobby criado, fase Lobby). Regras e corpos: compacto/amigos.js; desenho do
 // menu, diálogos e campo: compacto/amigos-menu.js. Toda escrita só com o evento do clique, tecla ou soltar DELE (isTrusted).
+// Etapa 3 (perfil, 16/10/2026): "Exibir perfil" e a foto do amigo abrem o perfil dele no painel da direita (modo 'perfil': resumo,
+// histórico, detalhe da partida; fecha voltando ao que estava, como o 📊); a foto do topo do lobby abre o editor do meu perfil à
+// esquerda, no lugar da ⚙ (um dos dois por vez). Desenho e corpos: compacto/perfil.js; o fundo da coluna: compacto/fundo.js.
 // Importável no node (tools/teste-compacto-lateral.mjs, teste-compacto-amigos.mjs): nada de DOM no topo; doc, LCU, relógio e
 // geometria injetáveis.
 import { h, estilo, campeoes as catalogoPadrao, FASES_JOGO } from './comum.js';
 import { verAmigos, lobbyParaConvite, pedidosRecebidos, criarListaAmigos, criarConversaView, lerConversa, enviarMensagem,
-  acharSalaTime, elencoTime, lerSalaTime, linhaSalaTime, limparConversas, verRecentes, criarRecentes, pidDe, CSS_CHAT_LATERAL } from './lateral-chat.js';
+  acharSalaTime, elencoTime, lerSalaTime, linhaSalaTime, limparConversas, verRecentes, criarRecentes, pidDe, statusAmigo, CSS_CHAT_LATERAL } from './lateral-chat.js';
 import { criarCoachView, modeloSelo, meuNaSessao, COACH_CADA_MS, CSS_COACH } from './lateral-coach.js';
 import { criarConfigView, CSS_CONFIG } from './lateral-config.js';
 import { larguraUtilCss } from './geometria.js';
@@ -30,6 +33,7 @@ import { ordenarGrupos, podeReordenar, novaOrdem, corpoRecolher, validarNomePast
   corpoEspectar, lerPodeAssistir, corpoNota, corpoMover, corpoBloqueio, corpoDenuncia, recebeuMensagem, nomeCompleto, itensMenu, itensMenuGrupo, comNome,
   TEXTOS_RIOT, ROTAS } from './amigos.js';
 import { criarMenu, criarDialogo, criarCampo, CSS_AMIGOS } from './amigos-menu.js';
+import { criarPerfilView, criarEditorView, CSS_PERFIL } from './perfil.js';
 
 export const LARG = { lista: 300, painel: 360, config: 360 };
 export const PASSO_MS = 1500;
@@ -38,23 +42,25 @@ export const chaveConversa = pid => `c:${String(pid).toLowerCase()}`;
 
 // estado -> o que aparece e as larguras (px CSS). util = largura útil do monitor em CSS; col = coluna da config.
 // Monitor estreito: lista e painel dividem a mesma vaga (o painel entra no lugar da lista, com ← para voltar).
+// Esquerda: as configurações (⚙) OU o editor do meu perfil (etapa 3 de 2026-10-16), um dos dois por vez, na mesma largura.
 export function layout(e, { util = Infinity, col = 420 } = {}) {
   let lista = !!e.lista, painel = !!e.painel, estreito = false;
-  const config = !!e.config;
-  const soma = () => col + (config ? LARG.config : 0) + (lista ? LARG.lista : 0) + (painel ? LARG.painel : 0);
+  const config = !!e.config, editor = !config && !!e.editor, esq = config || editor;
+  const soma = () => col + (esq ? LARG.config : 0) + (lista ? LARG.lista : 0) + (painel ? LARG.painel : 0);
   if (soma() > util && lista && painel) { estreito = true; if (e.vistaEstreita === 'lista') painel = false; else lista = false; }
-  return { esq: config ? LARG.config : 0, dir: (lista ? LARG.lista : 0) + (painel ? LARG.painel : 0), lista, painel, config, estreito, total: soma(), cabe: soma() <= util };
+  return { esq: esq ? LARG.config : 0, dir: (lista ? LARG.lista : 0) + (painel ? LARG.painel : 0), lista, painel, config, editor, estreito, total: soma(), cabe: soma() <= util };
 }
 
 // rot() -> roteador ({pedirLateral...}); servicos: {champ, ...}; geometria: criarGeometria | null
 export function criarLateral({
   cfg, rot, doc = globalThis.document, lcu, servicos = {}, geometria = null, definir = () => {},
   avisar = () => {}, log = () => {}, repetir = setInterval, pararRepetir = clearInterval, agora = () => Date.now(),
-  campeoes = catalogoPadrao, abrirConfigRiot = () => {}, abrirPerfilRiot = abrirPerfilDaRiot,
+  campeoes = catalogoPadrao, abrirConfigRiot = () => {},
 }) {
-  // painel: null | 'chat' | 'coach'; anterior: o modo que o coach cobriu (null | 'chat'); conversa: a escolhida no chat (a "última
-  // conversa aberta" enquanto ele não fechar no ✕): null | {k, tipo:'conversa', pid, conv, nome, txt} | {k:'time', tipo:'time'}
-  const e = { lista: false, config: false, painel: null, anterior: null, conversa: null, vistaEstreita: 'painel' };
+  // painel: null | 'chat' | 'coach' | 'perfil'; anterior: o modo que o coach ou o perfil cobriu (pilha de 1); conversa: a escolhida no
+  // chat (a "última conversa aberta" enquanto ele não fechar no ✕): null | {k, tipo:'conversa', pid, conv, nome, txt} | {k:'time',
+  // tipo:'time'}; perfil: de quem é o perfil à vista ({pid?, puuid, summonerId, nome, eu?}); editor: o editor do meu perfil à esquerda
+  const e = { lista: false, config: false, editor: false, painel: null, anterior: null, conversa: null, perfil: null, vistaEstreita: 'painel' };
   const rascunhos = new Map(); // k da conversa -> texto digitado e não enviado (só memória da página)
   const st = { fase: null, efetivo: 'expandido', partes: null, eu: null, euEm: 0, amigos: null, conversas: [], lobby: null, pedidos: 0, pedidosEm: 0,
     convidados: new Map(), sessao: null, sala: null, salaLinhas: [], salaVistas: 0, mudo: false, ativaPorMim: null, lidaPara: null,
@@ -63,6 +69,9 @@ export function criarLateral({
     // amigo); arrasto em andamento; denúncia de mensagem (config da Riot e quem ele já denunciou)
     grupos: null, amigosCrus: null, crus: new Map(), arrasto: null, denuncia: { ligada: false, em: 0, denunciados: new Set(), lidosEm: 0 } };
   let configView = null, coachView = null, timeView = null, convView = null, recentesView = null, listaView = null, menuView = null, dlgView = null, campoView = null;
+  let perfilView = null, editorView = null;
+  // "Assistir" do perfil à vista: o GET can-spectate da Riot para a chave de espectador do amigo (chave = "puuid|spectatorKey" já pedida)
+  const perfilCtx = { assistir: null, chave: '' };
   const colunasLigadas = new WeakSet();
   let painelEl = null, painelTit = null, painelSub = null, painelX = null, painelCorpo = null, chatEl = null, baixoNome = null, baixoSub = null, baixoCorpo = null;
 
@@ -89,7 +98,7 @@ export function criarLateral({
     listaView = criarListaAmigos({ doc, seguro, aoAmigo: (a, ev) => abrirConversa(a, ev), aoConvidar: (a, ev) => convidar(a, ev), aoPedidos: () => pedidosNoClient(),
       aoFechar: () => { e.lista = false; if (e.painel) e.vistaEstreita = 'painel'; render(); },
       aoMenuAmigo: (a, ev, linha) => abrirMenuAmigo(a, ev, linha), aoMenuGrupo: (s, ev, cab) => abrirMenuGrupo(s, ev, cab), aoRecolher: (s, ev) => recolher(s, ev),
-      aoNovaPasta: ev => pedirNovaPasta(ev), congelado: () => sobreAberto() || !!st.arrasto,
+      aoNovaPasta: ev => pedirNovaPasta(ev), congelado: () => sobreAberto() || !!st.arrasto, aoPerfil: (a, ev) => verPerfil(a.pid, ev),
       arrasto: { amigo: arrastarAmigo, grupo: arrastarGrupo, sobreGrupo, saiuGrupo, soltarGrupo, fim: () => limparArrasto() } });
     const soltar = () => { if (!sobreAberto()) listaView?.soltarPendente(); };
     menuView = criarMenu({ doc, seguro, aoEscolher: (it, sub, ev) => escolherNoMenu(it, sub, ev), aoFechar: soltar });
@@ -124,6 +133,14 @@ export function criarLateral({
         baixoCorpo));
     configView = criarConfigView({ doc, cfg, definir, aoConfigRiot: seguro(() => configRiot()), aoFechar: seguro(() => { e.config = false; render(); }) });
     coachView = criarCoachView({ doc });
+    // etapa 3 (perfil): o de outro jogador no painel da direita; o editor do meu à esquerda. Ações do perfil = as do menu do amigo
+    perfilView = criarPerfilView({ doc, lcu, seguro, avisar, agora, campeoes, acoes: {
+      estado: alvo => acoesDoPerfil(alvo),
+      convidar: (alvo, ev) => convidar(itemDe(alvo?.pid) || { pid: alvo?.pid, nome: alvo?.nome }, ev),
+      mensagem: (alvo, ev) => (deEle(ev) ? abrirConversa(itemDe(alvo?.pid) || { pid: alvo?.pid, nome: alvo?.nome }, ev) : false),
+      assistir: (alvo, ev) => assistir(alvo?.pid, ev),
+    } });
+    editorView = criarEditorView({ doc, lcu, seguro, avisar, agora, aoFechar: () => { e.editor = false; render(); }, aoHistorico: (alvo, ev) => abrirPerfil(alvo, ev, { aba: 'historico' }) });
   };
   // troca os filhos só se mudaram (mover um nó tira o foco do campo que ele está digitando)
   const trocar = (pai, nos) => {
@@ -148,6 +165,12 @@ export function criarLateral({
       trocar(painelCorpo, [coachView.el]);
       return;
     }
+    if (e.painel === 'perfil') {
+      texto(painelTit, e.perfil?.eu ? 'seu histórico' : 'perfil'); texto(painelSub, e.perfil?.eu ? 'partidas e replays' : e.perfil?.nome || 'jogador');
+      titulo(painelX, e.anterior === 'chat' ? 'fechar o perfil e voltar ao chat' : 'fechar o perfil');
+      trocar(painelCorpo, [perfilView.el]);
+      return;
+    }
     texto(painelTit, 'chat'); texto(painelSub, 'conversas recentes'); titulo(painelX, 'fechar o chat');
     trocar(painelCorpo, [chatEl]);
     pintarRecentes();
@@ -166,6 +189,8 @@ export function criarLateral({
       html.classList.toggle('lc-lt-config', !!e.config);
       html.classList.toggle('lc-lt-chat', e.painel === 'chat');
       html.classList.toggle('lc-lt-coach', e.painel === 'coach');
+      html.classList.toggle('lc-lt-perfil', e.painel === 'perfil');
+      html.classList.toggle('lc-lt-editor', !e.config && !!e.editor);
     } catch { /* sem DOM */ }
   }
 
@@ -174,7 +199,7 @@ export function criarLateral({
     const lay = L();
     if (st.partes) {
       garantirDom();
-      trocar(st.partes.esq, lay.config ? [configView.el] : []);
+      trocar(st.partes.esq, lay.config ? [configView.el] : lay.editor ? [editorView.el] : []);
       trocar(st.partes.dir, [lay.lista ? listaView.el : null, lay.painel ? painelEl : null].filter(Boolean));
       if (lay.config && !configView.el.dataset.pintado) { configView.el.dataset.pintado = '1'; configView.pintar(); }
       if (lay.painel) pintarPainel(lay);
@@ -206,12 +231,17 @@ export function criarLateral({
     if (lay.cabe) return true;
     if (lado === 'esq' && (e.lista || e.painel)) {
       guardarRascunho();
-      e.lista = false; e.painel = null; e.anterior = null; limparAtiva();
-      avisar('não cabe tudo ao lado neste monitor: o chat fechou para abrir as configurações');
+      if (e.painel === 'perfil') perfilView?.fechar();
+      e.lista = false; e.painel = null; e.anterior = null; e.perfil = null; limparAtiva();
+      avisar(`não cabe tudo ao lado neste monitor: o chat fechou para abrir ${e.config ? 'as configurações' : 'o seu perfil'}`);
     } else if (lado === 'dir' && e.config) { e.config = false; avisar('não cabe tudo ao lado neste monitor: as configurações fecharam'); }
+    else if (lado === 'dir' && e.editor && !editorView?.pendentes().length) { e.editor = false; avisar('não cabe tudo ao lado neste monitor: o editor do perfil fechou'); }
     lay = layout(e, { util: u, col: col() });
     return lay.cabe;
   }
+
+  // o chat entra no lugar do perfil (💬, conversa, sala do time): o perfil sai de verdade (leituras em voo descartadas)
+  function deixarPerfil() { if (e.painel === 'perfil') { perfilView?.fechar(); e.perfil = null; } }
 
   // ---------- rascunho por conversa (decisão f) ----------
   const viewDe = c => (c?.tipo === 'time' ? timeView : convView);
@@ -242,7 +272,7 @@ export function criarLateral({
     const lay = L();
     if (e.painel === 'chat' && lay.estreito && !lay.painel) { e.vistaEstreita = 'painel'; render(); return true; }
     if (e.painel === 'chat') { fecharPainel(); return true; }
-    e.painel = 'chat'; e.anterior = null; e.vistaEstreita = 'painel';
+    deixarPerfil(); e.painel = 'chat'; e.anterior = null; e.vistaEstreita = 'painel';
     if (!caber('dir')) { e.painel = null; avisar('o chat não cabe ao lado neste monitor: use o client normal', true); }
     render();
     if (e.painel === 'chat') {
@@ -254,8 +284,11 @@ export function criarLateral({
   // ✕ do cabeçalho do painel: no chat fecha o painel (a conversa escolhida fica para o próximo 💬); no coach volta ao anterior
   function fecharPainel() {
     guardarRascunho();
-    if (e.painel === 'coach') { e.painel = e.anterior; e.anterior = null; }
-    else { e.painel = null; e.anterior = null; }
+    if (e.painel === 'perfil') { perfilView?.fechar(); e.perfil = null; }
+    if (e.painel === 'coach' || e.painel === 'perfil') {
+      e.painel = e.anterior; e.anterior = null;
+      if (e.painel === 'coach' && !naSelecao()) e.painel = null; // o perfil cobria o coach e a seleção acabou
+    } else { e.painel = null; e.anterior = null; }
     if (!e.painel && e.lista) e.vistaEstreita = 'lista';
     render();
     if (e.painel === 'chat') lerChat().catch(() => {});
@@ -284,7 +317,7 @@ export function criarLateral({
       if (conv && !e.conversa.conv) e.conversa.conv = conv;
       if (a.txt) e.conversa.txt = a.txt;
     }
-    e.painel = 'chat'; e.anterior = null; e.vistaEstreita = 'painel';
+    deixarPerfil(); e.painel = 'chat'; e.anterior = null; e.vistaEstreita = 'painel';
     if (!caber('dir')) { e.painel = null; avisar('a conversa não cabe ao lado neste monitor: use o client normal', true); render(); return false; }
     render();
     lerConversaAtual().catch(err => falha('conversa', err));
@@ -302,7 +335,7 @@ export function criarLateral({
       garantirDom();
       timeView.reiniciar({ texto: rascunhos.get('time') || '' });
     }
-    e.painel = 'chat'; e.anterior = null; e.vistaEstreita = 'painel';
+    deixarPerfil(); e.painel = 'chat'; e.anterior = null; e.vistaEstreita = 'painel';
     if (!caber('dir')) { e.painel = null; avisar('a sala do time não cabe ao lado neste monitor', true); render(); return false; }
     render();
     lerSala().catch(err => falha('sala do time', err));
@@ -315,6 +348,7 @@ export function criarLateral({
     if (!naSelecao()) { avisar('o coach da seleção só existe na seleção de campeões'); return false; }
     if (e.painel === 'coach') { fecharPainel(); return true; }
     guardarRascunho();
+    if (e.painel === 'perfil') { perfilView?.fechar(); e.perfil = null; e.painel = e.anterior === 'chat' ? 'chat' : null; }
     e.anterior = e.painel === 'chat' ? 'chat' : null;
     e.painel = 'coach'; e.vistaEstreita = 'painel';
     if (!caber('dir')) { e.painel = e.anterior; e.anterior = null; avisar('o coach não cabe ao lado neste monitor', true); }
@@ -323,13 +357,74 @@ export function criarLateral({
     return true;
   }
   function alternarConfig() {
+    // ⚙ e o editor do perfil dividem a esquerda: com mudanças não salvas no perfil, a ⚙ espera (nada se perde sem ele decidir)
+    if (!e.config && e.editor && editorView?.pendentes().length) { avisar('o perfil tem mudanças não salvas: salve ou feche o editor antes', true); return false; }
     e.config = !e.config;
     if (e.config) {
+      e.editor = false;
       if (configView) delete configView.el.dataset.pintado;
       if (!caber('esq')) { e.config = false; avisar('as configurações não cabem ao lado neste monitor: use o client normal', true); }
     }
     render();
     return true;
+  }
+  // foto do topo (lobby e fila): o editor do meu perfil à esquerda, no lugar da ⚙ (decisão 11 do plano). Outro clique fecha (com
+  // mudanças não salvas, o editor pede o 2º clique no ✕ dele). Abrir só lê (GET); escrever é o "salvar" dele
+  function alternarEditor() {
+    garantirDom();
+    if (e.editor && !e.config) { editorView.fechar(); return true; }
+    e.editor = true; e.config = false;
+    if (!caber('esq')) { e.editor = false; avisar('o editor do perfil não cabe ao lado neste monitor: use o client normal', true); }
+    render();
+    if (e.editor) editorView.abrir().catch(err => falha('perfil', err));
+    return true;
+  }
+  // o que o perfil de um amigo oferece agora (a mesma regra do menu: amigos.podeConvidar, can-spectate da Riot, conversa no chat)
+  function acoesDoPerfil(alvo) {
+    const f = alvo?.pid ? st.crus.get(alvo.pid) : null;
+    if (!f) return {};
+    const c = conviteDe(alvo.pid);
+    const temChave = !!(f.puuid && f.lol?.spectatorKey);
+    // resposta de outra chave (partida anterior) não vale para a partida de agora
+    const s = (perfilCtx.chave === chaveAssistir(f) && perfilCtx.assistir) || { estado: 'verificando' };
+    return {
+      convidar: c.mostra ? { mostra: true, ok: !!c.ok, motivo: c.motivo || '' } : { mostra: false },
+      mensagem: { mostra: lateralLigada(cfg), ok: true, motivo: 'abrir a conversa no chat' },
+      assistir: temChave && s.estado !== 'erro' ? { mostra: true, ok: s.estado === 'ok', motivo: s.estado === 'verificando' ? 'verificando se a partida pode ser assistida'
+        : s.estado === 'ok' ? 'assistir a partida como espectador' : s.dica || 'a partida não pode ser assistida agora' } : { mostra: false },
+    };
+  }
+  // perfil no painel da direita (decisão 2: ocupa o lugar do chat e, fechado, volta ao que estava). Só com o gesto dele; só GET
+  function abrirPerfil(alvo, ev, { aba = 'resumo' } = {}) {
+    if (!deEle(ev) || !alvo?.puuid) return false;
+    garantirDom();
+    if (e.painel !== 'perfil') { guardarRascunho(); e.anterior = e.painel; }
+    e.painel = 'perfil'; e.perfil = { ...alvo }; e.vistaEstreita = 'painel';
+    if (!caber('dir')) {
+      e.painel = e.anterior; e.anterior = null; e.perfil = null;
+      avisar('o perfil não cabe ao lado neste monitor: use o client normal', true); render(); return false;
+    }
+    perfilCtx.assistir = null; perfilCtx.chave = '';
+    render();
+    perfilView.abrir(alvo, { aba }).catch(err => falha('perfil', err));
+    conferirAssistir();
+    return true;
+  }
+  const chaveAssistir = f => (f?.puuid && f.lol?.spectatorKey ? `${f.puuid}|${f.lol.spectatorKey}` : '');
+  // "Assistir" do perfil: o mesmo GET can-spectate que a Riot faz ao abrir o menu do amigo, ao abrir o perfil e de novo só quando a chave de
+  // espectador muda (o amigo entrou noutra partida com o perfil aberto; revisão de 16/10/2026: antes o botão ficava em "verificando"
+  // para sempre, ou valia o "pode" da partida anterior). Só GET
+  function conferirAssistir() {
+    const pid = e.painel === 'perfil' ? e.perfil?.pid : null;
+    const f = pid ? st.crus.get(pid) : null;
+    const chave = chaveAssistir(f);
+    if (!chave || chave === perfilCtx.chave) return;
+    perfilCtx.chave = chave; perfilCtx.assistir = null;
+    lcu('GET', ROTAS.podeAssistir(f.puuid, f.lol.spectatorKey)).then(r => {
+      if (e.perfil?.pid !== pid || perfilCtx.chave !== chave) return;
+      perfilCtx.assistir = lerPodeAssistir(r, f);
+      perfilView.pintar();
+    }).catch(() => {});
   }
   function configRiot() {
     abrirConfigRiot();
@@ -439,16 +534,14 @@ export function criarLateral({
       default: return undefined;
     }
   }
-  // "Exibir perfil": até a etapa 3 (perfil dentro do compacto), o client normal com o perfil da Riot por cima
-  // (profilePlugin.showOverlay({puuid, summonerId}) do rcp-fe-lol-profiles, o mesmo do viewProfile do roster; [S] pelo plugin)
-  async function verPerfil(pid, ev) {
-    if (!deEle(ev)) return;
+  // "Exibir perfil" (menu do amigo) e clique na foto dele na lista: o perfil dentro do compacto, no painel da direita (etapa 3; até
+  // ela, o client normal com o showOverlay do rcp-fe-lol-profiles)
+  function verPerfil(pid, ev) {
+    if (!deEle(ev)) return false;
     const f = st.crus.get(pid);
-    if (!f) return;
-    roteador()?.expandir?.();
-    let ok = false;
-    try { ok = await abrirPerfilRiot({ summonerId: f.summonerId, puuid: f.puuid }); } catch (err) { log('lateral: perfil da Riot', err); }
-    if (!ok) avisar('o perfil não abriu sozinho: abra pela lista de amigos do client normal', true);
+    if (!f?.puuid) { avisar('perfil indisponível para este amigo: use o client normal', true); return false; }
+    return abrirPerfil({ pid, puuid: String(f.puuid), summonerId: Number(f.summonerId) || 0, nome: String(f.gameName || f.name || 'amigo'), tag: String(f.gameTag || ''),
+      status: statusAmigo(f, agora()).txt }, ev);
   }
   // "Assistir partida" (spectateGame do roster v2): perfil privado avisa e não abre (hasPrivateProfile do rcp-fe-lol-profiles)
   async function assistir(pid, ev) {
@@ -936,6 +1029,8 @@ export function criarLateral({
         if (naSelecao() && (e.conversa?.tipo === 'time' || st.volta % 2 === 0)) await lerSala();
       } else if (lay.lista && st.volta % 2 === 0) await lerAmigos();
       if (e.painel === 'coach' && lay.painel && st.volta % 2 === 0) await lerCoach();
+      // perfil à vista: só o estado das ações (convite segue a fase e o amigo) e o replay da partida aberta; os amigos a cada 4 voltas
+      if (e.painel === 'perfil' && lay.painel) { if (e.perfil?.pid && st.volta % 4 === 0) await lerAmigos(); conferirAssistir(); perfilView?.relogio(); }
       if (lay.painel) pintarPainel(lay);
     } catch (err) { log('lateral: leitura', err); } finally { st.lendo = false; }
   }
@@ -962,6 +1057,7 @@ export function criarLateral({
         let mudou = false;
         // fora da seleção o coach sai e volta o que ele cobria; a sala do time deixa de existir (e o rascunho dela)
         if (e.painel === 'coach') { e.painel = e.anterior; e.anterior = null; mudou = true; }
+        if (e.painel === 'perfil' && e.anterior === 'coach') e.anterior = null; // o perfil cobria o coach: fechado, não volta a ele
         if (e.conversa?.tipo === 'time') { e.conversa = null; mudou = true; }
         rascunhos.delete('time');
         st.sala = null; st.salaLinhas = []; st.salaVistas = 0; st.sessao = null;
@@ -973,9 +1069,13 @@ export function criarLateral({
     },
     sincronizar() {
       if (!lateralLigada(cfg)) {
-        const tinha = e.lista || e.painel === 'chat' || e.anterior === 'chat';
+        // o perfil de um amigo nasce da lista (lateral): fecha junto; o meu histórico (atalho do editor) fica
+        const amigo = e.painel === 'perfil' && !e.perfil?.eu;
+        const tinha = e.lista || e.painel === 'chat' || e.anterior === 'chat' || amigo;
         guardarRascunho();
         e.lista = false;
+        // o perfil cobria o 📊 (seleção): volta ao 📊, como o ✕ do perfil (revisão de 16/10/2026: o coach sumia junto)
+        if (amigo) { perfilView?.fechar(); e.perfil = null; e.painel = e.anterior === 'coach' && naSelecao() ? 'coach' : null; e.anterior = null; }
         if (e.painel === 'chat') e.painel = null;
         if (e.anterior === 'chat') e.anterior = null;
         if (tinha) render();
@@ -986,9 +1086,12 @@ export function criarLateral({
     ligada: () => lateralLigada(cfg),
     alternarLista: seguro(alternarLista), alternarChat: seguro(alternarChat), abrirConversa: seguro(abrirConversa), fecharConversa: seguro(fecharConversa),
     fecharPainel: seguro(fecharPainel), alternarCoach: seguro(alternarCoach), abrirTime: seguro(abrirTime), alternarConfig: seguro(alternarConfig),
+    // etapa 3: a foto do topo abre/fecha o editor do meu perfil; o perfil de um jogador no painel da direita (clique dele)
+    alternarEditor: seguro(alternarEditor), abrirPerfil: seguro(abrirPerfil), verPerfil: seguro(verPerfil),
+    perfil: () => perfilView?.estado() ?? null, editor: () => editorView?.estado() ?? null, salvarPerfil: seguro(ev => editorView?.salvar(ev)),
     voltarLista: seguro(() => { e.vistaEstreita = 'lista'; render(); }),
     // ultima: a conversa que o 💬 mostra ao abrir (a última que ele abriu desde que o client ligou, até o ✕ dela)
-    estado: () => ({ ...e, conversa: e.conversa ? { ...e.conversa } : null, ultima: e.conversa ? (e.conversa.tipo === 'time' ? 'time' : e.conversa.pid) : null,
+    estado: () => ({ ...e, conversa: e.conversa ? { ...e.conversa } : null, perfil: e.perfil ? { ...e.perfil } : null, ultima: e.conversa ? (e.conversa.tipo === 'time' ? 'time' : e.conversa.pid) : null,
       rascunhos: rascunhos.size, layout: L(), fase: st.fase, efetivo: st.efetivo, ativaPorMim: st.ativaPorMim }),
     recentes: () => verRecentes({ conversas: st.conversas, amigos: st.amigos, eu: st.eu, agoraMs: agora() }),
     // etapa 2 (testes e __lolClient): o que a lista de amigos tem aberto agora
@@ -997,15 +1100,6 @@ export function criarLateral({
       menu: menuView?.chave() ?? null, dialogo: !!dlgView?.aberto(), campo: !!campoView?.aberto(), arrasto: st.arrasto ? { ...st.arrasto } : null }),
     layout: L, volta, lerAmigos, lerConversas,
   };
-}
-
-// "Exibir perfil" até a etapa 3: o perfil da Riot por cima do client normal (profilePlugin.showOverlay do rcp-fe-lol-profiles 16.20;
-// [S] chamado pelo plugin). -> true se a Riot recebeu o pedido
-async function abrirPerfilDaRiot(alvo) {
-  const p = await globalThis.rcp?.whenReady?.('rcp-fe-lol-profiles');
-  if (typeof p?.showOverlay !== 'function') return false;
-  p.showOverlay({ summonerId: alvo.summonerId, puuid: alvo.puuid });
-  return true;
 }
 
 export const CSS_LATERAL = `
@@ -1026,4 +1120,5 @@ export const CSS_LATERAL = `
 #lc-compacto .lc-lt-pcorpo { flex:1; min-height:0; display:flex; flex-direction:column; }
 html.lc-lt-chat #lc-compacto [data-a="chat"], html.lc-lt-lista #lc-compacto [data-a="lista-amigos"], html.lc-lt-config #lc-compacto [data-a="config"],
 html.lc-lt-coach #lc-compacto [data-a="coach"] { border-color:var(--lc-azul); box-shadow:0 0 0 1px rgba(10,200,185,.35) inset; }
-` + CSS_CHAT_LATERAL + CSS_AMIGOS + CSS_COACH + CSS_CONFIG;
+html.lc-lt-editor #lc-compacto [data-a="meu-perfil"] .lc-cp-av { border-color:var(--lc-azul); box-shadow:0 0 0 2px rgba(10,200,185,.35); }
+` + CSS_CHAT_LATERAL + CSS_AMIGOS + CSS_COACH + CSS_CONFIG + CSS_PERFIL;

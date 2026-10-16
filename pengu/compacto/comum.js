@@ -11,6 +11,10 @@ export const FASES_JOGO = ['GameStart', 'InProgress', 'Reconnect'];
 // lerPreferidas) se o GET /lol-lobby/v2/lobby falhar lá. em = Date.now() da leitura (0 = nunca)
 export const preferidasLobby = { pos1: '', pos2: '', em: 0 };
 
+// ícone de perfil que ele acabou de salvar no editor do compacto (compacto/perfil.js salvar; etapa 3 de 2026-10-16): o topo do lobby
+// e da fila (tela-lobby.js cabecalho) troca a foto sem esperar a releitura de 60 s. em = Date.now() do PUT aceito (0 = nunca)
+export const perfilSalvo = { icone: null, em: 0 };
+
 // escapa texto para HTML (atributo ou corpo)
 export function esc(v) {
   return String(v ?? '').replace(/[&<>"'`]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;', '`': '&#96;' })[c]);
