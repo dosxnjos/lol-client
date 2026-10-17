@@ -490,7 +490,9 @@ versão `76d3c16afdfb`: até a tarefa `lol-client-voz` gravar, essas caem na Mar
 - **Pacote que cresce sozinho** (plano voz, passo 6b): a tarefa `lol-client-voz` (`tools\voz-agendada.py rodar`,
   `pythonw`, oculta, só logado) roda às 05:15 e a cada 2 h até 23:15. Pula com `League of Legends.exe` aberto ou o
   client fora de `None`/`Lobby`/`EndOfGame` (fase pela LCU, como o coletor); senão chama o gerador no venv do TTS
-  (`--tom ambos`, console oculto, abaixo do normal) e, se o client entra em fila no meio, cria
+  (enxuto desde 17/10/2026: só `google-genai` e `psutil`, 35 MB; recriar: `uv venv --python 3.11 venv` em
+  `%LOCALAPPDATA%\lol-client\voz` + `uv pip install --python venv\Scripts\python.exe google-genai psutil`; a bancada
+  `tools/bancada-vozes.py` precisa dos motores locais, que saíram) (`--tom ambos`, console oculto, abaixo do normal) e, se o client entra em fila no meio, cria
   `dados\voz-agendada.parar` (o gerador para antes do próximo pedido ou no meio de uma espera da API); com
   `League of Legends.exe` aberto, mata o gerador na hora. O Whisper só sobe no 1º áudio (cota morta = 1 pedido e
   sai). O gerador faz (a) as falas que faltam, com a
