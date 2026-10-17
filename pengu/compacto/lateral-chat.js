@@ -228,10 +228,12 @@ export function elencoTime(sessao) {
 }
 // mensagens da sala do time -> [{id, quem: {campeao, posicao, eu} | null, texto}] (só chat; system "entrou/saiu" some)
 export function lerSalaTime(msgs, elenco, eu) {
-  const meus = new Set([eu?.id, eu?.pid, eu?.puuid, eu?.summonerId].filter(v => v !== undefined && v !== null && v !== '').map(String));
+  // minhas chaves: /lol-chat/v1/me e as da minha cell (na ranqueada a fala pode vir só com as obfuscated; rcp-fe-lol-social getDisplayName,
+  // lido em 16/10/2026: fromPuuid, fromObfuscatedPuuid, fromSummonerId, fromObfuscatedSummonerId)
+  const meus = new Set([eu?.id, eu?.pid, eu?.puuid, eu?.summonerId, ...((elenco || []).find(x => x.eu)?.chaves || [])].filter(v => v !== undefined && v !== null && v !== '').map(String));
   const lista = Array.isArray(msgs) ? msgs.filter(m => m && typeof m === 'object') : [];
   return lista.filter(m => (m.type === 'chat' || m.type === 'groupchat') && typeof m.body === 'string').slice(-MSGS_MAX).map(m => {
-    const de = [m.fromPuuid, m.fromSummonerId, m.fromObfuscatedSummonerId, m.fromId, m.fromPid].filter(v => v !== undefined && v !== null && v !== '').map(String);
+    const de = [m.fromPuuid, m.fromObfuscatedPuuid, m.fromSummonerId, m.fromObfuscatedSummonerId, m.fromId, m.fromPid].filter(v => v !== undefined && v !== null && v !== '' && v !== 0 && v !== '0').map(String);
     const sou = de.some(d => meus.has(d));
     const j = sou ? (elenco.find(x => x.eu) || { campeao: 0, posicao: '', eu: true }) : elenco.find(x => !x.eu && de.some(d => x.chaves.has(d))) || null;
     return { id: String(m.id ?? ''), quem: j ? { campeao: j.campeao, posicao: j.posicao, eu: !!sou || !!j.eu } : null, texto: m.body };

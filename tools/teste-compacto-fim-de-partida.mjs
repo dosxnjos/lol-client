@@ -65,6 +65,8 @@ class El {
   addEventListener(ev, fn) { (this.ouvintes[ev] ||= []).push(fn); }
   disparar(ev, extra = {}) { const e = { target: this, stopPropagation() {}, preventDefault() {}, ...extra }; for (const fn of this.ouvintes[ev] || []) fn(e); }
   click(extra) { this.disparar('click', extra); }
+  // a faixa da sala nunca puxa o foco sozinha (etapa A de 2026-10-16): todo focus() conta
+  focus() { this.doc.focos = (this.doc.focos || 0) + 1; this.doc.activeElement = this; }
   matches(sel) {
     const m = String(sel).match(/^([a-z0-9-]*)((?:\.[\w-]+)*)(#[\w-]+)?((?:\[[^\]]+\])*)$/i);
     if (!m) throw new Error('seletor não suportado: ' + sel);
@@ -134,7 +136,7 @@ const clone = o => JSON.parse(JSON.stringify(o));
 
 // ---------- cenário: roteador + telas de verdade, LCU falsa ----------
 function cenario({ ballot = FX.ballot, amigos = [], pedidos = [], denunciados = [], noJogo = [], vozDoTime = false, mudo = false,
-  chat = FX.chat, conversas, custom = false, rotas: extras = {}, cfgChat = { nomes: 'ambos' } } = {}) {
+  chat = FX.chat, conversas, custom = false, rotas: extras = {}, cfgChat = { nomes: 'ambos' }, cfgCompacto = {} } = {}) {
   const rel = relogio();
   honra._relogio.agora = () => rel.agora;
   posjogo._relogio.agora = () => rel.agora;
@@ -188,7 +190,7 @@ function cenario({ ballot = FX.ballot, amigos = [], pedidos = [], denunciados = 
   const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => [win.innerWidth, 720] });
   const s = { rel, doc, est, falsa, avisos: [], logs: [], pedidosJanela, subs: new Map() };
   s.emitir = async (uri, data, eventType = 'Update') => { s.subs.get(uri)?.({ uri, data, eventType }); await tick(14); };
-  const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680 }, aceite: { ligado: true }, chatPosjogo: cfgChat,
+  const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680, ...cfgCompacto }, aceite: { ligado: true }, chatPosjogo: cfgChat,
     filaRapida: { jogarDeNovo: true, pos1: 'TOP', pos2: 'JUNGLE', freioTilt: 2, freioMadrugada: true } };
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => {}, aoFechar: () => {} });
   s.rot = criarRoteador({
@@ -203,6 +205,7 @@ function cenario({ ballot = FX.ballot, amigos = [], pedidos = [], denunciados = 
   s.rot.marcarPronto();
   s.ir = async (fase, seq) => { est.fase = fase; s.rot.aoFase(fase); s.rot.aoSessao(sessao); if (seq !== undefined) s.rot.aoSequencia(seq); await tick(14); };
   s.honra = async () => { await s.ir('WaitingForStats'); await s.ir('PreEndOfGame', 'honor-vote'); await tick(14); };
+  s.cfg = cfg;
   s.camada = () => doc.getElementById('lc-compacto');
   s.texto = () => s.camada()?.textContent || '';
   s.q = sel => s.camada()?.querySelector(sel);
@@ -684,6 +687,79 @@ const MSGS_VELHA = `/lol-chat/v1/conversations/${encodeURIComponent(VELHA)}/mess
   await s.clicar(s.q('[data-a="lobby"]'));
   caso('ir para o lobby sozinho sem play-again: dismiss-stats com o aviso "indo para o início"', igual(s.escritas(), ['POST /lol-end-of-game/v1/state/dismiss-stats'])
     && s.avisos.some(([m]) => /indo para o início/.test(m)), s.escritas().join(', '));
+}
+
+// ---------- 7. a faixa cresce sozinha (etapa A de roadmap/2026-10-16-chat-da-sala-som-icones.md) ----------
+{ // funções puras
+  caso('cresce: chaves do remetente sem os vazios da sala MUC ("" e 0), na ordem do getDisplayName da Riot',
+    igual(sala.chavesDe({ fromPuuid: 'p', fromObfuscatedPuuid: '', fromSummonerId: 0, fromObfuscatedSummonerId: 77, fromId: 'x@a', fromPid: 'x@a', gameName: 'Nome' }), ['p', '77', 'x@a', 'x@a']));
+  const L = (id, de, hist = false) => ({ id, de, hist, texto: id, quando: '' });
+  const base = sala.novasDeOutros([L('a', ['p2']), L('b', ['p3'])], null, new Set(['eu']));
+  caso('cresce: 1ª leitura da sala é base (o que já estava na sala ao abrir nunca conta como novo)', base.novas === 0 && base.vistos.size === 2);
+  const dep = sala.novasDeOutros([L('a', ['p2']), L('b', ['p3']), L('c', ['p4']), L('d', ['obf-eu']), L('e', ['p5'], true)], base.vistos, new Set(['eu', 'obf-eu']));
+  caso('cresce: só a nova de outro jogador conta; a minha (até só com a chave obfuscated) e a histórica não', dep.novas === 1 && dep.vistos.size === 5);
+  caso('cresce: a lista de vistos de entrada não muda', base.vistos.size === 2);
+  caso('cresce: só recolhida, com a chave ligada (ausente = ligada) e mensagem nova',
+    sala.deveCrescer({ tam: 'recolhido', novas: 1 }) && sala.deveCrescer({ tam: 'recolhido', novas: 1, ligado: undefined }) && !sala.deveCrescer({ tam: 'recolhido', novas: 1, ligado: false })
+    && !sala.deveCrescer({ tam: 'normal', novas: 3 }) && !sala.deveCrescer({ tam: 'recolhido', novas: 0 }));
+  const conv = [{ id: 'velha@champ-select.br1.pvp.net', type: 'championSelect', password: 'x' }, { id: 'muc1@lobby.br1.pvp.net', type: 'teamBuilder' },
+    { id: 'MUC2@champ-select.br1.pvp.net', type: 'championSelect', password: 'nunca', mucJwtDto: { jwt: 'nunca' } }];
+  caso('sala da seleção: a desta sessão pelo multiUserChatId (startsWith, como o front da Riot); a anterior, a do lobby e sem muc = nenhuma; só id e type saem',
+    igual(sala.acharSalaSelecao(conv, 'muc2'), { id: 'MUC2@champ-select.br1.pvp.net', type: 'championSelect' }) && sala.acharSalaSelecao(conv, 'muc1') === null
+    && sala.acharSalaSelecao(conv, '') === null && sala.acharSalaSelecao(conv.slice(0, 1), 'muc2') === null && sala.acharSalaSelecao('lixo', 'muc2') === null
+    && sala.mucDaSessao({ chatDetails: { multiUserChatId: 'muc2', multiUserChatPassword: 'nunca' } }) === 'muc2' && sala.mucDaSessao(null) === '');
+}
+const novaMsg = (s, id, puuid, body = 'oi') => s.est.chat.push({ id, type: 'groupchat', body, fromPuuid: puuid, fromSummonerId: 0, isHistorical: false, timestamp: '' });
+{ // honra: nasce recolhida; mensagem de outro = normal; nada de foco, escrita ou "lida"
+  const s = cenario();
+  await s.honra();
+  await s.rel.avancar(1600);
+  const dock = () => s.q('.lc-cp-dock');
+  caso('cresce (honra): as mensagens que já estavam na sala não abrem a faixa', dock().dataset.tam === 'recolhido');
+  novaMsg(s, 'eu1', 'puuid-eu', 'minha');
+  await s.rel.avancar(1600);
+  caso('cresce (honra): a minha mensagem não abre a faixa', dock().dataset.tam === 'recolhido');
+  s.est.chat.push({ id: 'sis1', type: 'system', body: 'joined_room', fromPuuid: 'puuid-7', timestamp: '' });
+  novaMsg(s, 'h1', 'puuid-4', 'velha');
+  s.est.chat[s.est.chat.length - 1].isHistorical = true;
+  await s.rel.avancar(1600);
+  caso('cresce (honra): "entrou na sala" e mensagem histórica não abrem a faixa', dock().dataset.tam === 'recolhido');
+  novaMsg(s, 'o1', 'puuid-3', 'bora de novo?');
+  await s.rel.avancar(1600);
+  caso('cresce (honra): mensagem de outro jogador abre a faixa (normal) e mostra a mensagem', dock().dataset.tam === 'normal' && s.q('.lc-cp-ms').textContent.includes('bora de novo?'));
+  caso('cresce (honra): sem foco de teclado, nenhuma escrita, nenhum "lida" (PUT conversations/active)', !s.doc.focos && s.escritas().length === 0
+    && !s.falsa.chamadas.some(c => /conversations\/active/.test(c.url)), `${s.doc.focos} ${s.escritas().join(', ')}`);
+  await s.clicar(s.q('[data-a="sala-recolher"]'));
+  novaMsg(s, 'o2', 'puuid-5', 'e aí');
+  await s.rel.avancar(1600);
+  caso('cresce (honra): recolhida por ele, abre de novo na próxima mensagem de outro jogador', dock().dataset.tam === 'normal');
+  await s.clicar(s.q('[data-a="sala-aumentar"]'));
+  novaMsg(s, 'o3', 'puuid-2', 'alto');
+  await s.rel.avancar(1600);
+  caso('cresce (honra): aberta no alto não muda de tamanho', dock().dataset.tam === 'alto');
+}
+{ // chave desligada: a faixa só abre pelo clique; o contador sobe
+  const s = cenario({ cfgCompacto: { chatSalaCresce: false } });
+  await s.honra();
+  await s.rel.avancar(1600);
+  novaMsg(s, 'o1', 'puuid-3', 'oi time');
+  await s.rel.avancar(1600);
+  caso('cresce desligado: a faixa fica recolhida e o contador sobe (4)', s.q('.lc-cp-dock').dataset.tam === 'recolhido' && s.q('.lc-cp-un')?.textContent === '4', s.q('.lc-cp-dock').textContent);
+  s.cfg.compacto.chatSalaCresce = true; // vale na hora (o cfg é o mesmo objeto)
+  novaMsg(s, 'o2', 'puuid-3', 'oi de novo');
+  await s.rel.avancar(1600);
+  caso('cresce religado: vale na próxima mensagem, sem recarregar', s.q('.lc-cp-dock').dataset.tam === 'normal');
+}
+{ // pós-jogo: nasce aberta; recolhida por ele, cresce de novo
+  const s = cenario();
+  await s.honra(); await s.ir('EndOfGame');
+  await s.rel.avancar(1600);
+  caso('cresce (pós-jogo): nasce aberta', s.q('.lc-cp-dock').dataset.tam === 'normal');
+  await s.clicar(s.q('[data-a="sala-recolher"]'));
+  novaMsg(s, 'o1', 'puuid-6', 'ggwp');
+  await s.rel.avancar(1600);
+  caso('cresce (pós-jogo): recolhida por ele, mensagem de outro jogador abre de novo; sem foco nem escrita', s.q('.lc-cp-dock').dataset.tam === 'normal'
+    && !s.doc.focos && s.escritas().length === 0);
 }
 
 relatar(casos);

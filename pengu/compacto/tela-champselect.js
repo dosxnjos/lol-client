@@ -22,10 +22,15 @@
 //   POST session/position-swaps|pick-order-swaps|champion-swaps/{id}/request|cancel|accept|decline
 //        (a troca de campeão é o campo `trades` da sessão, mas a rota é champion-swaps)
 //   GET  /lol-perks/v1/pages, /lol-perks/v1/currentpage; PUT /lol-perks/v1/currentpage <id puro> (ARMADILHAS § LCU)
+//   sala do time (chat-sala.js, etapa A de 2026-10-16): GET /lol-chat/v1/conversations, /lol-chat/v1/me, /lol-chat/v1/player-mutes
+//        (até achar a sala), GET .../conversations/{id}/messages a cada 1,5 s; POST .../messages só no Enter ou clique dele
+//        (corpo do sendMessage do rcp-fe-lol-social). Nunca PUT conversations/active (a "lida" é dele)
 import { h, fotoCampeao, campeoes, estilo, preferidasLobby } from './comum.js';
 import { consultarRunas } from '../runas.js';
 import { textoSelo } from '../champselect.js';
 import { botaoChat, botaoCoach } from './chat-botao.js';
+import { criarSala, ALTURAS, acharSalaSelecao, mucDaSessao, salaDaSelecao } from './chat-sala.js';
+import { elencoTime } from './lateral-chat.js';
 
 const CS = '/lol-champ-select/v1';
 export const POS = { TOP: 'Topo', JUNGLE: 'Selva', MIDDLE: 'Meio', BOTTOM: 'Atirador', UTILITY: 'Suporte' };
@@ -536,6 +541,14 @@ export const CSS = `
 #lc-compacto .lc-cp-sel-papel.lc-cp-sel-d-auto { color:#ff8a9a; }
 #lc-compacto .lc-cp-sel-selo.lc-cp-sel-pouco span:last-child { color:var(--lc-amarelo); }
 #lc-compacto .lc-cp-nota.lc-cp-sel-avisopos { color:var(--lc-amarelo); }
+/* sala do time (etapa A de 2026-10-16): logo acima da caixa de seleção; a altura é do caberSala. No painel da posição (3,5 s) some
+   junto da caixa. Coluna justa = linhas do time mais baixas, quando a faixa não cabe no espaço que sobra */
+#lc-compacto .lc-cp-sel > .lc-cp-dock { margin-top:auto; border-bottom:1px solid var(--lc-linha2); }
+#lc-compacto .lc-cp-sel > .lc-cp-dock ~ .lc-cp-sel-sel, #lc-compacto .lc-cp-sel > .lc-cp-dock ~ .lc-cp-sel-papel-painel { margin-top:0; }
+#lc-compacto .lc-cp-sel.lc-cp-sel-papel-on > .lc-cp-dock { display:none; }
+#lc-compacto .lc-cp-sel.lc-cp-sel-justo .lc-cp-sel-lin { min-height:34px; padding:2px 4px; }
+#lc-compacto .lc-cp-sel.lc-cp-sel-justo .lc-cp-sel-lin > .lc-cp-foto { width:28px !important; height:28px !important; }
+#lc-compacto .lc-cp-sel.lc-cp-sel-justo .lc-cp-sel-sec { padding:4px 12px 2px; }
 `;
 
 // ---------- tela ----------
@@ -620,6 +633,11 @@ function montarEsqueleto(st) {
   ctx.extras.append(p.tempo);
   botaoCoach(ctx); // passo 13 B2: 📊 abre o selo completo ao lado (só no clique dele)
   botaoChat(ctx); // protótipo (tela 3): relógio, 💬 com o contador, expandir
+  p.busca.addEventListener('input', () => { try { caberSala(st); } catch { /* segue */ } });
+  // o ponteiro dele mexeu no time, nos inimigos ou na caixa de seleção: a faixa adia o crescer (PONTEIRO_MS)
+  const marcar = () => { st.ponteiroEm = _relogio.agora(); };
+  for (const alvo of [p.time, p.inim, p.sel]) for (const ev of ['pointermove', 'pointerdown', 'wheel']) alvo.addEventListener(ev, marcar, { passive: true });
+  st.sala = montarSala(st);
   raiz.append(
     el('div', { class: 'lc-cp-sel-barra' }, p.barra),
     p.receb,
@@ -627,8 +645,85 @@ function montarEsqueleto(st) {
     p.time,
     el('div', { class: 'lc-cp-sel-sec' }, el('span', {}, 'time inimigo · só campeão'), p.toggle),
     p.inim,
+    ...(st.sala ? [st.sala.el] : []),
     p.sel,
   );
+}
+
+// ---------- sala do time (etapa A de roadmap/2026-10-16-chat-da-sala-som-icones.md) ----------
+// A faixa do chat-sala.js entre o time inimigo e a caixa de seleção, nascida recolhida. Cresce sozinha com mensagem de outro
+// jogador (só a altura; chat-sala.js). Quem fala: só campeão e posição, em toda fila (o nome nunca: a regra do nome oculto da
+// ranqueada, e a lateral e esta tela já mostram assim). Erro da faixa nunca derruba a seleção: o ctx dela engole e loga
+// (a tela inteira expandiria por um GET do chat, e na seleção o client normal custa o tempo da vez).
+function ctxCalado(ctx) {
+  const log = (e, onde) => { try { (ctx.log || console.log)(`[lol-client] compacto: sala do time (${onde}) ${e?.message || e}`); } catch { /* segue */ } };
+  const calado = (fn, onde) => (...a) => {
+    try { const r = fn(...a); if (r && typeof r.then === 'function') return r.catch(e => log(e, onde)); return r; } catch (e) { log(e, onde); return undefined; }
+  };
+  const c = Object.create(ctx);
+  c.seguro = fn => ctx.seguro(calado(fn, 'clique'));
+  c.intervalo = (fn, ms) => ctx.intervalo(calado(fn, 'leitura'), ms);
+  return c;
+}
+export const TEXTOS_SALA_TIME = {
+  titulo: 'sala do time', semSala: 'a sala do time ainda não abriu', semChave: 'aguardando a sala desta seleção…',
+  semChavePh: 'sem sala', semChaveTitulo: 'sala desta seleção ainda não identificada: a mensagem não vai para outra sala',
+};
+// o time da seleção para a faixa: {chaves, campeaoId, campeao (nome), posicao, eu, aliado}; nunca nome de jogador
+export function timeDaSala(sessao, nomeDe = id => `campeão ${id}`) {
+  return elencoTime(sessao).map(j => ({ chaves: j.chaves, campeaoId: j.campeao || null, campeao: j.campeao ? nomeDe(j.campeao) : '', posicao: j.posicao,
+    eu: !!j.eu, aliado: true }));
+}
+// Crescer empurra a busca e a grade ~60 px para baixo e aperta as linhas do time (prints do harness de 16/10/2026): com o ponteiro
+// em movimento sobre a coluna, o clique seguinte cairia no campeão (ou na troca) errado, e no banimento o BANIR vem logo depois.
+// Ponteiro parado há PONTEIRO_MS (ou fora da coluna) = pode crescer; senão a faixa espera a próxima volta da leitura (1,5 s).
+export const PONTEIRO_MS = 1200;
+export const podeCrescerSala = (st, agora = _relogio.agora()) => !(st?.ponteiroEm > 0) || agora - st.ponteiroEm >= PONTEIRO_MS;
+// quem falou na sala do time -> [{texto, classe}]: "você", ou campeão · posição (só posição antes de escolher; "aliado" sem casar)
+export function nomeNaSalaTime(j) {
+  if (j?.eu) return [{ texto: 'você', classe: 'lc-cp-nm lc-cp-nm-eu' }];
+  const texto = j ? [j.campeao, POS[posDe(j.posicao)]].filter(Boolean).join(' · ') : '';
+  return [{ texto: texto || 'aliado', classe: 'lc-cp-nm lc-cp-nm-al' }];
+}
+function montarSala(st) {
+  try {
+    const muc = () => mucDaSessao(st.sessao); // só o id da sala; senha e token da sessão nunca saem da sessão
+    return criarSala(ctxCalado(st.ctx), {
+      doc: st.doc, tamanho: 'recolhido', presenca: false, textos: TEXTOS_SALA_TIME,
+      jogadores: () => (st.sessao ? timeDaSala(st.sessao, id => nomeDe(st, id)) : []),
+      pronta: () => !!muc(), achar: conv => acharSalaSelecao(conv, muc()), mesma: s => salaDaSelecao(s.id, muc()),
+      nomeDe: nomeNaSalaTime, aoPintar: () => caberSala(st), podeCrescer: () => podeCrescerSala(st),
+    });
+  } catch (e) {
+    try { (st.ctx.log || console.log)(`[lol-client] compacto: sala do time não montou ${e?.message || e}`); } catch { /* segue */ }
+    return null;
+  }
+}
+
+// Caber nos 680 px com BANIR/TRAVAR e a busca à vista (medido no harness em 16/10/2026: sobram 14-79 px conforme a fase; a faixa
+// recolhida tem 26 e a normal 168). Se a faixa no tamanho dela faz a coluna rolar, cede nesta ordem: (1) as linhas do time ficam
+// mais justas (lc-cp-sel-justo), (2) a grade de campeões encolhe até GRADE_MIN (segue rolando por dentro), (3) a faixa cresce só
+// até onde cabe (nunca abaixo da recolhida). Só CSS da coluna: nada de ResizeTo/MoveTo (a janela não muda).
+export const GRADE_MIN = 60;
+export function caberSala(st) {
+  const d = st?.sala?.el, corpo = st?.raiz, g = st?.partes?.grade;
+  if (!d || !corpo || !d.isConnected) return null;
+  const alvo = ALTURAS[st.sala.tamanho()] || ALTURAS.recolhido;
+  const excesso = () => { const sh = Number(corpo.scrollHeight), ch = Number(corpo.clientHeight); return sh > 0 && ch > 0 ? sh - ch : 0; };
+  d.style.height = alvo + 'px';
+  if (g?.style) g.style.maxHeight = '';
+  corpo.classList.remove('lc-cp-sel-justo');
+  let x = excesso();
+  const r = { alvo, altura: alvo, justo: false, grade: null };
+  if (x > 0) { corpo.classList.add('lc-cp-sel-justo'); r.justo = true; x = excesso(); }
+  if (x > 0 && g?.style) {
+    const gh = Number(g.clientHeight) || 0;
+    const cede = Math.min(x, Math.max(0, gh - GRADE_MIN));
+    if (cede > 0) { g.style.maxHeight = (gh - cede) + 'px'; r.grade = gh - cede; x = excesso(); }
+  }
+  if (x > 0) { r.altura = Math.max(ALTURAS.recolhido, alvo - x); d.style.height = r.altura + 'px'; }
+  st.salaCabe = r;
+  return r;
 }
 
 function aoSessao(st, s) {
@@ -644,7 +739,13 @@ function aoSessao(st, s) {
   if (st.sessao?.id !== s.id || st.l?.me !== l.me) { st.escolhido = 0; st.spAberto = null; st.skins = null; st.runa = null; }
   // escolha local vale só para a ação em que foi feita (intenção 18 -> ban 4 -> pick 18): nunca carrega para o ban
   if ((l.modo.acao?.id ?? null) !== st.acaoId) { st.acaoId = l.modo.acao?.id ?? null; st.escolhido = 0; }
+  const mucAntes = mucDaSessao(st.sessao);
   st.sessao = s; st.l = l;
+  // a sala desta seleção ficou conhecida (ou mudou: dodge e seleção nova): a faixa procura já, sem esperar a volta de 1,5 s (o que
+  // chegasse nesse meio viraria base e não faria a faixa crescer)
+  if (st.sala && mucDaSessao(s) && mucDaSessao(s) !== mucAntes) {
+    Promise.resolve().then(() => st.sala.ler()).catch(e => (ctx.log || console.log)(`[lol-client] compacto: sala do time (leitura) ${e?.message || e}`));
+  }
   // hover enviado vale até a sessão mostrar ele (ou a ação mudar, ou REENVIO_MS): evento velho não faz reenviar o mesmo
   const he = st.hoverEnviado;
   if (he && (l.modo.acao?.id !== he.acao || noClient(l) === he.id || Date.now() - he.em > REENVIO_MS)) st.hoverEnviado = null;
@@ -1010,6 +1111,7 @@ function pintar(st) {
   pintarInimigos(st);
   pintarSel(st);
   pintarPapel(st);
+  try { caberSala(st); } catch (e) { (st.ctx.log || console.log)(`[lol-client] compacto: sala do time (altura) ${e?.message || e}`); }
 }
 
 // painel da posição: irmão da caixa de seleção (a caixa fica no DOM, escondida pela classe da raiz), nunca sobre o pedido de

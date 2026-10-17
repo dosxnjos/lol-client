@@ -344,6 +344,20 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   no meio da digitação (a tecla seguinte vai para os atalhos da Riot) e botão recriado a cada 500 ms engole o clique que
   começa num e termina no outro. Campo, botão de envio e botão de baixo nascem uma vez por montagem e só mudam texto e
   `disabled` (`compacto/chat-sala.js`, `compacto/tela-honra.js`); `replaceChildren` só no que não tem foco nem clique.
+- **Faixa da sala na seleção faz a coluna rolar e esconde o TRAVAR** (harness de 16/10/2026, 420×680) → sobram só 14–79 px conforme a
+  fase; a faixa recolhida tem 26 e a normal 168. `tela-champselect.caberSala` mede o excesso (`scrollHeight − clientHeight`) a cada
+  pintura e cede: linhas do time justas, grade até `GRADE_MIN` (60), e só então a faixa fica mais baixa (120–168 px medidos, nunca
+  rola). Elemento novo na coluna da seleção: medir no harness (`temp/compacto-harness/telas.html`, `window.__msg`).
+- **Erro dentro da faixa da sala na seleção não vira falha da tela** (16/10/2026) → o ctx dela (`ctxCalado` em `tela-champselect.js`)
+  engole e só loga `[lol-client] compacto: sala do time (...)`, para um GET do chat não expandir a seleção. Teste que só olha
+  `falhas`/`expandiu` não vê o erro: conferir também o log (o DOM falso sem setter de `disabled` passou assim até o caso olhar o log).
+- **Faixa da sala cresce e o clique cai no campeão errado** (revisão de 16/10/2026, prints do harness) → crescer empurra a busca e a
+  grade ~60 px e aperta as linhas do time; só o TRAVAR fica parado. Com o mouse em movimento na coluna, o clique seguinte (e o BANIR
+  logo depois) pegaria outro campeão ou outra troca. `tela-champselect.podeCrescerSala`: ponteiro mexeu no time, nos inimigos ou na
+  caixa de seleção há menos de `PONTEIRO_MS` (1,2 s) = a faixa fica pendente e cresce na próxima volta (`chat-sala.js`, `podeCrescer`).
+- **Enter na faixa vai para a sala velha** (revisão de 16/10/2026) → o `multiUserChatId` (ou o `gameId`) muda com uma leitura no
+  meio do GET; o `ler()` imediato sai pelo `est.lendo` e `est.sala` segue a velha até a próxima volta. `enviar` confere `mesma(sala)`
+  antes do POST e, se mudou, esquece a sala e não envia (o texto fica no campo).
 - **`ctx.expandir()` não diz se foi clique dele** (15/10/2026) → as telas chamam o mesmo `ctx.expandir()` num botão e
   sozinhas (lobby personalizado, seleção com banco, chat sem coletor, pós-jogo sem saída). O registro das expansões
   separa pelo último `pointerdown` ou Enter/Espaço da página, medido no pedido (`GESTO_MS`, 1,5 s): sem gesto = `tela-sozinha`.
@@ -579,6 +593,13 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   sonda de 14/10: 21 `groupchat`, 0 `chat`, `fromSummonerId` 0). O `lerMensagens` filtrava só `chat`. Mensagem de sala =
   `chat` ou `groupchat` (o `isChatMessage` do rcp-fe-lol-social); a 1:1 segue `chat` (medido 15/10). Fixture de teste de sala
   sempre em `groupchat` (`tests/fixtures/fim-de-partida-3293137136.json`).
+- **Sala da seleção: qual é e quem falou** (rcp-fe-lol-social 16.20, lido no `assets.wad` em 16/10/2026; nenhuma seleção real medida) →
+  a Riot acha a sala por `conversations.find(c => c.id.startsWith(session.chatDetails.multiUserChatId) && c.type === 'championSelect')`
+  (sem `@` obrigatório; a do lobby é `teamBuilder`/`customGame`). Sem `multiUserChatId` = nenhuma sala (a da seleção anterior pode
+  seguir na lista): `chat-sala.acharSalaSelecao`. O nome de quem falou sai, nessa ordem, de `fromPuuid`, `fromObfuscatedPuuid`,
+  `fromSummonerId`, `fromObfuscatedSummonerId` (`getDisplayName`): na ranqueada a fala, inclusive a dele, pode vir só com as
+  obfuscated. "Sou eu" = `/lol-chat/v1/me` **e** as chaves da minha cell no `myTeam`, senão a mensagem dele conta como de outro
+  (`chat-sala.novasDeOutros`). A `lateral-chat.acharSalaTime` ainda aceita "1 sala só" sem casar (decisão de 14/10).
 - **Replay: rotas e estados** (rcp-fe-lol-shared-components 16.20, ReplayButton, lido 15/10/2026; GETs medidos, nenhum POST
   enviado por teste) → `GET /lol-replays/v1/metadata/{id}` dá 404 ("Try using the POST metadata create endpoint first") até
   `POST /lol-replays/v2/metadata/{id}/create {gameVersion, gameType, queueId[, gameEnd]}` (o botão da Riot cria ao aparecer);

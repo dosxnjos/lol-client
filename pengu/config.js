@@ -73,7 +73,9 @@ export const PADRAO = {
   // deixam de abrir conversa sozinhas). Entra pela mescla, sem VERSAO nova. A chave conversaSozinha saiu em 16/10/2026 (nada do
   // chat abre sozinho, pedido do Gabriel; roadmap/2026-10-16-compacto-chat-amigos-perfil.md): o valor salvo some na mescla.
   // fundoPerfil (etapa 3 do mesmo plano, 16/10/2026): o fundo do perfil dele como fundo da coluna compacta (compacto/fundo.js).
-  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true },
+  // chatSalaCresce (etapa A de roadmap/2026-10-16-chat-da-sala-som-icones.md): a faixa da sala do time (seleção, honra, pós-jogo)
+  // cresce sozinha com mensagem de outro jogador (compacto/chat-sala.js). Entra pela mescla, sem VERSAO nova.
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true, chatSalaCresce: true },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -229,6 +231,7 @@ const ALTERNAVEIS = [
   ['compacto.inicioCompacto', 'abrir cada fase no modo compacto'],
   ['compacto.chatLateral', 'chat ao lado do compacto'],
   ['compacto.fundoPerfil', 'fundo do perfil no compacto'],
+  ['compacto.chatSalaCresce', 'abrir a faixa da sala do time com mensagem nova'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],

@@ -39,6 +39,7 @@ class El {
   setAttribute(k, v) { if (k === 'id') this.id = String(v); else if (k === 'class') this.className = v; else this.attrs.set(k, String(v)); }
   getAttribute(k) { return k === 'id' ? this.id : this.attrs.get(k) ?? null; }
   get disabled() { return this.attrs.has('disabled'); }
+  set disabled(v) { if (v) this.attrs.set('disabled', ''); else this.attrs.delete('disabled'); } // como o DOM (a faixa da sala põe .disabled)
   get title() { return this.attrs.get('title') ?? ''; }
   get children() { return this.childNodes.filter(n => n.nodeType === 1); }
   append(...ns) { for (let n of ns) { if (typeof n === 'string') n = new Texto(n); if (n.parentNode) n.remove(); n.parentNode = this; this.childNodes.push(n); } }
@@ -1378,6 +1379,145 @@ const todasEscritas = [];
       avisoPosicao(champ, 58, 'JUNGLE', 'Renekton') === null, avisoPosicao(champ, 58, 'JUNGLE', 'Renekton'));
   }
   zerar();
+}
+
+// ---------- 10. sala do time na seleção (etapa A de roadmap/2026-10-16-chat-da-sala-som-icones.md) ----------
+const NUNCA = 'NUNCA-GUARDAR'; // no client: as credenciais da sala (senha, token), que nunca podem sair da leitura
+{
+  const MUC = 'cs-sala-1';
+  // a fixture é "só sinais": chatDetails e identidade postos aqui (no formato do /help; nome secreto para provar que nunca aparece)
+  const comChat = (s, muc = MUC) => {
+    s.chatDetails = { multiUserChatId: muc, multiUserChatPassword: NUNCA, mucJwtDto: { jwt: NUNCA } };
+    for (const c of s.myTeam) Object.assign(c, { puuid: `p-${c.cellId}`, obfuscatedPuuid: `o-${c.cellId}`, gameName: `Secreto${c.cellId}`, tagLine: 'BR1', summonerId: 0 });
+    return s;
+  };
+  const idSala = muc => `${muc}@champ-select.br1.pvp.net`;
+  const msgsUrl = muc => `GET /lol-chat/v1/conversations/${encodeURIComponent(idSala(muc))}/messages`;
+  const montarSala = async ({ cfg = CFG, inicial = comChat(S(20)), msgs = [], extra = {} } = {}) => {
+    const chat = { msgs: clonar(msgs), conversas: [
+      { id: 'velha@champ-select.br1.pvp.net', type: 'championSelect', password: NUNCA },
+      { id: `${MUC}@lobby.br1.pvp.net`, type: 'teamBuilder', password: NUNCA },
+      { id: idSala(MUC), type: 'championSelect', password: NUNCA, mucJwtDto: { jwt: NUNCA } }] };
+    const t = await montarTela({ cfg, inicial, rotas: {
+      'GET /lol-chat/v1/conversations': () => chat.conversas,
+      [msgsUrl(MUC)]: () => (chat.portao ? chat.portao.then(() => chat.msgs) : chat.msgs), // portao: segura a leitura no meio (corrida)
+      'GET /lol-chat/v1/me': { id: 'eu@br1.pvp.net', pid: 'eu@br1.pvp.net', puuid: 'p-5', summonerId: 111 },
+      'GET /lol-chat/v1/player-mutes': {},
+      ...extra,
+    } });
+    t.chat = chat;
+    // a leitura da sala é o intervalo de 1,5 s do chat-sala.js (o montarTela guarda os intervalos; aqui roda à mão)
+    t.lerSala = async () => { for (const x of t.intervalos.filter(i => i.ms === 1500)) x.fn(); await tick(); };
+    t.dock = () => t.achar('div.lc-cp-dock');
+    t.fala = (id, de, body = 'oi', extraMsg = {}) => chat.msgs.push({ id, type: 'groupchat', body, fromPuuid: '', fromObfuscatedPuuid: de, fromSummonerId: 0, fromId: `${id}@x`,
+      isHistorical: false, timestamp: '', ...extraMsg });
+    await t.lerSala();
+    return t;
+  };
+  const historica = [{ id: 'h1', type: 'groupchat', body: 'antes de abrir', fromObfuscatedPuuid: 'o-7', fromSummonerId: 0, timestamp: '' }];
+  const t = await montarSala({ msgs: historica });
+  caso('sala do time: a faixa nasce recolhida, entre o time inimigo e a caixa de seleção', t.dock()?.dataset.tam === 'recolhido'
+    && t.raiz.children.indexOf(t.dock()) === t.raiz.children.indexOf(t.achar('div.lc-cp-sel-sel')) - 1 && /sala do time/.test(t.dock().textContent), t.dock()?.textContent);
+  caso('sala do time: lê só a desta seleção (nunca a velha nem a do lobby)', t.lcu.chamadas.some(c => `${c.metodo} ${c.url}` === msgsUrl(MUC))
+    && !t.lcu.chamadas.some(c => /velha|lobby\.br1/.test(c.url)));
+  caso('sala do time: a mensagem que já estava na sala ao abrir não abre a faixa', t.dock().dataset.tam === 'recolhido');
+  t.achar('input[data-a="busca"]').focus();
+  const busca = t.doc.ativo;
+  t.fala('m1', 'o-5', 'minha mensagem');
+  await t.lerSala();
+  caso('sala do time: a minha mensagem (só com a chave obfuscated da minha cell) não abre a faixa', t.dock().dataset.tam === 'recolhido');
+  t.fala('m2', 'o-6', 'vou de zed');
+  await t.lerSala();
+  caso('sala do time: mensagem de outro jogador abre a faixa (normal) e aparece', t.dock().dataset.tam === 'normal' && t.dock().textContent.includes('vou de zed'), t.dock().textContent);
+  const txt = t.dock().textContent;
+  caso('sala do time: quem falou = campeão · posição ("você" para mim), nunca o nome do jogador', txt.includes('Camp238 · Meio') && txt.includes('você')
+    && !/Secreto|BR1/.test(txt), txt);
+  caso('sala do time: crescer não muda o foco (ele segue na busca de campeão) nem escreve nada', t.doc.ativo === busca && t.escritas().length === 0, t.escritas().join(', '));
+  caso('sala do time: senha e token da sala nunca na faixa nem no log', !JSON.stringify(t.logs).includes(NUNCA) && !txt.includes(NUNCA));
+  await (t.achar('[data-a="sala-recolher"]')?.click(), tick());
+  t.fala('m3', 'o-9', 'alguém tem flash?');
+  await t.lerSala();
+  caso('sala do time: recolhida por ele, abre de novo na próxima mensagem de outro jogador', t.dock().dataset.tam === 'normal' && t.dock().textContent.includes('Atirador'), t.dock().textContent);
+  caso('sala do time: nada falhou, expandiu nem foi ao log de erro', t.falhas.length === 0 && t.expandiu === 0 && !t.logs.some(l => /sala do time/.test(l)),
+    JSON.stringify([t.falhas.map(String), t.logs.filter(l => /sala do time/.test(l))]));
+  const input = t.achar('input[data-a="sala-texto"]');
+  input.value = 'boa'; input.disparar('keydown', { key: 'Enter' }); await tick();
+  const w = t.lcu.escritas();
+  caso('sala do time: Enter dele envia o corpo do client para a sala desta seleção', w.length === 1 && w[0].url === `/lol-chat/v1/conversations/${encodeURIComponent(idSala(MUC))}/messages`
+    && w[0].corpo.type === 'chat' && w[0].corpo.body === 'boa' && w[0].corpo.isHistorical === false, JSON.stringify([w, input.disabled, t.logs.filter(l => /sala/.test(l))]));
+  // revisão de 16/10/2026: crescer empurra a busca e a grade ~60 px (prints do harness); com o ponteiro mexendo na coluna o clique
+  // seguinte cairia no campeão errado. A faixa espera o ponteiro parar PONTEIRO_MS (o contador sobe nesse meio)
+  const agoraReal = tela._relogio.agora;
+  let agoraF = 5e6;
+  tela._relogio.agora = () => agoraF;
+  try {
+    for (const [alvo, nome] of [['div.lc-cp-sel-sel', 'na caixa de seleção'], ['div.lc-cp-sel-time', 'nas linhas do time']]) {
+      await (t.achar('[data-a="sala-recolher"]')?.click(), tick());
+      t.achar(alvo).disparar('pointermove');
+      t.fala(`p-${nome}`, 'o-6', 'troca comigo?');
+      await t.lerSala();
+      const esperou = t.dock().dataset.tam === 'recolhido' && t.dock().querySelector('.lc-cp-un')?.textContent === '1';
+      agoraF += tela.PONTEIRO_MS - 1;
+      await t.lerSala();
+      const aindaEsperou = t.dock().dataset.tam === 'recolhido';
+      agoraF += 1;
+      await t.lerSala(); // nenhuma mensagem nova: cresce pela pendente
+      caso(`sala do time: ponteiro mexendo ${nome} adia o crescer; parado há PONTEIRO_MS, cresce sem mensagem nova`, esperou && aindaEsperou && t.dock().dataset.tam === 'normal',
+        JSON.stringify([esperou, aindaEsperou, t.dock().dataset.tam]));
+    }
+    caso('sala do time: podeCrescerSala sem ponteiro = sim; ponteiro recente = não', tela.podeCrescerSala({}) && !tela.podeCrescerSala({ ponteiroEm: 100 }, 100 + tela.PONTEIRO_MS - 1)
+      && tela.podeCrescerSala({ ponteiroEm: 100 }, 100 + tela.PONTEIRO_MS));
+  } finally { tela._relogio.agora = agoraReal; }
+  // revisão de 16/10/2026: a sessão trocou de sala (multiUserChatId novo) com uma leitura no meio; o Enter não pode ir para a velha
+  let soltar;
+  t.chat.portao = new Promise(r => { soltar = r; });
+  for (const x of t.intervalos.filter(i => i.ms === 1500)) x.fn(); // leitura presa no GET das mensagens
+  await tick();
+  await t.emitir(comChat(S(20), 'cs-sala-9'));
+  const antes = t.lcu.escritas().length;
+  input.value = 'pra sala velha?'; input.disparar('keydown', { key: 'Enter' }); await tick();
+  caso('sala do time: seleção trocou de sala no meio da leitura: o Enter não envia para a sala velha e o texto fica no campo',
+    t.lcu.escritas().length === antes && input.value === 'pra sala velha?', t.lcu.escritas().slice(antes).map(c => c.url).join(', '));
+  soltar(); delete t.chat.portao; await tick();
+  await t.lerSala();
+  caso('sala do time: depois da troca, nenhuma leitura da sala velha', t.dock().textContent.includes('ainda não abriu') || /sem sala/.test(input.getAttribute('placeholder') || ''),
+    t.dock().textContent);
+}
+{ // sem multiUserChatId na sessão: nenhuma sala (a da seleção anterior pode estar na lista)
+  const sem = S(20); delete sem.chatDetails;
+  const t = await montarTela({ inicial: sem, rotas: { 'GET /lol-chat/v1/conversations': [{ id: 'velha@champ-select.br1.pvp.net', type: 'championSelect' }] } });
+  for (const x of t.intervalos.filter(i => i.ms === 1500)) x.fn();
+  await tick();
+  caso('sala do time: sem o multiUserChatId da sessão, nenhuma sala lida; campo cinza', !t.lcu.chamadas.some(c => /\/messages/.test(c.url))
+    && t.achar('input[data-a="sala-texto"]')?.disabled !== false && t.falhas.length === 0);
+}
+{ // a chave desligada: fica recolhida, o contador sobe; erro dentro da faixa não derruba a seleção
+  const MUC = 'cs-sala-2';
+  const s = S(20); s.chatDetails = { multiUserChatId: MUC };
+  const msgs = [];
+  const url = `GET /lol-chat/v1/conversations/${encodeURIComponent(MUC + '@champ-select.br1.pvp.net')}/messages`;
+  const t = await montarTela({ inicial: s, cfg: { ...CFG, compacto: { ...CFG.compacto, chatSalaCresce: false } }, rotas: {
+    'GET /lol-chat/v1/conversations': [{ id: MUC + '@champ-select.br1.pvp.net', type: 'championSelect' }], [url]: () => msgs, 'GET /lol-chat/v1/me': { puuid: 'eu' } } });
+  const ler = async () => { for (const x of t.intervalos.filter(i => i.ms === 1500)) x.fn(); await tick(); };
+  await ler();
+  msgs.push({ id: 'a', type: 'groupchat', body: 'oi', fromObfuscatedPuuid: 'outro' });
+  await ler();
+  caso('sala do time com a chave desligada: fica recolhida e o contador sobe', t.achar('div.lc-cp-dock')?.dataset.tam === 'recolhido' && t.achar('.lc-cp-un')?.textContent === '1');
+  // erro dentro da leitura da faixa (a config que lança ao ler a chave): loga e segue, a seleção não expande
+  t.ctx.cfg = { ...CFG, compacto: new Proxy({ ...CFG.compacto }, { get: (o, k) => { if (k === 'chatSalaCresce') throw new Error('boom'); return o[k]; } }) };
+  msgs.push({ id: 'b', type: 'groupchat', body: 'oi 2', fromObfuscatedPuuid: 'outro' });
+  await ler();
+  caso('sala do time: erro na faixa só vai ao log (a seleção não expande nem falha)', t.falhas.length === 0 && t.expandiu === 0 && t.logs.some(l => /sala do time .*boom/.test(l)),
+    JSON.stringify([t.falhas.map(String), t.logs.filter(l => /sala/.test(l))]));
+}
+{ // funções puras da tela
+  caso('sala do time: nome = "você" | campeão · posição | só posição | "aliado"; nunca nome',
+    tela.nomeNaSalaTime({ eu: true, campeao: 'Zac' })[0].texto === 'você' && tela.nomeNaSalaTime({ campeao: 'Zed', posicao: 'middle' })[0].texto === 'Zed · Meio'
+    && tela.nomeNaSalaTime({ campeao: '', posicao: 'UTILITY' })[0].texto === 'Suporte' && tela.nomeNaSalaTime(null)[0].texto === 'aliado');
+  const s = S(20); s.myTeam[1].gameName = 'Secreto'; s.myTeam[1].puuid = 'p6';
+  const time = tela.timeDaSala(s, id => `C${id}`);
+  caso('sala do time: o time da faixa leva chaves, campeão e posição; nenhum nome de jogador', time.length === 5 && time.find(j => j.chaves.has('p6'))?.campeao === 'C238'
+    && !JSON.stringify(time.map(j => ({ ...j, chaves: [...j.chaves] }))).includes('Secreto') && time.filter(j => j.eu).length === 1);
 }
 
 // ---------- 8. linha que não se cruza, somada ----------

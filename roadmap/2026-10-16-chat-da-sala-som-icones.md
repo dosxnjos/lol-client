@@ -58,6 +58,50 @@ O `CLAUDE.md` do projeto já foi atualizado com essa exceção (linha da Lateral
 7. Chave de configuração (`compacto.chatSalaCresce`, padrão true, entra pela mescla sem `VERSAO` nova) com texto de
    interface no guia. Testes node das funções puras (qual sala, quem falou, quando cresce) e `teste-textos`.
 
+### Estado da etapa A (16/10/2026, noite; construída, revisada e commitada)
+
+- **Medido (front, `tools/ler-wad.py`; nenhuma seleção real aberta, jogo fechado):** rcp-fe-lol-social 16.20 acha a sala da seleção por
+  `conversations.find(c => c.id.startsWith(session.chatDetails.multiUserChatId) && c.type === 'championSelect')` (a do lobby é
+  `teamBuilder`/`customGame`; o pós-jogo usa `stats.multiUserChatId` do eog). O nome de quem falou: `fromPuuid` → `fromObfuscatedPuuid` →
+  `fromSummonerId` → `fromObfuscatedSummonerId` (`getDisplayName`); rcp-fe-lol-champ-select lê a mesma conversa `championSelect`.
+- **Passo 1/2:** `chat-sala.criarSala` ficou genérica (`achar`, `mesma`, `pronta`, `nomeDe`, `presenca`, `textos`, `aoPintar`); a seleção
+  usa `acharSalaSelecao` (estrita: sem `multiUserChatId` nenhuma sala) e `timeDaSala` (chaves do `myTeam` → campeão e posição). Faixa
+  entre o time inimigo e a caixa de seleção, nasce recolhida; some nos 3,5 s do painel da posição. **Decisão:** quem fala aparece só
+  como campeão · posição ("você" para ele) **em toda fila**, não só na ranqueada (mais seguro que o plano; a lateral e a tela 3 já fazem
+  assim). Reverter: gate por `nameVisibilityType` do `myTeam`, nunca por campo da mensagem. Erro da faixa só vai ao log (`ctxCalado`),
+  nunca expande a seleção.
+- **Passo 3:** a leitura já rodava com a faixa recolhida (o `ctx.intervalo` da montagem); o que estava errado era o cabeçalho. Custo:
+  1 GET `.../messages` a cada 1,5 s; `conversations`/`me`/`player-mutes` só até achar a sala; `participants` só onde há a faixa de
+  presença (pós-jogo/honra), nunca na seleção.
+- **Passo 4/5:** `novasDeOutros` + `deveCrescer` (`chat-sala.js`): 1ª leitura da sala = base (nada cresce), depois só mensagem nova de
+  outro jogador (não a dele, nem pelas chaves obfuscated da cell dele; não system; não `isHistorical`) com a faixa recolhida → normal.
+  Recolhida por ele, cresce de novo na próxima. Honra e pós-jogo com a mesma regra. Nada de foco, geometria ou `PUT conversations/active`.
+- **Passo 6 (cabe):** sobram 14–79 px por fase (harness 420×680). `caberSala` cede linhas do time justas → grade até 60 px (1 linha,
+  rola por dentro) → faixa mais baixa. Medido: faixa aberta de 120 px (vez de outro, a pior) a 168 px (banimento), coluna sem rolar e
+  busca + BANIR/TRAVAR à vista em todas. Prints: `temp/compacto-harness/2026-10-16-sala-0-escolha-recolhida.png`,
+  `…-sala-1-escolha-cresceu.png`, `…-sala-2-vez-de-outro-cresceu.png`, `…-sala-3-finalizacao-cresceu.png`. Janela separada não foi
+  preciso.
+- **Passo 7:** `compacto.chatSalaCresce` (padrão true, mescla, sem `VERSAO`), caixa "Abrir a sala do time com mensagem nova" em
+  `blocos.js` (vale no ⚙ e nas Configurações), Ctrl+K em `ALTERNAVEIS`. Testes: `teste-compacto-fim-de-partida.mjs` §7,
+  `teste-compacto-selecao.mjs` §10, `teste-compacto.mjs` (config).
+- **Completado fora do passo a passo:** `lateral-chat.lerSalaTime` (a sala do time do 💬) passou a casar `fromObfuscatedPuuid` e as
+  chaves da minha cell (mesma lacuna da faixa; caso novo em `teste-compacto-lateral.mjs`); a seleção procura a sala na hora em que o
+  `multiUserChatId` da sessão aparece ou muda (sem esperar 1,5 s, senão a 1ª fala virava base). A `acharSalaTime` da lateral segue
+  aceitando "1 sala só" sem casar (decisão de 14/10; a faixa não aceita).
+- **Desvio do passo 6 (decisão técnica, reversível):** `caberSala` cede a grade até 1 linha **antes** de baixar a faixa (o plano dizia
+  "a faixa cresce só até a altura que cabe"). Motivo: a grade rola por dentro e a busca filtra; a faixa baixa demais esconde a conversa
+  que a fez crescer. Reverter: trocar a ordem em `caberSala` ou subir `GRADE_MIN`.
+- **Revisão adversarial (16/10/2026, noite), dois furos corrigidos com teste que falhava antes** (`teste-compacto-selecao.mjs` §10):
+  (1) crescer empurra a busca e a grade ~60 px e aperta as linhas do time: com o mouse mexendo na coluna, o clique seguinte caía no
+  campeão (ou na troca) errado, e no banimento o BANIR vem logo depois. Agora `podeCrescerSala` (ponteiro parado há `PONTEIRO_MS`,
+  1,2 s, no time, nos inimigos ou na caixa de seleção) e a faixa fica pendente até poder (`chat-sala.js`, opção `podeCrescer`; honra e
+  pós-jogo sem mudança). (2) `multiUserChatId` novo com uma leitura no meio: o Enter ia para a sala velha; `enviar` confere `mesma(sala)`
+  antes do POST. Conferido sem furo: nome (faixa, `title`, log), sala velha/lobby/1:1, própria/histórica/system, foco, timers
+  (`ctx.intervalo` da montagem), lateral e 1:1 sem abrir sozinhas, `isTrusted`, credencial fora do log, geometria só CSS da coluna.
+- **Só o client real prova:** o formato real do id da sala contra o `multiUserChatId`; que as falas da ranqueada vêm com as chaves que
+  casam com o `myTeam` (senão a linha diz "aliado"); a altura no CEF 108 com o fundo do perfil; a ida e volta do envio na sala da seleção;
+  que a espera do ponteiro (1,2 s) não parece atraso.
+
 ## Etapa B — som no ⚙ do compacto
 
 1. **Medir a rota** das configurações de áudio do client: `tools/ler-wad.py` no front de configurações

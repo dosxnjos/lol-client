@@ -907,6 +907,12 @@ async function nadaSozinho() {
     elencoTime(sessaoCS(58)), { id: 'eu@br1.pvp.net', puuid: 'puuid-eu' });
   caso('sala do time: remetente casado pelo summonerId vira campeão/posição; eu = "você"; sistema some; nenhum nome na saída',
     linhas.length === 2 && linhas[0].quem.posicao === 'JUNGLE' && linhas[0].quem.campeao === 64 && linhas[1].quem.eu && !JSON.stringify(linhas).includes(NOME_OCULTO), JSON.stringify(linhas));
+  // na ranqueada a fala pode vir só com as chaves obfuscated (rcp-fe-lol-social getDisplayName, lido em 16/10/2026), a dele também
+  const sObf = { localPlayerCellId: 1, myTeam: [{ cellId: 1, obfuscatedPuuid: 'o1', assignedPosition: 'top', championId: 58 }, { cellId: 2, obfuscatedPuuid: 'o2', assignedPosition: 'middle', championId: 238 }] };
+  const lObf = lerSalaTime([{ id: 'a', type: 'groupchat', body: 'oi', fromObfuscatedPuuid: 'o2', fromSummonerId: 0 }, { id: 'b', type: 'groupchat', body: 'eu', fromObfuscatedPuuid: 'o1', fromSummonerId: 0 }],
+    elencoTime(sObf), { id: 'eu@br1.pvp.net', puuid: 'puuid-eu' });
+  caso('sala do time: fala só com fromObfuscatedPuuid casa com o elenco; a minha (só obfuscated) = "você"',
+    lObf[0].quem?.campeao === 238 && lObf[0].quem?.posicao === 'MIDDLE' && !lObf[0].quem.eu && lObf[1].quem?.eu === true, JSON.stringify(lObf));
   caso('elenco do time: guarda campeão/posição e as chaves só em Set (nenhum gameName)', !JSON.stringify(elencoTime(sessaoCS(58)).map(x => ({ ...x, chaves: [...x.chaves] }))).includes(NOME_OCULTO));
   caso('conversa: mensagens minhas por fromId, sistema separado', igual(lerConversa([{ id: 1, body: 'a', fromId: 'eu' }, { id: 2, body: 'b', fromId: 'x', type: 'system' }], { id: 'eu' }).map(m => [m.eu, m.sis]), [[true, false], [false, true]]));
   caso('conversa: "joined_room"/"left_room" de sistema somem (15/10: 1:1 terminando nelas mostrava o texto cru)',

@@ -230,4 +230,6 @@ export const blocoCompacto = (corpo, { cfg, definir, ui }) => corpo.append(
   ui.caixa('compacto.chatLateral', 'Chat e amigos ao lado do compacto', 'O 💬 alarga o client para a direita com as conversas recentes e a última conversa aberta; o 👥 mostra a lista de amigos. Mensagem nova só aparece nos recentes e no contador: nada abre sozinho. Substitui as janelas do chat do coletor (elas deixam de abrir conversa sozinhas). Desligado: o 💬 volta a abrir as janelas próprias.',
     cfg.compacto?.chatLateral !== false, v => definir('compacto.chatLateral', v)),
   ui.caixa('compacto.fundoPerfil', 'Fundo do perfil no compacto', 'O fundo do seu perfil vira o fundo da janela compacta, centralizado e cortado nas laterais, com um véu escuro para o texto continuar legível. Só a imagem (o vídeo do fundo fica de fora). Desligado: o fundo escuro de sempre.',
-    cfg.compacto?.fundoPerfil !== false, v => definir('compacto.fundoPerfil', v)));
+    cfg.compacto?.fundoPerfil !== false, v => definir('compacto.fundoPerfil', v)),
+  ui.caixa('compacto.chatSalaCresce', 'Abrir a sala do time com mensagem nova', 'Na seleção de campeões, na honra e no pós-jogo, a faixa do chat da sala abre sozinha quando outro jogador manda mensagem. Só a faixa cresce: o cursor continua onde estava e a mensagem não é marcada como lida. Desligado: a faixa só abre pelo clique, e a mensagem nova aparece no contador.',
+    cfg.compacto?.chatSalaCresce !== false, v => definir('compacto.chatSalaCresce', v)));
