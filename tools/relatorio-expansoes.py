@@ -20,7 +20,7 @@ import re
 import statistics
 import sys
 from collections import Counter
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
@@ -60,15 +60,44 @@ def hora_local(em):
         return s
 
 
+def _instante(em):
+    """carimbo ISO do plugin (UTC, "...Z") -> datetime com fuso | None"""
+    try:
+        return datetime.fromisoformat(str(em or "").replace("Z", "+00:00"))
+    except ValueError:
+        return None
+
+
+def reclassificar(eventos):
+    """pedido de tela marcado "por-ele" pelo plugin antigo cujo clique foi ANTES de o compacto voltar (um "fim" entre o clique e o
+    pedido): a camada nem estava à vista, então o clique foi no client normal da Riot. Caso de 16/10/2026 20:48 (roadmap/
+    2026-10-17-telas-que-expandem.md, A4): o "Assistir" 771 ms antes contou como pedido da tela da seleção. Desde a etapa 3 o
+    plugin já classifica certo (gestoAntesDaTela); aqui corrige o que ficou gravado antes. -> {id: motivo da correção}"""
+    fins = sorted(t for t in (_instante(ev.get("em")) for ev in eventos if ev.get("tipo") == "fim") if t)
+    out = {}
+    for ev in eventos:
+        if ev.get("tipo") != "inicio" or ev.get("origem") != "por-ele" or not str(ev.get("gatilho") or "").startswith("tela "):
+            continue
+        quando, ms = _instante(ev.get("em")), ev.get("gestoHaMs")
+        if not quando or isinstance(ms, bool) or not isinstance(ms, (int, float)):
+            continue
+        gesto = quando - timedelta(milliseconds=ms)
+        if any(gesto < f <= quando for f in fins):
+            out[ev.get("id")] = "clique antes de o compacto voltar (no client normal)"
+    return out
+
+
 def juntar(eventos, desde=None):
     """-> [expansão] (o "inicio" com fim, duracaoMs, como e trilha do "fim" de mesmo id) e o total descartado no plugin"""
     inicios, fins, descartados = {}, {}, 0
+    corrigidos = reclassificar(eventos)
     for ev in eventos:
         t, i = ev.get("tipo"), ev.get("id")
         if t == "descartados":
             descartados += int(ev.get("n") or 0)
         elif t == "inicio" and i:
-            inicios.setdefault(i, {**ev, "em": hora_local(ev.get("em")) if ev.get("em") else ev.get("em")})
+            extra = {"origem": "tela-sozinha", "porEle": False, "reclassificado": corrigidos[i]} if i in corrigidos else {}
+            inicios.setdefault(i, {**ev, **extra, "em": hora_local(ev.get("em")) if ev.get("em") else ev.get("em")})
         elif t == "fim" and i:
             fins[i] = ev
     out = []
@@ -117,7 +146,8 @@ def agrupar(expansoes):
             "etapas": dict(Counter(e["seq"] for e in es if e.get("seq")).most_common()),
             "filas": dict(Counter(str(e["fila"]) for e in es if e.get("fila") is not None).most_common()),
             "como": dict(Counter(e.get("como") or "sem volta" for e in es).most_common()),
-            "exemplos": [{k: e.get(k) for k in ("em", "fase", "seq", "fila", "mapa", "gatilho", "aviso", "telaAntes")
+            "reclassificadas": sum(1 for e in es if e.get("reclassificado")),
+            "exemplos": [{k: e.get(k) for k in ("em", "fase", "seq", "fila", "mapa", "gatilho", "aviso", "telaAntes", "reclassificado")
                           if e.get(k) not in (None, "")}
                          | ({"camada": next((c for c in e.get("camadas") or [] if c.get("expande")), (e.get("camadas") or [None])[0])}
                             if e.get("camadas") else {})
@@ -126,7 +156,26 @@ def agrupar(expansoes):
     return sorted(out, key=lambda g: (g["porEle"], -g["n"], g["origem"]))
 
 
-def texto(grupos, descartados=0, tortas=0, total=0):
+def agrupar_trilha(expansoes):
+    """motivos que pediriam expansão com o client normal JÁ à vista (a trilha do "fim"): sem este bloco, o que acontece durante
+    uma expansão pedida por ele some no grupo dele (16/10/2026: as seleções assistidas ficaram escondidas em "pedidas por ele")"""
+    grupos = {}
+    for e in expansoes:
+        for t in e.get("trilha") or []:
+            if not isinstance(t, dict):
+                continue
+            chave = (motivo_curto(t.get("motivo")), t.get("origem") or "?")
+            g = grupos.setdefault(chave, {"motivo": chave[0], "origem": chave[1], "n": 0, "fases": Counter(), "dentro": Counter(), "exemplos": []})
+            g["n"] += 1
+            g["fases"][t.get("fase") or "?"] += 1
+            g["dentro"]["pedidas por você" if e.get("porEle") else "automáticas"] += 1
+            g["exemplos"] = (g["exemplos"] + [{"em": e.get("em"), "aposS": round((t.get("aposMs") or 0) / 1000, 1), "fase": t.get("fase"),
+                                                "expansao": e.get("origem")}])[-3:]
+    out = [{**g, "fases": dict(g["fases"].most_common()), "dentro": dict(g["dentro"].most_common())} for g in grupos.values()]
+    return sorted(out, key=lambda g: (-g["n"], g["motivo"]))
+
+
+def texto(grupos, descartados=0, tortas=0, total=0, trilha=None):
     linhas = [f"{total} expansão(ões) do compacto em {len(grupos)} grupo(s)"
               + (f"; {descartados} evento(s) descartado(s) no plugin (fila cheia sem coletor)" if descartados else "")
               + (f"; {tortas} linha(s) ilegível(is)" if tortas else "")]
@@ -139,10 +188,19 @@ def texto(grupos, descartados=0, tortas=0, total=0):
             linhas.append(f"    {dur}; sem volta {g['semVolta']}; fases {g['fases']}"
                           + (f"; etapas {g['etapas']}" if g["etapas"] else "") + (f"; filas {g['filas']}" if g["filas"] else ""))
             linhas.append(f"    voltou: {g['como']}")
+            if g.get("reclassificadas"):
+                linhas.append(f"    {g['reclassificadas']} reclassificada(s) de 'por-ele': o clique foi antes de o compacto voltar (no client normal)")
             for ex in g["exemplos"]:
                 cam = ex.pop("camada", None)
                 linhas.append(f"    ex.: {json.dumps(ex, ensure_ascii=False)}"
                               + (f" camada {json.dumps({k: cam.get(k) for k in ('tag', 'classes', 'titulo', 'botoes') if cam.get(k)}, ensure_ascii=False)}" if cam else ""))
+    if trilha:
+        linhas.append(f"\n== TAMBÉM APARECERAM COM O CLIENT NORMAL JÁ À VISTA (trilha das expansões): {sum(g['n'] for g in trilha)}")
+        for g in trilha:
+            linhas.append(f"- {g['n']}x [{g['origem']}] {g['motivo']}")
+            linhas.append(f"    fases {g['fases']}; durante expansões {g['dentro']}")
+            for ex in g["exemplos"]:
+                linhas.append(f"    ex.: {json.dumps(ex, ensure_ascii=False)}")
     return "\n".join(linhas)
 
 
@@ -156,14 +214,15 @@ def main():
     eventos, tortas = ler(a.arquivo)
     expansoes, descartados = juntar(eventos, a.desde)
     grupos = agrupar(expansoes)
+    trilha = agrupar_trilha(expansoes)
     if a.json:
-        print(json.dumps({"total": len(expansoes), "descartados": descartados, "tortas": tortas, "grupos": grupos},
+        print(json.dumps({"total": len(expansoes), "descartados": descartados, "tortas": tortas, "grupos": grupos, "trilha": trilha},
                          ensure_ascii=False, indent=1))
     elif not eventos:
         print(f"nenhuma expansão registrada ainda ({a.arquivo}): o coletor grava depois de reiniciado com a rota "
               f"/compacto/expansoes; ao vivo: window.__lolClient.compacto.expansoes() pelo tools/cdp.mjs eval")
     else:
-        print(texto(grupos, descartados, tortas, len(expansoes)))
+        print(texto(grupos, descartados, tortas, len(expansoes), trilha))
     return 0
 
 

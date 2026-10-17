@@ -25,7 +25,8 @@ _ID = re.compile(r"^[\w-]{1,40}$")
 TEXTO = {"em": 40, "fase": 40, "seq": 60, "motivo": 200, "origem": 30, "gatilho": 60, "telaAntes": 30, "tela": 30, "como": 80,
          "gatilhoCamada": 60, "aviso": 140}
 NUMERO = ("fila", "mapa", "duracaoMs", "esperouFocoMs", "reencolhidas", "versao", "gestoHaMs")
-BOOL = ("porEle", "custom", "camadasCortadas")
+# gestoAntesDaTela / gestoForaDaCamada: por que um pedido de tela virou tela-sozinha (etapa 3 de roadmap/2026-10-17-telas-que-expandem.md)
+BOOL = ("porEle", "custom", "camadasCortadas", "gestoAntesDaTela", "gestoForaDaCamada")
 JANELA = {"larg", "alt", "x", "y", "telaX", "telaY", "zoom", "compacta", "minimizada", "monitor"}
 
 

@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada } from '../pengu/compacto/modo.js';
-import { criarRoteador, descreverCamadas, CLASSE, SEQ_FIRME_MS, GESTO_MS, MODAIS } from '../pengu/compacto/index.js';
+import { criarRoteador, descreverCamadas, CLASSE, SEQ_FIRME_MS, GESTO_MS, MODAIS, gestoDentro, GRACA_VOLTA_MS, ESPERA_SESSAO_MS } from '../pengu/compacto/index.js';
 import { criarRegistroExpansoes, textoSeguro, descreverCamada, DEPOIS_MS, REENVIO_MS, ROTA, enviarAoColetor } from '../pengu/compacto/expansoes.js';
 import { h } from '../pengu/compacto/comum.js';
 
@@ -172,6 +172,12 @@ const J = x => JSON.stringify(x);
   caso('texto: Riot ID e nome somem (vira "…"), palavras de interface ficam', !/xerekton|br1|fulaninho/i.test(t1 + t2)
     && t1 === '… para a partida' && t2 === '… saiu da partida' && t3 === 'aceitar', J([t1, t2, t3]));
   caso('texto: só nome/número/símbolo = vazio', textoSeguro('ZéDoLoL 1234 #tag') === '' && textoSeguro('') === '' && textoSeguro(null) === '');
+  // etapa 3 de roadmap/2026-10-17-telas-que-expandem.md: os modais de 15/10 (aviso de punição e erro do Vanguard) com nome no registro
+  const tv = ['Atualização de feedback', 'Feedback de denúncia', 'GGWP', 'ERRO NO VANGUARD: VAN 152', 'Atualização de Placar!',
+    'Aplicamos uma penalidade a Fulaninho em uma das suas partidas recentes'].map(x => textoSeguro(x));
+  caso('texto: feedback, denúncia, GGWP, Vanguard e placar entram no vocabulário; o nome do jogador punido segue fora',
+    J(tv) === J(['atualização de feedback', 'feedback de denúncia', 'ggwp', 'erro no vanguard …', 'atualização de placar', '… uma penalidade a … em uma das suas partidas …'])
+      && !/fulaninho/i.test(J(tv)), J(tv));
   const doc = novoDoc();
   const modal = el(doc, 'div', 'modal lol-uikit-dialog-frame-root', [
     el(doc, 'lol-uikit-dialog-frame', 'dialog-frame', [
@@ -203,6 +209,7 @@ const J = x => JSON.stringify(x);
   const compactoAntes = s.rot.estado().efetivo;
   s.wrapper.append(el(s.doc, 'div', 'modal', [el(s.doc, 'h4', 'header', ['Nova recompensa'])]));
   s.rel.avancar(5000);
+  s.modal = 'modal';   // a vigia vê o modal aberto (desde a etapa 6 de 17/10, modal que some volta ao compacto sozinho)
   s.rot.aoModal('modal');
   await tick();
   caso('regra 7: nada sai antes de ler a janela "depois" (DEPOIS_MS)', s.eventos().length === 0 && s.rot.estado().efetivo === 'expandido', J(s.eventos()));
@@ -215,6 +222,7 @@ const J = x => JSON.stringify(x);
   caso('regra 7: janela antes (420, compacta) e depois (1280)', e?.janelaAntes?.larg === 420 && e.janelaAntes.compacta === true
     && e.janelaDepois?.larg === 1280 && e.janelaDepois.compacta === false, J([e?.janelaAntes, e?.janelaDepois]));
   s.rel.avancar(20000);
+  s.modal = null;      // fecha junto da virada de fase (antes do prazo da volta da etapa 6)
   await s.ir('Matchmaking');
   await s.passar(10);
   const [f] = s.fim();
@@ -222,6 +230,107 @@ const J = x => JSON.stringify(x);
     s.rot.estado().efetivo === 'compacto' && f && f.id === e.id && f.como === 'automático' && f.fase === 'Matchmaking' && f.tela === 'fila'
     && f.duracaoMs === 20000 + DEPOIS_MS + 50, J(f));
   caso('envio: só a rota do coletor, por POST (nenhuma LCU)', s.col.chamadas.every(([c, m]) => c === ROTA && m === 'POST') && ROTA === '/compacto/expansoes', J(s.col.chamadas));
+}
+
+// ---------- 2b. volta ao compacto quando a janela da Riot fecha (etapa 6 do roadmap/2026-10-17-telas-que-expandem.md) ----------
+// reconstrução de 15/10/2026 12:35 (registro): EndOfGame compacto, o aviso de punição ("Feedback de denúncia", botão "GGWP") abre
+// como div.modal > lol-uikit-full-page-backdrop; antes ele ficava no client normal até o Lobby (61 s) depois do GGWP
+{
+  const s = await pronto('EndOfGame');
+  const aviso = el(s.doc, 'div', 'modal', [el(s.doc, 'lol-uikit-full-page-backdrop', ''), el(s.doc, 'div', 'dialog-alert', [el(s.doc, 'h4', 'header', ['Feedback de denúncia']),
+    el(s.doc, 'button', 'button', ['GGWP'])])]);
+  s.wrapper.append(aviso);
+  s.modal = 'modal';
+  s.rot.aoModal('modal');
+  await s.passar();
+  const e = s.inicio()[0];
+  const cam = e?.camadas?.find(c => c.expande);
+  caso('aviso de punição (15/10 12:35): expande pela regra 7 e o registro nomeia título e botão (feedback de denúncia, ggwp)',
+    e && e.origem === 'modal' && cam?.titulo === 'feedback de denúncia' && J(cam?.botoes) === J(['ggwp']), J(e));
+  s.rel.avancar(10000);
+  const aindaAberto = s.rot.estado().efetivo;
+  aviso.remove(); s.modal = null;       // ele clicou GGWP
+  s.rel.avancar(1000); await tick();
+  const aos1 = s.rot.estado().efetivo;
+  s.rel.avancar(1000); await tick();
+  await s.passar(10);
+  const f = s.fim()[0];
+  caso('GGWP: com o modal aberto segue expandido; 1,5 s depois de fechar volta ao pós-jogo compacto e o fim diz "a janela da Riot fechou"',
+    aindaAberto === 'expandido' && aos1 === 'expandido' && s.rot.estado().efetivo === 'compacto' && s.rot.estado().tela === 'posjogo'
+      && f && f.id === e.id && f.como === 'a janela da Riot fechou', J([aindaAberto, aos1, s.rot.estado().efetivo, f]));
+
+  // dois modais em sequência (o Vanguard abriu 2 dialog-alert): o 2º em 300 ms não deixa piscar
+  const v = await pronto('Lobby');
+  v.modal = 'modal'; v.rot.aoModal('modal'); await v.passar();
+  v.modal = null; v.rel.avancar(300); await tick();
+  v.modal = 'modal'; v.rel.avancar(5000); await tick();
+  caso('modal some e outro abre em 300 ms: fica expandido (sem 420 -> 1280 -> 420)', v.rot.estado().efetivo === 'expandido' && !v.fim().length, J(v.eventos()));
+  v.modal = null; v.rel.avancar(2000); await tick();
+  caso('...e volta quando o segundo também fecha', v.rot.estado().efetivo === 'compacto', J(v.rot.estado()));
+
+  // ele pediu o client normal no meio: não volta sozinho
+  const p = await pronto('Lobby');
+  p.modal = 'modal'; p.rot.aoModal('modal'); await p.passar();
+  p.rot.expandir('Ctrl+K'); await tick();
+  p.modal = null; p.rel.avancar(5000); await tick();
+  caso('pedido dele de client normal no meio: o modal fechar não devolve o compacto', p.rot.estado().efetivo === 'expandido', J(p.rot.estado()));
+
+  // ready check (regra própria: contagem do aceite / popup da Riot): nunca volta por esta regra
+  const r = await pronto('ReadyCheck');
+  r.modal = 'modal'; r.rot.aoModal('modal'); r.rel.avancar(1100); await r.passar();
+  const rcExp = r.rot.estado().efetivo;
+  r.modal = null; r.rel.avancar(5000); await tick();
+  caso('ready check: modal desconhecido expande e não volta pela regra da etapa 6', rcExp === 'expandido' && r.rot.estado().efetivo === 'expandido', J([rcExp, r.rot.estado()]));
+
+  // revisão adversarial de 17/10: a janela da Riot que só se escondeu (getClientRects vazio = "fechou" para a etapa 6) e reaparece
+  // sem nó novo no wrapper (a vigia só vê filho adicionado, então ninguém chama aoModal): até GRACA_VOLTA_MS depois da volta a
+  // releitura segue e expande de novo. Antes da correção a camada ficava por cima da janela da Riot
+  const o = await pronto('EndOfGame');
+  o.modal = 'modal'; o.rot.aoModal('modal'); await o.passar();
+  o.modal = null; o.rel.avancar(2000); await tick();
+  const voltouO = o.rot.estado().efetivo;
+  o.modal = 'modal'; o.rel.avancar(600); await tick();     // reaparece; nenhum aoModal
+  const deNovo = o.rot.estado();
+  caso('janela da Riot que volta a aparecer logo depois da volta (sem nó novo): expande de novo pela regra 7',
+    voltouO === 'compacto' && deNovo.efetivo === 'expandido' && /janela própria \(modal\)/.test(deNovo.forcado || ''), J([voltouO, deNovo]));
+  o.modal = null; o.rel.avancar(4000); await tick();       // some de novo: não volta outra vez (nada de laço 420 -> 1280 -> 420)
+  const semLaco = o.rot.estado().efetivo;
+  await o.ir('Lobby'); await o.passar(10);
+  caso('...e, se some de novo, fica no client normal até a virada de destino (sem laço); a fase nova volta ao compacto',
+    semLaco === 'expandido' && o.rot.estado().efetivo === 'compacto', J([semLaco, o.rot.estado()]));
+  // depois do prazo a releitura para (a vigia de nó novo segue valendo): nada de leitura do DOM a cada 250 ms para sempre
+  const q = await pronto('EndOfGame');
+  q.modal = 'modal'; q.rot.aoModal('modal'); await q.passar();
+  q.modal = null; q.rel.avancar(2000); await tick();
+  q.rel.avancar(GRACA_VOLTA_MS + 500); await tick();
+  q.modal = 'modal'; q.rel.avancar(600); await tick();
+  caso('passado GRACA_VOLTA_MS, a releitura parou (só a vigia de nó novo expande)', q.rot.estado().efetivo === 'compacto', J(q.rot.estado()));
+}
+
+// ---------- 2c. seleção: sessão vazia e prazo da sessão (revisão adversarial de 17/10/2026) ----------
+{
+  // personalizada no SR (fila 0 = null, mapa 11): a sessão vazia da saída da seleção também não vira "fila desconhecida"
+  const s = await pronto('Lobby');
+  await s.ir('ChampSelect', { gameData: { queue: { id: 0 }, isCustomGame: true }, map: { id: 11 } });
+  const montou = s.rot.estado().tela;
+  s.rot.aoSessao({}); await tick();
+  await s.passar();
+  caso('personalizada no SR: sessão vazia antes da fase sair não expande ("fila desconhecida")',
+    montou === 'champselect' && s.rot.estado().efetivo === 'compacto' && s.rot.estado().tela === 'champselect' && !s.inicio().length, J([montou, s.rot.estado(), s.eventos()]));
+
+  // ChampSelect -> None -> ChampSelect em menos de ESPERA_SESSAO_MS (ex.: duas seleções assistidas seguidas): o prazo da 1ª não
+  // encurta o da 2ª (que tem 2 × ESPERA_SESSAO_MS inteiros)
+  const t = await pronto('None');
+  await t.ir('ChampSelect');
+  t.rel.avancar(1500); await tick();
+  await t.ir('None');
+  t.rel.avancar(300); await tick();
+  await t.ir('ChampSelect');
+  t.rel.avancar(2 * ESPERA_SESSAO_MS - 300); await tick();
+  const noPrazo = t.rot.estado().efetivo;
+  t.rel.avancar(500); await tick();
+  caso('prazo da sessão da seleção recomeça a cada entrada: segue esperando até 2 × ESPERA_SESSAO_MS e só então expande',
+    noPrazo === 'compacto' && t.rot.estado().efetivo === 'expandido' && /desconhecida/.test(t.rot.estado().motivo || ''), J([noPrazo, t.rot.estado()]));
 }
 
 // ---------- 3. fase sem tela compacta (ARAM) e trilha enquanto expandido ----------
@@ -246,6 +355,57 @@ const J = x => JSON.stringify(x);
   const e2 = s2.inicio()[0];
   caso('fase: seleção do ARAM saindo da fila compacta -> origem fase, fila 450, mapa 12, tela de antes "fila"',
     e2 && e2.origem === 'fase' && !e2.porEle && e2.fila === 450 && e2.mapa === 12 && e2.fase === 'ChampSelect' && e2.telaAntes === 'fila', J(e2));
+}
+
+// ---------- 3b. espectador (etapa 2 do roadmap/2026-10-17-telas-que-expandem.md) ----------
+// reconstrução de 16/10/2026 20:48:19–20:51:41 (medidor, hora local): ele clicou em "Assistir" no client normal (gesto 771 ms antes)
+// e o client entrou em ChampSelect com o gameflow em 420/11 e a sessão da seleção com isSpectating, localPlayerCellId -1,
+// GAME_STARTING; a sessão do gameflow esvaziou ~180 ms antes da fase None. Depois a de ARAM Mayhem (2400/12), que foi a InProgress
+{
+  const assistida = { isSpectating: true, localPlayerCellId: -1, isCustomGame: true, benchEnabled: false, timer: { phase: 'GAME_STARTING', totalTimeInPhase: 170000 } };
+  const s = await pronto('None', { comGesto: 771 });
+  await s.ir('ChampSelect', sessao(420, 11));       // 20:48:19,150: o gameflow chega antes; a tela da seleção monta
+  const montou = s.rot.estado().tela;
+  s.rot.aoSelecao(assistida); await tick();          // 20:48:19,185: a sessão da seleção diz espectador
+  await s.passar();
+  const e = s.inicio()[0];
+  caso('espectador 16/10 20:48 (ranqueada de um amigo, 420/11): expande pela fase, motivo "assistindo", nunca "por-ele" (gesto de 771 ms era o Assistir)',
+    montou === 'champselect' && e && e.origem === 'fase' && e.porEle === false && /assistindo a uma partida/.test(e.motivo) && e.fila === 420 && e.telaAntes === 'champselect', J([montou, e]));
+  s.rot.aoSessao({}); await tick();                  // 20:48:23,57: sessão vazia
+  const naoTrilhou = !s.fim().length;
+  s.rel.avancar(180);
+  await s.ir('None');                                // 20:48:23,75
+  await s.passar(10);
+  const f = s.fim()[0];
+  caso('espectador: a sessão vazia não vira "fila desconhecida" na trilha; a fase None volta ao lobby compacto',
+    naoTrilhou && f && f.id === e.id && f.fase === 'None' && f.tela === 'lobby' && !f.trilha.some(t => /desconhecida/.test(t.motivo)), J(f));
+
+  // 20:48:28: ARAM Mayhem assistido até o fim da partida
+  await s.ir('ChampSelect', sessao(2400, 12));
+  s.rot.aoSelecao({ ...assistida, timer: { phase: 'GAME_STARTING', totalTimeInPhase: 89000 } }); await tick();
+  await s.passar();
+  const fases = [];
+  for (const fase of ['GameStart', 'InProgress', 'WaitingForStats', 'EndOfGame']) { await s.ir(fase); await s.passar(10); fases.push(`${fase}:${s.rot.estado().efetivo}:${s.rot.estado().tela}`); }
+  const nada = fases.every(x => /:expandido:null$/.test(x));
+  await s.ir('None'); await s.passar(10);
+  caso('espectador: GameStart/InProgress/fim da partida assistida ficam no client normal (nada da tela "partida em andamento"); None zera e volta ao lobby',
+    nada && s.rot.estado().efetivo === 'compacto' && s.rot.estado().tela === 'lobby', J(fases));
+
+  // ranqueada dele (15/10 13:50): isSpectating false, localPlayerCellId 4 -> compacto do começo ao fim
+  const r = await pronto('ReadyCheck');
+  r.rot.aoSessao(sessao(420)); await tick();
+  await r.ir('ChampSelect');
+  r.rot.aoSelecao({ isSpectating: false, localPlayerCellId: 4, isCustomGame: false, timer: { phase: 'PLANNING' } }); await tick();
+  const seq = [r.rot.estado().tela];
+  for (const fase of ['GameStart', 'InProgress']) { await r.ir(fase); seq.push(r.rot.estado().tela); }
+  caso('ranqueada dele (isSpectating false, cellId 4): seleção e partida seguem compactas, nenhuma expansão',
+    J(seq) === J(['champselect', 'jogo', 'jogo']) && !r.inicio().length, J([seq, r.eventos()]));
+  // localPlayerCellId -1 sozinho (início de seleção real sem a sessão completa) nunca vira espectador
+  const c = await pronto('ReadyCheck');
+  c.rot.aoSessao(sessao(420)); await tick();
+  await c.ir('ChampSelect');
+  c.rot.aoSelecao({ localPlayerCellId: -1, myTeam: [] }); await tick();
+  caso('localPlayerCellId -1 sem isSpectating não tira a ranqueada do compacto', c.rot.estado().tela === 'champselect' && !c.inicio().length, J(c.eventos()));
 }
 
 // ---------- 4. celebração do fim de partida (etapa) ----------
@@ -351,6 +511,7 @@ const J = x => JSON.stringify(x);
     e && e.origem === 'tela-sozinha' && e.porEle === false && e.gatilho === 'tela lobby' && e.aviso === 'lobby personalizado abrindo o client normal', J(e));
 
   const s2 = await pronto('Lobby', { comGesto: GESTO_MS - 200 });
+  s2.rel.avancar(5000);   // a tela montou e o clique dele veio depois (etapa 3 de 17/10: clique de antes da tela não conta)
   s2.telas.lobby.ctx.avisar('Fulaninho#BR1: chat indisponível');
   s2.telas.lobby.ctx.expandir();
   await s2.passar();
@@ -362,6 +523,38 @@ const J = x => JSON.stringify(x);
   s3.telas.lobby.ctx.expandir();
   await s3.passar();
   caso('clique velho (> GESTO_MS) não conta como dele', s3.inicio()[0]?.origem === 'tela-sozinha', J(s3.eventos()));
+
+  // etapa 3 de roadmap/2026-10-17-telas-que-expandem.md: o gesto só conta se for dentro da camada e depois de a tela montar
+  // reconstrução de 16/10/2026 20:48:14–20:48:19: ele expandiu pelo ⤢ (client normal), clicou em "Assistir" no client da Riot
+  // (fora da camada, que nem existia) ~650 ms antes de a tela da seleção montar; a tela pediu o client normal 771 ms depois do clique
+  const s4 = await pronto('None', { comGesto: null });
+  await s4.ir('ChampSelect', sessao(420, 11));
+  s4.rel.avancar(120);
+  s4.gesto = { haMs: 771, dentro: false };
+  s4.telas.champselect.ctx.expandir();
+  await s4.passar();
+  const e4 = s4.inicio()[0];
+  caso('16/10 20:48 (Assistir no client normal 771 ms antes, tela montada 120 ms antes): tela-sozinha, porEle false, gesto anotado antes da tela e fora da camada',
+    e4 && e4.origem === 'tela-sozinha' && e4.porEle === false && e4.gestoHaMs === 771 && e4.gestoAntesDaTela === true && e4.gestoForaDaCamada === true, J(e4));
+  const s5 = await pronto('Lobby');
+  s5.rel.avancar(5000);
+  s5.gesto = { haMs: 700, dentro: false };    // clique fora da camada há 700 ms (ex.: botão flutuante, outra janela da página)
+  s5.telas.lobby.ctx.expandir();
+  await s5.passar();
+  caso('clique fora da camada há 700 ms + tela que expande = tela-sozinha', s5.inicio()[0]?.origem === 'tela-sozinha' && s5.inicio()[0]?.gestoForaDaCamada === true, J(s5.inicio()));
+  const s6 = await pronto('Lobby');
+  s6.rel.avancar(5000);
+  s6.gesto = { haMs: 120, dentro: true };     // clique no botão da tela
+  s6.telas.lobby.ctx.expandir();
+  await s6.passar();
+  caso('clique no botão da tela (dentro da camada, depois de montar) = por-ele', s6.inicio()[0]?.origem === 'por-ele' && s6.inicio()[0]?.porEle === true
+    && !('gestoForaDaCamada' in s6.inicio()[0]) && !('gestoAntesDaTela' in s6.inicio()[0]), J(s6.inicio()));
+  // gestoDentro: o alvo do clique dentro do #lc-compacto
+  const cam = { contains: x => x === 'botao' };
+  const docG = { getElementById: id => (id === 'lc-compacto' ? cam : null) };
+  caso('gestoDentro: alvo na camada = true; fora, sem camada ou sem alvo = false',
+    gestoDentro(docG, 'botao') === true && gestoDentro(docG, 'assistir') === false && gestoDentro({ getElementById: () => null }, 'botao') === false
+      && gestoDentro(docG, null) === false && gestoDentro(docG, cam) === true);
 }
 
 // ---------- 8. partida: expansão que esperou o foco ----------
@@ -382,6 +575,7 @@ const J = x => JSON.stringify(x);
 
   // botão de uma tela clicado por ele com a expansão adiada pelo foco: o gesto vale no pedido, não 7 s depois
   const s2 = await pronto('InProgress', { comGesto: 200 });
+  s2.rel.avancar(1000);   // o clique veio depois de a tela montar
   s2.foco = false;
   s2.telas.jogo.ctx.expandir();
   await tick();

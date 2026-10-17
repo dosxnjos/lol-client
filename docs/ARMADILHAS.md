@@ -179,6 +179,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   chave no roteador (`tela:fila`), então o botão expandir e a regra 7 não zeram sozinhos entre eles: `aoFase` zera ao sair do
   ready check. Um `div.modal` no ready check é conferido de novo em 1 s (`MODAL_RC_MS`) antes de expandir: o conteúdo
   `.ready-check-root-element` pode chegar depois da folga da vigia, que só vê filhos diretos do wrapper.
+- **O socket do plugin perde só a rota do ready check** (15/10/2026 12:01, 12:36, 12:37: nenhum evento de
+  `/lol-matchmaking/v1/ready-check` no `aceite.js`, o de fase vivo; causa não medida) → sem contagem, o compacto expandia. Desde
+  17/10 o `aceite.js` relê por GET na fase `ReadyCheck` (`criarReleituraRC`: já e a cada 1 s, até 12 leituras); no `coletor.log`
+  aparece `origem=get` quando foi o GET que salvou. GET que falha nunca vira `avaliar(null)` (zeraria o "não aceitar").
 - **No compacto o popup da Riot do ready check fica embaixo da camada** → quem responde é o `#lc-aceite` ("aceitar agora" /
   "não aceitar"). Sem ele em 1,5 s o client expande e fica expandido até o fim daquele ready check (`semContagem` trava),
   para a janela não encolher embaixo do cursor indo ao popup.
@@ -373,6 +377,30 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   sozinhas (lobby personalizado, seleção com banco, chat sem coletor, pós-jogo sem saída). O registro das expansões
   separa pelo último `pointerdown` ou Enter/Espaço da página, medido no pedido (`GESTO_MS`, 1,5 s): sem gesto = `tela-sozinha`.
   Expansão que não passa pelo `resolver()` (mudar `est.efetivo` direto) some do registro; `est.forcado` sem `forcar()` sai sem origem.
+  - o gesto era escutado no documento inteiro: em 16/10/2026 o clique em "Assistir" **no client normal** (771 ms antes) contou como
+    pedido da tela da seleção que montou depois. Desde 17/10 só conta clique **dentro do `#lc-compacto`** e **depois de a tela montar**
+    (`medirGesto`, `gestoDentro`); tela que cede à Riot sozinha usa `ctx.ceder(motivo)`, nunca `ctx.expandir()`.
+- **Assistir a um amigo não é `WatchInProgress`** (medido em 16/10/2026) → o client entra em `ChampSelect` (timer `GAME_STARTING` =
+  atraso do espectador, 75–170 s) e depois `InProgress`. Sinal: `isSpectating` da `/lol-champ-select/v1/session` (`aoSelecao` do
+  roteador); nunca `localPlayerCellId === -1` sozinho (aparece numa seleção real ainda sem sessão). Sem isso o compacto encolhia na
+  "partida em andamento" de quem ele só assistia ([plano](../roadmap/2026-10-17-telas-que-expandem.md), etapa 2; o coletor ainda
+  liga voz/painel na partida assistida: etapa 7, card à parte).
+- **"Seleção da fila desconhecida" piscando na ranqueada** (15/10/2026 13:50) → o GET da sessão do gameflow na entrada da seleção
+  travou ~6 s (client ocupado) e o prazo de 2 s esgotou. A fila do ready check vale na seleção (`aoFase`), o prazo relê a sessão uma
+  vez e espera 2 × `ESPERA_SESSAO_MS`. E a sessão do gameflow chega **vazia** ~150–190 ms antes de a fase sair da seleção: `aoSessao`
+  ignora sessão sem fila nem mapa em `ChampSelect` (quem decide a saída é a fase). Prova: `teste-compacto.mjs` § 4b.
+- **Regra 7 deixava o client normal até a virada de destino** (aviso de punição "Feedback de denúncia"/"GGWP", 15/10/2026) → hoje o
+  roteador relê `modalAberto()` a cada 250 ms e, sem camada da regra 7 por 1,5 s (`VOLTA_MODAL_MS`), volta ao compacto (fora do ready
+  check e das Configurações pelo painel). E `esperar` com `est.forcado` expande na hora (antes a espera ignorava a regra 7).
+  "Fechou" ali = nenhuma camada **visível** (`getClientRects` vazio conta como fechada) e a vigia só vê **nó novo**: janela da Riot que
+  só se esconde e reaparece sem nó novo ficaria embaixo da camada. Por isso a releitura segue `GRACA_VOLTA_MS` (5 s) depois da volta,
+  e reaparecer = expande e não volta mais até a virada de destino (sem laço 420 → 1280 → 420). Prova: `teste-compacto-expansoes.mjs` § 2b.
+- **Seleção assistida pisca o compacto por um instante** (limite aceito em 17/10/2026) → a sessão do gameflow (420/11) costuma chegar
+  antes da sessão da seleção (`isSpectating`), a tela compacta da seleção monta e logo cede. Esperar a sessão da seleção só na
+  entrada vinda de `None` (as 3 seleções `None → ChampSelect` do medidor de 15–16/10 eram todas assistidas; a dele vem de
+  `ReadyCheck`/`Lobby`) tiraria a piscada sem tocar na ranqueada; não feito sem o OK dele.
+- **Relógios diferentes nos registros** → `dados\expansoes-compacto.jsonl` em UTC (`...Z`); `dados\medicao-compacto-*.jsonl` e
+  `dados\coletor.log` em hora local sem fuso. "16/10 23:45 UTC" no registro = "20:45" no medidor (o relatório já converte).
 - **POST ao coletor com mais de 64 KiB volta 400 e, reenviado igual, trava a fila** (15/10/2026) → o `servidor_local.do_POST`
   lê no máximo 65536 bytes e corta o resto (JSON torto). Lote do plugin ao coletor vai por tamanho (`expansoes.LOTE_BYTES`),
   nunca só por contagem, e 400/413 tira o lote da fila em vez de repetir.

@@ -731,9 +731,16 @@ function aoSessao(st, s) {
   st.ultimoEvento = _relogio.agora();
   const l = lerSessao(s);
   if (!l) throw new Error('sessão da seleção sem myTeam');
-  // seleção com banco (ARAM), espectador ou sem seleção: a tela é da Riot
+  // seleção com banco (ARAM), espectador ou sem seleção: a tela é da Riot. Sai como automática (ctx.ceder), nunca pelo ctx.expandir()
+  // do clique dele (16/10/2026: o espectador entrava no registro como "por-ele"); o espectador normalmente nem chega aqui, o
+  // roteador já expandiu pelo isSpectating (etapa 2 de roadmap/2026-10-17-telas-que-expandem.md)
   if (s.benchEnabled || s.isSpectating || l.fila === 450) {
-    if (!st.saiu) { st.saiu = true; ctx.avisar('esta seleção (banco/ARAM ou espectador) é da tela da Riot: abrindo o client normal'); ctx.expandir(); }
+    if (!st.saiu) {
+      st.saiu = true;
+      ctx.avisar('esta seleção (banco/ARAM ou espectador) é da tela da Riot: abrindo o client normal');
+      const motivo = s.isSpectating ? 'assistindo a uma partida: tela da Riot' : 'seleção com banco (ARAM e outros): tela da Riot';
+      ctx.ceder(motivo);
+    }
     return;
   }
   if (st.sessao?.id !== s.id || st.l?.me !== l.me) { st.escolhido = 0; st.spAberto = null; st.skins = null; st.runa = null; }

@@ -20,6 +20,7 @@
 //   vivo()               // false depois de desmontada (trabalho async confere antes de pintar)
 //   falhou(erro)         // erro tratado pela tela que deve devolver o client normal
 //   expandir()           // clique do Gabriel que leva ao client normal (ex.: "ver análise completa")
+//   ceder(motivo)        // a tela é da Riot (decisão da tela, sem clique dele): client normal até a virada de destino
 //   avisar(msg, erro)    // aviso curto dentro da camada
 // }
 // Linhas que não se cruzam (plano § guardrails): busca só por clique e pelos freios (freios.js); nome oculto nunca;
@@ -50,11 +51,31 @@ export const ESPERA_SEQ_MS = 2000;
 // '' (nenhuma etapa) depois da honra: a Riot troca de etapa ou de fase em < 1 s; parado mais que isso, expande (revisão de
 // 14/10/2026: sem prazo, a tela ficava presa no PreEndOfGame e escondia o que a Riot abrisse por baixo)
 export const ESPERA_POS_HONRA_MS = 4000;
+// etapas que a Riot passa sozinha (etapa 5 do roadmap/2026-10-17-telas-que-expandem.md): medido em 15/10/2026 que a
+// challenge-level-up-celebration vira EndOfGame sozinha em ~2,5 e ~6,7 s, sem clique, e nenhum front da Riot posta o "complete" dela.
+// Fica na tela de antes (a da honra) até ESPERA_CELEBRACAO_MS; passou disso, expande como as outras. A vinheta com botão
+// (.vignette-celebration) segue na regra 7. missions-celebration e ranked-celebration continuam expandindo (SEQ_FIRME_MS).
+// Reverte: tirar o nome da lista
+export const SEQ_SOZINHAS = ['challenge-level-up-celebration'];
+export const ESPERA_CELEBRACAO_MS = 10000;
 export const MOTIVO_CONFIG_RIOT = 'configurações da Riot (abertas por você)'; // forcar() e a volta comparam o mesmo texto
 export const CLASSE = 'lc-modo-compacto'; // no <html> enquanto a camada está à vista (lc-compacto é a chave ligada)
-export const ESPERA_SESSAO_MS = 2000; // champ select sem a sessão do gameflow lida: espera isso e expande
+// champ select sem a sessão do gameflow lida: espera isso, relê a sessão uma vez (GET), espera de novo e só então expande (4 s no
+// total). Etapa 1 do roadmap/2026-10-17-telas-que-expandem.md: em 15/10 13:50 o GET da entrada travou ~6 s (client ocupado) e a
+// ranqueada expandiu 1 s por "fila desconhecida"
+export const ESPERA_SESSAO_MS = 2000;
 export const CONTAGEM_MS = 1500; // ready check sem o #lc-aceite visto até aqui: expande (o popup da Riot fica embaixo da camada)
 export const MODAL_RC_MS = 1000; // "modal" no ready check: confere de novo depois disso antes de expandir (aoModal)
+// volta ao compacto quando a janela da Riot que expandiu (regra 7) fecha (etapa 6 do roadmap/2026-10-17-telas-que-expandem.md): em
+// 15/10/2026, depois do "GGWP" no aviso de punição, ele ficou no client normal o pós-jogo inteiro (40 e 61 s) e chegou a desligar e
+// religar o compacto. Confere a cada CONFERE_MODAL_MS; nenhuma camada da regra 7 por VOLTA_MODAL_MS (cobre 2 modais em sequência,
+// como o Vanguard) = volta. Não vale no ready check (regra própria) nem nas Configurações pelo painel (volta própria)
+export const VOLTA_MODAL_MS = 1500;
+export const CONFERE_MODAL_MS = 250;
+// depois dessa volta, a releitura segue por GRACA_VOLTA_MS: "fechou" aqui = nenhuma camada visível (getClientRects vazio conta como
+// fechada) e a vigia só vê nó novo; janela da Riot que só se escondeu e reaparece sem nó novo expande de novo (revisão adversarial de
+// 17/10/2026). Reverte: 0
+export const GRACA_VOLTA_MS = 5000;
 // registro das expansões (passo 15): ctx.expandir() até GESTO_MS depois de um clique/tecla dele conta como dele; o aviso da tela
 // (ctx.avisar) até AVISO_MS antes da expansão vai junto no evento (só palavras do vocabulário de interface: textoSeguro)
 export const GESTO_MS = 1500;
@@ -72,9 +93,21 @@ export const MODAIS = {
   conhecidos: ['.ready-check-root-element'],
 };
 
-// info: {lida, fila, mapa, custom, aceiteLigado, aceiteVivo, aceiteManual} -> {tipo: 'tela'|'jogo'|'expandir'|'esperar', tela?, motivo?}
+// espectador (etapa 2 do roadmap/2026-10-17-telas-que-expandem.md): medido em 16/10/2026 que assistir a um amigo entra na fase
+// ChampSelect (timer GAME_STARTING = atraso do espectador) e depois InProgress, nunca WatchInProgress. O sinal é o isSpectating da
+// /lol-champ-select/v1/session (nunca localPlayerCellId -1 sozinho: aparece no início de uma seleção real ainda sem sessão)
+export const MOTIVO_ASSISTINDO = 'assistindo a uma partida: tela da Riot';
+export const FASES_POS = ['WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
+
+// info: {lida, fila, mapa, custom, aceiteLigado, aceiteVivo, aceiteManual, assistindo} -> {tipo: 'tela'|'jogo'|'expandir'|'esperar', tela?, motivo?}
 // aceiteVivo === false: o aceite.js falhou no init (index.js: seguro() devolveu null); undefined = não sei, vale o ligado
 export function destinoDaFase(fase, info = {}) {
+  // partida assistida: a seleção, a partida e o fim dela são telas da Riot do começo ao fim (antes das regras de fila/mapa)
+  if (info.assistindo) {
+    if (fase === 'ChampSelect') return { tipo: 'expandir', motivo: MOTIVO_ASSISTINDO };
+    if (FASES_JOGO.includes(fase)) return { tipo: 'jogo', motivo: 'assistindo a uma partida: client normal embaixo do jogo' };
+    if (FASES_POS.includes(fase)) return { tipo: 'expandir', motivo: 'fim de uma partida assistida: tela da Riot' };
+  }
   switch (fase) {
     case 'None': case 'Lobby': return { tipo: 'tela', tela: 'lobby' };
     case 'Matchmaking': return { tipo: 'tela', tela: 'fila' };
@@ -102,7 +135,8 @@ export function destinoDaFase(fase, info = {}) {
     // mesma chave (tela:jogo): o "⤢ expandir" dele vale a partida inteira e o botão RECONECTAR aparece pela fase
     // Só Summoner's Rift e ARAM (revisão adversarial, achado 10): TFT, Arena e outros modos não têm "teu time × inimigos" nem
     // campeão do jogador e voltam ao de antes do passo 14 (client normal). Mapa não lido = tela de jogo (não espera nem bloqueia).
-    // Espectador já é outra fase (WatchInProgress -> default: client normal)
+    // Espectador NÃO é outra fase (medido em 16/10/2026: assistir passa por ChampSelect e InProgress): vem pelo info.assistindo,
+    // tratado no topo desta função
     case 'GameStart': case 'InProgress': case 'Reconnect': {
       const mapa = Number(info.mapa) || 0;
       if (info.lida && mapa && !MAPAS_JOGO.includes(mapa)) return { tipo: 'jogo', motivo: `partida no mapa ${mapa} (TFT, Arena...): client normal` };
@@ -121,6 +155,9 @@ export function destinoDaFase(fase, info = {}) {
       // '' = nenhuma etapa: na entrada (a honra vem ~0,1 s depois) ou no fim da honra (a Riot já vai trocar); parado, expande
       if (!info.seq) return info.seqEsgotou ? { tipo: 'expandir', motivo: 'fim de partida sem etapa da Riot: tela da Riot' }
         : { tipo: 'esperar', motivo: 'entre duas etapas do fim de partida' };
+      // etapa que a Riot passa sozinha: espera na tela de antes; parada demais (seqLonga), expande
+      if (SEQ_SOZINHAS.includes(info.seq)) return info.seqLonga ? { tipo: 'expandir', motivo: `etapa do fim de partida da Riot (${info.seq}) parada: tela da Riot` }
+        : { tipo: 'esperar', motivo: `etapa ${info.seq}: a Riot passa sozinha` };
       return info.seqFirme ? { tipo: 'expandir', motivo: `etapa do fim de partida da Riot (${info.seq}): celebração e telas novas expandem` }
         : { tipo: 'esperar', motivo: `etapa ${info.seq}: esperando ver se fica` };
     }
@@ -135,6 +172,15 @@ export function destinoDaFase(fase, info = {}) {
 // jogo abrindo. Prova: teste-compacto-lateral.mjs ("corrida ⚙ fechada + GameStart")
 export function geometriaAtiva(e) {
   return !!e && e.efetivo === 'compacto' && !FASES_JOGO.includes(e.fase);
+}
+
+// o alvo de um clique/tecla está na camada do compacto (#lc-compacto: coluna, lateral, configurações)? Clique no client normal da
+// Riot (ex.: "Assistir", 16/10/2026) não é pedido de uma tela compacta (etapa 3 de roadmap/2026-10-17-telas-que-expandem.md)
+export function gestoDentro(doc, alvo) {
+  try {
+    const c = doc?.getElementById?.('lc-compacto');
+    return !!c && !!alvo && (c === alvo || !!c.contains?.(alvo));
+  } catch { return false; }
 }
 
 // algo espera o foco (est.adiado) e a página tem o foco agora -> reavaliar (iniciarCompacto relê a cada FOCO_RELE_MS)
@@ -259,8 +305,8 @@ export function criarRoteador({
   geometria = null, lateral = null,
   // passo 15 (opcionais): registro das expansões (expansoes.criarRegistroExpansoes) e as camadas da Riot à vista (descreverCamadas)
   registro = null, camadasRiot = () => [],
-  // ms desde o último clique/tecla dele na página (null = não sei): separa o ctx.expandir() de um botão da tela do que a tela
-  // chama sozinha (lobby personalizado, seleção com banco, sem coletor...)
+  // último clique/tecla dele na página: ms desde ele (número) ou {haMs, dentro} (dentro = o alvo estava na camada do compacto);
+  // null = não sei. Separa o ctx.expandir() de um botão da tela do que a tela chama sozinha (lobby personalizado, sem coletor...)
   gestoHaMs = () => null,
 }) {
   const reencolhidas = []; // quando a Riot devolveu a janela a 1280 com a tela compacta montada (ms)
@@ -277,7 +323,41 @@ export function criarRoteador({
   const podeMexer = () => est.fase !== 'InProgress' || focoOk();
   const adiar = oque => { if (est.adiado !== oque) { if (!est.adiado) est.adiadoDesde = agora(); est.adiado = oque; log(`partida: ${oque} espera o foco no client (jogo na frente)`); } };
   // est.forcado com a origem dele (registro das expansões, passo 15): modal | erro-tela | janela-voltou | sem-riotinvoke | config-riot
-  const forcar = (motivo, tipo, camadaRiot = null) => { est.forcado = motivo; est.forcadoTipo = tipo; est.forcadoCamada = camadaRiot; return motivo; };
+  const forcar = (motivo, tipo, camadaRiot = null) => {
+    est.forcado = motivo; est.forcadoTipo = tipo; est.forcadoCamada = camadaRiot;
+    if (tipo === 'modal') armarVoltaModal(); else pararVoltaModal();
+    return motivo;
+  };
+  // etapa 6 de 17/10: a janela da Riot que expandiu sumiu por VOLTA_MODAL_MS -> zera o forcado e volta (nenhuma chamada à LCU: lê o DOM)
+  let timerVoltaModal = null, semModalDesde = null;
+  function pararVoltaModal() { if (timerVoltaModal) { pararRepetir(timerVoltaModal); timerVoltaModal = null; } semModalDesde = null; }
+  // sempre recomeça: a releitura de depois da volta (conferirReaparecer) usa o mesmo timer e não pode segurar a vez da nova janela
+  function armarVoltaModal() { pararVoltaModal(); timerVoltaModal = repetir(conferirVoltaModal, CONFERE_MODAL_MS); }
+  function conferirVoltaModal() {
+    // outro motivo tomou conta (virada de destino, Configurações, ▣ dele), ele pediu o client normal (⤢) ou é o ready check: não volta
+    if (est.forcadoTipo !== 'modal' || !est.forcado || est.override === 'expandido' || est.fase === 'ReadyCheck' || est.voltaModalGasta) { pararVoltaModal(); return; }
+    if (est.efetivo !== 'expandido') { semModalDesde = null; return; } // a expansão ainda espera o foco (partida)
+    let d;
+    try { d = modalAberto(); } catch { d = 'sem leitura'; }
+    if (d) { semModalDesde = null; return; }
+    if (semModalDesde == null) { semModalDesde = agora(); return; }
+    if (agora() - semModalDesde < VOLTA_MODAL_MS) return;
+    pararVoltaModal();
+    est.forcado = null; est.forcadoTipo = null; est.forcadoCamada = null;
+    est.volta = 'a janela da Riot fechou';
+    log('a janela da Riot fechou: volta ao compacto');
+    resolver();
+    if (GRACA_VOLTA_MS > 0) { const desde = agora(); timerVoltaModal = repetir(() => conferirReaparecer(desde), CONFERE_MODAL_MS); }
+  }
+  // GRACA_VOLTA_MS depois da volta: a janela da Riot que só se escondeu e reaparece sem nó novo (a vigia não vê) expande de novo
+  function conferirReaparecer(desde) {
+    if (agora() - desde > GRACA_VOLTA_MS || est.forcado) { pararVoltaModal(); return; }
+    if (est.efetivo !== 'compacto') return; // tela ainda carregando ou ⤢ dele: nada a cobrir agora
+    let d;
+    try { d = modalAberto(); } catch { d = null; }
+    // reapareceu: expande e, até a virada de destino, não volta mais por esta regra (sem 420 -> 1280 -> 420 em laço)
+    if (d) { pararVoltaModal(); est.voltaModalGasta = true; forcarPorModal(d); }
+  }
   const coluna = () => tamanho(cfg.compacto?.larg, cfg.compacto?.alt)[0];
   const compactar = () => janela.compactar(cfg.compacto?.larg, cfg.compacto?.alt, extra());
   // sobre ({esq, dir}, da geometria): as larguras do passo em curso, não as mais novas (a geometria cresce com a esquerda VELHA e
@@ -306,12 +386,15 @@ export function criarRoteador({
     // sem DOM ou sem a 1ª leitura da fase: não mexe em nada (recarga com a janela pequena não pisca)
     if (!est.pronto || !est.faseLida) return { modo: 'nada' };
     const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual(), semContagem: semContagem(),
-      ...infoSequencia() });
+      assistindo: !!est.assistindo, ...infoSequencia() });
     const chave = d.tipo === 'esperar' ? est.chave : `${d.tipo}:${d.tela || ''}`;
     // virou de destino: a escolha manual e a regra 7 valem só até aqui ("lembrar o modo por fase", plano)
-    if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; est.configRiot = false; }
+    if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; est.configRiot = false; est.voltaModalGasta = false; }
     est.destino = d;
     const quer = est.override || (c.inicioCompacto ? 'compacto' : 'expandido');
+    // esperar com uma tela da Riot por cima (regra 7) expande na hora: a espera de até 10 s da celebração de desafio (etapa 5 de
+    // 17/10) deixava a vinheta com botão embaixo da camada. A chave não muda na espera, então o forcado vale até a virada de destino
+    if (d.tipo === 'esperar' && est.forcado && est.efetivo === 'compacto') return { modo: 'expandido', motivo: est.forcado, origem: est.forcadoTipo || 'forcado' };
     if (d.tipo === 'esperar') return { modo: 'esperar', motivo: d.motivo };
     if (d.tipo === 'expandir') return { modo: 'expandido', motivo: d.motivo, daFase: true, origem: 'fase' };
     // 'jogo' desde o passo 14 só sai para partida fora de SR/ARAM (TFT, Arena...): client normal embaixo do jogo, como antes
@@ -335,7 +418,7 @@ export function criarRoteador({
   function infoSequencia() {
     if (est.fase !== 'PreEndOfGame') return {};
     return { seq: est.seq ? est.seq.nome : undefined, seqFirme: !!est.seq && agora() - est.seq.desde >= SEQ_FIRME_MS,
-      seqEsgotou: prazoSemEtapa() === 0 };
+      seqLonga: !!est.seq && agora() - est.seq.desde >= ESPERA_CELEBRACAO_MS, seqEsgotou: prazoSemEtapa() === 0 };
   }
 
   // sem etapa (não lida ou ''): ms até expandir (0 = esgotou); null = há etapa com nome. '' antes da honra conta como
@@ -387,6 +470,17 @@ export function criarRoteador({
   const POR_ELE = ['por-ele', 'config-riot', 'desligado', 'padrao'];
   // motivo que vai ao registro: o de erro de tela leva e.message cru (pode trazer dado da LCU); ali só o vocabulário de interface
   const motivoSeguro = m => String(m ?? '').replace(/^erro na tela compacta \((.*)\)$/s, (_, x) => `erro na tela compacta (${textoSeguro(x, 100) || '…'})`);
+  // o gesto agora, em relação à tela montada (etapa 3 de roadmap/2026-10-17-telas-que-expandem.md): {haMs, antes, fora} | null.
+  // antes = foi antes de a tela atual montar (16/10/2026: o clique em "Assistir" no client normal, 771 ms antes, contou como pedido da
+  // tela da seleção que montou depois); fora = o alvo não estava na camada do compacto
+  function medirGesto() {
+    let g;
+    try { g = gestoHaMs(); } catch { g = null; }
+    const haMs = typeof g === 'number' ? g : g && typeof g.haMs === 'number' ? g.haMs : null;
+    if (haMs == null || !Number.isFinite(haMs)) return null;
+    const desde = typeof est.telaDesde === 'number' ? agora() - est.telaDesde : null;
+    return { haMs, antes: desde != null && haMs > desde, fora: !!g && typeof g === 'object' && g.dentro === false };
+  }
   function notarExpansao(antes) {
     const gatilho = est.gatilho, volta = est.volta, gestoPedido = est.gestoPedido;
     const transicao = antes.efetivo !== est.efetivo && (est.efetivo === 'expandido' || est.efetivo === 'compacto');
@@ -398,16 +492,19 @@ export function criarRoteador({
         let origem = est.origem || 'desconhecida', porEle = POR_ELE.includes(origem), gesto = null;
         // ctx.expandir() de uma tela: por ele só com clique/tecla dele há pouco (medido no pedido, não na expansão que
         // esperou o foco); sem isso foi a tela sozinha
+        let gestoFora = false, gestoAntes = false;
         if (origem === 'por-ele' && /^tela /.test(gatilho || '')) {
-          if (gestoPedido !== undefined) gesto = gestoPedido;
-          else { try { gesto = gestoHaMs(); } catch { gesto = null; } }
-          porEle = gesto != null && gesto <= GESTO_MS;
+          const g = gestoPedido !== undefined ? gestoPedido : medirGesto();
+          gesto = g ? g.haMs : null; gestoFora = !!g?.fora; gestoAntes = !!g?.antes;
+          // dele só com clique/tecla há pouco, dentro da camada e depois de a tela montar
+          porEle = !!g && g.haMs <= GESTO_MS && !g.antes && !g.fora;
           if (!porEle) origem = 'tela-sozinha';
         }
         const info = est.info || {};
         const aviso = est.ultimoAviso && agora() - est.ultimoAviso.em <= AVISO_MS ? est.ultimoAviso.msg : null;
         registro.abrir({
           origem, porEle, gatilho: gatilho || (origem === 'padrao' ? 'config: iniciar no compacto desligado' : null), gestoHaMs: gesto,
+          ...(gestoAntes ? { gestoAntesDaTela: true } : {}), ...(gestoFora ? { gestoForaDaCamada: true } : {}),
           motivo: motivoSeguro(est.motivo), aviso,
           fase: est.fase ?? null, seq: est.fase === 'PreEndOfGame' || est.fase === 'WaitingForStats' ? est.seq?.nome ?? null : null,
           fila: info.fila ?? null, mapa: info.mapa ?? null, custom: !!info.custom, telaAntes: antes.tela,
@@ -435,9 +532,9 @@ export function criarRoteador({
   }
 
   function aplicar(a) {
-    if (a.modo === 'esperar' && est.destino?.tipo === 'esperar' && !timerSessao) {
-      // sessão do champ select não chegou: não encolhe nem expande no escuro por até ESPERA_SESSAO_MS
-      timerSessao = agendar(() => { timerSessao = null; if (!est.info.lida && est.fase === 'ChampSelect') { est.info = { lida: true }; resolver(); } }, ESPERA_SESSAO_MS);
+    if (a.modo === 'esperar' && est.destino?.tipo === 'esperar' && !timerSessao && est.fase === 'ChampSelect') {
+      // sessão do champ select não chegou: não encolhe nem expande no escuro por até 2 × ESPERA_SESSAO_MS (relê no meio)
+      timerSessao = agendar(esgotouSessao, ESPERA_SESSAO_MS);
     }
     if (a.modo === 'nada' || a.modo === 'esperar') return;
     if (a.modo === 'compacto') {
@@ -529,6 +626,39 @@ export function criarRoteador({
     if (saindo) gancho('aoEfetivo', a.modo);
   }
 
+  // prazo da sessão do gameflow na seleção (etapa 1 de 17/10): o 1º esgotar relê a sessão (só GET) e espera mais um prazo; o 2º
+  // segue a regra "campo ausente = expandir" ({lida:true} sem fila -> "seleção da fila desconhecida")
+  function esgotouSessao() {
+    timerSessao = null;
+    if (est.info.lida || est.fase !== 'ChampSelect') return;
+    if (!est.sessaoRelida) {
+      est.sessaoRelida = true;
+      try {
+        Promise.resolve(lcu('GET', '/lol-gameflow/v1/session'))
+          .then(r => { if (r?.ok && r.json && typeof r.json === 'object' && est.fase === 'ChampSelect') aoSessao(r.json); })
+          .catch(e => log('releitura da sessão falhou', e));
+      } catch (e) { log('releitura da sessão falhou', e); }
+      timerSessao = agendar(esgotouSessao, ESPERA_SESSAO_MS);
+      return;
+    }
+    est.info = { lida: true };
+    resolver();
+  }
+
+  // /lol-gameflow/v1/session (evento ou GET)
+  function aoSessao(s) {
+    const novo = infoDaSessao(s);
+    const v = est.info;
+    if (v.lida && v.fila === novo.fila && v.mapa === novo.mapa && v.custom === novo.custom) return;
+    // a sessão chega vazia ~150-190 ms antes de a fase sair da seleção (medido em 16/10/2026): quem decide a saída é o evento de
+    // fase. Sessão com fila ou mapa (troca de fila de verdade) segue valendo
+    // (fila OU mapa já lidos: a personalizada no SR tem fila 0 = null e mapa 11; revisão adversarial de 17/10/2026)
+    if (est.fase === 'ChampSelect' && v.lida && (v.fila || v.mapa) && novo.fila == null && novo.mapa == null) return;
+    est.info = novo;
+    if (timerSessao && est.info.lida) { limpar(timerSessao); timerSessao = null; }
+    resolver();
+  }
+
   // a lateral pede larguras (px CSS). Compacto à vista: a janela muda na hora (geometria: cresce antes de andar, anda antes de
   // encolher, prende ao monitor, coluna parada); senão só guarda e vale quando o compacto voltar. -> true se mudou
   // opcoes {soSemMover, aoRecusar}: abertura automática (decisão 1): a geometria confere com a tela relida e, se teria de mover
@@ -590,6 +720,7 @@ export function criarRoteador({
     const t = ++token;
     const m = { nome, mod, token: t, fase: est.fase, partes, timers: new Set(), intervalos: new Set(), subs: new Map(), ctx: null };
     montagem = m;
+    est.telaDesde = agora(); // gesto de antes disto não é pedido desta tela (medirGesto)
     const vivo = () => montagem === m && m.token === token;
     const seguro = fn => (...args) => {
       if (!vivo()) return undefined;
@@ -628,6 +759,8 @@ export function criarRoteador({
       },
       falhou: e => falhou(e, t),
       expandir: () => expandirPorTi(`tela ${nome}`),
+      // a tela cede à Riot sozinha (seleção com banco, espectador): automática no registro, nunca "por ele" (etapa 2 de 17/10)
+      ceder: motivo => { if (!vivo()) return; forcar(String(motivo || `a tela ${nome} cedeu à Riot`).slice(0, 120), 'tela-sozinha'); est.gatilho = `tela ${nome}`; resolver(); },
       avisar: (msg, erro) => { anotarAviso(msg); return avisar(msg, erro); },
       dormir: ms => dormir(agendar, ms),
     };
@@ -704,7 +837,7 @@ export function criarRoteador({
     est.override = 'expandido';
     est.gatilho = typeof gatilho === 'string' ? gatilho.slice(0, 60) : 'ele';
     // o gesto vale no instante do pedido (na partida sem foco a expansão de verdade sai depois)
-    try { est.gestoPedido = gestoHaMs(); } catch { est.gestoPedido = null; }
+    est.gestoPedido = medirGesto();
     resolver();
   }
 
@@ -744,11 +877,20 @@ export function criarRoteador({
     aoFase(fase) {
       if (est.faseLida && fase === est.fase) return;
       est.faseLida = true; // null (leitura falhou de vez) também conta: destino "fase desconhecida" = client normal
-      if (fase === 'ChampSelect') est.info = { lida: false }; // a sessão de antes pode ser de outra fila
+      // a sessão de antes pode ser de outra fila; a do ready check não (a seleção que sai dele é a mesma partida: etapa 1 de
+      // 17/10/2026, decisão 2 do plano; reverte com um registro de seleção de fila diferente da do ready check)
+      if (fase === 'ChampSelect') {
+        if (!(est.fase === 'ReadyCheck' && est.info.lida && est.info.fila)) est.info = { lida: false };
+        est.sessaoRelida = false;
+      }
+      // o prazo da sessão é de uma entrada só: ChampSelect -> None -> ChampSelect em < 2 s encurtava o da 2ª (revisão de 17/10)
+      if (timerSessao) { limpar(timerSessao); timerSessao = null; }
       // saiu do ready check (outro não aceitou: Matchmaking de novo): "⤢ expandir" e regra 7 daquele ready check não
       // seguem para a busca. Matchmaking e ReadyCheck têm a mesma chave (tela:fila) desde 14/10/2026; antes o "ceder"
       // trocava a chave e zerava isso. Entrar no ready check não zera: expandido por ti segue expandido no aceite
       if (est.fase === 'ReadyCheck' && fase !== 'ReadyCheck') { est.override = null; est.forcado = null; }
+      // partida assistida acabou (ou nunca houve): fora da seleção/partida/fim, o espectador zera (etapa 2 de 17/10)
+      if (['None', 'Lobby', 'Matchmaking', 'ReadyCheck'].includes(fase)) est.assistindo = false;
       est.fase = fase;
       // ready check novo: confere a contagem do aceite de novo depois de CONTAGEM_MS (semContagem)
       if (timerContagem) { limpar(timerContagem); timerContagem = null; }
@@ -769,16 +911,20 @@ export function criarRoteador({
       if (est.seq && est.seq.nome === n) return;
       est.seq = { nome: n, desde: agora() };
       if (n === SEQ_HONRA) est.honraVista = true;
+      else if (SEQ_SOZINHAS.includes(n)) agendarSeq(ESPERA_CELEBRACAO_MS + 50);
       else if (n) agendarSeq(SEQ_FIRME_MS + 50);
       else { const p = prazoSemEtapa(); if (p !== null) agendarSeq(p + 50); } // '' também tem prazo (sem ele, ficava preso)
       resolver();
     },
-    aoSessao(s) {
-      const novo = infoDaSessao(s);
-      const v = est.info;
-      if (v.lida && v.fila === novo.fila && v.mapa === novo.mapa && v.custom === novo.custom) return;
-      est.info = novo;
-      if (timerSessao && est.info.lida) { limpar(timerSessao); timerSessao = null; }
+    aoSessao,
+    // /lol-champ-select/v1/session (evento ou GET; só leitura): isSpectating marca a partida assistida (etapa 2 de 17/10). Sem o
+    // campo (Delete, GET 404, sessão torta) nada muda; nas fases de partida e de fim o sinal da seleção vale até a fase zerar
+    aoSelecao(s) {
+      if (!s || typeof s !== 'object' || typeof s.isSpectating !== 'boolean') return;
+      if (FASES_JOGO.includes(est.fase) || FASES_POS.includes(est.fase)) return;
+      if (!!est.assistindo === s.isSpectating) return;
+      est.assistindo = s.isSpectating;
+      log(`seleção: ${s.isSpectating ? 'assistindo a uma partida' : 'partida própria'}`);
       resolver();
     },
     aoModal(desc) {
@@ -894,10 +1040,10 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     },
     log: (...a) => console.log('[lol-client] compacto:', ...a),
   });
-  let gesto = null; // último clique/tecla dele na página (ms do relógio): ligarDom escuta na captura
+  let gesto = null; // último clique/tecla dele na página {em (ms do relógio), dentro (na camada)}: ligarDom escuta na captura
   rot = criarRoteador({
     cfg, janela, camada, geometria, lateral, registro, camadasRiot: () => descreverCamadas(doc),
-    gestoHaMs: () => (gesto == null ? null : Date.now() - gesto),
+    gestoHaMs: () => (gesto == null ? null : { haMs: Date.now() - gesto.em, dentro: gesto.dentro }),
     carregarTela: nome => import(TELAS[nome]),
     servicos: { context, ...servicos, lateral },
     assinar: (uri, cb) => context.socket.observe(uri, cb),
@@ -938,6 +1084,10 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   }
 
   const lerSessao = () => lcuPadrao('GET', '/lol-gameflow/v1/session').then(r => { if (r.ok && r.json) rot.aoSessao(r.json); });
+  // espectador (etapa 2 de 17/10): isSpectating da sessão da seleção, por evento e por um GET na entrada (só leitura; não segura a
+  // tela da seleção: a ranqueada nunca espera por este GET)
+  const lerSelecao = () => lcuPadrao('GET', '/lol-champ-select/v1/session').then(r => { if (r.ok && r.json) rot.aoSelecao(r.json); }).catch(() => {});
+  context.socket.observe('/lol-champ-select/v1/session', msg => { if (msg?.eventType !== 'Delete' && msg?.data) rot.aoSelecao(msg.data); });
   // etapa do fim de partida (honra x celebrações, passo 12): evento + leitura ao entrar no PreEndOfGame
   const lerSequencia = () => lcuPadrao('GET', '/lol-pre-end-of-game/v1/currentSequenceEvent')
     .then(r => { if (r.ok && r.json && typeof r.json === 'object') rot.aoSequencia(String(r.json.name ?? '')); });
@@ -961,14 +1111,14 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     const f = msg?.data;
     if (typeof f !== 'string') return;
     rot.aoFase(f);
-    if (f === 'ChampSelect') lerSessao();
+    if (f === 'ChampSelect') { lerSessao(); lerSelecao(); }
     if (f === 'PreEndOfGame') { lerSequencia().catch(() => {}); vigiarSequencia(); }
   });
   context.socket.observe('/lol-gameflow/v1/session', msg => { if (msg?.eventType !== 'Delete' && msg?.data) rot.aoSessao(msg.data); });
   // fase inicial (recarga do plugin no meio de qualquer fase); falha = tenta de novo, a fase do socket também chega
   const lerFase = async (tentativa = 0) => {
     const r = await lcuPadrao('GET', '/lol-gameflow/v1/gameflow-phase');
-    if (typeof r.json === 'string') { rot.aoFase(r.json); if (r.json === 'ChampSelect') lerSessao(); if (r.json === 'PreEndOfGame') { lerSequencia().catch(() => {}); vigiarSequencia(); } return; }
+    if (typeof r.json === 'string') { rot.aoFase(r.json); if (r.json === 'ChampSelect') { lerSessao(); lerSelecao(); } if (r.json === 'PreEndOfGame') { lerSequencia().catch(() => {}); vigiarSequencia(); } return; }
     if (tentativa < 5) setTimeout(() => lerFase(tentativa + 1), 3000);
     else rot.aoFase(null);
   };
@@ -984,8 +1134,9 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     vigia.ligar();
     // registro das expansões: o ctx.expandir() de uma tela até GESTO_MS depois disto é dele (só o instante; nada do evento sai).
     // Tecla só Enter/Espaço (aciona botão): digitar no chat do compacto não é pedido de expandir (revisão adversarial 15/10)
-    doc.addEventListener('pointerdown', () => { gesto = Date.now(); }, true);
-    doc.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') gesto = Date.now(); }, true);
+    // o alvo vale junto (só se estava na camada do compacto: etapa 3 de 17/10/2026; nada do evento sai além disso)
+    doc.addEventListener('pointerdown', e => { gesto = { em: Date.now(), dentro: gestoDentro(doc, e?.target) }; }, true);
+    doc.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') gesto = { em: Date.now(), dentro: gestoDentro(doc, e?.target) }; }, true);
     // popup do ready check que volta (aceite manual): sai da tela compacta e expande
     if (typeof MutationObserver !== 'undefined')
       new MutationObserver(() => { if (rot.estado().fase === 'ReadyCheck') rot.reavaliar(); })

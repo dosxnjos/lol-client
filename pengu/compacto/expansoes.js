@@ -24,6 +24,7 @@ honra honrar honrou maestria campeao campeoes skin skins essencia essencias loja
 evento eventos passe temporada temporadas anuncio noticia noticias novidade novidades bem vindo vinda parabens
 configuracoes configuracao som video jogabilidade interface atalhos idioma conta perfil privacidade termos politica
 penalidade penalidades restricao restricoes banimento suspensao alerta comportamento chat mensagem mensagens
+feedback denuncia denuncias ggwp placar vanguard
 replay replays download tempo minutos minuto segundos segundo hora horas dias dia
 clash torneio torneios ingresso equipe inscricao dodge abandonou abandono saiu desconectado
 voce sua seu esta estao foi foram sera ser ter tem tens pode podem deve precisa precisam quer deseja tens

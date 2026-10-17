@@ -118,7 +118,7 @@ function telaFalsa(nome, { lancar = false, rejeitar = false, comAtualizar = fals
   return t;
 }
 
-function cenario({ cfg: cfgOver = {}, telas, telasExtra = {}, larguraInicial = 1280, alturaInicial = 720, modal = null, contagemNaTela, foco = true } = {}) {
+function cenario({ cfg: cfgOver = {}, telas, telasExtra = {}, larguraInicial = 1280, alturaInicial = 720, modal = null, contagemNaTela, foco = true, lcu: lcuOpt } = {}) {
   const cfg = { compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 640 }, aceite: { ligado: true }, ...cfgOver };
   const pedidos = [];
   // como o client: o ResizeTo muda a largura que a página mede
@@ -144,6 +144,8 @@ function cenario({ cfg: cfgOver = {}, telas, telasExtra = {}, larguraInicial = 1
     aceiteManual: () => doc.documentElement.classList.contains('lc-aceite-manual'),
     aoAplicar: e => aplicados.push(e.efetivo), contagemNaTela, temFoco: () => s.foco,
     agendar: rel.agendar, limpar: rel.limpar, repetir: rel.repetir, pararRepetir: rel.limpar, agora: rel.agoraMs,
+    // LCU da releitura da sessão (etapa 1 do plano de 17/10); sem ela, uma que nunca responde (nada sai para o client)
+    lcu: lcuOpt || (() => new Promise(() => {})),
   });
   s.janela = janela;
   s.foto = () => ({ efetivo: s.rot.estado().efetivo, tela: s.rot.estado().tela, janelaCompacta: janela.ehCompacta(),
@@ -220,6 +222,12 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('destino: personalizada no SR vai para a tela 3', destinoDaFase('ChampSelect', { ...info, fila: 3100, custom: true }).tela === 'champselect');
   caso('destino: fila desconhecida no SR expande', destinoDaFase('ChampSelect', { ...info, fila: 490 }).tipo === 'expandir');
   caso('destino: seleção sem sessão lida espera', destinoDaFase('ChampSelect', { lida: false }).tipo === 'esperar');
+  // etapa 2 de 2026-10-17: espectador (isSpectating) é tela da Riot do começo ao fim, mesmo na fila 420/SR e sem a sessão do gameflow
+  const ass = f => { const d = destinoDaFase(f, { ...info, assistindo: true }); return `${d.tipo}:${d.tela || ''}`; };
+  caso('destino espectador: seleção expande (mesmo 420/SR e sem sessão lida); partida = client normal (jogo); fim expande; lobby segue',
+    ass('ChampSelect') === 'expandir:' && destinoDaFase('ChampSelect', { lida: false, assistindo: true }).tipo === 'expandir'
+      && ['GameStart', 'InProgress', 'Reconnect'].every(f => ass(f) === 'jogo:') && ['WaitingForStats', 'PreEndOfGame', 'EndOfGame'].every(f => ass(f) === 'expandir:')
+      && ass('Lobby') === 'tela:lobby', ['ChampSelect', 'InProgress', 'EndOfGame'].map(ass).join());
   caso('destino: flex e normal (440, 400) vão para a tela 3', ['440', '400'].every(f => destinoDaFase('ChampSelect', { ...info, fila: Number(f) }).tela === 'champselect'));
   caso('destino: ReadyCheck com aceite desligado expande', destinoDaFase('ReadyCheck', { ...info, aceiteLigado: false }).tipo === 'expandir');
   caso('destino: ReadyCheck com o popup devolvido (aceite manual) expande', destinoDaFase('ReadyCheck', { ...info, aceiteManual: true }).tipo === 'expandir');
@@ -302,6 +310,45 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const z = Number(CSS_MODO.match(/#lc-compacto \{[^}]*z-index:(\d+)/)?.[1]);
   caso('camada com z-index 100000, abaixo do #lc-aceite (100002)', z === 100000 && z < 100002);
   caso('CSS: runas, selo e pós-jogo grande somem só com html.lc-modo-compacto', /html\.lc-modo-compacto #lc-runas, html\.lc-modo-compacto #lc-winrate, html\.lc-modo-compacto #lc-posjogo \{ display:none !important; \}/.test(CSS_MODO));
+}
+
+{ // etapa 5 do roadmap/2026-10-17-telas-que-expandem.md: celebração de desafio não expande. Medido em 15/10/2026 (12:34:58 ->
+  // 12:35:08 e 14:23:03 -> 14:23:13): honor-vote -> challenge-level-up-celebration por ~2,5 e ~6,7 s -> EndOfGame, sem clique dele
+  const tamanhos = s => s.pedidos.filter(p => p.name === 'Window.ResizeTo').map(p => p.params.join('x'));
+  const s = cenario(); s.rot.marcarPronto();
+  await s.ir('WaitingForStats'); await s.ir('PreEndOfGame');
+  s.rot.aoSequencia('honor-vote'); await tick();
+  s.rel.avancar(8000); await tick();
+  s.rot.aoSequencia('challenge-level-up-celebration'); await tick();
+  s.rel.avancar(6700); await tick();
+  const durante = s.foto();
+  await s.ir('EndOfGame');
+  caso('15/10 (celebração de desafio 6,7 s entre a honra e o EndOfGame): fica na tela da honra e vai ao pós-jogo sem 1280',
+    durante.efetivo === 'compacto' && durante.tela === 'honra' && s.foto().tela === 'posjogo' && !tamanhos(s).includes('1280x720'), JSON.stringify([durante, tamanhos(s)]));
+  const p = cenario(); p.rot.marcarPronto();
+  await p.ir('WaitingForStats'); await p.ir('PreEndOfGame');
+  p.rot.aoSequencia('honor-vote'); await tick();
+  p.rot.aoSequencia('challenge-level-up-celebration'); await tick();
+  p.rel.avancar(9900); await tick();
+  const aos99 = p.foto().efetivo;
+  p.rel.avancar(200); await tick();
+  caso('celebração de desafio parada 10 s: expande (tela da Riot)', aos99 === 'compacto' && p.foto().efetivo === 'expandido' && /parada/.test(p.rot.estado().motivo || ''),
+    JSON.stringify([aos99, p.foto(), p.rot.estado().motivo]));
+  const v = cenario(); v.rot.marcarPronto();
+  await v.ir('WaitingForStats'); await v.ir('PreEndOfGame');
+  v.rot.aoSequencia('honor-vote'); await tick();
+  v.rot.aoSequencia('challenge-level-up-celebration'); await tick();
+  v.rel.avancar(1000); await tick();
+  v.modal = 'vignette-celebration';
+  v.rot.aoModal('vignette-celebration'); await tick();
+  caso('vinheta da Riot (botão "próximo") durante a espera da celebração: expande na hora (regra 7)',
+    v.foto().efetivo === 'expandido' && /vignette-celebration/.test(v.rot.estado().motivo || ''), JSON.stringify([v.foto(), v.rot.estado().motivo]));
+  const m = cenario(); m.rot.marcarPronto();
+  await m.ir('WaitingForStats'); await m.ir('PreEndOfGame');
+  m.rot.aoSequencia('honor-vote'); await tick();
+  m.rot.aoSequencia('missions-celebration'); await tick();
+  m.rel.avancar(700); await tick();
+  caso('missions-celebration (o front da Riot conclui depois da escolha) segue expandindo em 600 ms', m.foto().efetivo === 'expandido', JSON.stringify(m.foto()));
 }
 
 { // fim de partida (passo 12): honra compacta, celebração firme expande, vazia não pisca, sem etapa lida expande
@@ -854,8 +901,11 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const antes = s.pedidos.length;
   await s.ir('ChampSelect');
   const esperando = s.foto().efetivo === 'compacto' && s.foto().tela === 'fila' && s.pedidos.length === antes;
-  s.rel.avancar(ESPERA_SESSAO_MS + 10);
-  caso('seleção sem a sessão do gameflow: espera na tela da fila sem mexer na janela e expande depois de 2 s', esperando && s.foto().efetivo === 'expandido' && !s.foto().janelaCompacta);
+  s.rel.avancar(ESPERA_SESSAO_MS + 10); await tick();
+  const aos2 = s.foto().efetivo === 'compacto' && s.pedidos.length === antes;
+  s.rel.avancar(ESPERA_SESSAO_MS + 10); await tick();
+  // etapa 1 de 17/10: 2 prazos (relê a sessão no meio); antes expandia aos 2 s
+  caso('seleção sem a sessão do gameflow: espera na tela da fila sem mexer na janela e expande depois de 2 prazos (4 s)', esperando && aos2 && s.foto().efetivo === 'expandido' && !s.foto().janelaCompacta);
   const s2 = cenario();
   s2.rot.marcarPronto();
   await s2.ir('Lobby');
@@ -866,6 +916,76 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   await s3.ir('Lobby', sessao(450, 12)); // sessão velha de ARAM
   await s3.ir('ChampSelect', sessao(3100, 11, true));
   caso('personalizada no SR: tela 3 (sessão nova vence a velha)', s3.foto().tela === 'champselect');
+}
+
+// ---------- 4b. seleção sem "fila desconhecida" passageira (etapa 1 do roadmap/2026-10-17-telas-que-expandem.md) ----------
+{ // reconstrução da ranqueada de 15/10/2026 13:50 (medidor + registro, linha 15): busca 420 às 13:50:11 (a sessão do gameflow
+  // chega pelo socket com fila 420/mapa 11), ready check às 13:50:13,8, aceite às 13:50:22, seleção às 13:50:24,25 e o GET da
+  // sessão travado ~6 s (o client ocupado na entrada da seleção); a sessão só chegou às 13:50:27,26. Antes: expandia aos 2 s com
+  // "seleção da fila desconhecida" e voltava 0,96 s depois
+  const gets = [];
+  const s = cenario({ lcu: (m, u) => { gets.push(`${m} ${u}`); return new Promise(() => {}); } }); // GET pendurado
+  s.rot.marcarPronto();
+  await s.ir('Lobby');
+  await s.ir('Matchmaking', sessao(420));
+  s.rel.avancar(2300);
+  await s.ir('ReadyCheck');
+  s.rel.avancar(10450);
+  const antes = s.aplicados.length;
+  await s.ir('ChampSelect');                       // sem sessão nova: o GET travou
+  const naEntrada = s.foto();
+  s.rel.avancar(3010); await tick();               // 13:50:27,26
+  s.rot.aoSessao(sessao(420)); await tick();
+  s.rel.avancar(5000); await tick();
+  caso('15/10 13:50 (ranqueada real): ReadyCheck 420 -> ChampSelect sem a sessão por 3 s = tela da seleção na hora e nenhuma expansão',
+    naEntrada.efetivo === 'compacto' && naEntrada.tela === 'champselect' && s.foto().tela === 'champselect'
+      && !s.aplicados.slice(antes).includes('expandido') && s.rot.estado().info.fila === 420, JSON.stringify([naEntrada, s.aplicados.slice(antes), s.rot.estado().info]));
+}
+{ // seleção vinda de None (personalizada, assistir) sem sessão: o GET de releitura só responde no 2º pedido (o 1º é o do
+  // iniciarCompacto, pendurado) -> sem expansão
+  const gets = [];
+  const s = cenario({ lcu: (m, u) => { gets.push(`${m} ${u}`); return Promise.resolve({ ok: true, status: 200, json: sessao(420) }); } });
+  s.rot.marcarPronto();
+  await s.ir('None');
+  const antes = s.aplicados.length;
+  await s.ir('ChampSelect');
+  s.rel.avancar(ESPERA_SESSAO_MS + 10); await tick();
+  caso('seleção sem sessão: no prazo relê a sessão do gameflow (1 GET) e a resposta monta a tela, sem expandir',
+    gets.length === 1 && gets[0] === 'GET /lol-gameflow/v1/session' && s.foto().tela === 'champselect' && !s.aplicados.slice(antes).includes('expandido'),
+    JSON.stringify([gets, s.foto(), s.aplicados.slice(antes)]));
+}
+{ // saída de uma seleção compacta: a sessão do gameflow chega vazia ~150-190 ms antes da fase (16/10 20:46:49 e 20:48:23)
+  const s = cenario();
+  s.rot.marcarPronto();
+  await s.ir('Lobby');
+  await s.ir('ChampSelect', sessao(420));
+  const antes = s.aplicados.length;
+  s.rot.aoSessao({}); await tick();
+  const durante = s.foto();
+  s.rel.avancar(180);
+  await s.ir('None');
+  caso('sessão vazia no fim da seleção: ignorada (sem 420 -> 1280 -> 420); a fase None leva ao lobby',
+    durante.tela === 'champselect' && !s.aplicados.slice(antes).includes('expandido') && s.foto().tela === 'lobby', JSON.stringify([durante, s.aplicados.slice(antes)]));
+  // troca de fila de verdade (sessão com outra fila) segue valendo
+  const t = cenario();
+  t.rot.marcarPronto();
+  await t.ir('Lobby');
+  await t.ir('ChampSelect', sessao(420));
+  t.rot.aoSessao(sessao(450, 12)); await tick();
+  caso('sessão com outra fila no meio da seleção continua valendo (ARAM expande)', t.foto().efetivo === 'expandido', JSON.stringify(t.foto()));
+}
+{ // o caso antigo: seleção vinda de None sem sessão nenhuma -> espera 2 prazos (relê uma vez no meio) e expande
+  const gets = [];
+  const s = cenario({ lcu: (m, u) => { gets.push(u); return Promise.resolve({ ok: false, status: 0 }); } });
+  s.rot.marcarPronto();
+  await s.ir('None');
+  await s.ir('ChampSelect');
+  s.rel.avancar(ESPERA_SESSAO_MS + 10); await tick();
+  const aos2 = s.foto();
+  s.rel.avancar(ESPERA_SESSAO_MS + 10); await tick();
+  caso('seleção sem sessão por 4 s: aos 2 s segue esperando (1 releitura), aos 4 s expande com "seleção da fila desconhecida"',
+    aos2.efetivo === 'compacto' && gets.length === 1 && s.foto().efetivo === 'expandido' && /fila desconhecida/.test(s.rot.estado().motivo || ''),
+    JSON.stringify([aos2, gets, s.rot.estado().motivo]));
 }
 
 // ---------- 5. atalho, botão "modo compacto", ✕ com confirmação ----------

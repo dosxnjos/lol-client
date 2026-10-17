@@ -154,6 +154,44 @@ export function embrulharAudio(api, deveCalar, sons = SONS_MUDOS) {
 // no <html> quando o popup nativo precisa aparecer apesar do esconderPopup (estilo.css); fora do config.js de propósito
 export const CLASSE_POPUP_LIVRE = 'lc-aceite-manual';
 
+// ---- releitura do ready check por GET (roadmap/2026-10-17-telas-que-expandem.md, etapa 4) ----
+// Em 15/10/2026 (12:01, 12:36, 12:37) o socket do plugin não entregou nenhum evento de /lol-matchmaking/v1/ready-check (o de fase
+// funcionava): sem a contagem, o compacto expandiu para o popup da Riot. Na fase ReadyCheck, lê por GET já e a cada cadaMs até haver
+// contagem/aceite em curso, "não aceitar", fim da fase ou max leituras. Só GET; resultado que não é InProgress (falha, 404) é
+// ignorado (avaliar(null) zeraria o "não aceitar" desta vez). Testável: ler/avaliar/ocupado/agendar injetados.
+export const RELEITURA_RC = { cadaMs: 1000, max: 12 };
+export function criarReleituraRC({ ler, avaliar, ocupado = () => false, agendar = setTimeout, limpar = clearTimeout,
+  cadaMs = RELEITURA_RC.cadaMs, max = RELEITURA_RC.max }) {
+  let timer = null, n = 0, ativa = false, geracao = 0;
+  const parar = () => { ativa = false; geracao++; if (timer) { limpar(timer); timer = null; } };
+  const rodada = async g => {
+    timer = null;
+    if (!ativa || g !== geracao) return;
+    if (ocupado() || n >= max) { parar(); return; }
+    n++;
+    let p = null;
+    try { p = await ler(); } catch { p = null; }
+    if (!ativa || g !== geracao) return;
+    if (ocupado()) { parar(); return; }             // o socket chegou antes: nada a fazer
+    if (p && typeof p === 'object' && p.state === 'InProgress') {
+      avaliar(p);
+      if (p.playerResponse !== 'None') { parar(); return; }  // já respondido (na mão ou pela reserva do coletor)
+    }
+    if (ocupado() || n >= max) { parar(); return; }
+    timer = agendar(() => rodada(g), cadaMs);
+  };
+  return {
+    aoFase(fase) {
+      if (fase !== 'ReadyCheck') { parar(); return; }
+      if (ativa) return;
+      ativa = true; n = 0;
+      const g = ++geracao;
+      timer = agendar(() => rodada(g), 0);
+    },
+    estado: () => ({ ativa, leituras: n }),
+  };
+}
+
 const lcuSimples = (metodo, url) => fetch(url, { method: metodo }).catch(e => console.error('[lol-client] aceite', url, e));
 
 // Liga o observador. cfg = objeto vivo do config.js (lê cfg.aceite a cada evento).
@@ -161,7 +199,8 @@ const lcuSimples = (metodo, url) => fetch(url, { method: metodo }).catch(e => co
 // vez (a reserva do coletor aceita sozinha se este JS não aceitar no alvo) e o diagnóstico de cada decisão, que vira
 // linha no dados/coletor.log (caso de 14/10/2026: o JS não aceitou e nada dizia se estava vivo). Nunca esperado: o
 // aceite não depende do coletor. Sem ele (teste), nada sai.
-export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
+// relerMs: intervalo da releitura por GET no ReadyCheck (criarReleituraRC; o teste encurta)
+export function iniciarAceite(context, cfg, { avisarColetor = null, relerMs = RELEITURA_RC.cadaMs } = {}) {
   let agendado = null, desligadoNestaVez = false, aceitando = false, emReadyCheck = false;
   const diag = (evento, extra = {}) => {
     if (!avisarColetor) return;
@@ -188,7 +227,11 @@ export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
   // os eventos acima não veem a ida e a volta do foco quando ele está no iframe do chat: a sonda cobre
   // (250 ms cabem na janela de 1 s antes e 2 s depois da fase)
   setInterval(() => { try { foco.sondar(document.hasFocus()); } catch { /* sem document */ } }, FOCO.sondaMs);
-  context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => foco.aoFase(msg?.data));
+  // a fase também liga a releitura do ready check por GET (criada no fim; o evento sempre chega depois do init)
+  context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => {
+    foco.aoFase(msg?.data);
+    try { releitura.aoFase(msg?.data); } catch (e) { console.error('[lol-client] aceite: releitura', e); }
+  });
   // som: o rcp-fe-audio pode já estar pronto ou ainda não; o embrulho é idempotente por canal
   const calar = () => !!cfg.aceite?.silenciarSom;
   let embrulhado = false;
@@ -218,9 +261,11 @@ export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
       try { Toast.error('Não foi possível aceitar a partida: aceite no popup do client'); } catch { console.error('[lol-client] aceite falhou', r?.status); }
     }
   };
-  const avaliar = payload => {
+  // origem: 'get' quando veio da releitura (o log diz quando foi o GET que salvou); undefined = socket
+  const avaliar = (payload, origem) => {
     const emCurso = !!payload && payload.state === 'InProgress';
-    if (emCurso) diag('evento', { timer: payload.timer, playerResponse: payload.playerResponse });
+    const de = origem ? { origem } : {};
+    if (emCurso) diag('evento', { timer: payload.timer, playerResponse: payload.playerResponse, ...de });
     else if (emReadyCheck) { desligadoNestaVez = false; diag('fim'); } // ready-check acabou: o coletor zera o "não aceitar"
     emReadyCheck = emCurso;
     if (!emCurso) { desligadoNestaVez = false; popupLivre(false); } // ready-check acabou: zera
@@ -230,7 +275,7 @@ export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
     if (d.acao === 'aceitar') return aceitar();
     if (agendado) return; // já contando; o próximo evento só atualiza se mudar a resposta
     agendado = setTimeout(aceitar, d.emS * 1000);
-    diag('agendou', { emS: d.emS, timer: payload.timer });
+    diag('agendou', { emS: d.emS, timer: payload.timer, ...de });
     mostrarOverlay({
       restanteS: d.emS,
       aoAceitar: aceitar,
@@ -239,5 +284,12 @@ export function iniciarAceite(context, cfg, { avisarColetor = null } = {}) {
     });
   };
   context.socket.observe('/lol-matchmaking/v1/ready-check', msg => avaliar(msg?.eventType === 'Delete' ? null : msg?.data));
-  return { avaliar, foco };
+  // o socket do ready check pode ficar mudo (15/10/2026): o de fase segue e dispara a releitura por GET
+  const releitura = criarReleituraRC({
+    ler: () => fetch('/lol-matchmaking/v1/ready-check').then(r => (r.ok ? r.json() : null)).catch(() => null),
+    avaliar: p => avaliar(p, 'get'),
+    ocupado: () => !!agendado || aceitando || desligadoNestaVez || !cfg.aceite?.ligado,
+    cadaMs: relerMs,
+  });
+  return { avaliar, foco, releitura };
 }

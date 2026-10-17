@@ -150,7 +150,7 @@ async function montarTela({ rotas = {}, cfg = CFG, servicos = {}, inicial = null
   const f = lcuFalsa(new Proxy(tabela, { get: (o, k) => (k in o ? o[k] : typeof k === 'string' && !k.startsWith('GET ') ? { status: 204 } : undefined) }));
   globalThis.fetch = f.fetch;
   _zerarCatalogo();
-  const t = { doc, raiz, titulo, extras, lcu: f, falhas: [], avisos: [], logs: [], expandiu: 0, timers: [], intervalos: [], subs: new Map(), vivo: true };
+  const t = { doc, raiz, titulo, extras, lcu: f, falhas: [], avisos: [], logs: [], expandiu: 0, cedeu: [], timers: [], intervalos: [], subs: new Map(), vivo: true };
   const seguro = fn => (...a) => {
     if (!t.vivo) return undefined;
     try { const r = fn(...a); if (r && typeof r.then === 'function') r.catch(e => t.falhas.push(e)); return r; } catch (e) { t.falhas.push(e); return undefined; }
@@ -161,7 +161,7 @@ async function montarTela({ rotas = {}, cfg = CFG, servicos = {}, inicial = null
     observar: (uri, cb) => t.subs.set(uri, seguro(cb)),
     tempo: (fn, ms) => { t.timers.push({ fn: seguro(fn), ms }); return t.timers.length; },
     intervalo: (fn, ms) => { t.intervalos.push({ fn: seguro(fn), ms }); return t.intervalos.length; },
-    falhou: e => t.falhas.push(e), expandir: () => { t.expandiu++; }, avisar: (m, e) => t.avisos.push([String(m), !!e]),
+    falhou: e => t.falhas.push(e), expandir: () => { t.expandiu++; }, ceder: m => { t.cedeu.push(String(m)); }, avisar: (m, e) => t.avisos.push([String(m), !!e]),
     dormir: () => Promise.resolve(), log: m => t.logs.push(String(m)),
   };
   t.emitir = async (s, eventType = 'Update') => { ultima = s; t.subs.get('/lol-champ-select/v1/session')?.({ eventType, data: s, uri: '/lol-champ-select/v1/session' }); await tick(); };
@@ -658,7 +658,16 @@ const todasEscritas = [];
 {
   const s = S(40); s.benchEnabled = true; s.queueId = 450;
   const t = await montarTela({ inicial: s });
-  caso('ARAM (banco): expande com aviso, sem pintar nem escrever', t.expandiu === 1 && t.avisos.length === 1 && t.escritas().length === 0);
+  // etapa 2 de 2026-10-17: cede à Riot como automática (ctx.ceder), nunca pelo ctx.expandir() do clique dele
+  caso('ARAM (banco): cede à Riot (ctx.ceder, não ctx.expandir) com aviso, sem pintar nem escrever',
+    t.expandiu === 0 && t.cedeu.length === 1 && /banco/.test(t.cedeu[0]) && t.avisos.length === 1 && t.escritas().length === 0, JSON.stringify([t.expandiu, t.cedeu]));
+}
+{ // 16/10/2026 20:48:19 (medidor): seleção assistida da ranqueada de um amigo, fila 420 no SR, isSpectating, localPlayerCellId -1,
+  // timer GAME_STARTING 170 s e os campeões já travados. A tela não pinta nem escreve e cede à Riot como automática
+  const s = S(40); s.isSpectating = true; s.localPlayerCellId = -1; s.timer = { phase: 'GAME_STARTING', totalTimeInPhase: 170000, adjustedTimeLeftInPhase: 167000, isInfinite: false };
+  const t = await montarTela({ inicial: s });
+  caso('espectador (16/10 20:48): cede à Riot com "assistindo a uma partida", sem ctx.expandir, sem escrever',
+    t.expandiu === 0 && t.cedeu.length === 1 && /assistindo a uma partida/.test(t.cedeu[0]) && t.escritas().length === 0, JSON.stringify([t.expandiu, t.cedeu, t.escritas()]));
 }
 {
   const t = await montarTela();

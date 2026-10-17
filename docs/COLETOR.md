@@ -778,7 +778,7 @@ o Pengu (`https://plugins`) ou sem `Origin`; as páginas do próprio coletor e o
 | --- | --- |
 | ver a janelinha com um ready check falso | `python coletor\aviso_partida.py --demo [--atraso 10 \| -1] [--segundos 12]` |
 | prova (contagem, config, `Coletor.fase`, reserva, rota `/aceite/plugin`, janela real; a janela é pulada com o jogo aberto) | `python tools\teste-aviso-partida.py [--sem-janela]` |
-| prova do lado do plugin (decisão, foco, som, popup, aviso ao coletor injetado) | `node tools\teste-aceite.mjs` |
+| prova do lado do plugin (decisão, foco, som, popup, aviso ao coletor injetado, releitura por GET com o socket do ready check mudo) | `node tools\teste-aceite.mjs` |
 
 ### Registro das expansões do compacto (`POST /compacto/expansoes`, 15/10/2026)
 
@@ -787,7 +787,9 @@ com o mesmo `id` ([plano do compacto](../roadmap/2026-10-13-client-compacto.md),
 (`pengu/compacto/expansoes.js`; o roteador compara o efetivo antes e depois de cada `resolver()`): `origem` (`modal` da regra
 7, `fase`, `jogo-fora`, `erro-tela`, `erro-roteador`, `janela-voltou`, `sem-riotinvoke`, `sem-tela`, `tela-sozinha`; pedidas por
 ele: `por-ele`, `config-riot`, `desligado`, `padrao` ("iniciar no compacto" desligado), com `porEle` e `gatilho`; botão de
-uma tela só conta como dele com clique ou Enter/Espaço até 1,5 s antes do pedido), `motivo` (o de erro de tela só com
+uma tela só conta como dele com clique ou Enter/Espaço até 1,5 s antes do pedido, **dentro do `#lc-compacto` e depois de a tela
+montar** (desde 17/10/2026; senão `tela-sozinha` com `gestoForaDaCamada`/`gestoAntesDaTela`: o "Assistir" no client normal de 16/10
+contava como pedido da seleção), `motivo` (o de erro de tela só com
 vocabulário de interface), `fase`, `seq` (etapa do fim de partida), `fila`,
 `mapa`, a camada da Riot (`gatilhoCamada` e `camadas`: tag, id, classes, filhos e título/botões só com vocabulário de
 interface), janela antes e depois, `esperouFocoMs`; no `fim`, `duracaoMs`, `como` voltou e a `trilha` de motivos. O coletor
@@ -796,7 +798,11 @@ interface), janela antes e depois, `esperouFocoMs`; no `fim`, `duracaoMs`, `como
 memória e reenvia a cada 60 s, em lotes de até 40 000 bytes (o servidor lê só 64 KiB de corpo; evento gordo demais perde as
 camadas, `camadasCortadas`; 400/413 descarta o lote em vez de repetir); recarga do client com a fila cheia perde a fila.
 Ao vivo, `window.__lolClient.compacto.expansoes()` pelo `tools\cdp.mjs eval`. O relatório mostra a hora local (o plugin
-carimba em UTC).
+carimba em UTC). Desde 17/10/2026 ([plano](../roadmap/2026-10-17-telas-que-expandem.md), etapa 3) o relatório também
+**reclassifica** como `tela-sozinha` o "por-ele" de tela gravado antes da regra do gesto cujo clique foi anterior à volta ao
+compacto (`reclassificado` no exemplo) e tem o bloco **"também apareceram com o client normal já à vista"** (a `trilha`: o que
+pediria expansão durante outra; foi ali que as seleções assistidas de 16/10 ficaram escondidas). Volta pela regra 7 quando a
+janela da Riot fecha (etapa 6): `como` = "a janela da Riot fechou".
 
 | o quê | comando |
 | --- | --- |

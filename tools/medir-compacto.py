@@ -102,6 +102,9 @@ def sessao_cs(s):
         "timer": {"phase": t.get("phase"), "totalTimeInPhase": t.get("totalTimeInPhase"), "isInfinite": t.get("isInfinite"),
                   "adjustedTimeLeftInPhase": t.get("adjustedTimeLeftInPhase"), "internalNowInEpochMs": t.get("internalNowInEpochMs")},
         "localPlayerCellId": s.get("localPlayerCellId"), "isCustomGame": s.get("isCustomGame"),
+        # espectador (roadmap/2026-10-17-telas-que-expandem.md, etapa 2): o compacto sai do caminho pelo isSpectating; em 16/10
+        # ele disparou o aviso da tela mas não estava gravado aqui
+        "isSpectating": s.get("isSpectating"),
         "allowSkinSelection": s.get("allowSkinSelection"), "benchEnabled": s.get("benchEnabled"),
         "allowRerolling": s.get("allowRerolling"), "rerollsRemaining": s.get("rerollsRemaining"),
         # as 2 bandeiras que a tela 3 lê no ban (fixture de 14/10/2026 teve de supor as duas)
@@ -115,6 +118,13 @@ def sessao_cs(s):
                    "isInProgress": a.get("isInProgress"), "championId": a.get("championId") if a.get("completed") else None}
                   for a in acoes if isinstance(a, dict)],
     }
+
+
+def gameflow_chaves(s):
+    """sessão do gameflow -> só os nomes das chaves de gameData e gameClient (ordenados), nunca valores"""
+    s = s if isinstance(s, dict) else {}
+    return {k: sorted(str(c) for c in (s.get(k) or {}).keys()) if isinstance(s.get(k), dict) else None
+            for k in ("gameData", "gameClient")}
 
 
 def lobby_sinais(lb):
@@ -346,11 +356,15 @@ class Medidor:
         return 1.0
 
     def ao_mudar_fase(self, fase, agora):
-        if fase in ("ChampSelect", "InProgress", "EndOfGame", "Lobby"):
+        if fase in ("ChampSelect", "GameStart", "InProgress", "EndOfGame", "Lobby"):
             s = self.get("/lol-gameflow/v1/session") or {}
             gd = s.get("gameData") or {}
             self.gravar_se_mudou("gameflow", {"queueId": (gd.get("queue") or {}).get("id"), "mapId": (s.get("map") or {}).get("id"),
                                               "isCustomGame": gd.get("isCustomGame"), "gameMode": (gd.get("queue") or {}).get("gameMode")})
+            if fase in ("ChampSelect", "GameStart", "InProgress"):
+                # etapa 2 de 2026-10-17: SÓ os nomes das chaves (nunca valores: gameClient tem host/porta do servidor da partida e
+                # gameData os times) para achar um campo do gameflow que diga "espectador" na próxima partida assistida
+                self.gravar_se_mudou("gameflow_chaves", gameflow_chaves(s), fase=fase)
             if fase == "InProgress" and gd.get("gameId") and (self.partida or {}).get("gameId") != gd.get("gameId"):
                 self.partida = {"gameId": gd.get("gameId"), "inicio": agora, "feitos": set(), "carregamento_em": None}
         if fase == "ChampSelect":

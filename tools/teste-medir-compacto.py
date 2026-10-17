@@ -36,7 +36,7 @@ def _achar(v, chave):
 SALA = _achar(json.loads((RAIZ / "tests" / "fixtures" / "champselect-autofill.json").read_text(encoding="utf-8")), "chatDetails")
 VALORES_SALA = [v for v in (list(SALA.values()) + list((SALA.get("mucJwtDto") or {}).values())) if isinstance(v, str) and len(v) > 3]
 SEGREDOS = ["Fulano", "Ciclano", "BR1", "puuid-aaaa-bbbb", "123456789", "987654321", "oi bora duo", "Beltrano", "Xerekton",
-            "Lee Sin", "abc-123", *VALORES_SALA]
+            "Lee Sin", "abc-123", "10.9.8.7", "10.9.8.6", "5123", *VALORES_SALA]
 
 
 class LcuFalsa:
@@ -66,6 +66,8 @@ ESTADO = {"fase": "Lobby", "t": 0, "rc": 0, "lp": 14, "lp_pronto": False, "gt": 
 TROCA = {"estado": "AVAILABLE"}
 SESSAO_GAMEFLOW = {"gameData": {"gameId": 3300000001, "queue": {"id": 420, "gameMode": "CLASSIC"}, "isCustomGame": False,
                                 "playerChampionSelections": [{"summonerInternalName": "Fulano", "championId": 58}]},
+                   # gameClient tem o servidor da partida: só as chaves podem sair (etapa 2 de 2026-10-17)
+                   "gameClient": {"serverIp": "10.9.8.7", "serverPort": 5123, "running": True, "observerServerIp": "10.9.8.6"},
                    "map": {"id": 11}}
 LP_NOTIF = lambda: ({"leaguePointsDelta": 18, "tier": "EMERALD", "division": "IV", "summonerName": "Xerekton"} if ESTADO["lp_pronto"] else None)
 ROTAS_COMUNS = {
@@ -251,6 +253,12 @@ def principal():
          se and "hasSimultaneousBans" in se and "disallowBanningTeammateHoveredChampions" in se, sorted(se or {}))
     gf = [ln["dados"] for ln in evs.get("gameflow", [])]
     caso("gameflow: fila, mapa e personalizada", gf and gf[0] == {"queueId": 420, "mapId": 11, "isCustomGame": False, "gameMode": "CLASSIC"}, gf)
+    # etapa 2 do roadmap/2026-10-17-telas-que-expandem.md: espectador
+    caso("sessão: isSpectating entra no registro (espectador, etapa 2 de 17/10)", se is not None and "isSpectating" in se, sorted(se or {}))
+    gc = evs.get("gameflow_chaves", [])
+    caso("gameflow_chaves: na seleção, só os nomes das chaves de gameData e gameClient (nenhum valor: servidor e times ficam fora)",
+         gc and gc[0]["fase"] == "ChampSelect" and gc[0]["dados"]["gameClient"] == ["observerServerIp", "running", "serverIp", "serverPort"]
+         and "queue" in gc[0]["dados"]["gameData"] and "playerChampionSelections" in gc[0]["dados"]["gameData"], gc)
     marcos = [p[0].rsplit("-", 1)[1] for p in prints]
     caso("prints: carregamento, 03min, 08min e 15min, uma vez cada", marcos == ["carregamento.png", "03min.png", "08min.png", "15min.png"], marcos)
     caso("prints: nome com o gameId; perfil do Edge em pasta própria; URL do painel", all("3300000001" in p[0] for p in prints)

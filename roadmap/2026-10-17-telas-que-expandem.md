@@ -5,7 +5,7 @@ Plano para um executor que nunca viu a conversa. Projeto `C:\Dev\lol-client`, pl
 (§ Client e Pengu, § LCU), `docs/TEXTOS-DA-INTERFACE.md`, `docs/COLETOR.md` § Registro das expansões do compacto e o
 [plano do compacto](2026-10-13-client-compacto.md) (regra 7, passos 12, 14 e 15).
 
-Este md é **só diagnóstico e proposta**: nenhum código de produto foi tocado para escrevê-lo. As etapas abaixo são
+Este md nasceu como diagnóstico e proposta; as etapas 1–6 foram construídas em 17/10 (§ Estado, no fim). As etapas abaixo são
 independentes; cada uma tem prova, revisão adversarial e commit próprio, na ordem da lista priorizada.
 
 ## Pedido (Gabriel, 17/10/2026)
@@ -304,6 +304,24 @@ a Live Client em modo espectador (medir `/liveclientdata/activeplayer` numa part
    de seleção com fila diferente da do ready check.
 3. Etapas 5 e 6 mudam a regra "lembrar o modo até a virada de destino" só para dois casos medidos. Reverte: registro com
    expansão que volta e sai de novo em menos de 3 s (flip-flop).
+
+## Estado (17/10/2026, tarde)
+
+Etapas 1–6 construídas e provadas offline; etapa 7 segue como card à parte. O que cada etapa virou, decisões, limites e o que só
+o client real prova: [relatório de execução](2026-10-17-telas-que-expandem.d/2026-10-17-relatorio-de-execucao.md).
+
+Revisão adversarial (17/10, noite), corrigido com teste que falhava antes (`teste-compacto-expansoes.mjs` § 2b e § 2c):
+
+- Etapa 6: janela da Riot que só se escondeu (conta como "fechada") e reaparece sem nó novo ficava embaixo da camada (a vigia só vê
+  nó novo). Releitura por `GRACA_VOLTA_MS` (5 s) depois da volta; reaparecer expande e não volta mais até a virada de destino.
+  `armarVoltaModal` sempre recomeça o timer (a releitura não segura a vez de uma janela nova).
+- Etapa 1: a sessão vazia da saída também é ignorada na personalizada no SR (fila 0 = null, mapa 11), não só com fila lida; e o
+  prazo da sessão recomeça a cada entrada em `ChampSelect` (seleção → `None` → seleção em < 2 s encurtava o da 2ª).
+- Sem achado: ranqueada (`ReadyCheck → ChampSelect`, sessão vazia, dodge), botão de janela da Riot sem clique dele, aceite (só GET,
+  mesma decisão do socket), nome oculto, ícones, textos. Limite aceito: a seleção assistida ainda pode mostrar a tela compacta por
+  um instante antes de ceder (ARMADILHAS § Client); a correção só na entrada vinda de `None` fica para decisão do Gabriel.
+- Bateria inteira (`rodar-testes.py`, jogo fechado) no código da construção: 58/58; depois das correções, todas as `.mjs` +
+  `teste-expansoes` + `teste-medir-compacto`: 29/29 (`teste-compacto-expansoes` 60/60, `teste-textos` 9/9, `teste-icones` 14/14).
 
 ## O que o pedido não dizia
 

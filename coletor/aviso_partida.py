@@ -274,8 +274,9 @@ class SinalPlugin:
 
 # diagnóstico do aceite do plugin (POST /aceite/plugin): cada decisão do pengu/aceite.js vira uma linha no coletor.log
 # para a próxima falha dizer se o JS estava vivo no ready check. Só estas chaves, só valor simples, texto cortado.
+# origem=get: o evento do ready check veio da releitura por GET, não do socket (roadmap/2026-10-17-telas-que-expandem.md, etapa 4)
 CAMPOS_DIAG = ("evento", "timer", "playerResponse", "state", "emS", "status", "detalhe", "ligado", "desligadoNestaVez",
-               "atrasoS", "limiteS", "hidden", "visibilityState", "foco")
+               "atrasoS", "limiteS", "hidden", "visibilityState", "foco", "origem")
 log_plugin = logging.getLogger("coletor.aceite")
 
 

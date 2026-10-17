@@ -158,6 +158,41 @@ def main():
     caso("D7 saneia camadasCortadas (bool: o plugin cortou as camadas de um evento grande demais)", s.get("camadasCortadas") is True,
          json.dumps(s, ensure_ascii=False))
 
+    # ---------- etapa 3 de roadmap/2026-10-17-telas-que-expandem.md: registro honesto ----------
+    # reconstrução das linhas 33–40 do dados/expansoes-compacto.jsonl (16/10/2026, UTC): expandido pelo botão às 23:48:14,477;
+    # o compacto volta na seleção assistida às 23:48:19,458; 114 ms depois a tela da seleção pede o client normal com gesto de 771 ms
+    # (o "Assistir" no client normal, ANTES da volta) -> o plugin antigo gravou "por-ele"; o relatório reclassifica
+    real = [evento(i="mvbljp6u-3", em="2026-10-16T23:26:21.510Z", origem="por-ele", motivo="expandido por você", fase="Lobby", porEle=True,
+                   gatilho="tela lobby", gestoHaMs=104),
+            evento("fim", "mvbljp6u-3", em="2026-10-16T23:46:49.904Z", duracaoMs=1228394, como="automático", fase="None",
+                   trilha=[{"aposMs": 1153293, "fase": "ChampSelect", "motivo": "seleção fora do Summoner's Rift (ARAM e outros): tela da Riot", "origem": "fase"},
+                           {"aposMs": 1228206, "fase": "ChampSelect", "motivo": "seleção da fila desconhecida: tela da Riot", "origem": "fase"}]),
+            evento(i="mvbmbua5-4", em="2026-10-16T23:48:14.477Z", origem="por-ele", motivo="expandido por você", fase="None", porEle=True, gatilho="botão ⤢"),
+            evento("fim", "mvbmbua5-4", em="2026-10-16T23:48:19.458Z", duracaoMs=4981, como="automático", fase="ChampSelect"),
+            evento(i="mvbmby7o-5", em="2026-10-16T23:48:19.572Z", origem="por-ele", motivo="expandido por você", fase="ChampSelect", porEle=True,
+                   gatilho="tela champselect", gestoHaMs=771, fila=420, mapa=11,
+                   aviso="esta seleção banco aram ou espectador é da tela da … abrindo o client normal"),
+            evento("fim", "mvbmby7o-5", em="2026-10-16T23:48:23.672Z", duracaoMs=4101, como="automático", fase="None",
+                   trilha=[{"aposMs": 4040, "fase": "ChampSelect", "motivo": "seleção da fila desconhecida: tela da Riot", "origem": "fase"}])]
+    exps_r, _ = R.juntar(real)
+    por_id = {e["id"]: e for e in exps_r}
+    caso("D8 por-ele de tela com o clique antes de o compacto voltar vira tela-sozinha (reclassificado); clique dentro da tela segue por-ele",
+         por_id["mvbmby7o-5"]["origem"] == "tela-sozinha" and por_id["mvbmby7o-5"]["porEle"] is False and por_id["mvbmby7o-5"].get("reclassificado")
+         and por_id["mvbljp6u-3"]["origem"] == "por-ele" and por_id["mvbljp6u-3"]["porEle"] is True
+         and por_id["mvbmbua5-4"]["origem"] == "por-ele", json.dumps(exps_r, ensure_ascii=False)[:600])
+    g_r = R.agrupar(exps_r)
+    t_r = R.agrupar_trilha(exps_r)
+    txt = R.texto(g_r, 0, 0, len(exps_r), t_r)
+    fora_sr = next((g for g in t_r if "Summoner" in g["motivo"]), None)
+    desc_t = next((g for g in t_r if "desconhecida" in g["motivo"]), None)
+    caso("D9 trilha: motivos que apareceram com o client normal à vista viram bloco próprio, com fase e de que expansão",
+         fora_sr and fora_sr["n"] == 1 and fora_sr["fases"] == {"ChampSelect": 1} and fora_sr["dentro"] == {"pedidas por você": 1}
+         and desc_t and desc_t["n"] == 2 and desc_t["dentro"] == {"pedidas por você": 1, "automáticas": 1}
+         and "TAMBÉM APARECERAM" in txt and "reclassificada" in txt, json.dumps(t_r, ensure_ascii=False)[:600])
+    s2 = expansoes.sanear(evento(origem="tela-sozinha", gestoHaMs=771, gestoAntesDaTela=True, gestoForaDaCamada=True))
+    caso("D10 saneia gestoAntesDaTela e gestoForaDaCamada (bool)", s2.get("gestoAntesDaTela") is True and s2.get("gestoForaDaCamada") is True
+         and expansoes.sanear(evento(gestoAntesDaTela="sim")).get("gestoAntesDaTela") is None, json.dumps(s2, ensure_ascii=False))
+
     k = sum(resultados)
     print(f"\n{'ok' if k == len(resultados) else 'FALHOU'} ({k}/{len(resultados)})")
     return 0 if k == len(resultados) else 1
