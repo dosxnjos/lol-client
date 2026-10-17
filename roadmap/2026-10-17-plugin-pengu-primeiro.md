@@ -144,8 +144,8 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
    `coletor/analise.py` e `coach.py` ficam para o coach ao vivo (`regiao`), o MCP e o prompt do mentor, que seguem lendo o
    SQLite sem mudança. A spec continua uma só (`docs/INSIGHTS.md`); a paridade é guardada por fixture comum (Fase 5).
    Confiança alta. Reverte: retirar `contexto` do `/ola` deixa o Gabriel no motor local, sem código novo.
-6. **Força do draft por snapshot embutido**, não por fonte de terceiros em tempo de execução: `pengu/dados/meta.json`
-   gerado do `dados/meta.db` pelo mantenedor, com data, patch, elo e n no próprio arquivo e mostrados no selo. Confiança
+6. **Força do draft por snapshot embutido**, não por fonte de terceiros em tempo de execução: `pengu/dados/meta.js`
+   (módulo ES) gerado do `dados/meta.db` pelo mantenedor, com data, patch, elo e n no próprio arquivo e mostrados no selo. Confiança
    média (amostra de 309 partidas Esmeralda, 13/10). Reverte: [[DECISAO]] do Gabriel por outra fonte.
 
 ## Como o plugin se comporta sem o complemento
@@ -202,10 +202,13 @@ Arquivos: `pengu/coach.js`, `pengu/config.js`, `pengu/index.js`, `pengu/blocos.j
    sessão do client (zera quando o client fecha). Log: "reserva do aceite desarmada: o plugin não falou". Prova com
    `teste-aviso-partida.py` (caso novo: rota no ar e plugin mudo = desarmada).
 3. `pengu/config.js`: `coletor: { ligado: false }` no `PADRAO`; `VERSAO = 4` com a migração "config salva de versão < 4 →
-   `coletor.ligado = true`", uma vez só, igual às 2 e 3.
+   `coletor.ligado = true`", uma vez só, igual às 2 e 3. `restaurar()` (`config.js:156`) mantém `coletor.ligado` como já
+   mantém `runas.regras`: é instalação, não preferência (sem isso, "restaurar padrões" desliga a ponte do Gabriel calado).
 4. `pengu/coach.js`: estado da ponte `{ligado, visto, recursos, versao}`; `coletor()` devolve `status 0` na hora, sem
    `fetch`, com a chave desligada ou sem aperto de mão; aperto de mão na carga, na virada para `None`/`Lobby`/`EndOfGame`
-   e com recuo 30 s → 2 min → 5 min enquanto não acha; `temRecurso(nome)` exportado. `sincronizarConfig` só com `coach`
+   e com recuo 30 s → 2 min → 5 min enquanto não acha; **fora do recuo**, uma tentativa imediata ao entrar em
+   `Matchmaking` e outra em `ReadyCheck` (o complemento que subiu no meio do recuo tem de ser visto antes do ready check,
+   senão a reserva fica desarmada: o caso de 14/10); `temRecurso(nome)` exportado. `sincronizarConfig` só com `coach`
    anunciado e sem o laço eterno de 30 s.
 5. Cada chamador passa por `temRecurso`: `/estado` (`tela-jogo.js:172-187`) com `estado-partida`; `/draft`
    (`champselect.js:115-126`, `lateral-coach.js`) com `draft`; `/contexto` e `/licoes` (`posjogo/index.js:271-299`,
@@ -221,13 +224,17 @@ Arquivos: `pengu/coach.js`, `pengu/config.js`, `pengu/index.js`, `pengu/blocos.j
    (`blocos.js:165`, `abas.js:148-153`, `:390-395`, `:420`, `tela-posjogo.js:675-709`, `champselect.js:187`,
    `lateral-coach.js:75`). `teste-textos.mjs` ganha a regra "sem complemento, nenhum texto visível com coletor/8765/MCP".
 9. Docs: README § Ligar e desligar (coluna "precisa do complemento"); ARMADILHAS § Client e Pengu ("origem leva a porta da
-   LCU: localStorage e IndexedDB morrem a cada abertura" e "DataStore é namespace comum e legível"); `CLAUDE.md` 1 linha:
-   "plugin só fala com a 8765 com `coletor.ligado` e aperto de mão (`pengu/coach.js`); reserva só com o plugin visto".
+   LCU: localStorage e IndexedDB morrem a cada abertura" e "DataStore é namespace comum e legível"); `CLAUDE.md`: **editar** a linha que já existe da reserva ("só com a rota do
+   plugin no ar…") para "…só com o plugin visto (aperto de mão nesta sessão do client)" e acrescentar nela "o plugin só fala
+   com a 8765 com `coletor.ligado` e aperto de mão (`pengu/coach.js`)"; nada de linha nova (teto do `gate-claude-md`:
+   quem acrescenta, corta). COLETOR.md § Quem aceita com a regra nova.
 
 **Provas.** `tools/teste-ponte.mjs` novo (fetch espião, relógio falso, `lcuFalsa`): (a) `ligado:false` → zero `fetch` à
 8765 em 30 min simulados passando por todas as fases, com compacto, seleção, partida e pós-jogo montados; (b) `ligado:true`
 e porta fechada → recuo medido (contagem de chamadas por fase); (c) porta respondendo 200 sem `app` → ausente, nenhuma
-outra rota chamada; (d) `/ola` com recursos parciais → só as rotas desses recursos. `teste-config.mjs`: instalação nova
+outra rota chamada; (d) `/ola` com recursos parciais → só as rotas desses recursos; (e) complemento que sobe no meio do recuo
+de 5 min e fase `Lobby → Matchmaking → ReadyCheck` → aperto de mão feito antes do `ReadyCheck` e o "não aceitar" chega.
+`teste-config.mjs`: instalação nova
 = `false`; config v3 salva = `true` uma vez; `false` escolhido depois fica `false`. Bateria node inteira do plugin e
 `teste-textos`/`teste-icones` verdes. Mutação: tirar o `temRecurso` de uma chamada deixa (d) vermelho.
 **Reverte:** `git revert` do commit; ou só `coletor.ligado` = `true` e `/ola` anunciando tudo (comportamento de hoje).
@@ -250,7 +257,8 @@ Se ele não aprovar: nada a fazer, a Fase 1 já esconde o caminho de quem não t
 2. `filaRapida.fila/pos1/pos2` ficam (qualquer par válido serve; a tela do lobby grava a escolha).
 3. Freios sem os números de outra pessoa: `MEDICAO` (`freios.js:11`) vira parâmetro `medicao` (null = texto sem número);
    `tela-lobby.js:169-175` idem. Os números voltam calculados na Fase 5.
-4. Comentários "decisão do Gabriel" ficam (história do código); texto visível não cita o Gabriel.
+4. Comentários "decisão do Gabriel" ficam (história do código, e o empacotador não mexe em código); texto visível e
+   valor padrão não citam o Gabriel. A prova do pacote (Fase 8) olha texto visível e literais, não comentários.
 
 **Prova:** `teste-config.mjs` (instalação nova sem regras nem favoritos; config salva do Gabriel igual antes e depois),
 `teste-jogar-de-novo.mjs` (freio com `medicao` null tem texto sem número e passa no `teste-textos`), `teste-runas.mjs`.
@@ -306,11 +314,12 @@ e trauma sem nenhuma chamada à 8765. **Reverte:** `git revert`; o complemento c
 
 ## Fase 6 — draft em JS com snapshot do meta
 
-1. `tools/exportar-meta.py` (mantenedor; lê `dados/meta.db`, sem rede, sem chave) → `pengu/dados/meta.json` com
-   `{data, patch, elo, partidas, campeoes: {id: {rota: [jogos, vitorias]}}}`.
+1. `tools/exportar-meta.py` (mantenedor; lê `dados/meta.db`, sem rede, sem chave) → `pengu/dados/meta.js` com
+   `export default {data, patch, elo, partidas, campeoes: {id: {rota: [jogos, vitorias]}}}`.
 2. `pengu/draft.js`: porta de `rotas_provaveis` (`draft.py:88`), `indices_pessoais` (`:144`) e `forca_draft` (`:154`),
-   lendo o JSON por `https://plugins/lol-client/dados/meta.json` (arquivo da pasta do plugin; ARMADILHAS § Client e Pengu,
-   arquivos servidos) e o acumulador.
+   lendo o snapshot e o acumulador. O snapshot sai do `exportar-meta.py` como módulo ES (`pengu/dados/meta.js`,
+   `export default {...}`) importado direto: sem `fetch` e sem depender do nome da pasta do plugin (o caminho
+   `https://plugins/<nome>/` não está fixo no código hoje e o nome público é [[DECISAO]]).
 3. Selo da seleção e 📊: draft local quando o complemento não anuncia `draft`; mostra a data e o elo da amostra.
 4. Docs: COLETOR.md (gerar o snapshot a cada patch, depois do `coletar-meta.py`).
 
@@ -340,7 +349,9 @@ pular; o relógio local continua.
 4. Docs: README dividido em "edição Pengu" e "instalação completa"; hub com o link do pacote.
 
 **Prova:** `tools/teste-pacote.py`: o zip tem só arquivos servíveis, todos os `import` resolvem dentro dele, nenhum `.py`,
-`dados/`, symlink, "Gabriel", "Xerekton", id de página de runa nem caminho `C:\Dev`; `LICENSE` e `TERCEIROS.md` presentes.
+`dados/` do coletor (o `pengu/dados/meta.js` vai) nem symlink; em literais de string e texto visível (não em comentário,
+ver Fase 3 passo 4), nenhum "Gabriel", "Xerekton", id de página de runa nem caminho `C:\Dev`; `LICENSE` e `TERCEIROS.md`
+presentes.
 Prova no client: só numa instalação limpa (2ª máquina, ou o Gabriel trocando a junção por uma cópia, decisão dele), com o
 complemento parado (`python tools/vigia-coletor.py pausar` antes, CLAUDE.md). **Reverte:** apagar `dist/`; nada no client
 dele muda.
