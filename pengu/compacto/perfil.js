@@ -21,7 +21,7 @@
 // - shared-components summary-player-data/player/{puuid} (título e emblemas de outro jogador, ViewRegaliaService): medido em 16/10/2026
 //   (GET 200 de um amigo: title {itemId, name, …}, topChallenges [{id, name, currentLevel, levelToIconPath, …}], bannerId, crestId).
 // Só funções puras no topo (tools/teste-compacto-perfil.mjs); as views recebem doc e lcu injetados. Texto da LCU só por textContent.
-import { h, iconeCampeao, perfilSalvo } from './comum.js';
+import { h, iconeCampeao, perfilSalvo, icone, comIcone } from './comum.js';
 import { FILAS, quandoCurto } from './lateral-chat.js';
 import { criarReplay } from '../replay.js';
 
@@ -341,7 +341,7 @@ export function criarPerfilView(amb) {
   }
   function pintarDetalhe() {
     const j = st.jogo, d = st.detalhe;
-    const volta = h('button', { doc, class: 'lc-pf-volta', dataset: { a: 'pf-voltar' }, on: { click: amb.seguro(() => { st.jogo = null; st.detalhe = null; pintar(); }) } }, '← partidas');
+    const volta = h('button', { doc, class: 'lc-pf-volta', dataset: { a: 'pf-voltar' }, on: { click: amb.seguro(() => { st.jogo = null; st.detalhe = null; pintar(); }) } }, comIcone('voltar', 'partidas', { doc, tam: 12 }));
     const cab = h('div', { doc, class: 'lc-pf-dcab' }, volta, h('small', { doc }, [j.fila, j.duracao, j.quando].filter(Boolean).join(' · ')));
     if (!d) return [cab, h('div', { doc, class: 'lc-lt-vazio' }, 'carregando a partida…')];
     if (d.motivo) return [cab, h('div', { doc, class: 'lc-lt-vazio' }, d.motivo)];
@@ -436,7 +436,8 @@ export function criarEditorView(amb) {
     const e = st.dados?.eu;
     if (e?.puuid) amb.aoHistorico?.({ puuid: e.puuid, summonerId: e.summonerId, nome: e.gameName || 'você', tag: e.tagLine || '', eu: true }, ev);
   }) } }, 'histórico');
-  const xFechar = h('button', { doc, class: 'lc-lt-x', title: 'fechar o editor', dataset: { a: 'ed-fechar' }, on: { click: amb.seguro(ev => fechar(ev)) } }, '✕');
+  const xFechar = h('button', { doc, class: 'lc-lt-x', title: 'fechar o editor', 'aria-label': 'fechar o editor', dataset: { a: 'ed-fechar' }, on: { click: amb.seguro(ev => fechar(ev)) } },
+    icone('fechar', { doc, tam: 14 }));
   const el = h('section', { doc, class: 'lc-lt-pn lc-lt-cfg lc-pf-editor', dataset: { painel: 'editor' } },
     h('header', { doc, class: 'lc-lt-cab' }, h('div', { doc, class: 'lc-lt-tit' }, h('b', { doc }, 'seu perfil'), h('small', { doc }, 'escolha e clique em salvar')), xFechar),
     previa, abas, buscaCx, corpo, h('footer', { doc, class: 'lc-lt-rod lc-pf-rod' }, h('div', { doc, class: 'lc-pf-bts' }, btSalvar, btHist), nota));
@@ -447,7 +448,7 @@ export function criarEditorView(amb) {
     btSalvar.disabled = !p.length || st.salvando;
     btSalvar.textContent = st.salvando ? 'salvando…' : 'salvar';
     btSalvar.setAttribute('title', p.length ? `salvar: ${p.map(c => c.parte).join(', ')}` : 'nenhuma mudança');
-    const t = st.descartarEm && agora() - st.descartarEm < DESCARTAR_MS ? 'mudanças não salvas: clique em ✕ de novo para descartar'
+    const t = st.descartarEm && agora() - st.descartarEm < DESCARTAR_MS ? 'mudanças não salvas: clique em fechar de novo para descartar'
       : p.length ? `${p.length === 1 ? '1 alteração' : `${p.length} alterações`} por salvar` : st.motivo || '';
     if (nota.textContent !== t) nota.textContent = t;
   }

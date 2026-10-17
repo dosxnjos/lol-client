@@ -5,7 +5,7 @@
 // client normal. Também aqui: ⚙ (configurações à esquerda, B1) e 📊 (coach da seleção, B2). Contador: GET
 // /lol-chat/v1/conversations (só conversa 1:1; sala do lobby, da seleção e do pós-jogo não conta). Só lê a LCU; a credencial
 // fica com o coletor. Importável no node (sem DOM no topo).
-import { h, estilo } from './comum.js';
+import { h, estilo, icone } from './comum.js';
 import { naoLidasDaLcu } from './chat-ponte.js';
 
 // não lidas das conversas diretas (type 'chat', fora das salas de grupo)
@@ -42,7 +42,8 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
   const bolha = h('i', { doc, class: 'lc-cp-bolha', style: { display: 'none' } });
   let abrindo = false;
   const aoLado = !!ctx.servicos?.lateral?.ligada?.();
-  const bt = h('button', { doc, class: 'lc-cp-ic', title: aoLado ? 'chat: conversas recentes ao lado (outro clique fecha)' : 'amigos (abre em janela própria)', dataset: { a: 'chat' }, on: { click: ctx.seguro(async () => {
+  const bt = h('button', { doc, class: 'lc-cp-ic', title: aoLado ? 'chat: conversas recentes ao lado (outro clique fecha)' : 'chat: amigos e conversas em janela própria',
+    'aria-label': 'chat', dataset: { a: 'chat' }, on: { click: ctx.seguro(async () => {
     if (abrindo) return;
     abrindo = true;
     try {
@@ -55,7 +56,7 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
       ctx.expandir();
       ctx.avisar('chat em janela própria indisponível (coletor fora do ar): abrindo o client normal', true);
     } finally { abrindo = false; }
-  }) } }, '💬', bolha);
+  }) } }, icone('chat', { doc }), bolha);
   if (antesDe && antesDe.parentNode === ctx.extras && typeof ctx.extras.insertBefore === 'function') ctx.extras.insertBefore(bt, antesDe);
   else ctx.extras.append(bt);
   botaoAmigos(ctx, { depoisDe: bt });
@@ -77,8 +78,8 @@ export function botaoAmigos(ctx, { depoisDe = null } = {}) {
   const lat = ctx.servicos?.lateral;
   if (typeof lat?.alternarLista !== 'function' || !lat.ligada?.()) return null;
   const doc = ctx.extras?.ownerDocument || ctx.extras?.doc;
-  const bt = h('button', { doc, class: 'lc-cp-ic', title: 'amigos: lista ao lado (outro clique fecha)', dataset: { a: 'lista-amigos' },
-    on: { click: ctx.seguro(() => lat.alternarLista()) } }, '👥');
+  const bt = h('button', { doc, class: 'lc-cp-ic', title: 'amigos: lista ao lado (outro clique fecha)', 'aria-label': 'amigos', dataset: { a: 'lista-amigos' },
+    on: { click: ctx.seguro(() => lat.alternarLista()) } }, icone('amigos', { doc }));
   const irmaos = [...(ctx.extras.children || [])];
   const i = depoisDe ? irmaos.indexOf(depoisDe) : -1;
   const prox = i >= 0 ? irmaos[i + 1] : null;
@@ -92,8 +93,8 @@ export function botaoConfig(ctx) {
   const lat = ctx.servicos?.lateral;
   if (typeof lat?.alternarConfig !== 'function') return null;
   const doc = ctx.extras?.ownerDocument || ctx.extras?.doc;
-  const bt = h('button', { doc, class: 'lc-cp-ic', title: 'configurações do lol-client (abrem à esquerda)', dataset: { a: 'config' },
-    on: { click: ctx.seguro(() => lat.alternarConfig()) } }, '⚙');
+  const bt = h('button', { doc, class: 'lc-cp-ic', title: 'configurações do lol-client (abrem à esquerda)', 'aria-label': 'configurações', dataset: { a: 'config' },
+    on: { click: ctx.seguro(() => lat.alternarConfig()) } }, icone('configuracoes', { doc }));
   ctx.extras.append(bt);
   return bt;
 }
@@ -103,8 +104,8 @@ export function botaoCoach(ctx, { antesDe = null } = {}) {
   const lat = ctx.servicos?.lateral;
   if (typeof lat?.alternarCoach !== 'function') return null;
   const doc = ctx.extras?.ownerDocument || ctx.extras?.doc;
-  const bt = h('button', { doc, class: 'lc-cp-ic', title: 'coach da seleção: selo completo ao lado (KDA, posição, matchup, draft)', dataset: { a: 'coach' },
-    on: { click: ctx.seguro(() => lat.alternarCoach()) } }, '📊');
+  const bt = h('button', { doc, class: 'lc-cp-ic', title: 'coach da seleção: selo completo ao lado (KDA, posição, matchup, draft)', 'aria-label': 'coach da seleção', dataset: { a: 'coach' },
+    on: { click: ctx.seguro(() => lat.alternarCoach()) } }, icone('coach', { doc }));
   if (antesDe && antesDe.parentNode === ctx.extras && typeof ctx.extras.insertBefore === 'function') ctx.extras.insertBefore(bt, antesDe);
   else ctx.extras.append(bt);
   return bt;

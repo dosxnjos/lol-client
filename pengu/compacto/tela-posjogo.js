@@ -17,7 +17,7 @@
 // current-ranked-stats entre a 1ª leitura (WaitingForStats, guardada por partida) e as seguintes, por até 3 min.
 // Campo ausente ou estado estranho nunca quebra: vira "–" com o motivo no title. Botão que não pode agir fica cinza com
 // o motivo. Erro de código = o roteador devolve o client normal. Importável no node (tools/teste-compacto-posjogo.mjs).
-import { h, estilo, fotoCampeao } from './comum.js';
+import { h, estilo, fotoCampeao, comIcone } from './comum.js';
 import { jogarDeNovo, FILAS_COM_POSICAO } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
 import { partesMentor } from '../posjogo/abas.js';
@@ -667,7 +667,7 @@ function conteudoResumo(ctx, est) {
     if (sec.resto && !sec.veredito) caixa.push(h('div', { class: 'lc-cp-mt-ver' }, sec.resto));
   } else if (m.status === 'pensando' || m.status === 'nada' || m.status === 'carregando') {
     caixa.push(h('div', { class: 'lc-cp-mt-tt' }, h('span', { class: 'lc-cp-rot' }, 'mentor'), h('span', { class: 'lc-cp-nota' }, 'chega 1–2 min depois do fim')),
-      h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, m.status === 'carregando' ? 'perguntando ao coletor…' : '⏳ analisando a partida…'),
+      h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, m.status === 'carregando' ? 'perguntando ao coletor…' : comIcone('espera', 'analisando a partida…', { tam: 12 })),
       h('div', { class: 'lc-cp-nota' }, 'pode jogar de novo sem esperar: a resposta fica guardada no coletor.'));
   } else if (m.status === 'erro') {
     const ult = [...(m.conversa || [])].reverse().find(c => c.uso === 'posjogo');
@@ -698,7 +698,7 @@ function conteudoResumo(ctx, est) {
   let lista;
   if (lic.estado === 'ok') {
     const titulo = l => (lic.local ? `${l.texto} (motor local: as do coletor não chegaram)` : l.texto);
-    lista = h('ul', { class: 'lc-cp-lic' }, lic.lista.map(l => h('li', { class: l.positiva ? 'lc-cp-pos' : undefined, title: titulo(l) }, `${l.positiva ? '✓' : '⚠'} ${l.texto}`)));
+    lista = h('ul', { class: 'lc-cp-lic' }, lic.lista.map(l => h('li', { class: l.positiva ? 'lc-cp-pos' : undefined, title: titulo(l) }, comIcone(l.positiva ? 'ok' : 'aviso', l.texto, { tam: 12 }))));
   } else if (lic.estado === 'fora' || lic.estado === 'sem') {
     const texto = lic.estado === 'fora' ? 'coletor fora do ar: as lições ficam na análise completa' : `sem lições: ${lic.motivo || 'nada a mostrar'}`;
     lista = h('ul', { class: 'lc-cp-lic' }, h('li', { class: 'lc-cp-mudo', title: texto }, texto));
@@ -755,7 +755,7 @@ function conteudoDetalhes(ctx, est) {
   out.push(h('div', { class: 'lc-cp-jg-h' }, h('span'), h('span'), h('span', {}, 'K/D/A'), h('span', {}, 'farm'), h('span', {}, 'dano'), h('span', {}, 'ouro'), h('span')),
     h('div', { class: 'lc-cp-tm' }, h('span', {}, `seu time${v === true ? ' · vitória' : v === false ? ' · derrota' : ''}`), h('b', {}, tot(meu))), ...meu.map(linha),
     h('div', { class: 'lc-cp-tm' }, h('span', {}, 'adversários'), h('b', {}, tot(deles))), ...deles.map(linha),
-    h('div', { class: 'lc-cp-nota lc-cp-centro' }, 'itens, runas e feitiços: ⤢ análise completa'));
+    h('div', { class: 'lc-cp-nota lc-cp-centro' }, 'itens, runas e feitiços: análise completa'));
   return out;
 }
 
@@ -776,14 +776,14 @@ function pintarBase(ctx, est) {
   est.cont = null;
   if (b.armada) {
     est.cont = h('span', { class: 'lc-cp-cont' }, `${Math.max(0, Math.ceil((est.armadoAte - _relogio.agora()) / 1000))} s`);
-    filhos.push(h('div', { class: 'lc-cp-freio', role: 'status' }, est.cont, `⚠ ${est.textoFreio}`));
+    filhos.push(h('div', { class: 'lc-cp-freio', role: 'status' }, est.cont, comIcone('aviso', est.textoFreio, { tam: 12 })));
   }
   // análise completa só no Summoner's Rift (a análise do pós-jogo é dele: docs/INSIGHTS.md)
   const analise = est.mapa === null || est.mapa === 11;
   filhos.push(h('div', { class: 'lc-cp-linha-bts' },
     analise ? h('button', { class: 'lc-cp-btn', dataset: { a: 'analise' }, title: 'abre o client normal com as 6 abas do pós-jogo',
-      on: { click: ctx.seguro(() => verAnalise(ctx, est)) } }, '⤢ análise completa') : null,
-    h('button', { class: 'lc-cp-btn', dataset: { a: 'fechar-pj' }, title: 'sai da tela de fim de partida como o ✕ da Riot (não busca)',
+      on: { click: ctx.seguro(() => verAnalise(ctx, est)) } }, comIcone('expandir', 'análise completa')) : null,
+    h('button', { class: 'lc-cp-btn', dataset: { a: 'fechar-pj' }, title: 'sai da tela de fim de partida como o botão de fechar da Riot (não busca)',
       on: { click: ctx.seguro(e => fechar(ctx, e)) } }, 'fechar')));
   est.partes.base.replaceChildren(...filhos);
 }

@@ -2,7 +2,7 @@
 // client: o roteador de verdade (compacto/index.js) monta as telas de verdade, com riotInvoke falso, DOM mínimo feito
 // aqui, relógio falso e LCU falsa (fetch global trocado: nada sai para o client). Prova do plano
 // roadmap/2026-10-13-client-compacto.md, passo 4: busca só no clique; freio pede o 2º clique; penalidade não busca;
-// não-líder não busca nem cancela; cancelar = DELETE; convite aceito/recusado só por clique; 💬 sem coletor expande.
+// não-líder não busca nem cancela; cancelar = DELETE; convite aceito/recusado só por clique; chat sem coletor expande.
 // uso: node tools/teste-compacto-lobby.mjs
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada } from '../pengu/compacto/modo.js';
@@ -429,27 +429,31 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('convite: recusar = POST .../decline', igual(s.escritas(), ['POST /lol-lobby/v2/received-invitations/xyz/decline']) && s.avisos.some(([m]) => m === 'convite recusado'), s.escritas().join(', '));
 }
 {
-  // 💬: com o coletor abre a janela; sem rota/coletor, expande (chat da Riot)
+  // chat: com o coletor abre a janela; sem rota/coletor, expande (chat da Riot)
   const s = cenario({ rotas: { 'GET /lol-chat/v1/conversations': [{ type: 'chat', unreadMessageCount: 2 }, { type: 'customGame', unreadMessageCount: 9 }] }, coletor: async () => ({ status: 200, dados: { ok: true } }) });
   await s.iniciar();
   const bolha = s.doc.getElementById('lc-compacto').querySelector('.lc-cp-bolha');
-  caso('💬: contador só das conversas 1:1', bolha?.textContent === '2' && bolha.style.display === '');
+  caso('chat: contador só das conversas 1:1', bolha?.textContent === '2' && bolha.style.display === '');
+  // revisão de 17/10/2026 (ícones): sem o chat ao lado o botão é o mesmo "chat" (ícone e aria-label), só abre as janelas do coletor
+  const btChat = s.doc.getElementById('lc-compacto').querySelector('[data-a="chat"]');
+  caso('chat sem o chat ao lado: ícone chat e aria-label "chat" (o nome do ícone, não "amigos")',
+    btChat?.getAttribute('aria-label') === 'chat' && !!btChat?.querySelector('[data-icone="chat"]'), btChat?.getAttribute('aria-label'));
   await s.clicar('[data-a="chat"]');
-  caso('💬: coletor abriu = POST /chat/abrir/amigos e o compacto fica', s.colChamadas.some(([m, c]) => m === 'POST' && c === '/chat/abrir/amigos') && s.efetivo() === 'compacto');
+  caso('chat: coletor abriu = POST /chat/abrir/amigos e o compacto fica', s.colChamadas.some(([m, c]) => m === 'POST' && c === '/chat/abrir/amigos') && s.efetivo() === 'compacto');
   await s.evento('/lol-chat/v1/conversations', null);
-  caso('💬: nada de escrita na LCU', s.escritas().length === 0);
+  caso('chat: nada de escrita na LCU', s.escritas().length === 0);
 }
 {
   const s = cenario({ coletor: async () => ({ status: 404, dados: { erro: 'não existe' } }) });
   await s.iniciar();
   await s.clicar('[data-a="chat"]');
-  caso('💬 sem a rota do chat: expande e avisa', s.efetivo() === 'expandido' && !s.doc.getElementById('lc-compacto') && s.avisos.some(([m]) => m.includes('chat em janela própria indisponível')), JSON.stringify(s.avisos));
+  caso('chat sem a rota do chat: expande e avisa', s.efetivo() === 'expandido' && !s.doc.getElementById('lc-compacto') && s.avisos.some(([m]) => m.includes('chat em janela própria indisponível')), JSON.stringify(s.avisos));
 }
 {
   const s = cenario({ servicos: { coletor: undefined } });
   await s.iniciar();
   await s.clicar('[data-a="chat"]');
-  caso('💬 sem coletor nenhum: expande', s.efetivo() === 'expandido');
+  caso('chat sem coletor nenhum: expande', s.efetivo() === 'expandido');
 }
 {
   // + convidar: sem o chat do coletor, a lista de amigos dentro da tela; convite só no clique
@@ -478,7 +482,7 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   const s = cenario({ coletor: async c => (c === '/chat/abrir/amigos' ? { status: 202, dados: { ok: false } } : { status: 404 }) });
   await s.iniciar();
   await s.clicar('[data-a="chat"]');
-  caso('💬: coletor recusou (ok false) = expande', s.efetivo() === 'expandido');
+  caso('chat: coletor recusou (ok false) = expande', s.efetivo() === 'expandido');
 }
 {
   const s = cenario({ coletor: async c => (c === '/dica' ? { status: 200, dados: { texto: 'teu farm caiu 12% nas derrotas de hoje.' } } : { status: 404 }) });

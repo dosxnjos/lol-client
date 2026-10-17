@@ -180,6 +180,70 @@ O `CLAUDE.md` do projeto já foi atualizado com essa exceção (linha da Lateral
 4. Docs, `CLAUDE.md` e testes passam a citar o **nome** (chat, amigos, configurações, coach) e não o glifo.
 5. Painel da 2ª tela (`painel/**`) e janelas do coletor (Python): fora desta etapa; ficam como proposta ao Gabriel.
 
+### Estado da etapa C (17/10/2026; construída, revisada e commitada)
+
+- **Passo 1 (inventário, `pengu/**`, varredura de todo símbolo acima de U+2000):** ícone de botão ou marcador trocado: 💬 chat, 👥 amigos,
+  ⚙ configurações, 📊 coach (topo e "última partida"), 🗨 sala do time, 🎬 replay, ⛔ bloqueado, ⏳ espera, ⚠ aviso (lições, freio,
+  posição), ⚑ denunciar, ♥/♡ honrar (cheio = votado), ★ amigo/favorito, ✓ ok, ✕ fechar (topo, painéis, diálogos, editor, pós-jogo),
+  – minimizar, ⤢ expandir, ▣ modo compacto, ← voltar, ⇄/⇅/⟲ trocas de posição/ordem/campeão, ▾/▸/▴/› setas de recolher, ＋ criar pasta.
+  Frase que citava o glifo passou a citar o nome ("tente de novo ou use expandir", "clique em fechar de novo", "lista de amigos",
+  "engrenagem no topo", botão "modo compacto" nas Configurações). **Ficam (decisão, reversível):** ↑/↓/→ do PDL e "35 → 40" (tipografia de
+  número), ● da lista de objetivos e ✕/▲/▼/▬ dentro dos gráficos do painel do pós-jogo (marca de dado, não botão), os nomes de página de runa
+  do Gabriel no `config.js` (dado dele) e as strings `'botão ⤢'`, `'botão ▣'`, `'painel ⚙: …'` do registro das expansões (vão ao coletor:
+  contrato rio abaixo, fora da etapa). Comentários de código mantêm o glifo (histórico; outras sessões mexem nos mesmos arquivos).
+- **Passo 2 (Lucide embutido):** `lucide-static@1.49.0` (npm, publicado 29/09/2026), tarball conferido pelo `sha512` e pelo `shasum` do
+  registry, extraído por `tarfile` (só `LICENSE` e `icons/*.svg`, nome simples) numa pasta nova do scratchpad. `tools/icones-lucide.py`
+  (novo, `python -I`) lê só os 25 usados, recusa DOCTYPE/ENTITY/script/style/href/on*/foreignObject e passa cada SVG por lista branca (raiz 24×24
+  com os atributos do Lucide; filhos path/circle; atributos geométricos; valores numéricos) e imprime o bloco `ICONES` de `pengu/icones.js`
+  (novo, sem import, licença ISC do Lucide + MIT do Feather no topo: x, check, minus, plus, maximize-2, minimize-2, arrow-left e chevrons
+  derivam dele). Nenhuma requisição externa em execução. Mapa nome do produto → Lucide: chat=message-circle, amigos=users,
+  configuracoes=settings, coach=chart-column, salaTime=messages-square, replay=clapperboard, bloqueado=ban, espera=hourglass,
+  aviso=triangle-alert, denunciar=flag, honrar=heart, favorito=star, ok=check, fechar=x, minimizar=minus, expandir=maximize-2,
+  compacto=minimize-2, voltar=arrow-left, trocaPosicao=arrow-left-right, trocaOrdem=arrow-up-down, trocaCampeao=rotate-ccw,
+  aberto/fechado/aumentar=chevron-down/right/up, adicionar=plus.
+- **Passo 3 (troca):** `icone(nome, {doc, tam, cheio, classe})` monta o SVG por `createElementNS` com os dados fixos (DOM falso sem
+  `createElementNS` cai no `createElement`), `aria-hidden`, `focusable=false`, `data-icone`, `currentColor`, width/height nos atributos
+  (funciona sem CSS); `iconeHtml` = a mesma coisa em string fixa (só o `posjogo/index.js`, que monta HTML). `compacto/comum.js` reexporta
+  `icone` e dá `comIcone(nome, texto)` (margem no ícone, `.lc-ic-antes` em `estilo.css`, nunca espaço no texto: num flex o espaço some).
+  Botão só com ícone ganhou `aria-label` além do `title` (chat, amigos, configurações, coach da seleção, minimizar, fechar o client, fechar
+  a conversa/o chat/a lista/as configurações/o editor, voltar à lista de amigos, criar pasta, recolher, aumentar, denunciar, adicionar como
+  amigo/pedido enviado/já é amigo); o `titulo()` da lateral muda os dois juntos. Contador de não lidas segue como 2º filho do botão de chat
+  (`position:absolute` por cima do ícone). Tamanhos: 16 px no topo (o emoji media ~16), 14 nos fechar/voltar, 11–13 nos inline.
+  Modelos puros ganharam o nome do ícone em vez do glifo no texto: `botaoHonra` (`icone: 'ok'`), `linhaUltima` (`botao.icone`), `TROCAS`
+  (`icone`); `linhaUltima.titulo` perdeu o 📊 (o ícone fica na própria linha quando não há foto do campeão).
+- **Passo 4 (docs e testes):** `CLAUDE.md` (Lateral e Som pelo nome; regra "ícone só de `pengu/icones.js`, nunca emoji" na linha dos textos),
+  README, `TEXTOS-DA-INTERFACE.md` (regra de ícone e nome na frase), ARMADILHAS (entrada nova "Ícone que some do `textContent`" e o título da
+  seleção medido de novo). Testes acham ícone por `[data-icone]` e citam o nome nos casos. `tools/teste-icones.mjs` (novo, em
+  `rodar-testes.py`, 14 casos): atributos, namespace, limites, nome desconhecido/protótipo lança, dados só geométricos, licença, nada de rede,
+  só os usados embutidos e todo nome usado existe, e **nenhum emoji ou glifo de ícone no código do plugin fora de comentário** (exceções
+  nomeadas). Casos novos: `teste-compacto-lateral.mjs` (4 botões do topo com ícone, aria-label e a bolha por cima), honra (coração cheio,
+  "honra enviada" com ok), runa ok, lições aviso/aviso/ok, botão "reabrir análise" com o ícone, "modo compacto" com o ícone.
+- **Harness (jogo fechado, `servir.mjs` na 8831):** `temp/compacto-harness/2026-10-17-icones-1-selecao-final.png`,
+  `…-2-selecao-coach-chat-amigos.png` (3 botões de 28 px; o título "FINALIZAÇÃO" inteiro em 109 px), `…-3-honra.png`.
+  Nenhum emoji no texto da camada; o console só tem os 404 de foto de campeão que o harness já tinha. Clique de verdade (Playwright,
+  Chromium) no `<circle>` do ícone de amigos abriu a lista, e no `<path>` da seta "aumentar" da sala do time a faixa cresceu sem o
+  clique do cabeçalho recolher de novo (o `closest('button')` acha o botão a partir da forma do SVG).
+- **Revisão adversarial do fechamento (17/10/2026), 2 furos corrigidos com teste que falhava antes:** (1) o "×" de "tirar da regra" nas
+  fichas das regras de runa (`blocos.js`, Configurações da Riot e ⚙ do compacto) escapou do inventário: o `×` (U+00D7) e o `←` não estavam
+  na guarda. Virou o ícone fechar, com `role=button` e `aria-label`; a guarda de `teste-icones.mjs` passou a contar `×`, `←` e as outras setas
+  (↑ → ↓ seguem livres, tipografia de número), com exceções nomeadas para o "contra" (matchup do coach, placar da partida, objetivos do
+  pós-jogo) e o "← esta" da tabela do pós-jogo (marcador de dado). (2) o botão de chat sem o chat ao lado tinha ícone chat e `aria-label`
+  "amigos": agora "chat" nos dois modos, `title` "chat: amigos e conversas em janela própria" (`teste-compacto-lobby.mjs`). **Medido:** o CSS
+  comum da Riot (rcp-fe-common-libs, -ember-libs, -lol-navigation, -lol-uikit, por `tools/ler-wad.py`) não tem regra para `svg` solto
+  (só seletores de componentes dela), então o width/height dos atributos valem na barra e nos botões. Conferido sem furo: nenhum SVG ou
+  fetch externo em execução, todo handler acha o botão por `closest()`/`contains()` (o clique no `<path>` chega), nenhum seletor por
+  glifo no plugin, no coletor ou nas ferramentas, `currentColor` herdado de botões com cor própria, nenhuma escrita nova na LCU, nenhuma
+  geometria nova, chat 1:1 e lateral sem abrir sozinhos (bateria). **Limite conhecido:** o caso "só os usados estão embutidos" procura o
+  nome como palavra solta (ícone sobrando só pesa bytes). O "abrir" + ícone dos pedidos de amizade é o único texto com ícone depois.
+  Bateria depois da revisão: `python tools/rodar-testes.py` 58/58 com o jogo fechado (tasklist antes), `teste-textos` 9/9.
+- **Proposta ao Gabriel (não feita):** o mesmo para o painel da 2ª tela (`painel/**`), as janelas do coletor (Python/HTML) e o vocabulário do
+  registro das expansões (`'botão ⤢'` → `'botão expandir'`, mudando junto o que o coletor e o relatório leem).
+- **Só o client real prova:** SVG inline no CEF 108 com o `currentColor` e o alinhamento (`vertical-align`) nos botões da Riot que herdam
+  fonte; o `#lc-botao-compacto` com o ícone na barra da Riot (largura nova empurra a `--lc-cp-nav`); o clique no `<path>` do ícone chegando
+  ao botão (`closest`) nos uikit; a prova de carga `node tools/cdp.mjs eval tools/compacto-importar.js` (agora com `icones.js` e
+  `replay.js`) depois de recarregar a interface; o ícone fechar nas fichas de runa (`#lc-config-painel`, modal da Riot, fora do harness);
+  o "abrir" + ícone do botão de pedidos de amizade na lista.
+
 ## O que reverteria cada decisão
 
 - Faixa na janela principal → janela separada: se o print mostrar que não cabe ou se ele pedir.

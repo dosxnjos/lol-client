@@ -23,7 +23,7 @@
 // esquerda, no lugar da ⚙ (um dos dois por vez). Desenho e corpos: compacto/perfil.js; o fundo da coluna: compacto/fundo.js.
 // Importável no node (tools/teste-compacto-lateral.mjs, teste-compacto-amigos.mjs): nada de DOM no topo; doc, LCU, relógio e
 // geometria injetáveis.
-import { h, estilo, campeoes as catalogoPadrao, FASES_JOGO } from './comum.js';
+import { h, estilo, icone, campeoes as catalogoPadrao, FASES_JOGO } from './comum.js';
 import { verAmigos, lobbyParaConvite, pedidosRecebidos, criarListaAmigos, criarConversaView, lerConversa, enviarMensagem,
   acharSalaTime, elencoTime, lerSalaTime, linhaSalaTime, limparConversas, verRecentes, criarRecentes, pidDe, statusAmigo, CSS_CHAT_LATERAL } from './lateral-chat.js';
 import { criarCoachView, modeloSelo, meuNaSessao, COACH_CADA_MS, CSS_COACH } from './lateral-coach.js';
@@ -107,11 +107,13 @@ export function criarLateral({
     listaView.sobre.append(campoView.el, menuView.el, dlgView.el);
     painelTit = h('b', { doc }, 'chat');
     painelSub = h('small', { doc }, '');
-    painelX = h('button', { doc, class: 'lc-lt-x', title: 'fechar o chat', dataset: { a: 'lt-fechar-painel' }, on: { click: seguro(() => fecharPainel()) } }, '✕');
+    painelX = h('button', { doc, class: 'lc-lt-x', title: 'fechar o chat', 'aria-label': 'fechar o chat', dataset: { a: 'lt-fechar-painel' }, on: { click: seguro(() => fecharPainel()) } },
+      icone('fechar', { doc, tam: 14 }));
     painelCorpo = h('div', { doc, class: 'lc-lt-pcorpo' });
     painelEl = h('section', { doc, class: 'lc-lt-pn lc-lt-painel', dataset: { painel: 'painel' } },
       h('header', { doc, class: 'lc-lt-cab' },
-        h('button', { doc, class: 'lc-lt-volta', title: 'voltar à lista de amigos', dataset: { a: 'lt-voltar' }, on: { click: seguro(() => { e.vistaEstreita = 'lista'; render(); }) } }, '←'),
+        h('button', { doc, class: 'lc-lt-volta', title: 'voltar à lista de amigos', 'aria-label': 'voltar à lista de amigos', dataset: { a: 'lt-voltar' },
+          on: { click: seguro(() => { e.vistaEstreita = 'lista'; render(); }) } }, icone('voltar', { doc, tam: 14 })),
         h('div', { doc, class: 'lc-lt-tit' }, painelTit, painelSub), painelX),
       painelCorpo);
     // chat: recentes em cima, a conversa embaixo (uma view para todas as 1:1 e outra para a sala do time; o campo nasce uma vez)
@@ -129,7 +131,8 @@ export function criarLateral({
     chatEl = h('div', { doc, class: 'lc-lt-chat', dataset: { a: 'lt-chat' } }, recentesView.el,
       h('div', { doc, class: 'lc-lt-baixo', dataset: { a: 'lt-conversa' } },
         h('header', { doc, class: 'lc-lt-ccab' }, h('div', { doc, class: 'lc-lt-tit' }, baixoNome, baixoSub),
-          h('button', { doc, class: 'lc-lt-x', title: 'fechar a conversa', dataset: { a: 'lt-fechar-conversa' }, on: { click: seguro(() => fecharConversa()) } }, '✕')),
+          h('button', { doc, class: 'lc-lt-x', title: 'fechar a conversa', 'aria-label': 'fechar a conversa', dataset: { a: 'lt-fechar-conversa' },
+            on: { click: seguro(() => fecharConversa()) } }, icone('fechar', { doc, tam: 14 }))),
         baixoCorpo));
     configView = criarConfigView({ doc, cfg, definir, lcu, avisar, aoConfigRiot: seguro(() => configRiot()), aoFechar: seguro(() => { e.config = false; render(); }) });
     coachView = criarCoachView({ doc });
@@ -150,7 +153,8 @@ export function criarLateral({
     pai.replaceChildren(...nos);
   };
   const texto = (el, t) => { if (el && el.textContent !== t) el.textContent = t; };
-  const titulo = (el, t) => { try { if (el.getAttribute('title') !== t) el.setAttribute('title', t); } catch { /* sem DOM */ } };
+  // botão só com ícone: o nome dele vai no title e no aria-label juntos
+  const titulo = (el, t) => { try { if (el.getAttribute('title') !== t) { el.setAttribute('title', t); el.setAttribute('aria-label', t); } } catch { /* sem DOM */ } };
 
   function pintarRecentes() {
     if (!recentesView) return;
@@ -161,7 +165,7 @@ export function criarLateral({
   function pintarPainel(lay) {
     painelEl.classList.toggle('lc-lt-estreito', !!lay.estreito);
     if (e.painel === 'coach') {
-      texto(painelTit, '📊 coach da seleção'); texto(painelSub, 'selo completo · acompanha o seu hover'); titulo(painelX, 'fechar o coach');
+      texto(painelTit, 'coach da seleção'); texto(painelSub, 'selo completo · acompanha o seu hover'); titulo(painelX, 'fechar o coach');
       trocar(painelCorpo, [coachView.el]);
       return;
     }
@@ -177,7 +181,7 @@ export function criarLateral({
     const c = e.conversa;
     chatEl.classList.toggle('lc-lt-com-conversa', !!c);
     if (!c) { trocar(baixoCorpo, []); return; }
-    if (c.tipo === 'time') { texto(baixoNome, '🗨 sala do time'); texto(baixoSub, 'só campeão e posição de quem fala'); trocar(baixoCorpo, [timeView.el]); return; }
+    if (c.tipo === 'time') { texto(baixoNome, 'sala do time'); texto(baixoSub, 'só campeão e posição de quem fala'); trocar(baixoCorpo, [timeView.el]); return; }
     texto(baixoNome, c.nome || 'amigo'); texto(baixoSub, c.txt || 'conversa');
     trocar(baixoCorpo, [convView.el]);
   }
@@ -1117,10 +1121,11 @@ export const CSS_LATERAL = `
 #lc-compacto .lc-lt-tit { flex:1; min-width:0; display:flex; flex-direction:column; line-height:1.2; }
 #lc-compacto .lc-lt-tit b { color:var(--lc-ouro2); font-size:13px; font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 #lc-compacto .lc-lt-tit small { color:var(--lc-mudo); font-size:11px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
-#lc-compacto .lc-lt-x, #lc-compacto .lc-lt-volta { width:24px; height:24px; flex:none; background:none; border:none; color:var(--lc-mudo); font:inherit; font-size:13px; cursor:pointer; }
+#lc-compacto .lc-lt-x, #lc-compacto .lc-lt-volta { width:24px; height:24px; flex:none; background:none; border:none; color:var(--lc-mudo); font:inherit; font-size:13px; cursor:pointer;
+  display:inline-grid; place-items:center; padding:0; }
 #lc-compacto .lc-lt-x:hover, #lc-compacto .lc-lt-volta:hover { color:var(--lc-ouro2); }
 #lc-compacto .lc-lt-volta { display:none; }
-#lc-compacto .lc-lt-painel.lc-lt-estreito .lc-lt-volta { display:inline-block; }
+#lc-compacto .lc-lt-painel.lc-lt-estreito .lc-lt-volta { display:inline-grid; }
 #lc-compacto .lc-lt-pcorpo { flex:1; min-height:0; display:flex; flex-direction:column; }
 html.lc-lt-chat #lc-compacto [data-a="chat"], html.lc-lt-lista #lc-compacto [data-a="lista-amigos"], html.lc-lt-config #lc-compacto [data-a="config"],
 html.lc-lt-coach #lc-compacto [data-a="coach"] { border-color:var(--lc-azul); box-shadow:0 0 0 1px rgba(10,200,185,.35) inset; }

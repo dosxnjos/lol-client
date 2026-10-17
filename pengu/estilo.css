@@ -4,6 +4,10 @@
    CSS_* de cada tela-*.js), todo sob #lc-compacto, #lc-botao-compacto, html.lc-modo-compacto ou html.lc-botao-compacto,
    que só existem com compacto.ligado: desligado, nada daquele CSS pega no client normal (tools/teste-compacto.mjs). */
 
+/* ícones Lucide do plugin (pengu/icones.js): alinhados ao texto, cor do texto (currentColor), nunca encolhem num flex */
+.lc-ic { display: inline-block; flex: none; vertical-align: -0.15em; }
+.lc-ic.lc-ic-antes { margin-right: .35em; }
+
 /* esconder TFT: card na tela de modos e aba na barra de cima */
 html.lc-esconder-tft .game-type-card:has(.parties-game-type-icon.map-22),
 html.lc-esconder-tft .main-navigation-menu-item.menu_item_navbar_tft { display: none !important; }
@@ -188,7 +192,7 @@ html:not(.lc-champ-select) #lc-winrate { display: none; }
 #lc-config-painel .lc-fichas > .lc-explica { margin: 0; }
 #lc-config-painel .lc-ficha { display: inline-flex; align-items: center; gap: 6px; padding: 3px 4px 3px 8px; border: 1px solid #785a28; background: #1e2328; color: #f0e6d2; font: 12px var(--font-body); }
 #lc-config-painel .lc-ficha.lc-apagada { border-color: #5b2a2a; color: #e84057; }
-#lc-config-painel .lc-ficha-x { cursor: pointer; padding: 0 4px; color: #a09b8c; }
+#lc-config-painel .lc-ficha-x { cursor: pointer; padding: 0 4px; color: #a09b8c; display: inline-grid; place-items: center; }
 #lc-config-painel .lc-ficha-x:hover { color: #f0e6d2; }
 #lc-config-painel .lc-ficha-add { flex: 0 0 190px; }
 #lc-config-painel .lc-sugestoes { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }

@@ -4,6 +4,7 @@
 import { campeoes, paginasEditaveis } from './runas.js';
 import { JUNGLER_LONGE, OVERLAY_CORES, OVERLAY_FORCAS } from './config.js';
 import { TEXTO_SILENCIAR } from './configuracoes.js';
+import { icone } from './icones.js';
 
 const POSICOES = [['*', 'Qualquer posição'], ['TOP', 'Topo'], ['JUNGLE', 'Selva'], ['MIDDLE', 'Meio'], ['BOTTOM', 'Atirador'], ['UTILITY', 'Suporte']];
 const clonar = o => JSON.parse(JSON.stringify(o));
@@ -74,8 +75,11 @@ export function blocoRunas(corpo, ctx) {
     for (const id of r.paginas) {
       const p = paginaPorId[id];
       const f = el('span', 'lc-ficha' + (p ? '' : ' lc-apagada'), p ? p.name : `página ${id} (apagada)`);
-      const x = el('span', 'lc-ficha-x', '×');
+      const x = el('span', 'lc-ficha-x');
+      x.append(icone('fechar', { tam: 11 }));
       x.title = 'tirar da regra';
+      x.setAttribute('role', 'button');
+      x.setAttribute('aria-label', 'tirar da regra');
       x.addEventListener('click', () => { const n = clonar(regras); n[i].paginas = n[i].paginas.filter(v => v !== id); salvar(n); });
       f.append(x);
       fichas.append(f);
@@ -245,11 +249,11 @@ export const blocoTraumas = (corpo, { cfg, definir, ui }) => corpo.append(
 
 // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): vale na hora (index.js aoMudar -> sincronizar)
 export const blocoCompacto = (corpo, { cfg, definir, ui }) => corpo.append(
-  ui.caixa('compacto.ligado', 'Client compacto', 'Janela pequena só com a rotina (lobby, fila, seleção com as trocas, pós-jogo), o botão "▣ modo compacto" no topo e o atalho Ctrl+Shift+M. Desligado: client normal, sem botão; o coletor deixa de abrir conversa nova sozinho.',
+  ui.caixa('compacto.ligado', 'Client compacto', 'Janela pequena só com a rotina (lobby, fila, seleção com as trocas, pós-jogo), o botão "modo compacto" no topo e o atalho Ctrl+Shift+M. Desligado: client normal, sem botão; o coletor deixa de abrir conversa nova sozinho.',
     !!cfg.compacto?.ligado, v => definir('compacto.ligado', v)),
-  ui.caixa('compacto.inicioCompacto', 'Abrir cada fase no compacto', 'Desligado: cada fase começa no client normal e o botão "▣ modo compacto" leva ao compacto. ARAM, reconectar, celebrações e janelas próprias da Riot abrem o client normal de qualquer jeito.',
+  ui.caixa('compacto.inicioCompacto', 'Abrir cada fase no compacto', 'Desligado: cada fase começa no client normal e o botão "modo compacto" leva ao compacto. ARAM, reconectar, celebrações e janelas próprias da Riot abrem o client normal de qualquer jeito.',
     !!cfg.compacto?.inicioCompacto, v => definir('compacto.inicioCompacto', v)),
-  ui.caixa('compacto.chatLateral', 'Chat e amigos ao lado do compacto', 'O 💬 alarga o client para a direita com as conversas recentes e a última conversa aberta; o 👥 mostra a lista de amigos. Mensagem nova só aparece nos recentes e no contador: nada abre sozinho. Substitui as janelas do chat do coletor (elas deixam de abrir conversa sozinhas). Desligado: o 💬 volta a abrir as janelas próprias.',
+  ui.caixa('compacto.chatLateral', 'Chat e amigos ao lado do compacto', 'O botão de chat alarga o client para a direita com as conversas recentes e a última conversa aberta; o de amigos mostra a lista de amigos. Mensagem nova só aparece nos recentes e no contador: nada abre sozinho. Substitui as janelas do chat do coletor (elas deixam de abrir conversa sozinhas). Desligado: o botão de chat volta a abrir as janelas próprias.',
     cfg.compacto?.chatLateral !== false, v => definir('compacto.chatLateral', v)),
   ui.caixa('compacto.fundoPerfil', 'Fundo do perfil no compacto', 'O fundo do seu perfil vira o fundo da janela compacta, centralizado e cortado nas laterais, com um véu escuro para o texto continuar legível. Só a imagem (o vídeo do fundo fica de fora). Desligado: o fundo escuro de sempre.',
     cfg.compacto?.fundoPerfil !== false, v => definir('compacto.fundoPerfil', v)),

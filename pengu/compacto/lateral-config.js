@@ -7,7 +7,7 @@
 // página Som é a dela). Junta o som do client (compacto/som.js: GET ao abrir; PATCH só no clique ou no soltar do volume, dele) com as
 // chaves de som do plugin (blocos.js blocoSomPlugin); o bloco "Voz" some daqui porque os controles dele estão na Som.
 // Importável no node (o DOM vem do doc injetado; montarPainel e os blocos usam o document global, como no client).
-import { h } from './comum.js';
+import { h, icone, comIcone } from './comum.js';
 import { montarPainel, ui } from '../configuracoes.js';
 import { blocoSomPlugin } from '../blocos.js';
 import { criarSomView, CSS_SOM } from './som.js';
@@ -39,12 +39,13 @@ export function criarConfigView(amb) {
   busca.addEventListener('keydown', e => e.stopPropagation?.());
   const corpo = h('div', { doc, class: 'lc-lt-cfgcorpo', dataset: { a: 'cfg-corpo' } });
   const riot = h('button', { doc, class: 'lc-cp-btn lc-lt-riot', dataset: { a: 'cfg-riot' }, title: 'abre o client normal no modal da Riot; ao fechar, volta ao compacto',
-    on: { click: e => { if (e?.isTrusted === false) return; amb.aoConfigRiot?.(); } } }, '⤢ Configurações da Riot (vídeo, som, teclas)');
+    on: { click: e => { if (e?.isTrusted === false) return; amb.aoConfigRiot?.(); } } }, comIcone('expandir', 'Configurações da Riot (vídeo, som, teclas)', { doc }));
   // um arrasto do volume que ficou preso (sem pointerup) solta no próximo clique em qualquer lugar da ⚙ fora de um volume (cabeçalho de
   // bloco, busca, ✕): senão a ⚙ ficava parada, porque arrastando ela não repinta (revisão de 16/10/2026)
   const el = h('section', { doc, class: 'lc-lt-pn lc-lt-cfg', dataset: { painel: 'config' }, on: { pointerdown: ev => som.soltarSeFora(ev) } },
-    h('header', { doc, class: 'lc-lt-cab' }, h('div', { doc, class: 'lc-lt-tit' }, h('b', { doc }, '⚙ configurações do lol-client'), h('small', { doc }, 'grava na hora · as mesmas do client normal')),
-      h('button', { doc, class: 'lc-lt-x', title: 'fechar as configurações', dataset: { a: 'cfg-fechar' }, on: { click: e => amb.aoFechar?.(e) } }, '✕')),
+    h('header', { doc, class: 'lc-lt-cab' }, h('div', { doc, class: 'lc-lt-tit' }, h('b', { doc }, comIcone('configuracoes', 'configurações do lol-client', { doc })), h('small', { doc }, 'grava na hora · as mesmas do client normal')),
+      h('button', { doc, class: 'lc-lt-x', title: 'fechar as configurações', 'aria-label': 'fechar as configurações', dataset: { a: 'cfg-fechar' }, on: { click: e => amb.aoFechar?.(e) } },
+        icone('fechar', { doc, tam: 14 }))),
     h('div', { doc, class: 'lc-lt-buscacx' }, busca), corpo,
     h('footer', { doc, class: 'lc-lt-rod' }, riot, h('small', { doc }, 'abre o client normal: o modal da Riot é desenhado para 1280')));
 
@@ -79,7 +80,7 @@ export function criarConfigView(amb) {
       const ehLinha = x => x?.classList?.contains?.('lol-settings-general-row');
       const n = linhas.reduce((t, x) => t + (ehLinha(x) ? 1 : (x?.querySelectorAll?.('.lol-settings-general-row')?.length || 0)), 0) || linhas.length;
       const cab = h('button', { doc, class: 'lc-lt-bcab' + (abre ? ' lc-lt-aberto' : ''), dataset: { a: 'cfg-bloco', bloco: g.titulo },
-        on: { click: () => { aberto = aberto === g.titulo ? '' : g.titulo; pintar(); } } }, h('span', { doc }, g.titulo), h('small', { doc }, `${n} ${n === 1 ? 'opção' : 'opções'} ${abre ? '▾' : '▸'}`));
+        on: { click: () => { aberto = aberto === g.titulo ? '' : g.titulo; pintar(); } } }, h('span', { doc }, g.titulo), h('small', { doc }, `${n} ${n === 1 ? 'opção' : 'opções'} `, icone(abre ? 'aberto' : 'fechado', { doc, tam: 11 })));
       const vistos = filtro && casam.length ? casam : linhas;
       const corpoB = abre ? h('div', { doc, class: 'lc-lt-bcorpo' }, ...vistos) : null;
       if (abre && vistos.includes(som.el)) somAVista = true;

@@ -245,7 +245,7 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   caso('WaitingForStats (tela D): "CARREGANDO ESTATÍSTICAS", sem números, sem jogar de novo nem ir para o lobby', s.texto().includes('CARREGANDO ESTATÍSTICAS')
     && !s.texto().includes('PDL') && !s.botao('jogar') && !s.botao('lobby') && !s.botao('analise'), s.texto());
   caso('topo: o próprio nome e o rank (sem ranque lido = "fim de partida")', s.camada().querySelector('.lc-cp-pj-id')?.textContent.startsWith('Xerekton'));
-  caso('topo: 💬 com o contador antes do expandir (protótipo da tela 4: "mais uma?" no fim da partida)',
+  caso('topo: botão de chat com o contador antes do expandir (protótipo da tela 4: "mais uma?" no fim da partida)',
     !!s.camada().querySelector('.lc-cp-extras')?.querySelector('button[data-a="chat"]'));
   caso('CSS do pós-jogo escopado em .lc-cp-pj (não muda o JOGAR nem o freio da tela 1)',
     !/#lc-compacto \.lc-cp-(jogar|freio|res|nums|lic|linha-bts)\b/.test(tela.CSS_POSJOGO) && /#lc-compacto \.lc-cp-pj \.lc-cp-jogar \{/.test(tela.CSS_POSJOGO));
@@ -264,8 +264,8 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   caso('lições: coletor ainda sem a partida → "…" e nova tentativa agendada', s.coletorPedidos.length === 1 && s.camada().querySelector('.lc-cp-lic')?.classList.contains('lc-cp-carregando'));
   await s.rel.avancar(5000);
   const lis = s.camada().querySelectorAll('li');
-  caso('lições: depois de 5 s as 3 do coletor, ⚠/⚠/✓, texto inteiro no title', lis.length === 3 && s.coletorPedidos.length === 2
-    && lis.map(l => l.textContent[0]).join('') === '⚠⚠✓' && lis[2].classList.contains('lc-cp-pos')
+  caso('lições: depois de 5 s as 3 do coletor, ícones aviso/aviso/ok, texto inteiro no title', lis.length === 3 && s.coletorPedidos.length === 2
+    && lis.map(l => l.querySelector('[data-icone]')?.dataset.icone).join('/') === 'aviso/aviso/ok' && lis[2].classList.contains('lc-cp-pos')
     && lis.every((l, i) => l.getAttribute('title') === FX.licoes.licoes[i].texto), lis.map(l => l.textContent).join(' | '));
   caso('jogar de novo: "mesma fila: Normal (escolha) · Topo / Selva"', s.botao('jogar')?.textContent === 'JOGAR DE NOVOmesma fila: Normal (escolha) · Topo / Selva', s.botao('jogar')?.textContent);
   caso('EndOfGame com o compacto: painel grande NÃO abriu sozinho', s.abertos.length === 0);
@@ -293,7 +293,7 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   caso('detalhes: cada linha com foto do campeão, nome do jogador e campeão (Riot ID inteiro no title)',
     linhas.length === 2 && t.includes('AliadoSecreto') && t.includes('Lee Sin') && t.includes('InimigoSecreto') && t.includes('Darius')
     && linhas.every(l => !!l.querySelector('.lc-cp-foto')) && linhas[1].querySelector('.lc-cp-n')?.getAttribute('title') === 'InimigoSecreto #XYZ · Darius', t);
-  caso('detalhes: "+" e "⚑" por jogador; nada escrito sem clique', linhas.every(l => !!l.querySelector('[data-a="adicionar"]') && !!l.querySelector('[data-a="denunciar"]'))
+  caso('detalhes: adicionar e denunciar por jogador; nada escrito sem clique', linhas.every(l => !!l.querySelector('[data-a="adicionar"]') && !!l.querySelector('[data-a="denunciar"]'))
     && s.escritas().length === 0, s.escritas().join(', '));
 }
 
@@ -508,8 +508,8 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   await tick(12);
   let lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
-  caso('b5: coletor fora → as 3 lições do motor local (⚠/⚠/✓), com a origem no title, pedidas pelo gameId da partida',
-    lis.length === 3 && lis.map(l => l.textContent[0]).join('') === '⚠⚠✓' && lis[0].textContent.includes('Morreu 9 vezes')
+  caso('b5: coletor fora → as 3 lições do motor local (aviso/aviso/ok), com a origem no title, pedidas pelo gameId da partida',
+    lis.length === 3 && lis.map(l => l.querySelector('[data-icone]')?.dataset.icone).join('/') === 'aviso/aviso/ok' && lis[0].textContent.includes('Morreu 9 vezes')
     && /motor local/.test(lis[0].getAttribute('title') || '') && igual(s.locaisPedidos, [GID]) && !s.texto().includes('coletor fora do ar: as lições'),
     s.texto());
   caso('b5: rótulo diz que é sem o coletor', /sem o coletor/.test(s.camada().querySelector('.lc-cp-lics summary')?.textContent || ''), s.camada().querySelector('.lc-cp-lics summary')?.textContent);
@@ -799,14 +799,14 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     let s = await nova({ fim: false });
     s.ret.abrirPainel(GJ).catch(() => {}); await tick(10);
     const carregando = s.painelEl()?.innerHTML || '';
-    caso('pedido por ele: "analisando a partida…" com ✕ na caixa de carregamento',
+    caso('pedido por ele: "analisando a partida…" com o fechar na caixa de carregamento',
       carregando.includes('analisando a partida') && carregando.includes('lc-fechar') && !s.painelPronto(), carregando);
     s.painelEl()?.disparar('click', { target: xis });
-    caso('✕ no carregamento: a caixa sai e o botão do topo diz "analisando a partida…"',
-      !s.painelEl() && s.botao()?.textContent === '⏳ analisando a partida…', s.botao()?.textContent);
+    caso('fechar no carregamento: a caixa sai e o botão do topo diz "analisando a partida…" (ícone espera)',
+      !s.painelEl() && s.botao()?.textContent === 'analisando a partida…' && !!s.botao()?.querySelector?.('[data-icone="espera"]'), s.botao()?.textContent);
     abrir(); await tick(20);
-    caso('análise chega com o painel fechado: nada abre sozinho; o botão vira "análise pronta"',
-      !s.painelEl() && s.botao()?.textContent === '📊 análise pronta', s.botao()?.textContent);
+    caso('análise chega com o painel fechado: nada abre sozinho; o botão vira "análise pronta" (ícone coach)',
+      !s.painelEl() && s.botao()?.textContent === 'análise pronta' && !!s.botao()?.querySelector?.('[data-icone="coach"]'), s.botao()?.textContent);
     s.botao()?.click(); await tick(10);
     caso('clique no botão: painel com a partida na hora, sem ler a LCU de novo (a análise seguiu em cache)',
       s.painelPronto() && !s.botao() && leituras === 1, `leituras ${leituras}`);
@@ -814,11 +814,11 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     caso('clique dentro da caixa não fecha', s.painelPronto());
     s.janela.disparar('pointerdown', s.doc.body);
     caso('clique fora da caixa (no client) fecha o painel e deixa "reabrir análise"',
-      !s.painelEl() && s.botao()?.textContent === '📊 reabrir análise' && s.janela.ouvindo('pointerdown') === 0, s.botao()?.textContent);
+      !s.painelEl() && s.botao()?.textContent === 'reabrir análise' && s.janela.ouvindo('pointerdown') === 0, s.botao()?.textContent);
 
     // abertura automática do EndOfGame: carrega só com o botão; sem ele mexer no client, abre quando fica pronta
     s = await nova();
-    caso('EndOfGame: carregando sem caixa por cima (só o botão "analisando")', !s.painelEl() && s.botao()?.textContent === '⏳ analisando a partida…');
+    caso('EndOfGame: carregando sem caixa por cima (só o botão "analisando")', !s.painelEl() && s.botao()?.textContent === 'analisando a partida…');
     abrir(); await tick(20);
     caso('EndOfGame sem clique dele no client: o painel abre sozinho quando a análise fica pronta', s.painelPronto() && !s.botao());
     // 2º EndOfGame da mesma partida com o painel dela aberto: fica o mesmo painel (vivo, pintando), sem botão ao lado
@@ -832,7 +832,7 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     s.janela.disparar('pointerdown', s.doc.body);
     abrir(); await tick(20);
     caso('EndOfGame com clique dele no client durante o carregamento: painel não abre; botão "análise pronta"',
-      !s.painelEl() && s.botao()?.textContent === '📊 análise pronta', s.botao()?.textContent);
+      !s.painelEl() && s.botao()?.textContent === 'análise pronta', s.botao()?.textContent);
     s.botao()?.click(); await tick(10);
     caso('...e o clique no botão abre o painel', s.painelPronto());
     // abertura automática com a análise já pronta (2º EndOfGame, camada compacta que cai depois do pré-carregamento):
@@ -840,7 +840,7 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     s.janela.disparar('pointerdown', s.doc.body);
     s.ret.abrirPainel(GJ, { fimDePartida: true, automatico: true }); await tick(10);
     caso('abertura automática seguinte, com a análise pronta: não cobre o client; fica o "reabrir análise"',
-      !s.painelEl() && s.botao()?.textContent === '📊 reabrir análise' && leituras === 1, s.botao()?.textContent);
+      !s.painelEl() && s.botao()?.textContent === 'reabrir análise' && leituras === 1, s.botao()?.textContent);
 
     // aceite no meio do carregamento: some tudo e a análise em voo não abre nada depois
     s = await nova();
@@ -855,7 +855,7 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     s.emitir('/lol-gameflow/v1/gameflow-phase', 'EndOfGame'); await tick(10);
     abrir(); await tick(20);
     caso('2º EndOfGame no carregamento depois de ele clicar no client: o painel continua sem cair por cima',
-      !s.painelEl() && s.botao()?.textContent === '📊 análise pronta' && leituras === 1, `${s.botao()?.textContent} leituras ${leituras}`);
+      !s.painelEl() && s.botao()?.textContent === 'análise pronta' && leituras === 1, `${s.botao()?.textContent} leituras ${leituras}`);
     s = await nova();
     s.botao()?.click(); await tick(10);
     const caixaAntes = s.painelEl()?.innerHTML?.includes('analisando a partida');
@@ -870,11 +870,11 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
       s = await nova();
       abrir(); await tick(20);
       caso('abertura automática com erro: nenhuma caixa por cima do client; botão "tentar a análise de novo"',
-        !s.painelEl() && s.botao()?.textContent === '📊 tentar a análise de novo', s.botao()?.textContent);
+        !s.painelEl() && s.botao()?.textContent === 'tentar a análise de novo', s.botao()?.textContent);
       s = await nova({ fim: false });
       s.ret.abrirPainel(GJ).catch(() => {}); await tick(10);
       abrir(); await tick(20);
-      caso('pedido por ele com erro: o erro aparece na caixa (com ✕)',
+      caso('pedido por ele com erro: o erro aparece na caixa (com o fechar)',
         !!s.painelEl()?.innerHTML?.includes('pós-jogo:') && !!s.painelEl()?.innerHTML?.includes('lc-fechar'));
     } finally { jogoServido = jogo; }
 
@@ -902,7 +902,7 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
     mudouClasse(); await tick(10);
     const btF = f.doc.getElementById('lc-posjogo-reabrir');
     caso('posjogo/index.js: camada cai depois da decisão com a análise pronta → nada por cima; botão "análise pronta"',
-      fechadoAntes && !f.doc.getElementById('lc-posjogo') && btF?.textContent === '📊 análise pronta' && obs.every(o => !o.on), btF?.textContent);
+      fechadoAntes && !f.doc.getElementById('lc-posjogo') && btF?.textContent === 'análise pronta' && obs.every(o => !o.on), btF?.textContent);
     btF?.click(); await tick(10);
     caso('...e o clique no "análise pronta" abre o painel', !!f.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo'));
     // com a análise ainda em voo: como antes (D4), abre quando fica pronta se ele não mexeu no client nesse meio tempo
@@ -916,7 +916,7 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
       const btV = v.doc.getElementById('lc-posjogo-reabrir')?.textContent;
       soltar(); await esperarReal(50); await tick(20);
       caso('posjogo/index.js: camada cai com a análise em voo → "analisando" e, sem clique dele, o painel abre quando fica pronta',
-        btV === '⏳ analisando a partida…' && !!v.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo'), btV);
+        btV === 'analisando a partida…' && !!v.doc.getElementById('lc-posjogo')?.innerHTML?.includes('lc-topo'), btV);
     }
     // Ctrl+K "analisar última partida" no fim de partida compacto (achado 2): a partida que acabou, um painel só
     {

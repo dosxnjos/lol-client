@@ -12,7 +12,7 @@
 //   personalizada e para quem já está em GET reported-players/gameId/<id> (isReportDisabled do placar).
 // Nada sai sem clique dele. Nome de terceiro só como o client mostra no pós-jogo (Riot ID do eog), sempre por
 // textContent, nunca no log. Importável no node (tools/teste-compacto-fim-de-partida.mjs): nada de DOM no topo.
-import { h, estilo, fotoCampeao } from './comum.js';
+import { h, estilo, fotoCampeao, icone, comIcone } from './comum.js';
 
 export const POSICOES_PT = { TOP: 'Topo', JUNGLE: 'Selva', MIDDLE: 'Meio', BOTTOM: 'Atirador', UTILITY: 'Suporte' };
 export const ROTAS = {
@@ -203,7 +203,7 @@ export function criarSocial(ctx, { gameId = () => null, custom = () => null } = 
     if (!ctx.vivo()) return { ok: r?.ok };
     // só o campeão no aviso: sem camada e sem Toast, o avisar cai no console.log (nome de terceiro nunca no log)
     if (r.ok) { s.enviados.add(j.puuid); ctx.avisar(`pedido de amizade enviado (${j.campeao || 'jogador'})`); }
-    else if (r.status === 405) ctx.avisar('esse jogador está bloqueado: desbloquear e adicionar fica no client normal (⤢ expandir)', true);
+    else if (r.status === 405) ctx.avisar('esse jogador está bloqueado: desbloquear e adicionar fica no client normal (expandir)', true);
     else ctx.avisar(`não foi possível enviar o pedido de amizade (${r.status}${r.json?.message ? ': ' + String(r.json.message).slice(0, 80) : ''}): use o client normal`, true);
     mudou();
     return { ok: r.ok, status: r.status };
@@ -236,14 +236,16 @@ export function botoesJogador(ctx, social, j, { aoDenunciar, doc } = {}) {
   if (j?.eu) return h('span', { doc, class: 'lc-cp-jacoes' });
   const am = estadoAmizade(s, j.puuid);
   const voandoA = s.emVoo.has('a:' + j.puuid);
+  const icA = am === 'enviado' || am === 'pendente' ? 'ok' : am === 'amigo' ? 'favorito' : 'adicionar';
   const btA = h('button', { doc, class: 'lc-cp-jb' + (am === 'enviado' ? ' lc-cp-jb-ok' : ''), dataset: { a: 'adicionar', puuid: j.puuid || '' },
     title: ad.ok ? `adicionar ${nomeCompleto(j) || 'o jogador'} como amigo` : ad.motivo,
+    'aria-label': voandoA ? 'enviando o pedido de amizade' : { ok: 'pedido de amizade enviado', favorito: 'já é amigo', adicionar: 'adicionar como amigo' }[icA],
     on: { click: ctx.seguro(e => { e?.stopPropagation?.(); if (e?.isTrusted === false) return; return social.adicionar(j); }) } },
-  voandoA ? '…' : am === 'enviado' || am === 'pendente' ? '✓' : am === 'amigo' ? '★' : '+');
+  voandoA ? '…' : icone(icA, { doc, tam: 13, cheio: icA === 'favorito' }));
   btA.disabled = !ad.ok || voandoA;
   const btD = h('button', { doc, class: 'lc-cp-jb lc-cp-jb-d' + (s.denunciados.has(j.puuid) ? ' lc-cp-jb-ok' : ''), dataset: { a: 'denunciar', puuid: j.puuid || '' },
-    title: de.ok ? `denunciar ${nomeCompleto(j) || 'o jogador'}` : de.motivo,
-    on: { click: ctx.seguro(e => { e?.stopPropagation?.(); if (e?.isTrusted === false) return; aoDenunciar?.(j); }) } }, '⚑');
+    title: de.ok ? `denunciar ${nomeCompleto(j) || 'o jogador'}` : de.motivo, 'aria-label': 'denunciar',
+    on: { click: ctx.seguro(e => { e?.stopPropagation?.(); if (e?.isTrusted === false) return; aoDenunciar?.(j); }) } }, icone('denunciar', { doc, tam: 13 }));
   btD.disabled = !de.ok;
   return h('span', { doc, class: 'lc-cp-jacoes' }, btA, btD);
 }
@@ -300,7 +302,7 @@ export function abrirDenuncia(ctx, social, j, { raiz = ctx.raiz, doc } = {}) {
         ...lista,
         ta, conta,
         erro ? h('div', { doc, class: 'lc-cp-den-erro', role: 'status' }, erro, ' ',
-          h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'denuncia-expandir' }, on: { click: ctx.seguro(() => { fechar(); ctx.expandir(); }) } }, '⤢ abrir no client normal')) : null),
+          h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'denuncia-expandir' }, on: { click: ctx.seguro(() => { fechar(); ctx.expandir(); }) } }, comIcone('expandir', 'abrir no client normal', { doc }))) : null),
       h('div', { doc, class: 'lc-cp-den-bts' },
         // FECHAR é ele desistindo: o rascunho vai junto (a troca de tela não passa por aqui e o guarda)
         h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'fechar-denuncia' }, on: { click: ctx.seguro(() => { rascunhosDenuncia.delete(chaveR); fechar(); }) } }, TEXTOS_DENUNCIA.fechar),
@@ -322,10 +324,10 @@ export function abrirJogador(ctx, social, j, { raiz = ctx.raiz, doc } = {}) {
     const ad = podeAdicionar(j, s), de = podeDenunciar(j, s, { custom: social.custom?.() === true });
     const btA = h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'card-adicionar' }, title: ad.motivo || undefined,
       on: { click: ctx.seguro(e => { if (e?.isTrusted === false) return; return social.adicionar(j); }) } },
-    estadoAmizade(s, j.puuid) === 'enviado' ? '✓ pedido enviado' : '+ adicionar');
+    estadoAmizade(s, j.puuid) === 'enviado' ? comIcone('ok', 'pedido enviado', { doc }) : comIcone('adicionar', 'adicionar', { doc }));
     btA.disabled = !ad.ok || s.emVoo.has('a:' + j.puuid);
     const btD = h('button', { doc, class: 'lc-cp-btn lc-cp-verm', dataset: { a: 'card-denunciar' }, title: de.motivo || undefined,
-      on: { click: ctx.seguro(e => { if (e?.isTrusted === false) return; fechar(); abrirDenuncia(ctx, social, j, { raiz, doc }); }) } }, '⚑ denunciar');
+      on: { click: ctx.seguro(e => { if (e?.isTrusted === false) return; fechar(); abrirDenuncia(ctx, social, j, { raiz, doc }); }) } }, comIcone('denunciar', 'denunciar', { doc }));
     btD.disabled = !de.ok;
     el.replaceChildren(
       h('div', { doc, class: 'lc-cp-den-topo' }, fotoCampeao(j.campeaoId, { tam: 34, nome: j.campeao, doc }),

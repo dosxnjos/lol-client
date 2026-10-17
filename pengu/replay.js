@@ -18,7 +18,7 @@
 // logo depois de abrir não manda o watch de novo (REPLAY.reflexoMs). A janela não é mexida aqui:
 // quem devolve o tamanho compacto depois do ShowMain é o roteador (compacto/index.js, "a janela voltou a 1280 sozinha").
 // Textos: docs/TEXTOS-DA-INTERFACE.md. Importável no node (tools/teste-replay.mjs): nada de DOM no topo.
-import { h, lcu as lcuPadrao } from './compacto/comum.js';
+import { h, lcu as lcuPadrao, icone } from './compacto/comum.js';
 
 export const COMPONENTE = { fim: 'replay-button_end-of-game', historico: 'replay-button_match-history' };
 export const REPLAY = { cadaMs: 2000, reflexoMs: 4000 };
@@ -138,7 +138,7 @@ export function criarReplay(amb) {
   const texto = h('span', { doc, class: `${pref}-tx`, dataset: { a: 'replay-estado' } }, 'replay');
   const btB = h('button', { doc, class: `${pref}-bt`, dataset: { a: 'replay-baixar', acao: 'replay-baixar' } }, 'baixar replay');
   const btA = h('button', { doc, class: `${pref}-bt`, dataset: { a: 'replay-assistir', acao: 'replay-assistir' } }, 'assistir replay');
-  const el = h('div', { doc, class: `${pref}`, dataset: { a: 'replay' } }, h('span', { doc, class: `${pref}-ic` }, '🎬'), texto, btB, btA);
+  const el = h('div', { doc, class: `${pref}`, dataset: { a: 'replay' } }, h('span', { doc, class: `${pref}-ic` }, icone('replay', { doc, tam: 14 })), texto, btB, btA);
   let modelo = null;
 
   const fim = () => (typeof amb.fim === 'function' ? !!amb.fim() : amb.fim !== false);

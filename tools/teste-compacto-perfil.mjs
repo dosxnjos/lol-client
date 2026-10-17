@@ -6,7 +6,7 @@
 // O que segura: os corpos do identity customizer da Riot (_saveIcon, _saveRegalia, _savePreferences) ao pé da letra, só as chamadas
 // que mudaram, só no "salvar" com o clique dele; escolher não escreve; o perfil de amigo só lê (GET), respeita o perfil privado e
 // só oferece o replay de terceiro quando a Riot oferece; o fundo usa a imagem (nunca o vídeo) e some com a chave desligada.
-// Seção 6 (revisão de 16/10/2026): emblema nunca repete, "assistir" do perfil segue a chave de espectador, o 📊 volta quando o chat ao
+// Seção 6 (revisão de 16/10/2026): emblema nunca repete, "assistir" do perfil segue a chave de espectador, o coach volta quando o chat ao
 // lado desliga, o rascunho sobrevive ao perfil; e a "colheita" (seção 4) reprova cor de texto da coluna abaixo de 4,5:1 sobre o véu.
 // uso: node tools/teste-compacto-perfil.mjs
 import { readFileSync } from 'node:fs';
@@ -367,7 +367,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
   const s = cenario();
   await s.preparar();
   s.lat.alternarEditor(); await tick(16);
-  caso('foto do topo → editor à esquerda (largura 360, no lugar da ⚙); abrir só lê (GET)',
+  caso('foto do topo → editor à esquerda (largura 360, no lugar da área de configurações); abrir só lê (GET)',
     s.lat.estado().editor === true && s.lat.layout().esq === 360 && s.lateralPedida?.esq === 360 && !!s.ed() && s.escritas().length === 0
       && s.falsa.chamadas.some(c => c.url === '/lol-regalia/v2/current-summoner/regalia') && s.falsa.chamadas.some(c => c.url === '/lol-game-data/assets/v1/summoner-icons.json'));
   caso('prévia com o ícone atual, a moldura de prestígio 200 e o título A; aba ícone com a grade do inventário',
@@ -401,13 +401,13 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
     igual(s.escritas()[0]?.[2]?.challengeIds, [101000, 202000, 303000]) && s.escritas().length === 1 && s.avisos.some(([m, e]) => e && /500/.test(m)) && s.lat.editor().pendentes.length === 1,
     JSON.stringify([s.escritas(), s.avisos]));
   s.est.falharPrefs = 0; s.zerar();
-  // ⚙ com mudança não salva: espera; ✕ pede o 2º clique e não salva nada
+  // área de configurações com mudança não salva: espera; fechar pede o 2º clique e não salva nada
   s.lat.alternarConfig(); await tick();
-  caso('⚙ com mudança não salva no perfil: as configurações esperam (aviso) e o editor fica', s.lat.estado().config === false && s.lat.estado().editor === true && s.avisos.some(([m]) => /não salvas/.test(m)));
+  caso('área de configurações com mudança não salva no perfil: as configurações esperam (aviso) e o editor fica', s.lat.estado().config === false && s.lat.estado().editor === true && s.avisos.some(([m]) => /não salvas/.test(m)));
   s.ed().querySelector('[data-a="ed-fechar"]').click(); await tick();
   const ficou = s.lat.estado().editor === true && /de novo para descartar/.test(s.ed().textContent);
   s.ed().querySelector('[data-a="ed-fechar"]').click(); await tick();
-  caso('✕ com mudança não salva: o 1º clique avisa, o 2º descarta e fecha; nada é escrito ao fechar (decisão 9: a Riot salvaria)',
+  caso('fechar com mudança não salva: o 1º clique avisa, o 2º descarta e fecha; nada é escrito ao fechar (decisão 9: a Riot salvaria)',
     ficou && s.lat.estado().editor === false && s.lat.layout().esq === 0 && s.escritas().length === 0);
   s.lat.alternarEditor(); await tick(16);
   // regalia recusada e preferências aceitas no mesmo "salvar": só a regalia fica pendente (revisão: antes a moldura sumia das pendências)
@@ -426,7 +426,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
   s.lat.alternarEditor(); await tick(); // fecha (nada pendente)
   s.lat.alternarEditor(); await tick(16);
   s.lat.alternarConfig(); await tick();
-  caso('sem pendência a ⚙ troca o editor de lugar (um dos dois à esquerda)', s.lat.estado().config === true && s.lat.layout().editor === false && s.lat.layout().esq === 360);
+  caso('sem pendência a área de configurações troca o editor de lugar (um dos dois à esquerda)', s.lat.estado().config === true && s.lat.layout().editor === false && s.lat.layout().esq === 360);
   globalThis.document = undefined;
 }
 
@@ -469,7 +469,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
       && /jogador y6#BR1.*3\/6\/2/.test(s.pf().querySelectorAll('.lc-pf-jog')[5].textContent) && !s.pf().querySelector('[data-a="replay"]')
       && /não oferece o replay/.test(s.pf().textContent) && s.escritas().length === 0 && !s.falsa.chamadas.some(c => c.url.startsWith('/lol-replays/')));
   s.lat.fecharPainel(); await tick();
-  caso('✕ do perfil: fecha (nada estava aberto antes, o painel some)', s.lat.estado().painel === null && s.lat.layout().painel === false);
+  caso('fechar do perfil: fecha (nada estava aberto antes, o painel some)', s.lat.estado().painel === null && s.lat.layout().painel === false);
   globalThis.document = undefined;
 }
 
@@ -488,7 +488,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
   caso('fila liberada pela Riot (ThirdPersonAccessibleGameQueues "420"): a linha do replay aparece e só lê (GET metadata/configuração)',
     !!s.pf().querySelector('[data-a="replay"]') && s.falsa.chamadas.some(c => c.url === '/lol-replays/v1/metadata/3001') && s.escritas().length === 0);
   s.lat.fecharPainel(); await tick();
-  caso('✕ do perfil volta ao chat com a mesma conversa', s.lat.estado().painel === 'chat' && s.lat.estado().conversa?.pid === conversa && conversa === 'a1@br1.pvp.net');
+  caso('fechar do perfil volta ao chat com a mesma conversa', s.lat.estado().painel === 'chat' && s.lat.estado().conversa?.pid === conversa && conversa === 'a1@br1.pvp.net');
   // convite pelo perfil: amigo livre no Lobby com lobby criado
   s.lat.verPerfil('a1@br1.pvp.net', {}); await tick(16);
   s.zerar();
@@ -598,7 +598,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
 }
 
 {
-  // "chat ao lado" desligado com o perfil de amigo por cima do 📊 na seleção: o perfil fecha e o 📊 volta (antes: sumia junto)
+  // "chat ao lado" desligado com o perfil de amigo por cima do coach na seleção: o perfil fecha e o coach volta (antes: sumia junto)
   const s = cenario({ fase: 'ChampSelect' });
   await s.preparar();
   s.lat.alternarLista(); await tick(12); await s.lat.lerAmigos(); await tick();
@@ -606,13 +606,13 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
   s.lat.verPerfil('a2@br1.pvp.net', {}); await tick(16);
   const cobriu = s.lat.estado().painel === 'perfil' && s.lat.estado().anterior === 'coach';
   s.cfg.compacto.chatLateral = false; s.lat.sincronizar(); await tick();
-  caso('chat ao lado desligado com o perfil por cima do 📊: o perfil fecha e o 📊 volta',
+  caso('chat ao lado desligado com o perfil por cima do coach: o perfil fecha e o coach volta',
     cobriu && s.lat.estado().painel === 'coach' && s.lat.estado().perfil === null && s.lat.estado().anterior === null, JSON.stringify(s.lat.estado()));
   globalThis.document = undefined;
 }
 
 {
-  // rascunho: o perfil por cima do chat não perde o texto digitado (✕ do perfil, 💬 no lugar do perfil, "mensagem" do perfil)
+  // rascunho: o perfil por cima do chat não perde o texto digitado (fechar do perfil, chat no lugar do perfil, "mensagem" do perfil)
   const s = cenario();
   await s.preparar();
   s.lat.alternarLista(); await tick(12); await s.lat.lerAmigos(); await tick();
@@ -629,7 +629,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
   s.lat.verPerfil('a1@br1.pvp.net', {}); await tick(16);
   s.pf().querySelector('[data-a="pf-mensagem"]').click(); await tick(12);
   const depoisMensagem = campo()?.value;
-  caso('rascunho: perfil por cima do chat e de volta (✕, 💬, "mensagem" do perfil) mantém o texto da conversa; abrir e fechar o perfil não escreve',
+  caso('rascunho: perfil por cima do chat e de volta (fechar, chat, "mensagem" do perfil) mantém o texto da conversa; abrir e fechar o perfil não escreve',
     depoisX === 'texto pro a1' && depoisChat === 'texto pro a1' && depoisMensagem === 'texto pro a1' && s.lat.estado().conversa?.pid === 'a1@br1.pvp.net' && semEscrita,
     JSON.stringify([depoisX, depoisChat, depoisMensagem, s.escritas()]));
   globalThis.document = undefined;

@@ -198,7 +198,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('caiu escondido fora do Reconnect', t.achar('div[data-a="caiu"]').style.display === 'none');
   caso('nenhuma escrita na LCU numa partida normal (só GET)', t.escritas().length === 0 && t.coletorPedidos.every(([c, m]) => c === '/estado' && m === 'GET'), JSON.stringify([t.escritas(), t.coletorPedidos]));
   t.achar('button[data-a="abrir-normal"]').click();
-  caso('"⤢ abrir o client normal" chama o expandir do roteador', t.expandiu === 1);
+  caso('"abrir o client normal" (ícone expandir) chama o expandir do roteador', t.expandiu === 1);
   caso('sem erro de tela', t.falhas.length === 0, t.falhas.map(String).join('; '));
   t.desmontar();
 }

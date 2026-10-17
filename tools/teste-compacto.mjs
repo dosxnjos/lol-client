@@ -234,7 +234,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const pedidos = [];
   const j = criarJanela({ invocar: invocadorRiot({ riotInvoke: a => pedidos.push(JSON.parse(a.request)) }), medir: () => [1280, 720] });
   j.compactar(420, 640); j.expandir(); j.minimizar(); j.sair();
-  caso('janela: ResizeTo 420×640; expandir = ResizeTo 1280×720 + CenterToScreen; – e ✕ da Riot',
+  caso('janela: ResizeTo 420×640; expandir = ResizeTo 1280×720 + CenterToScreen; minimizar e fechar da Riot',
     igual(pedidos, [{ name: 'Window.ResizeTo', params: [420, 640] }, { name: 'Window.ResizeTo', params: [1280, 720] },
       { name: 'Window.CenterToScreen', params: [] }, { name: 'Window.Minimize', params: [] }, { name: 'RiotClient.Exit', params: [] }]), JSON.stringify(pedidos));
   caso('janela: tamanho torto vira 420×680 (o padrão), fora do limite também', igual(tamanho('x', null), [420, 680]) && igual(tamanho(100, 5000), [420, 680]) && igual(tamanho(480, 700), [480, 700]));
@@ -257,7 +257,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
     igual(inicial, { efetivo: 'compacto', tela: 'lobby', janelaCompacta: true, camada: true, classe: true }) && igual(s.nomes(), ['Window.ResizeTo 420x640'])
       && s.telas.lobby.montadas === 1 && s.telas.lobby.raiz.textContent === 'tela lobby', JSON.stringify([inicial, s.nomes()]));
   const camadaEl = s.doc.getElementById('lc-compacto');
-  caso('camada: topo com expandir, – e ✕; título da tela no slot', !!camadaEl.querySelector('[data-a=expandir]') && !!camadaEl.querySelector('[data-a=minimizar]')
+  caso('camada: topo com expandir, minimizar e fechar; título da tela no slot', !!camadaEl.querySelector('[data-a=expandir]') && !!camadaEl.querySelector('[data-a=minimizar]')
     && !!camadaEl.querySelector('[data-a=fechar]') && camadaEl.querySelector('.lc-cp-titulo').textContent === 'título lobby');
   s.rot.alternar();
   caso('alternar -> expandido: ResizeTo 1280×720 + CenterToScreen, camada e classe saem, tela desmontada',
@@ -332,7 +332,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   b.rot.aoSequencia('honor-vote'); await tick();
   caso('etapa honor-vote chega tarde: a honra compacta monta', b.foto().efetivo === 'compacto' && b.foto().tela === 'honra', JSON.stringify(b.foto()));
   b.rot.expandir(); await tick();
-  caso('"⤢ expandir" na honra vale até o EndOfGame (outra tela): o pós-jogo volta compacto', b.foto().efetivo === 'expandido');
+  caso('"expandir" na honra vale até o EndOfGame (outra tela): o pós-jogo volta compacto', b.foto().efetivo === 'expandido');
   await b.ir('EndOfGame');
   caso('EndOfGame depois do expandir na honra: pós-jogo compacto', b.foto().efetivo === 'compacto' && b.foto().tela === 'posjogo', JSON.stringify(b.foto()));
   await b.ir('Lobby');
@@ -474,7 +474,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   const mmDepois = c.foto().efetivo;
   c.rot.expandir();
   await c.ir('ReadyCheck');
-  caso('"⤢ expandir" no ready check não segue para a busca; expandido na busca segue expandido no ready check',
+  caso('"expandir" no ready check não segue para a busca; expandido na busca segue expandido no ready check',
     rcExp === 'expandido' && mmDepois === 'compacto' && c.foto().efetivo === 'expandido', JSON.stringify([rcExp, mmDepois, c.foto()]));
   // 3) sem contagem em 1,5 s expande; ela chegar tarde não encolhe de novo no mesmo ready check
   let contagem = false;
@@ -548,7 +548,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   await b.ir('GameStart'); await b.ir('InProgress');
   b.rot.expandir();
   await b.ir('Reconnect');
-  caso('partida: "⤢ expandir" dele segue no Reconnect (mesma tela)', b.foto().efetivo === 'expandido');
+  caso('partida: "expandir" dele segue no Reconnect (mesma tela)', b.foto().efetivo === 'expandido');
   await b.ir('InProgress'); await b.ir('WaitingForStats');
   caso('partida: depois do jogo o pós-jogo volta ao compacto', b.foto().efetivo === 'compacto' && b.foto().tela === 'posjogo');
   // 5) plugin recarregado no meio da partida, janela normal e jogo na frente: não encolhe; encolhe quando ele vier ao client
@@ -881,8 +881,8 @@ caso('atalho: Ctrl+Shift+M (key e code) sim; Ctrl+M, Ctrl+Shift+K e Ctrl+Alt+Shi
   b.sincronizar(true);
   const el = doc.getElementById('lc-botao-compacto');
   el?.click();
-  caso('botão "▣ modo compacto" no topo, logo depois da fila rápida (368 px), e o clique compacta',
-    el && el.parentNode === nav && el.textContent === '▣ modo compacto' && el.style.left === '368px' && cliques === 1
+  caso('botão "modo compacto" (ícone compacto + texto) no topo, logo depois da fila rápida (368 px), e o clique compacta',
+    el && el.parentNode === nav && el.textContent === 'modo compacto' && !!el.querySelector?.('[data-icone="compacto"]') && el.style.left === '368px' && cliques === 1
       && doc.documentElement.classList.contains('lc-botao-compacto') && doc.documentElement.style['--lc-cp-nav'] === `${368 + 140 + 8 - 253}px`, JSON.stringify(el?.style));
   b.sincronizar(false);
   caso('botão some quando a camada está à vista (ou o compacto desligado)', !doc.getElementById('lc-botao-compacto') && !doc.documentElement.classList.contains('lc-botao-compacto'));
@@ -934,7 +934,7 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   const voltou = !cam.querySelector('.lc-cp-alerta') && !s.nomes().includes('RiotClient.Exit');
   cam.querySelector('[data-a=fechar]').click();
   cam.querySelector('[data-a=fechar-sim]').click();
-  caso('✕ no champ select: avisa do dodge, "voltar" não fecha, 2º clique fecha (RiotClient.Exit)', textoOk && voltou && s.nomes().at(-1) === 'RiotClient.Exit');
+  caso('fechar no champ select: avisa do dodge, "voltar" não fecha, 2º clique fecha (RiotClient.Exit)', textoOk && voltou && s.nomes().at(-1) === 'RiotClient.Exit');
   cam.querySelector('[data-a=minimizar]').click();
   caso('– minimiza pela Riot (Window.Minimize)', s.nomes().at(-1) === 'Window.Minimize');
 }
@@ -995,7 +995,7 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   caso('iniciarCompacto: Ctrl+Shift+M chega ao roteador (compacto -> client normal 1280x720, sem camada)',
     parou && api.estado().efetivo === 'expandido' && !doc.getElementById('lc-compacto') && !doc.documentElement.classList.contains('lc-modo-compacto')
       && pedidos.filter(p => p.name === 'Window.ResizeTo').at(-1)?.params.join('x') === '1280x720');
-  caso('iniciarCompacto: no client normal aparece o "▣ modo compacto" (sem a barra da Riot neste DOM: flutuante)',
+  caso('iniciarCompacto: no client normal aparece o "modo compacto" (sem a barra da Riot neste DOM: flutuante)',
     doc.getElementById('lc-botao-compacto')?.dataset.modo === 'flutua');
   caso('iniciarCompacto: ouve o resize da janela (a Riot pode devolver 1280×720 sozinha)', teclas.some(([ev]) => ev === 'resize'));
   caso('iniciarCompacto: montar o lobby e alternar só leem a LCU (GET)', lf.escritas().length === 0, JSON.stringify(lf.escritas()));
@@ -1086,7 +1086,7 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   caso('b2: Ctrl+K com a camada à vista: expande (sem camada, janela 1280×720) ANTES de abrir o painel',
     antes.efetivo === 'compacto' && vistoNaAbertura.length === 1 && vistoNaAbertura[0].efetivo === 'expandido' && !vistoNaAbertura[0].camada
     && !vistoNaAbertura[0].aVista && !s.janela.ehCompacta() && r === 'aberto', JSON.stringify({ antes, vistoNaAbertura }));
-  caso('b2: o expandir do Ctrl+K vale como "⤢ expandir" dele (override), não como erro', s.rot.estado().override === 'expandido' && !s.avisos.some(([, e]) => e));
+  caso('b2: o expandir do Ctrl+K vale como o "expandir" dele (override), não como erro', s.rot.estado().override === 'expandido' && !s.avisos.some(([, e]) => e));
   // já expandido: só abre
   const s2 = cenario({ cfg: { compacto: { ligado: false } } });
   await s2.ir('Lobby');

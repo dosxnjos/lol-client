@@ -10,7 +10,7 @@
 // - o anel é um elemento só a montagem inteira: o client manda o evento da busca a cada ~1 s e redesenhar o anel
 //   reiniciava o giro do ::after a cada segundo (Gabriel, 14/10/2026). Repintura troca o resto, nunca solta o anel.
 // Nunca busca: esta tela não tem caminho para POST .../matchmaking/search.
-import { h, estilo, campeoes } from './comum.js';
+import { h, estilo, campeoes, comIcone } from './comum.js';
 import { cabecalho, estadoGrupo, lerHoje, resumoHoje, sequenciaHoje, blocoDia, mmss, FILAS_CP, NOME_POS, CSS_LOBBY } from './tela-lobby.js';
 import { FILAS_COM_POSICAO } from '../fila-rapida.js';
 
@@ -168,7 +168,7 @@ function pintar(s) {
       const nomeLider = g.membros?.find(m => m.lider && !m.eu)?.nome;
       return h('div', { class: 'lc-cp-nota lc-cp-centro' }, `só o líder${nomeLider ? ` (${nomeLider})` : ''} cancela`);
     }
-    return h('button', { class: 'lc-cp-btn lc-cp-verm lc-cp-cancelar', disabled: true, title: 'líder do grupo desconhecido: cancele pelo client normal (⤢ expandir)', dataset: { a: 'cancelar-fila' } },
+    return h('button', { class: 'lc-cp-btn lc-cp-verm lc-cp-cancelar', disabled: true, title: 'líder do grupo desconhecido: cancele pelo client normal (expandir)', dataset: { a: 'cancelar-fila' } },
       g ? 'cancelar (líder desconhecido)' : 'cancelar (lendo o grupo…)');
   };
 
@@ -183,7 +183,7 @@ function pintar(s) {
     filhos.push(s.refs.notaRc = h('div', { class: 'lc-cp-centro lc-cp-nota lc-cp-nota-rc' }, textoNotaRc(s)));
   } else if (b.tipo === 'baixa') {
     filhos.push(anelDe(s, ['lc-cp-anel-pena'], relogio, h('small', {}, 'espera extra antes de buscar')));
-    filhos.push(h('div', { class: 'lc-cp-pena' }, '⏳ ', h('b', {}, 'fila de baixa prioridade'), ' (saída de partida). A busca de verdade começa quando a contagem zerar; o client conta sozinho.'));
+    filhos.push(h('div', { class: 'lc-cp-pena' }, comIcone('espera', h('b', {}, 'fila de baixa prioridade'), { tam: 12 }), ' (saída de partida). A busca de verdade começa quando a contagem zerar; o client conta sozinho.'));
     filhos.push(botaoCancelar());
   } else if (b.tipo === 'achou') {
     filhos.push(anelDe(s, ['lc-cp-parado'], h('b', { class: 'lc-cp-achou' }, 'partida', h('br'), 'encontrada')));

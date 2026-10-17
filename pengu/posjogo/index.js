@@ -10,6 +10,7 @@ import { jogarDeNovo } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
 import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
 import { estilo, frase } from '../compacto/comum.js';
+import { icone, iconeHtml } from '../icones.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -154,10 +155,10 @@ export function mostrarReabrir() {
   if (!ultimaAberta || !document.body) { esconderReabrir(); return null; }
   const { gameId, fimDePartida, vista } = ultimaAberta;
   const a = analises.get(gameId);
-  const [texto, dica] = a && !a.pronta ? ['⏳ analisando a partida…', 'a análise segue aqui atrás; clique para ver o carregamento']
-    : a?.erro ? ['📊 tentar a análise de novo', `a última tentativa falhou: ${a.erro}`]
-    : vista ? ['📊 reabrir análise', 'abre de novo o painel do pós-jogo (mentor, lições, rota)']
-      : ['📊 análise pronta', 'abre o painel do pós-jogo (mentor, lições, rota)'];
+  const [ic, texto, dica] = a && !a.pronta ? ['espera', 'analisando a partida…', 'a análise segue aqui atrás; clique para ver o carregamento']
+    : a?.erro ? ['coach', 'tentar a análise de novo', `a última tentativa falhou: ${a.erro}`]
+    : vista ? ['coach', 'reabrir análise', 'abre de novo o painel do pós-jogo (mentor, lições, rota)']
+      : ['coach', 'análise pronta', 'abre o painel do pós-jogo (mentor, lições, rota)'];
   let bt = document.getElementById('lc-posjogo-reabrir');
   if (!bt) {
     bt = document.createElement('button');
@@ -168,7 +169,7 @@ export function mostrarReabrir() {
     });
     document.body.appendChild(bt);
   }
-  bt.textContent = texto;
+  bt.replaceChildren(icone(ic, { tam: 13, classe: 'lc-ic-antes' }), texto);
   bt.title = dica;
   return bt;
 }
@@ -191,9 +192,9 @@ function moldura(conteudo) {
   return el;
 }
 const htmlCarregando = texto => `<div class="lc-carregando"><span class="lc-carregando-texto">${esc(texto)}</span>
-  <button class="lc-fechar" title="fechar (Esc): a análise segue e o botão no topo reabre">✕</button>
+  <button class="lc-fechar" title="fechar (Esc): a análise segue e o botão no topo reabre" aria-label="fechar">${iconeHtml('fechar', { tam: 14 })}</button>
   <div class="lc-nota">pode fechar: a análise segue e o botão no topo reabre.</div></div>`;
-const htmlErro = msg => `<div class="lc-carregando">pós-jogo: ${esc(msg)} <button class="lc-fechar" title="fechar (Esc)">✕</button></div>`;
+const htmlErro = msg => `<div class="lc-carregando">pós-jogo: ${esc(msg)} <button class="lc-fechar" title="fechar (Esc)" aria-label="fechar">${iconeHtml('fechar', { tam: 14 })}</button></div>`;
 
 // abertura automática (D4): enquanto carrega, só o botão do topo; se ele clicou ou digitou no client nesse meio
 // tempo, o painel não cai por cima: o botão vira "análise pronta" e espera o clique dele

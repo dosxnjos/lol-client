@@ -3,7 +3,7 @@
 // e compacto/amigos.js. Os três moram no ".lc-lt-sobre" da lista, AO LADO do corpo que o relógio recria (ARMADILHAS "Campo de
 // texto ou botão recriado"), e cada botão passa o evento do clique adiante: quem escreve na LCU confere isTrusted.
 // Importável no node: nada de DOM no topo.
-import { h } from './comum.js';
+import { h, icone } from './comum.js';
 
 // clique direito dentro do diálogo/campo: nem o menu do navegador nem o da lista (cortar só a subida pulava quem, no document,
 // suprime o menu nativo do CEF; revisão de 16/10/2026)
@@ -32,7 +32,7 @@ export function criarMenu({ doc, seguro, aoEscolher, aoFechar }) {
     const filhos = [];
     for (const it of itens) {
       if (it.sub) {
-        filhos.push(botao(it, { depois: h('span', { doc, class: 'lc-lt-mseta' }, subAberto ? ' ▾' : ' ›'), click: () => { subAberto = !subAberto; desenhar(); } }));
+        filhos.push(botao(it, { depois: h('span', { doc, class: 'lc-lt-mseta' }, ' ', icone(subAberto ? 'aberto' : 'fechado', { doc, tam: 12 })), click: () => { subAberto = !subAberto; desenhar(); } }));
         if (subAberto) filhos.push(h('div', { doc, class: 'lc-lt-msub', role: 'menu' }, ...it.sub.map(s => h('button', { doc, class: 'lc-lt-mi' + (s.off ? ' lc-lt-off' : ''),
           role: 'menuitem', 'aria-disabled': s.off ? 'true' : undefined, dataset: { a: 'lt-m-mover-para', gid: String(s.id) },
           on: { click: seguro(e => { e.stopPropagation?.(); if (s.off) return; aoEscolher?.(it, s, e); }) } }, s.rotulo))));
@@ -75,7 +75,8 @@ export function criarDialogo({ doc, seguro, aoFechar }) {
       on: { click: seguro(e => { const m = cx ? !!cx.checked : false; fechar(); return b.acao?.(e, m); }) } }, b.rotulo));
     el.replaceChildren(h('div', { doc, class: 'lc-lt-dcx' },
       h('header', { doc, class: 'lc-lt-dcab' }, h('b', { doc }, titulo),
-        h('button', { doc, class: 'lc-lt-x', title: 'fechar sem fazer nada', dataset: { a: 'lt-dlg-fechar' }, on: { click: seguro(e => { e.stopPropagation?.(); fechar(); }) } }, '✕')),
+        h('button', { doc, class: 'lc-lt-x', title: 'fechar sem fazer nada', 'aria-label': 'fechar sem fazer nada', dataset: { a: 'lt-dlg-fechar' },
+          on: { click: seguro(e => { e.stopPropagation?.(); fechar(); }) } }, icone('fechar', { doc, tam: 14 }))),
       corpoTexto,
       cx ? h('label', { doc, class: 'lc-lt-dcaixa' }, cx, ' ', caixa.rotulo) : null,
       h('div', { doc, class: 'lc-lt-dbts' }, ...bts)));
@@ -95,7 +96,8 @@ export function criarCampo({ doc, seguro, aoFechar }) {
   const ok = h('button', { doc, class: 'lc-cp-btn lc-cp-prim', dataset: { a: 'lt-campo-ok' }, on: { click: seguro(e => confirmar(e)) } }, 'salvar');
   const el = h('div', { doc, class: 'lc-lt-campo', dataset: { a: 'lt-campo-cx' }, style: { display: 'none' } }, tit,
     h('div', { doc, class: 'lc-lt-en lc-lt-cen' }, input, ok,
-      h('button', { doc, class: 'lc-lt-x', title: 'cancelar', dataset: { a: 'lt-campo-cancelar' }, on: { click: seguro(() => fechar()) } }, '✕')), erro);
+      h('button', { doc, class: 'lc-lt-x', title: 'cancelar', 'aria-label': 'cancelar', dataset: { a: 'lt-campo-cancelar' }, on: { click: seguro(() => fechar()) } },
+        icone('fechar', { doc, tam: 14 }))), erro);
   input.addEventListener('keydown', seguro(e => {
     e.stopPropagation?.(); // teclas do campo não vão para os atalhos da Riot
     if (e.key === 'Enter' && !e.isComposing) { e.preventDefault?.(); return confirmar(e); }
@@ -135,7 +137,7 @@ export const CSS_AMIGOS = `
 #lc-compacto .lc-lt-gcab { display:flex; align-items:baseline; gap:2px; cursor:pointer; user-select:none; border-top:2px solid transparent; border-bottom:2px solid transparent; }
 #lc-compacto .lc-lt-gcab:hover { color:var(--lc-ouro2); }
 #lc-compacto .lc-lt-gcab small { font-size:10px; letter-spacing:0; color:var(--lc-mudo); }
-#lc-compacto .lc-lt-gcab .lc-lt-seta { width:10px; display:inline-block; }
+#lc-compacto .lc-lt-gcab .lc-lt-seta { width:12px; display:inline-grid; place-items:center; }
 #lc-compacto .lc-lt-gcab.lc-lt-antes { border-top-color:var(--lc-azul); }
 #lc-compacto .lc-lt-gcab.lc-lt-depois { border-bottom-color:var(--lc-azul); }
 #lc-compacto .lc-lt-gcab.lc-lt-alvo { background:rgba(10,200,185,.10); color:var(--lc-ouro2); }

@@ -88,15 +88,23 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
     por vídeo/captura em alta taxa. Perto da borda direita, o `ResizeTo` primeiro passa da borda do monitor até o `MoveTo` [S].
 - **Mensagem chega já lida e ele nunca vê** → a conversa marcada como lida (`PUT conversations/active`) seguia a ativa do client
   depois de trocar de aba, ir para a partida ou minimizar. `lateral.conferirAtiva` devolve (`DELETE`) quando ela sai de vista
-  (desde 16/10/2026 também: ✕ da conversa, fechar o painel, 📊 por cima, ← da lista no monitor estreito).
+  (desde 16/10/2026 também: fechar da conversa, fechar o painel, coach por cima, voltar da lista no monitor estreito).
 - **Conversa que abre sozinha** (relato de 16/10/2026: "eu não quero que a janela abra sozinha com a mensagem") → a decisão 1
   do passo 13 abria a conversa ao lado quando cabia. Saiu inteira (`talvezAbrirSozinha`, `conversaSozinha`, coach lembrado):
   mensagem nova só muda contador, ordem e selo dos recentes. Prova: "nada sozinho" de `teste-compacto-lateral.mjs` (7 fases ×
   3 estados do chat); religar uma abertura no `volta()` deixa o caso vermelho.
-- **Nome da fase cortado no topo da seleção** ("FINALIZAÇÃ", harness de 16/10/2026) → o 👥 ao lado do 💬 pôs 3 botões no topo
-  (📊 💬 👥) e sobraram 91 px para os 97 px de "FINALIZAÇÃO". Com 3 botões nas `.lc-cp-extras` os ícones ficam mais justos
-  (`CSS_CHAT` de `chat-botao.js`, `:has`, CEF 108). Botão novo no topo: medir o título da seleção no harness.
-- **`data-a="amigos"` já existe** → é a lista de convite dentro da tela do lobby (`tela-lobby.js`, sem a lateral). O botão 👥 é
+- **Nome da fase cortado no topo da seleção** ("FINALIZAÇÃ", harness de 16/10/2026) → o botão de amigos ao lado do de chat pôs 3
+  botões no topo (coach, chat, amigos) e sobraram 91 px para os 97 px de "FINALIZAÇÃO". Com 3 botões nas `.lc-cp-extras` os ícones
+  ficam mais justos (`CSS_CHAT` de `chat-botao.js`, `:has`, CEF 108). Botão novo no topo: medir o título da seleção no harness. Com os
+  ícones Lucide (17/10/2026) os 3 botões têm 28 px e o título ficou com 109 px (`temp/compacto-harness/2026-10-17-icones-2-*.png`).
+- **Ícone que some do `textContent` / teste que procura o glifo** (ícones Lucide, 17/10/2026) → o ícone é um `<svg>` de
+  `pengu/icones.js`, sem texto: `'💬'`, `'⤢ expandir'` ou `textContent[0] === '⚠'` não existem mais. Teste acha o ícone por
+  `[data-icone="nome"]` e o botão só com ícone pelo `data-a`/`aria-label`; texto ao lado do ícone vem por `comIcone` (margem no ícone,
+  sem espaço no texto). O DOM falso dos testes não tem `createElementNS`: o `icone()` cai no `createElement` (no CEF é SVG de verdade).
+  `e.target` de um clique pode ser o `<path>` do ícone: achar o botão por `closest()`, nunca comparar o alvo. Emoji de volta no código
+  reprova `teste-icones.mjs`. Varredura só de emoji deixa passar `×` (U+00D7, abaixo de U+2000) e `←`: o "×" de tirar uma ficha de runa
+  (`blocos.js`) escapou assim; a guarda conta os dois.
+- **`data-a="amigos"` já existe** → é a lista de convite dentro da tela do lobby (`tela-lobby.js`, sem a lateral). O botão de amigos é
   `data-a="lista-amigos"`; teste ou CSS que procure `[data-a="amigos"]` pega a lista do lobby.
 - **Menu do clique direito, diálogo ou campo que somem sozinhos na lista de amigos** (etapa 2 de 16/10/2026) → o corpo da lista é
   recriado a cada leitura (3 s) e levava junto o que estivesse dentro dele. Menu, diálogo e campo moram no `.lc-lt-sobre`, irmão do
@@ -523,7 +531,7 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
     Configurações promete isso); sem aviso ainda (`None`, coletor reiniciou), a lista aberta vale.
   - **as 1:1 também trazem `password` e `mucJwtDto`** (medido em 16/10/2026, 5 conversas em plena partida), não só as salas:
     toda leitura da lista passa por `lateral-chat.limparConversas` (da 1:1 ficam id, pid, nome, não lidas e da `lastMessage`
-    só remetente, `body`, `timestamp` e `type`). Os recentes do 💬 saem dessa `lastMessage` (ordem por `timestamp`, trecho
+    só remetente, `body`, `timestamp` e `type`). Os recentes do chat saem dessa `lastMessage` (ordem por `timestamp`, trecho
     do `body`); `joined_room`/`left_room` de sistema não viram trecho.
 - **Timeout de leitura da LCU não vira `URLError`** → sai `TimeoutError` cru do `getresponse`
   (e `ConnectionResetError`, `JSONDecodeError` com corpo cortado). Quem só pega `HTTPError` morre

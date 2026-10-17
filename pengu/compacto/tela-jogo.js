@@ -14,7 +14,7 @@
 //   da Riot (early-exit, spectate/quit) não existe aqui;
 // - nada nesta tela mexe na janela nem no foco: quem decide tamanho é o roteador (index.js podeMexer).
 // Importável no node (tools/teste-compacto-jogo.mjs).
-import { h, estilo, campeoes, fotoCampeao } from './comum.js';
+import { h, estilo, campeoes, fotoCampeao, comIcone } from './comum.js';
 import { infoDaPartida, nomeFila } from './tela-posjogo.js';
 
 export const ESTADO_CADA_MS = 2000; // GET /estado do coletor
@@ -207,7 +207,7 @@ function esqueleto(s) {
     // texto neutro (revisão adversarial, achado 3): o Reconnect também aparece no fim de uma partida normal (medição de 14/10:
     // InProgress -> Reconnect 19:33:01 -> PreEndOfGame 19:33:12); "caiu, a partida segue" seria falso ali
     el('b', {}, 'o jogo fechou'), el('div', { class: 'lc-cp-nota' }, 'se a partida ainda está rolando, reconecta para voltar a ela'), r.reconectar, r.motivoRec);
-  r.expandir = el('button', { class: 'lc-cp-btn', dataset: { a: 'abrir-normal' }, on: { click: ctx.seguro(() => ctx.expandir()) } }, '⤢ abrir o client normal');
+  r.expandir = el('button', { class: 'lc-cp-btn', dataset: { a: 'abrir-normal' }, on: { click: ctx.seguro(() => ctx.expandir()) } }, comIcone('expandir', 'abrir o client normal', { doc: raiz.ownerDocument || raiz.doc || globalThis.document }));
   raiz.append(
     el('section', { class: 'lc-cp-jg-cab' }, r.foto, el('div', {}, r.campeao, r.fila)),
     el('section', { class: 'lc-cp-jg-relogio' }, r.tempo, r.rotulo, r.placar),
@@ -279,7 +279,7 @@ async function reconectar(s, e) {
   if (!ctx.vivo()) return;
   if (res.ok) { r.motivoRec.textContent = 'pedido enviado: o jogo vai abrir'; return; }
   s.reconectando = false; s.reconectaEm = 0;
-  r.motivoRec.textContent = `não foi possível reconectar (${res.status || 'sem resposta'}): use o RECONECTAR do client normal (⤢ abaixo)`;
+  r.motivoRec.textContent = `não foi possível reconectar (${res.status || 'sem resposta'}): abra o client normal (botão abaixo) e use o RECONECTAR de lá`;
   ctx.avisar(`não foi possível reconectar (${res.status || 'sem resposta'}): abra o client normal e use o botão da Riot`, true);
   pintar(s);
 }

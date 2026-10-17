@@ -171,8 +171,8 @@ const extras = [
   extras.push(['b3: "página da regra não existe mais" com a camada à vista → aviso dentro do #lc-compacto, sem Toast',
     { r: r.acao, aviso: c.aviso(), toasts: c.toasts },
     x => /não existe mais/.test(x.aviso || '') && x.toasts.length === 0]);
-  // decisão (ii): "runa X aplicada" não sai em dobro com o ✓ da tela 3 (nem camada nem Toast)
-  extras.push(['b3: "runa aplicada" com a camada à vista não sai (o ✓ da tela 3 já diz)', { r: r.acao, toasts: c.toasts, avisos: c.camada.querySelectorAll('.lc-cp-aviso').map(a => a.textContent) },
+  // decisão (ii): "runa X aplicada" não sai em dobro com o ícone ok da tela 3 (nem camada nem Toast)
+  extras.push(['b3: "runa aplicada" com a camada à vista não sai (o ícone ok da tela 3 já diz)', { r: r.acao, toasts: c.toasts, avisos: c.camada.querySelectorAll('.lc-cp-aviso').map(a => a.textContent) },
     x => x.r === 'aplicou' && !x.toasts.some(([, m]) => /aplicada/.test(m)) && !x.avisos.some(m => /aplicada/.test(m))]);
   // client normal: os mesmos avisos seguem no Toast
   c = client({ compacto: false });

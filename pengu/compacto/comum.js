@@ -2,6 +2,7 @@
 // nada de window/document no topo do módulo; quem precisa de DOM recebe o document (ou usa o global na hora).
 // Regra da casa: texto da LCU (nome de campeão, título, mensagem) nunca vai cru para innerHTML. Montar DOM com h()
 // (textContent) ou, se for string HTML, passar cada valor por esc().
+import { icone } from '../icones.js';
 
 // fases da partida (passo 14): a tela compacta "partida em andamento" (tela-jogo.js) fica atrás do jogo; a lateral fica guardada
 // (decisão 2 do passo 13) e o roteador não mexe na janela com o jogo na frente (compacto/index.js podeMexer)
@@ -60,6 +61,13 @@ export function campeoes(f = globalThis.fetch) {
   }).finally(() => { catalogoEmVoo = null; }));
 }
 export const _zerarCatalogo = () => { catalogo = null; }; // só teste
+
+// ícones Lucide embutidos (pengu/icones.js, etapa C de roadmap/2026-10-16-chat-da-sala-som-icones.md): icone('chat', {doc, tam})
+// devolve o <svg> para ir como filho de h(); nunca emoji como ícone
+export { icone };
+// ícone antes de um texto (botão, nota, título): [svg, texto] para os filhos de h(). O espaço é a margem do ícone (lc-ic-antes em
+// pengu/estilo.css), não um ' ' no texto: num flex o espaço do começo do texto some, e o textContent fica só o texto
+export const comIcone = (nome, texto, { doc, tam = 13, cheio = false } = {}) => [icone(nome, { doc, tam, cheio, classe: 'lc-ic-antes' }), texto];
 
 // cria elemento: h('div', {class: 'x', title: 't', dataset: {a: 1}, on: {click: fn}, style: {left: '1px'}}, filho, 'texto')
 // texto entra por textContent (seguro com dado da LCU). doc injetável (teste).

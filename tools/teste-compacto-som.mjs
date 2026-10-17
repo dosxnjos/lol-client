@@ -1,12 +1,12 @@
-// Testa a seção Som da ⚙ do compacto (etapa B de roadmap/2026-10-16-chat-da-sala-som-icones.md; pedido do Gabriel de 16/10/2026: "deve
+// Testa a seção Som da área de configurações do compacto (etapa B de roadmap/2026-10-16-chat-da-sala-som-icones.md; pedido do Gabriel de 16/10/2026: "deve
 // haver configurações de som no modo compacto").
 // Sem o client: compacto/som.js e compacto/lateral-config.js de verdade, DOM mínimo feito aqui, LCU falsa que registra método, rota e corpo
 // (tools/lcu-falsa.mjs), relógio do debounce injetado. Resposta do GET = a medida no client real em 16/10/2026 ({data: {musicEnabled:
 // false}, schemaVersion: 5}).
 // O que segura: os corpos do front da Riot (rcp-fe-lol-settings 16.20: um PATCH por propriedade em /lol-settings/v1/local/lol-audio
-// {schemaVersion: 5, data}, e o 2º PATCH do onSaveSetting para sfxEnabled -> voiceEnabled e sfxVolume -> voiceVolume × 0,5); abrir a ⚙,
+// {schemaVersion: 5, data}, e o 2º PATCH do onSaveSetting para sfxEnabled -> voiceEnabled e sfxVolume -> voiceVolume × 0,5); abrir a área de configurações,
 // abrir a seção, buscar e repintar nunca gravam (só GET); nada sai sem isTrusted; o volume grava só no change (soltar), com debounce
-// e só o último valor; arrastando, a ⚙ não repinta; GET que falha = só as chaves do plugin e o motivo; o bloco Voz vira parte da Som.
+// e só o último valor; arrastando, a área de configurações não repinta; GET que falha = só as chaves do plugin e o motivo; o bloco Voz vira parte da Som.
 // uso: node tools/teste-compacto-som.mjs
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { lcu as lcuReal } from '../pengu/compacto/comum.js';
@@ -157,7 +157,7 @@ function novoDoc() {
     volumeDe('40') === 40 && volumeDe('40.6') === 41 && volumeDe('-3') === 0 && volumeDe('130') === 100 && volumeDe('') === null && volumeDe('x') === null && volumeValido(0) && !volumeValido(true));
 }
 
-// =================== 2. a ⚙ do compacto: seção Som com LCU falsa ===================
+// =================== 2. a área de configurações do compacto: seção Som com LCU falsa ===================
 registrarBloco('voz', blocoVoz, 'Voz');
 registrarBloco('alertas', blocoAlertas, 'Alertas na tela');
 registrarBloco('compacto', blocoCompacto, 'Client compacto');
@@ -189,7 +189,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   const vol = k => v.el.querySelector(`[data-a="som-volume"][data-som="${k}"]`);
   const gets = () => falsa.chamadas.filter(c => c.metodo === 'GET').length;
   const doPlugin = nome => [...corpo().querySelectorAll('input')].find(i => i.getAttribute('name') === nome);
-  const abrirSom = () => { v.aoAbrir(); v.pintar(); abrir(BLOCO_SOM); }; // a ⚙ abre (lateral.js render) e ele clica em "Som"
+  const abrirSom = () => { v.aoAbrir(); v.pintar(); abrir(BLOCO_SOM); }; // a área de configurações abre (lateral.js render) e ele clica em "Som"
   return { doc, cfg, definidos, falsa, v, corpo, cabs, abrir, abrirSom, caixa, vol, gets, timers, correr, avisos, doPlugin };
 }
 
@@ -198,9 +198,9 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   s.v.aoAbrir(); s.v.pintar();
   await tick();
   const titulos = s.cabs().map(b => b.dataset.bloco);
-  caso('⚙ aberta: Client compacto primeiro, Som em 2º, o bloco Voz sai do compacto (os controles dele estão na Som)',
+  caso('área de configurações aberta: Client compacto primeiro, Som em 2º, o bloco Voz sai do compacto (os controles dele estão na Som)',
     titulos[0] === BLOCO_INICIAL && titulos[1] === BLOCO_SOM && !titulos.includes('Voz') && titulos.includes('Alertas na tela'), JSON.stringify(titulos));
-  caso('abrir a ⚙ com a Som recolhida: nenhum pedido à LCU (nem GET)', s.falsa.chamadas.length === 0, JSON.stringify(s.falsa.chamadas));
+  caso('abrir a área de configurações com a Som recolhida: nenhum pedido à LCU (nem GET)', s.falsa.chamadas.length === 0, JSON.stringify(s.falsa.chamadas));
   s.abrir(BLOCO_SOM);
   await tick();
   caso('abrir a seção Som: 1 GET da rota da Riot e nenhuma escrita', s.gets() === 1 && s.falsa.escritas().length === 0 && s.falsa.chamadas[0].url === ROTA_SOM, JSON.stringify(s.falsa.chamadas));
@@ -215,11 +215,11 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   // repintar (mudança de cfg vinda de outro lugar, busca) não lê de novo nem grava
   s.v.pintar(); s.v.pintar();
   await tick();
-  caso('repintar a ⚙ com a Som aberta: nem GET novo nem escrita (o nó do som é o mesmo)', s.gets() === 1 && s.falsa.escritas().length === 0);
-  // a ⚙ reabriu: relê na próxima vez que a Som estiver à vista
+  caso('repintar a área de configurações com a Som aberta: nem GET novo nem escrita (o nó do som é o mesmo)', s.gets() === 1 && s.falsa.escritas().length === 0);
+  // a área de configurações reabriu: relê na próxima vez que a Som estiver à vista
   s.v.aoAbrir(); s.v.pintar();
   await tick();
-  caso('⚙ reaberta com a Som aberta: lê de novo (ele pode ter mexido nas Configurações da Riot), ainda sem escrita', s.gets() === 2 && s.falsa.escritas().length === 0);
+  caso('área de configurações reaberta com a Som aberta: lê de novo (ele pode ter mexido nas Configurações da Riot), ainda sem escrita', s.gets() === 2 && s.falsa.escritas().length === 0);
 
   // caixa: sintética não grava e volta ao valor lido
   const mus = s.caixa('musicEnabled');
@@ -248,7 +248,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   caso('arrastando o volume: o número muda ("Volume geral: 30") e nada sai', /Volume geral: 30/.test(s.corpo().textContent) && s.falsa.escritas().length === n0);
   const corpoAntes = s.corpo().children[0];
   s.cfg.coach.voz = false; s.v.pintar(); // cfg mudou no meio do arrasto
-  caso('arrastando: a ⚙ não repinta (o controle não sai do lugar)', s.corpo().children[0] === corpoAntes && s.vol('masterVolume') === mv);
+  caso('arrastando: a área de configurações não repinta (o controle não sai do lugar)', s.corpo().children[0] === corpoAntes && s.vol('masterVolume') === mv);
   mv.disparar('pointerup');
   // o change do soltar vem depois do pointerup, no mesmo evento do mouse: mover o controle no DOM antes dele perderia a gravação
   caso('soltou: a repintura pendente espera o fim do evento (o controle não sai do lugar antes do change)', s.corpo().children[0] === corpoAntes && !s.v.som.arrastando());
@@ -291,7 +291,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
 }
 
 {
-  // arrasto que nunca começa ou fica preso não congela a ⚙ (revisão de 16/10/2026)
+  // arrasto que nunca começa ou fica preso não congela a área de configurações (revisão de 16/10/2026)
   const s = cenario();
   s.abrirSom();
   await tick();
@@ -299,7 +299,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   cinza.disparar('pointerdown');
   const a0 = s.corpo().children[0];
   s.v.pintar();
-  caso('pointerdown no volume cinza: não conta como arrasto e a ⚙ segue repintando', cinza.disabled && !s.v.som.arrastando() && s.corpo().children[0] !== a0);
+  caso('pointerdown no volume cinza: não conta como arrasto e a área de configurações segue repintando', cinza.disabled && !s.v.som.arrastando() && s.corpo().children[0] !== a0);
   s.vol('masterVolume').disparar('pointerdown');
   const a1 = s.corpo().children[0];
   s.v.pintar();
@@ -310,7 +310,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   // gravado com uma releitura no meio da espera: o controle fica no valor gravado
   const mv = s.vol('masterVolume');
   mv.value = '20'; mv.disparar('change');
-  s.v.aoAbrir(); s.v.pintar(); // ⚙ reaberta durante a espera: GET devolve 100
+  s.v.aoAbrir(); s.v.pintar(); // área de configurações reaberta durante a espera: GET devolve 100
   await tick();
   s.correr();
   await tick();
@@ -320,7 +320,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
 
 {
   // revisão do fechamento da etapa B (16/10/2026, noite): furos que os casos acima deixavam passar
-  // (a) arrasto preso e o clique seguinte no cabeçalho de outro bloco (fora da seção Som): a ⚙ ficava parada para sempre
+  // (a) arrasto preso e o clique seguinte no cabeçalho de outro bloco (fora da seção Som): a área de configurações ficava parada para sempre
   const s = cenario();
   s.abrirSom();
   await tick();
@@ -328,7 +328,7 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   s.v.pintar(); // pendente
   const cab = s.cabs().find(b => b.dataset.bloco === BLOCO_INICIAL);
   cab.disparar('pointerdown'); cab.click(); s.correr();
-  caso('arrasto preso + clique no cabeçalho de outro bloco: solta e o bloco abre (a ⚙ não fica parada)',
+  caso('arrasto preso + clique no cabeçalho de outro bloco: solta e o bloco abre (a área de configurações não fica parada)',
     !s.v.som.arrastando() && s.corpo().querySelector('.lc-lt-aberto')?.dataset.bloco === BLOCO_INICIAL, s.corpo().querySelector('.lc-lt-aberto')?.dataset.bloco);
   // (b) soltou o mouse fora do controle (o pointerup cai em outro elemento): o documento solta, na captura
   s.abrir(BLOCO_SOM);

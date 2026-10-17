@@ -25,7 +25,7 @@
 //   sala do time (chat-sala.js, etapa A de 2026-10-16): GET /lol-chat/v1/conversations, /lol-chat/v1/me, /lol-chat/v1/player-mutes
 //        (até achar a sala), GET .../conversations/{id}/messages a cada 1,5 s; POST .../messages só no Enter ou clique dele
 //        (corpo do sendMessage do rcp-fe-lol-social). Nunca PUT conversations/active (a "lida" é dele)
-import { h, fotoCampeao, campeoes, estilo, preferidasLobby } from './comum.js';
+import { h, fotoCampeao, campeoes, estilo, preferidasLobby, comIcone } from './comum.js';
 import { consultarRunas } from '../runas.js';
 import { textoSelo } from '../champselect.js';
 import { botaoChat, botaoCoach } from './chat-botao.js';
@@ -37,9 +37,9 @@ export const POS = { TOP: 'Topo', JUNGLE: 'Selva', MIDDLE: 'Meio', BOTTOM: 'Atir
 // catálogo medido 13/10/2026 (summoner-spells.json, CLASSIC): reserva quando o client não responde
 export const FEITICOS = { 1: 'Purificar', 3: 'Exaustão', 4: 'Flash', 6: 'Fantasma', 7: 'Curar', 11: 'Golpear', 12: 'Teleporte', 14: 'Incendiar', 21: 'Barreira' };
 export const TROCAS = [
-  { tipo: 'POSICAO', campo: 'positionSwaps', rota: 'position-swaps', botao: '⇄ posição', nome: 'posição', mostrar: 'showPositionSwaps' },
-  { tipo: 'ORDEM', campo: 'pickOrderSwaps', rota: 'pick-order-swaps', botao: '⇅ ordem', nome: 'ordem', mostrar: 'showSwaps' },
-  { tipo: 'CAMPEAO', campo: 'trades', rota: 'champion-swaps', botao: '⟲ campeão', nome: 'campeão', mostrar: 'showTrades' },
+  { tipo: 'POSICAO', campo: 'positionSwaps', rota: 'position-swaps', botao: 'posição', icone: 'trocaPosicao', nome: 'posição', mostrar: 'showPositionSwaps' },
+  { tipo: 'ORDEM', campo: 'pickOrderSwaps', rota: 'pick-order-swaps', botao: 'ordem', icone: 'trocaOrdem', nome: 'ordem', mostrar: 'showSwaps' },
+  { tipo: 'CAMPEAO', campo: 'trades', rota: 'champion-swaps', botao: 'campeão', icone: 'trocaCampeao', nome: 'campeão', mostrar: 'showTrades' },
 ];
 const MOTIVO = {
   BUSY: { todos: 'outra troca em andamento: aguarde a resposta' },
@@ -1011,7 +1011,7 @@ function enviarHover(st) {
       st.hover = null;
       if (!r.ok && !r.status) {
         st.fechando = null;
-        ctx.avisar(`o client não respondeu ao campeão marcado: clique em ${VERBO[f.verbo].rot} de novo ou em ⤢ expandir`, true);
+        ctx.avisar(`o client não respondeu ao campeão marcado: clique em ${VERBO[f.verbo].rot} de novo ou em expandir`, true);
         if (ctx.vivo()) { st.chaveSel = ''; pintar(st); }
         return;
       }
@@ -1060,7 +1060,7 @@ function enviarAcao(st) {
     st.ocupado.delete('acao');
     if (!r.ok) {
       if (st.fechando === f) st.fechando = null;
-      ctx.avisar(`não foi possível ${f.verbo} ${f.nome} (${r.status || 'sem resposta'}): tente de novo ou use ⤢ expandir`, true);
+      ctx.avisar(`não foi possível ${f.verbo} ${f.nome} (${r.status || 'sem resposta'}): tente de novo ou use expandir`, true);
     } else { ok = true; if (prazo) conferirAcao(st, f); }
     repintar();
   }));
@@ -1075,7 +1075,7 @@ function conferirAcao(st, f) {
     const a = acoes(s).find(x => x.id === f.acao);
     const aberta = a && !a.completed && a.isInProgress;
     if (st.fechando === f) st.fechando = null;
-    if (aberta) ctx.avisar(`o client não ${VERBO[f.verbo].fez} ${f.nome}: tente de novo ou use ⤢ expandir`, true);
+    if (aberta) ctx.avisar(`o client não ${VERBO[f.verbo].fez} ${f.nome}: tente de novo ou use expandir`, true);
     // fechou no client e o evento não veio (socket mudo): a tela passa a valer a sessão relida (sem isso o botão voltaria
     // ligado para uma ação já fechada)
     else if (r.ok && Array.isArray(r.json?.myTeam) && st.l?.modo.acao?.id === f.acao) return aoSessao(st, r.json);
@@ -1221,8 +1221,9 @@ function pintarTime(st) {
       } else {
         dir = el('div', { class: 'lc-cp-sel-trocas' }, ...estados.map(([tr, e]) => (e.estado === 'AVAILABLE'
           ? el('button', { title: `pedir troca de ${tr.nome} com ${t.rotulo}`, dataset: { a: 'pedir', tipo: tr.tipo, cell: t.cellId },
-            disabled: st.ocupado.has(`troca:${tr.tipo}:${e.id}`), on: { click: ctx.seguro(() => troca(st, tr, e.id, 'request')) } }, tr.botao)
-          : el('button', { disabled: true, class: e.estado === 'BUSY' ? 'lc-cp-sel-busy' : undefined, title: e.motivo, dataset: { tipo: tr.tipo, estado: e.estado, cell: t.cellId } }, tr.botao))));
+            disabled: st.ocupado.has(`troca:${tr.tipo}:${e.id}`), on: { click: ctx.seguro(() => troca(st, tr, e.id, 'request')) } }, comIcone(tr.icone, tr.botao, { doc: st.doc, tam: 11 }))
+          : el('button', { disabled: true, class: e.estado === 'BUSY' ? 'lc-cp-sel-busy' : undefined, title: e.motivo, dataset: { tipo: tr.tipo, estado: e.estado, cell: t.cellId } },
+            comIcone(tr.icone, tr.botao, { doc: st.doc, tam: 11 })))));
       }
     }
     return el('div', { class: `lc-cp-sel-lin${t.eu ? ' lc-cp-sel-eu' : ''}${agindo ? ' lc-cp-sel-agindo' : ''}`, dataset: { cell: t.cellId } },
@@ -1256,7 +1257,7 @@ function pintarSel(st) {
   const chave = `desconhecido|${l.fase}`;
   if (chave === st.chaveSel) return;
   st.chaveSel = chave;
-  st.partes.sel.replaceChildren(st.el('div', { class: 'lc-cp-nota' }, `fase da seleção desconhecida (${l.fase || 'sem leitura'}): use ⤢ expandir para a tela da Riot.`));
+  st.partes.sel.replaceChildren(st.el('div', { class: 'lc-cp-nota' }, `fase da seleção desconhecida (${l.fase || 'sem leitura'}): use expandir para a tela da Riot.`));
 }
 
 // "winrate no champ select" (champSelect.ligado) vale nos dois modos: desligado, nem os números dos favoritos nem o selo
@@ -1324,7 +1325,7 @@ function motivoFora(st, d, id) {
     if (al && d.fora.has(id)) return `${al.rotulo} quer jogar ${nome}: não pode ser banido, escolha outro.`;
     return `${nome} não está na lista de bans do client: escolha outro.`;
   }
-  return `${nome} não está entre os seus campeões liberados: escolha outro ou use ⤢ expandir.`;
+  return `${nome} não está entre os seus campeões liberados: escolha outro ou use expandir.`;
 }
 // campeão do botão: o clicado agora, senão o que o client já tem nesta ação. No ban, NUNCA a intenção de pick dele
 // (a intenção declarada no PLANNING viraria "BANIR <o campeão dele>" a um clique)
@@ -1363,7 +1364,7 @@ function pintarEscolha(st) {
   p.favs.replaceChildren(...fav.map((x, i) => el('button', {
     class: 'lc-cp-sel-fav' + (x === id ? ' lc-cp-sel-on' : ''), disabled: !pode(x), dataset: { a: 'campeao', id: x },
     on: { click: ctx.seguro(() => clicarCampeao(st, x)) },
-  }, foto(st, x, 28), el('span', {}, `★ ${nomeDe(st, x)}`, el('small', {}, stats[i])))));
+  }, foto(st, x, 28), el('span', {}, comIcone('favorito', nomeDe(st, x), { doc: st.doc, tam: 11 }), el('small', {}, stats[i])))));
   // banir e travar: botão de baixo, só com o clique dele. Intenção: o clique na grade já declara, e no lugar do botão fica
   // um marcador cinza do mesmo tamanho (sem ele, o TRAVAR que surge na vez dele empurraria a grade e um clique na última
   // fileira cairia no botão: revisão de 14/10/2026)
@@ -1380,7 +1381,7 @@ function pintarEscolha(st) {
   }
   const notas = [];
   if (avisoPos) notas.push(el('div', { class: 'lc-cp-nota lc-cp-sel-avisopos', dataset: { a: 'aviso-posicao' },
-    title: 'suas partidas com este campeão nesta posição, no histórico do client; só um aviso, a escolha continua livre' }, `⚠ ${avisoPos}`));
+    title: 'suas partidas com este campeão nesta posição, no histórico do client; só um aviso, a escolha continua livre' }, comIcone('aviso', avisoPos, { doc: st.doc, tam: 12 })));
   // sem lista na escolha a nota do sem-lista já explica o cinza
   if ((tipo === 'banir' || tipo === 'escolher') && id && !pode(id) && !(semLista && tipo !== 'banir') && !f)
     notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'motivo' } }, motivoFora(st, d, id)));
@@ -1393,7 +1394,7 @@ function pintarEscolha(st) {
   if (tipo === 'intencao' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, 'um clique declara a intenção (só o seu time vê); a escolha vale na sua vez.'));
   if (semLista) notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'sem-lista' } }, tipo === 'banir'
     ? 'o client não mandou a lista de bans: mostrando todos (se não valer, o client recusa e avisa).'
-    : 'o client não mandou a lista dos seus campeões: só os favoritos, em cinza. Use ⤢ expandir para escolher na tela da Riot.'));
+    : 'o client não mandou a lista dos seus campeões: só os favoritos, em cinza. Use expandir para escolher na tela da Riot.'));
   p.notas.replaceChildren(...notas);
   p.fim.replaceChildren();
 }
@@ -1523,7 +1524,7 @@ function pintarRuna(st, runa, champ) {
     `runa ${pg.nome} aplicada`, () => { if (st.runa?.campeao === champ) st.runa = { ...st.runa, atual: { id: pg.id, nome: pg.nome } }; });
   if (!c.length) return linha(el('span', { class: 'lc-cp-nota' }, `sem página para ${nome}: fica a atual${runa.atual?.nome ? ` (${runa.atual.nome})` : ''}`));
   if (c.length === 1) {
-    return atual === c[0].id ? linha(el('span', { class: 'lc-cp-sel-ok' }, '✓'), `página "${c[0].nome}" aplicada sozinha`)
+    return atual === c[0].id ? linha(el('span', { class: 'lc-cp-sel-ok' }, comIcone('ok', '', { doc: st.doc, tam: 12 })), `página "${c[0].nome}" aplicada sozinha`)
       : linha(`página "${c[0].nome}": `, el('button', { dataset: { a: 'runa-aplicar', id: c[0].id }, disabled: st.ocupado.has('runa'),
         on: { click: ctx.seguro(() => aplicar(c[0])) } }, 'aplicar'));
   }
@@ -1531,5 +1532,5 @@ function pintarRuna(st, runa, champ) {
   return linha(`${c.length} páginas de ${nome}: `, ...c.map(pg => el('button', {
     class: pg.id === atual ? 'lc-cp-sel-on' : undefined, disabled: st.ocupado.has('runa'), dataset: { a: 'runa-pagina', id: pg.id },
     on: { click: ctx.seguro(() => { if (pg.id !== atual) aplicar(pg); }) },
-  }, pg.nome)), marcada ? el('span', { class: 'lc-cp-sel-ok' }, '✓ aplicada') : el('span', { class: 'lc-cp-nota' }, 'escolha uma'));
+  }, pg.nome)), marcada ? el('span', { class: 'lc-cp-sel-ok' }, comIcone('ok', 'aplicada', { doc: st.doc, tam: 12 })) : el('span', { class: 'lc-cp-nota' }, 'escolha uma'));
 }

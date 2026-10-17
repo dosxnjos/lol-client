@@ -14,15 +14,15 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   Travar/banir = `PATCH session/actions/{id} {completed:true, championId}`; nunca `POST .../complete` (ARMADILHAS § LCU).
   Fim de partida (voto, prosseguir, adicionar, denunciar, sala, replay): só clique dele, rota e corpo do front da Riot (ARMADILHAS § LCU).
   Partida (`tela-jogo.js`): sozinho nada de `MoveTo`/`ux-show` (geometria só com `geometriaAtiva`); em `InProgress` sem foco nada mexe na janela, nem `CenterToScreen` (`podeMexer`, ARMADILHAS § Client).
-  Lateral (💬, 👥, ⚙, 📊): largura só pelo `est.lateral` do roteador, posição só pela `compacto/geometria.js` (px físicos; `MoveTo` fora dela = `anotarPosicao`); nada do chat abre nem muda de foco sozinho, em fase nenhuma (16/10/2026); provar com `teste-compacto-lateral.mjs`.
+  Lateral (chat, amigos, configurações, coach): largura só pelo `est.lateral` do roteador, posição só pela `compacto/geometria.js` (px físicos; `MoveTo` fora dela = `anotarPosicao`); nada do chat abre nem muda de foco sozinho, em fase nenhuma (16/10/2026); provar com `teste-compacto-lateral.mjs`.
   Exceção: a faixa da sala do time na coluna (seleção, pós-jogo, honra) cresce sozinha com mensagem de outro jogador, só a altura: sem foco, sem geometria, sem "lida"; na ranqueada só campeão/posição ([plano](roadmap/2026-10-16-chat-da-sala-som-icones.md)); provar com `teste-compacto-selecao.mjs` §10 e `teste-compacto-fim-de-partida.mjs` §7.
   Amigos (pastas, menu, arrastar): regra e corpos só em `compacto/amigos.js`; convite só na fase `Lobby` com lobby criado (a lista nunca cria lobby); provar com `teste-compacto-amigos.mjs`.
   Perfil (editor, perfil de amigo, fundo): corpos só em `compacto/perfil.js`; grava só no "salvar" dele e só o que mudou (nunca ao fechar); fundo só a imagem, véu medido (`compacto/fundo.js`); provar com `teste-compacto-perfil.mjs`.
-  Som da ⚙ (`lol-audio` do client, só o client, não a partida): corpos só em `compacto/som.js`; grava só no clique ou no soltar do volume dele, abrir nunca grava; provar com `teste-compacto-som.mjs`.
+  Som das configurações (`lol-audio` do client, só o client, não a partida): corpos só em `compacto/som.js`; grava só no clique ou no soltar do volume dele, abrir nunca grava; provar com `teste-compacto-som.mjs`.
   Ordem CSS/`ResizeTo`/`MoveTo` só pela fila da geometria, partindo da esquerda pintada (ARMADILHAS § Client, "Pisca ao abrir ⚙").
   Saída do compacto só pelo `resolver()` (o registro das expansões compara antes/depois); `est.forcado` só por `forcar(motivo, tipo)`; texto de camada da Riot só por `expansoes.textoSeguro` (vocabulário, nunca nome) ([COLETOR](docs/COLETOR.md) § Registro das expansões).
 - Texto de interface (`pengu/**`, `painel/**`): tom de produto, impessoal ou "você", nunca "tu"/gíria/1ª pessoa do app;
-  régua em [TEXTOS-DA-INTERFACE](docs/TEXTOS-DA-INTERFACE.md), guarda em `node tools/teste-textos.mjs`.
+  régua em [TEXTOS-DA-INTERFACE](docs/TEXTOS-DA-INTERFACE.md), guarda em `node tools/teste-textos.mjs`. Ícone só de `pengu/icones.js` (Lucide embutido), nunca emoji; guarda em `teste-icones.mjs`.
 - Resposta falsa (avisos calados) só GET das `ROTAS` de `pengu/sem-popups.js`; nunca a sessão do champ select
   (o coletor lê `isAutofilled`). Plano: [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,

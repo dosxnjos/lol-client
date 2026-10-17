@@ -925,14 +925,14 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
     let visto = false, avisou = false;
     (async () => {
       try { const s = await globalThis.rcp?.whenReady?.('rcp-fe-lol-settings'); if (typeof s?.show === 'function') { s.show(); return; } } catch (e) { console.error('[lol-client] compacto: configurações da Riot', e); }
-      avisarPadrao('abra a engrenagem ⚙ no topo do client: ao fechar as configurações, o compacto volta', false);
+      avisarPadrao('abra a engrenagem no topo do client: ao fechar as configurações, o compacto volta', false);
     })();
     clearInterval(vigiaCfg);
     vigiaCfg = setInterval(() => {
       const aberto = !!doc.querySelector('.lol-settings-container');
       if (aberto) visto = true;
       else if (visto) { clearInterval(vigiaCfg); vigiaCfg = null; rot.configRiotFechou(); return; }
-      if (!visto && !avisou && Date.now() - inicio > 5000) { avisou = true; avisarPadrao('as Configurações da Riot não abriram sozinhas: use a engrenagem ⚙ no topo', true); }
+      if (!visto && !avisou && Date.now() - inicio > 5000) { avisou = true; avisarPadrao('as Configurações da Riot não abriram sozinhas: use a engrenagem no topo', true); }
       if (Date.now() - inicio > 600000) { clearInterval(vigiaCfg); vigiaCfg = null; }
     }, 500);
   }
@@ -1055,7 +1055,7 @@ export function expandirAntes({ compacto, abrir, aVista = () => !!globalThis.doc
   const naCamada = () => { try { return aVista() || compacto?.estado?.().efetivo === 'compacto'; } catch { return false; } };
   if (naCamada()) {
     try { compacto?.expandir?.('Ctrl+K'); } catch (e) { console.error('[lol-client] compacto: expandir', e); }
-    if (naCamada()) { avisar('não foi possível sair do modo compacto: use ⤢ expandir e chame de novo pelo Ctrl+K', true); return null; }
+    if (naCamada()) { avisar('não foi possível sair do modo compacto: use expandir e chame de novo pelo Ctrl+K', true); return null; }
   }
   return abrir();
 }

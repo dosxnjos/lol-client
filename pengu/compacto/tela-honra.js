@@ -15,7 +15,7 @@
 //   estimativa e ao zerar não trava nada; voto e pronto valem até a Riot fechar a fase.
 // Nome de cada linha: Riot ID do eog (o que o client mostra no pós-jogo), juntado pelo puuid; sem eog, só o campeão.
 // Importável no node (tools/teste-compacto-fim-de-partida.mjs).
-import { h, estilo, fotoCampeao } from './comum.js';
+import { h, estilo, fotoCampeao, comIcone } from './comum.js';
 import { botaoChat } from './chat-botao.js';
 import { criarSala } from './chat-sala.js';
 import { jogadoresDoEog, criarSocial, botoesJogador, abrirDenuncia, abrirJogador, nomeCompleto, POSICOES_PT, CSS_JOGADORES } from './jogador-acoes.js';
@@ -52,7 +52,7 @@ export function lerBallot(r) {
 // sai antes do POST honor voltar, senão o voto se perdia); seq: etapa lida (fora de honor-vote o POST ballot cairia fora
 // da etapa: cinza). Revisão de 14/10/2026.
 export function botaoHonra({ ballot, enviado, enviando, desdeMs, votando = 0, seq = SEQ_HONRA }) {
-  if (enviado) return { texto: '✓ honra enviada', acao: null, motivo: 'esperando a Riot fechar a honra' };
+  if (enviado) return { texto: 'honra enviada', icone: 'ok', acao: null, motivo: 'esperando a Riot fechar a honra' };
   if (enviando) return { texto: 'ENVIANDO…', acao: null, motivo: 'enviando' };
   if (seq !== SEQ_HONRA) return { texto: 'a Riot já fechou a honra', acao: null, motivo: 'o pós-jogo entra sozinho' };
   if (votando > 0) return { texto: 'enviando o voto…', acao: null, motivo: 'esperando o voto chegar à Riot' };
@@ -274,7 +274,7 @@ function pintarLista(ctx, est) {
     const nome = nomeCompleto(j);
     const coracao = h('button', { class: 'lc-cp-coracao' + (on ? ' lc-cp-on' : ''), dataset: { a: 'honrar', puuid: c.puuid },
       title: on ? 'voto dado (não volta, como na Riot)' : est.enviado ? 'honra já enviada' : sobra <= 0 ? 'sem votos sobrando' : `honrar ${nome || j.campeao || 'o jogador'}`,
-      on: { click: ctx.seguro(e => votar(ctx, est, c, e)) } }, voando ? '…' : on ? '♥ honrado' : '♡ honrar');
+      on: { click: ctx.seguro(e => votar(ctx, est, c, e)) } }, voando ? '…' : comIcone('honrar', on ? 'honrado' : 'honrar', { tam: 12, cheio: on }));
     coracao.disabled = on || voando || est.enviado || est.enviando || sobra <= 0;
     return h('div', { class: 'lc-cp-hj' + (on ? ' lc-cp-on' : ''), dataset: { puuid: c.puuid } },
       fotoCampeao(j.campeaoId, { tam: 32, nome: j.campeao }),
@@ -302,7 +302,11 @@ function pintarBase(ctx, est) {
   if (botao.className !== classe) botao.className = classe;
   botao.dataset.acao = bt.acao || '';
   botao.setAttribute('title', bt.motivo || '');
-  if (botao.textContent !== bt.texto) botao.textContent = bt.texto;
+  // o botão nasce uma vez (ARMADILHAS "botão recriado"): só o miolo muda, com o ícone do modelo (bt.icone) antes do texto
+  if (botao.textContent !== bt.texto || (botao.dataset.ic || '') !== (bt.icone || '')) {
+    botao.dataset.ic = bt.icone || '';
+    botao.replaceChildren(...(bt.icone ? comIcone(bt.icone, bt.texto) : [bt.texto]));
+  }
   botao.disabled = !bt.acao;
   const aviso = est.enviado ? 'esperando a Riot fechar a honra; o pós-jogo entra sozinho'
     : est.seq !== SEQ_HONRA ? 'a Riot fechou a honra: o pós-jogo entra sozinho'

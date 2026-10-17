@@ -321,7 +321,7 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   caso('botão da honra: sem voto = "prosseguir" (ajuste de 14/10 ~20:00); com voto = PRONTO; lista vazia libera o pular em 5 s',
     honra.botaoHonra({ ballot: { ...bOk, usados: new Set() } }).texto === 'prosseguir' && bt().texto === 'PRONTO · enviar 1 voto'
     && !honra.botaoHonra({ ballot: bVazio, desdeMs: 4000 }).acao && honra.botaoHonra({ ballot: bVazio, desdeMs: 5000 }).acao === 'pular'
-    && !honra.botaoHonra({ ballot: b404 }).acao && bt({ enviado: true }).texto === '✓ honra enviada');
+    && !honra.botaoHonra({ ballot: b404 }).acao && bt({ enviado: true }).texto === 'honra enviada' && bt({ enviado: true }).icone === 'ok');
   caso('botão da honra: voto em voo = cinza "enviando o voto"; etapa fora de honor-vote = cinza "a Riot já fechou a honra" (revisão 14/10)',
     !bt({ votando: 1 }).acao && bt({ votando: 1 }).texto === 'enviando o voto…' && !bt({ seq: '' }).acao && bt({ seq: '' }).texto === 'a Riot já fechou a honra'
     && !bt({ seq: 'ranked-celebration' }).acao && bt({ seq: 'honor-vote' }).acao === 'enviar');
@@ -339,7 +339,7 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
     && linhas.every(l => !!l.querySelector('.lc-cp-foto')) && s.linha('puuid-1')?.textContent.includes('Jogador1 #BR1')
     && s.linha('puuid-5')?.textContent.includes("K'Sante"), linhas.map(l => l.textContent).join(' | '));
   caso('honra: sem os rótulos de protótipo "aliado N"/"inimigo N" (ajuste de 14/10 ~20:00)', !/aliado \d|inimigo \d/.test(t), t);
-  caso('honra: "+" e "⚑" em cada linha', linhas.every(l => !!l.querySelector('[data-a="adicionar"]') && !!l.querySelector('[data-a="denunciar"]')));
+  caso('honra: adicionar e denunciar em cada linha', linhas.every(l => !!l.querySelector('[data-a="adicionar"]') && !!l.querySelector('[data-a="denunciar"]')));
   caso('honra: botão de baixo "prosseguir" sem voto', s.q('[data-a="honra-base"]')?.textContent === 'prosseguir', s.q('[data-a="honra-base"]')?.textContent);
   caso('honra: chat da sala embaixo, recolhido', s.q('.lc-cp-dock')?.dataset.tam === 'recolhido');
   await s.rel.avancar(45000);
@@ -352,12 +352,14 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   const v = s.falsa.escritas();
   caso('honra: clique no coração = POST /lol-honor/v1/honor {recipientPuuid, honorType:"HEART"} (o corpo do front da Riot)',
     v.length === 1 && v[0].url === '/lol-honor/v1/honor' && igual(v[0].corpo, { recipientPuuid: 'puuid-1', honorType: 'HEART' }), JSON.stringify(v));
-  caso('honra: voto dado vira "♥ honrado" e o botão vira "PRONTO · enviar 1 voto"', s.linha('puuid-1').querySelector('[data-a="honrar"]').textContent === '♥ honrado'
+  caso('honra: voto dado vira "honrado" com o coração cheio e o botão vira "PRONTO · enviar 1 voto"', s.linha('puuid-1').querySelector('[data-a="honrar"]').textContent === 'honrado'
+    && s.linha('puuid-1').querySelector('[data-a="honrar"] [data-icone="honrar"]')?.getAttribute('fill') === 'currentColor'
     && s.q('[data-a="honra-base"]').textContent === 'PRONTO · enviar 1 voto');
   await s.clicar(s.q('[data-a="honra-base"]'));
   const w = s.falsa.escritas();
-  caso('honra: PRONTO = POST /lol-honor/v1/ballot sem corpo; depois "✓ honra enviada" e corações travados',
-    w.length === 2 && w[1].url === '/lol-honor/v1/ballot' && w[1].corpo === undefined && s.q('[data-a="honra-base"]').textContent === '✓ honra enviada'
+  caso('honra: PRONTO = POST /lol-honor/v1/ballot sem corpo; depois "honra enviada" com o ícone ok e corações travados',
+    w.length === 2 && w[1].url === '/lol-honor/v1/ballot' && w[1].corpo === undefined && s.q('[data-a="honra-base"]').textContent === 'honra enviada'
+    && !!s.q('[data-a="honra-base"] [data-icone="ok"]')
     && s.linha('puuid-2').querySelector('[data-a="honrar"]').disabled === true, JSON.stringify(w));
   s.est.seq = { name: '' };
   s.rot.aoSequencia(''); await s.emitir('/lol-pre-end-of-game/v1/currentSequenceEvent', { name: '', priority: -1 });
@@ -404,9 +406,9 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   caso('adicionar: nada sai sem clique', s.escritas().length === 0);
   await s.clicar(ad('puuid-3'));
   const w = s.falsa.escritas();
-  caso('adicionar: clique = POST /lol-chat/v2/friend-requests {direction:"out", puuid} (rota do pós-jogo da Riot); "✓" cinza depois',
+  caso('adicionar: clique = POST /lol-chat/v2/friend-requests {direction:"out", puuid} (rota do pós-jogo da Riot); ícone ok cinza depois',
     w.length === 1 && w[0].url === '/lol-chat/v2/friend-requests' && igual(w[0].corpo, { direction: 'out', puuid: 'puuid-3' })
-    && ad('puuid-3').disabled && ad('puuid-3').textContent === '✓' && s.avisos.some(([m]) => /pedido de amizade enviado/.test(m)), JSON.stringify(w));
+    && ad('puuid-3').disabled && !!ad('puuid-3').querySelector('[data-icone="ok"]') && ad('puuid-3').getAttribute('aria-label') === 'pedido de amizade enviado' && s.avisos.some(([m]) => /pedido de amizade enviado/.test(m)), JSON.stringify(w));
   await s.clicar(ad('puuid-3'));
   caso('adicionar: 2º clique não manda de novo', s.falsa.escritas().length === 1);
 }
@@ -437,7 +439,7 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   caso('denunciar: formulário aberto e preenchido não envia sozinho', s.escritas().length === 0);
   await s.clicar(s.q('[data-a="enviar-denuncia"]'));
   const w = s.falsa.escritas();
-  caso('denunciar: clique em DENUNCIAR JOGADOR = POST end-of-game-reports com o corpo do client; fecha e agradece; "⚑" cinza depois',
+  caso('denunciar: clique em DENUNCIAR JOGADOR = POST end-of-game-reports com o corpo do client; fecha e agradece; denunciar cinza depois',
     w.length === 1 && w[0].url === '/lol-player-report-sender/v1/end-of-game-reports'
     && JSON.stringify(w[0].corpo) === JSON.stringify({ comment: 'xingou o time inteiro', gameId: GID, categories: ['VERBAL_ABUSE', 'LEAVING_AFK', 'BOTTING'], offenderSummonerId: 1006, offenderPuuid: 'puuid-6' })
     && !s.q('.lc-cp-den') && s.avisos.some(([m]) => m === 'Uma denúncia foi enviada para análise. Obrigado.') && s.linha('puuid-6').querySelector('[data-a="denunciar"]').disabled,
@@ -468,7 +470,7 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
 {
   const s = cenario({ custom: true });
   await s.honra();
-  caso('personalizada: "⚑" cinza (a Riot não deixa denunciar em personalizada)', s.linha('puuid-6').querySelector('[data-a="denunciar"]').disabled
+  caso('personalizada: denunciar cinza (a Riot não deixa denunciar em personalizada)', s.linha('puuid-6').querySelector('[data-a="denunciar"]').disabled
     && /personalizada/.test(s.linha('puuid-6').querySelector('[data-a="denunciar"]').getAttribute('title')));
 }
 
@@ -544,7 +546,7 @@ const NOMES_FX = Array.from({ length: 9 }, (_, i) => `Jogador${i + 1}`);
   caso('detalhes: 10 linhas, a minha marcada e a do adversário direto (K\'Sante)', linhas.length === 10 && linhas.filter(l => l.classList.contains('lc-cp-eu')).length === 1
     && linhas.find(l => l.classList.contains('lc-cp-adv'))?.textContent.includes("K'Sante"), linhas.map(l => l.textContent).join(' | '));
   caso('detalhes: tu × adversário direto (KDA, farm, ouro, dano, dano recebido, visão)', s.q('.lc-cp-vs')?.textContent.includes('dano recebido') && s.qq('.lc-cp-vsl').length === 6);
-  caso('detalhes: a minha linha sem "+" e "⚑"; amigo com "+" cinza', !linhas.find(l => l.classList.contains('lc-cp-eu')).querySelector('[data-a="adicionar"]')
+  caso('detalhes: a minha linha sem adicionar e denunciar; amigo com adicionar cinza', !linhas.find(l => l.classList.contains('lc-cp-eu')).querySelector('[data-a="adicionar"]')
     && s.qq('.lc-cp-jg').find(l => l.dataset.puuid === 'puuid-2').querySelector('[data-a="adicionar"]').disabled);
   await s.clicar(s.q('[data-a="aba-resumo"]'));
   await s.clicar(s.q('[data-a="sala-aumentar"]'));
@@ -585,7 +587,7 @@ const MSGS_VELHA = `/lol-chat/v1/conversations/${encodeURIComponent(VELHA)}/mess
   caso('sala sem saber a partida: nenhuma sala lida, campo cinza com o motivo', !s.falsa.chamadas.some(c => c.url === MSGS) && s.q('[data-a="sala-texto"]').disabled === true
     && s.q('.lc-cp-dock').textContent.includes('esperando saber qual é a partida'), s.q('.lc-cp-dock').textContent);
   // 10: sem gameId da sessão nem do ballot, o eog (de qualquer partida) não entra: só o campeão, sem denúncia
-  caso('honra sem gameId: eog não aceito (só o campeão na linha, "⚑" cinza)', !s.linha('puuid-1').textContent.includes('Jogador1')
+  caso('honra sem gameId: eog não aceito (só o campeão na linha, denunciar cinza)', !s.linha('puuid-1').textContent.includes('Jogador1')
     && s.linha('puuid-1').querySelector('[data-a="denunciar"]').disabled === true, s.linha('puuid-1').textContent);
 }
 { // 10: sessão falhou, ballot com gameId: o eog desta partida entra, o de outra não
@@ -678,7 +680,7 @@ const MSGS_VELHA = `/lol-chat/v1/conversations/${encodeURIComponent(VELHA)}/mess
   await s.clicar(s.q('[data-a="fechar-pj"]'), { isTrusted: false });
   caso('pós-jogo: JOGAR DE NOVO e fechar com clique sintético não escrevem nada', s.escritas().length === 0, s.escritas().join(', '));
   await s.clicar(s.q('[data-a="lobby"]'));
-  caso('ir para o lobby sem play-again e sem saber do grupo: não usa o ✕ (dismiss-stats); avisa e abre o client normal',
+  caso('ir para o lobby sem play-again e sem saber do grupo: não usa o fechar da Riot (dismiss-stats); avisa e abre o client normal',
     s.escritas().length === 0 && s.foto().efetivo === 'expandido' && s.avisos.some(([m, e]) => e && /lobby/.test(m)), s.escritas().join(', '));
 }
 {

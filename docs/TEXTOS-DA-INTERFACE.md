@@ -38,6 +38,9 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
 - **Pergunta de confirmação** é frase nova: "… 44%. Buscar mesmo assim?".
 - **Aviso curto**, uma linha. Dois-pontos ligam fato e saída ("o client está atualizando: tente em alguns minutos").
 - Número com unidade ("8 s", "3 partidas"); ordinal "1ª", "2º"; travessão não.
+- **Ícone, nunca emoji** (17/10/2026, "ícones lucide no lugar de emojis"): ícone sai de `pengu/icones.js` (Lucide embutido) e é
+  decorativo. Botão só com ícone leva `title` e `aria-label` com o nome dele ("chat", "amigos", "configurações", "coach da seleção",
+  "fechar a conversa"). Frase que cita um botão usa o nome, não o glifo: "tente de novo ou use expandir", "clique em fechar de novo".
 
 ## Antes e depois (15/10/2026)
 
@@ -51,13 +54,13 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
 | tu (na linha dele, na seleção e no lobby) | você |
 | tu baniu Zed. / tu não baniu ninguém. | seu ban: Zed. / nenhum ban seu nesta seleção. |
 | Renekton foi banido: clica outro. | Renekton foi banido: escolha outro. |
-| não consegui travar Zac (500): tenta de novo ou ⤢ expandir | não foi possível travar Zac (500): tente de novo ou use ⤢ expandir |
+| não consegui travar Zac (500): tenta de novo ou ⤢ expandir | não foi possível travar Zac (500): tente de novo ou use expandir |
 | não sei se tu é o líder: cancela pelo client normal | líder do grupo desconhecido: cancele pelo client normal |
 | lobby personalizado: abri o client normal | lobby personalizado: abrindo o client normal |
 | não cabe tudo ao lado no teu monitor: fechei o chat… | não cabe tudo ao lado neste monitor: o chat fechou… |
 | espera as estatísticas chegarem | aguarde as estatísticas chegarem |
 | de madrugada teu winrate cai: 47% contra 58% de dia. buscar mesmo assim? | de madrugada o seu winrate cai: 47% contra 58% de dia. Buscar mesmo assim? |
-| ⛔ chat bloqueado pela Riot nesta conta: dá para ler, não dá para enviar | ⛔ chat bloqueado pela Riot nesta conta: só leitura, sem envio |
+| ⛔ chat bloqueado pela Riot nesta conta: dá para ler, não dá para enviar | chat bloqueado pela Riot nesta conta: só leitura, sem envio (com o ícone bloqueado, desde 17/10) |
 
 A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/2026-10-13-client-compacto.md).
 

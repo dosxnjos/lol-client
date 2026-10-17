@@ -7,7 +7,7 @@
 // - Window.ResizeTo [w, h] em px CSS; a viewport da Riot (#rcp-fe-viewport-root) continua com 1280 e é cortada;
 // - o plugin-runner da Riot volta ao normal com Window.ResizeTo [1280, 720] + Window.CenterToScreen (expandir = isso);
 // - o "–" da Riot é Window.Minimize; o "✕" termina em RiotClient.Exit (rcp-fe-lol-navigation, _postAction).
-import { h, CSS_BASE } from './comum.js';
+import { h, CSS_BASE, icone } from './comum.js';
 
 export const EXPANDIDA = [1280, 720];
 export const PADRAO_COMPACTA = [420, 680]; // mesmo padrão do config.js (compacto.larg/alt)
@@ -187,9 +187,12 @@ export function criarCamada({ doc = globalThis.document, aoExpandir, aoMinimizar
     const coluna = h('div', { doc, class: 'lc-cp-coluna' },
       h('header', { doc, class: 'lc-cp-topo' + (arrasto ? ' lc-cp-arrasta' : ''), title: arrasto ? 'arraste por aqui para mover a janela' : undefined, on: arrastar }, titulo,
         h('div', { doc, class: 'lc-cp-acoes' }, extras,
-          h('button', { doc, class: 'lc-cp-ic lc-cp-exp', title: 'client normal (Ctrl+Shift+M)', dataset: { a: 'expandir' }, on: { click: () => aoExpandir?.() } }, '⤢ expandir'),
-          h('button', { doc, class: 'lc-cp-win', title: 'minimizar', dataset: { a: 'minimizar' }, on: { click: () => aoMinimizar?.() } }, '–'),
-          h('button', { doc, class: 'lc-cp-win', title: 'fechar o client', dataset: { a: 'fechar' }, on: { click: pedirFechar } }, '✕'))),
+          h('button', { doc, class: 'lc-cp-ic lc-cp-exp', title: 'client normal (Ctrl+Shift+M)', dataset: { a: 'expandir' }, on: { click: () => aoExpandir?.() } },
+            icone('expandir', { doc, tam: 14 }), 'expandir'),
+          h('button', { doc, class: 'lc-cp-win', title: 'minimizar', 'aria-label': 'minimizar', dataset: { a: 'minimizar' }, on: { click: () => aoMinimizar?.() } },
+            icone('minimizar', { doc, tam: 14 })),
+          h('button', { doc, class: 'lc-cp-win', title: 'fechar o client', 'aria-label': 'fechar o client', dataset: { a: 'fechar' }, on: { click: pedirFechar } },
+            icone('fechar', { doc, tam: 14 })))),
       raiz);
     el = h('div', { doc, id: 'lc-compacto', role: 'dialog', 'aria-label': 'client compacto' }, esq, coluna, dir);
     doc.body.appendChild(el);
@@ -236,7 +239,7 @@ export function criarBotaoModo({ doc = globalThis.document, aoClicar, raf = fn =
     const pai = modo === 'barra' ? doc.querySelector?.('.navbar_backdrop') : doc.body;
     if (!pai) return null;
     const b = h('div', { doc, id: ID, class: modo === 'flutua' ? 'lc-cp-flutua' : undefined, dataset: { modo }, title: 'modo compacto (Ctrl+Shift+M)', role: 'button',
-      on: { click: e => { e?.stopPropagation?.(); aoClicar?.(); } } }, '▣ modo compacto');
+      on: { click: e => { e?.stopPropagation?.(); aoClicar?.(); } } }, icone('compacto', { doc, tam: 14 }), 'modo compacto');
     pai.appendChild(b);
     posicionar();
     return b;
@@ -299,7 +302,7 @@ html.lc-modo-compacto { background:#010a13; }
 #lc-compacto .lc-cp-ic:hover { border-color:#c8aa6e; }
 #lc-compacto .lc-cp-ic.lc-cp-exp { border-color:#785a28; color:#c8aa6e; }
 #lc-compacto .lc-cp-win { width:18px; padding:0; background:none; border:none; color:#a09b8c; font-family:inherit; font-size:13px;
-  text-align:center; cursor:pointer; }
+  display:inline-grid; place-items:center; cursor:pointer; }
 #lc-compacto .lc-cp-win:hover { color:#f0e6d2; }
 #lc-compacto .lc-cp-corpo { flex:1; min-height:0; overflow:auto; padding:12px 14px; display:flex; flex-direction:column; gap:8px; }
 #lc-compacto .lc-cp-alerta { flex:none; margin:8px 10px 2px; padding:8px 10px; border:1px solid #e84057; background:rgba(232,64,87,.12);
@@ -315,7 +318,7 @@ html.lc-modo-compacto #lc-aceite { top:54px; left:calc(var(--lc-cp-esq,0px) + 12
    classes, a regra só deixa de casar e volta ao de antes (lista por baixo) */
 html.lc-modo-compacto .fixed.top-0.left-0.z-\\[99\\] { z-index:100003 !important; }
 #lc-botao-compacto { position:absolute; left:368px; top:24px; height:34px; padding:0 12px; box-sizing:border-box; z-index:2;
-  display:flex; align-items:center; white-space:nowrap; cursor:pointer; user-select:none; pointer-events:auto;
+  display:flex; align-items:center; gap:6px; white-space:nowrap; cursor:pointer; user-select:none; pointer-events:auto;
   font:700 12px/1 var(--font-display); letter-spacing:.08em; text-transform:uppercase; color:#cdbe91;
   background:linear-gradient(180deg,#1e2328,#0f1317); border:2px solid transparent; border-image:linear-gradient(180deg,#c8aa6e,#785a28) 1; }
 #lc-botao-compacto:hover { color:#f0e6d2; border-image:linear-gradient(180deg,#f0e6d2,#c8aa6e) 1; box-shadow:0 0 8px rgba(200,170,110,.35); }

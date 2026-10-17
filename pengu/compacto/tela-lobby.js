@@ -12,7 +12,7 @@
 // - nome mostrado aqui é só de quem está no grupo dele, de quem o convidou e dos amigos (nada da seleção ranqueada).
 // Campo ausente ou estado desconhecido nunca quebra a tela: vira botão cinza com o motivo. Erro que escapa de
 // handler/timer/evento (ctx.seguro) devolve o client normal.
-import { h, fotoCampeao, campeoes, estilo, preferidasLobby, perfilSalvo } from './comum.js';
+import { h, fotoCampeao, campeoes, estilo, preferidasLobby, perfilSalvo, icone, comIcone } from './comum.js';
 import { buscarFilaRapida, Recusa, restricaoDura, FILAS_COM_POSICAO } from '../fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, avaliarFreios, textoFreios, derrotasSeguidasAgora, ehMadrugada, MEDICAO,
   JANELA_MS, ATUALIZANDO } from '../freios.js';
@@ -223,14 +223,14 @@ export function planoJogar(g, fila, { filaEscolhida = false } = {}) {
 // | null (sem linha: descartada no ready check, ou o painel pós-jogo do plugin não existe). acao: 'abrir' | 'analisar' | null
 export function linhaUltima(an, nomeCampeao = id => `campeão ${id}`) {
   if (!an || typeof an !== 'object') return null;
-  if (an.nunca) return { titulo: '📊 última partida', sub: 'análise ainda não aberta nesta sessão', botao: { rotulo: 'analisar', acao: 'analisar' } };
+  if (an.nunca) return { titulo: 'última partida', sub: 'análise ainda não aberta nesta sessão', botao: { rotulo: 'analisar', acao: 'analisar' } };
   const r = an.resumo;
   const res = r ? `${r.vitoria ? 'vitória' : 'derrota'} · ${nomeCampeao(r.campeao)} ${r.k}/${r.d}/${r.a}` : '';
   const quando = r ? [FILAS_CP[r.fila]?.c || FILAS_FORA[r.fila], Number(r.criacao) > 0 ? `às ${horaMin(Number(r.criacao))}` : ''].filter(Boolean).join(' ') : '';
-  if (an.erro) return { titulo: '📊 última partida', sub: `a análise falhou: ${String(an.erro).slice(0, 80)}`, botao: { rotulo: 'tentar de novo', acao: 'abrir' } };
-  if (!an.pronta) return { titulo: '📊 última partida', sub: 'analisando a partida…', botao: { rotulo: 'analisando…', acao: null, motivo: 'a análise ainda está rodando: o botão acende quando ela ficar pronta' } };
-  return { titulo: `📊 última partida${res ? `: ${res}` : ''}`, sub: [an.vista ? 'análise vista' : 'análise pronta', quando].filter(Boolean).join(' · '),
-    botao: { rotulo: '⤢ reabrir', acao: 'abrir' } };
+  if (an.erro) return { titulo: 'última partida', sub: `a análise falhou: ${String(an.erro).slice(0, 80)}`, botao: { rotulo: 'tentar de novo', acao: 'abrir' } };
+  if (!an.pronta) return { titulo: 'última partida', sub: 'analisando a partida…', botao: { rotulo: 'analisando…', acao: null, motivo: 'a análise ainda está rodando: o botão acende quando ela ficar pronta' } };
+  return { titulo: `última partida${res ? `: ${res}` : ''}`, sub: [an.vista ? 'análise vista' : 'análise pronta', quando].filter(Boolean).join(' · '),
+    botao: { rotulo: 'reabrir', icone: 'expandir', acao: 'abrir' } };
 }
 
 // ---------- cache entre montagens (a tela 2 usa o mesmo cabeçalho) ----------
@@ -451,7 +451,7 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
         if (!acao || !pj) return;
         const doc = s.raiz?.ownerDocument || s.raiz?.doc || globalThis.document;
         ctx.expandir();
-        if (doc?.documentElement?.classList?.contains?.('lc-modo-compacto')) { ctx.avisar('não foi possível sair do modo compacto: use ⤢ expandir', true); return; }
+        if (doc?.documentElement?.classList?.contains?.('lc-modo-compacto')) { ctx.avisar('não foi possível sair do modo compacto: use expandir', true); return; }
         const r = acao === 'abrir' && an?.gameId ? pj.abrirPainel?.(an.gameId, {}) : pj.analisarUltima?.();
         Promise.resolve(r).catch(e => console.error('[lol-client] compacto: última partida', e));
       }),
@@ -625,10 +625,11 @@ function pintar(s, cab) {
   // 📊 última partida (passo 13 B3): reabrir/analisar expande e abre o painel de 6 abas; some no próximo ready check
   const ua = linhaUltima(s.analise, id => s.nomesCamp?.get?.(Number(id))?.nome || `campeão ${id}`);
   if (ua) filhos.push(h('div', { class: 'lc-cp-ultima', dataset: { a: 'ultima' } },
-    s.analise?.resumo?.campeao ? fotoCampeao(s.analise.resumo.campeao, { tam: 26 }) : h('span', { class: 'lc-cp-ultima-ic' }, '📊'),
+    s.analise?.resumo?.campeao ? fotoCampeao(s.analise.resumo.campeao, { tam: 26 }) : h('span', { class: 'lc-cp-ultima-ic' }, icone('coach', { tam: 18 })),
     h('div', {}, h('b', {}, ua.titulo), h('small', {}, ua.sub)),
     h('button', { class: 'lc-cp-btn' + (ua.botao.acao ? ' lc-cp-prim' : ' lc-cp-cinza'), disabled: !ua.botao.acao, title: ua.botao.motivo || undefined,
-      dataset: { a: 'ultima-' + (ua.botao.acao || 'espera') }, on: { click: () => a.ultima?.(ua.botao.acao) } }, ua.botao.rotulo)));
+      dataset: { a: 'ultima-' + (ua.botao.acao || 'espera') }, on: { click: () => a.ultima?.(ua.botao.acao) } },
+    ua.botao.icone ? comIcone(ua.botao.icone, ua.botao.rotulo) : ua.botao.rotulo)));
 
   // grupo
   filhos.push(h('div', { class: 'lc-cp-rot' }, 'grupo'));
@@ -663,7 +664,7 @@ function pintar(s, cab) {
   const plano = planoJogar(g, s.fila, { filaEscolhida: !!s.filaEscolhida });
   const armado = s.confirmacao.armada() && !!s.textoFreio;
   if (g.restricao) {
-    filhos.push(h('div', { class: 'lc-cp-pena' }, '⛔ ', h('b', {}, 'busca indisponível agora.'), h('br'), g.restricao));
+    filhos.push(h('div', { class: 'lc-cp-pena' }, comIcone('bloqueado', h('b', {}, 'busca indisponível agora.'), { tam: 12 }), h('br'), g.restricao));
     filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, dataset: { a: 'jogar' } }, 'JOGAR', h('small', {}, 'volta quando liberar; a busca só começa com o seu clique')));
   } else if (membro) {
     filhos.push(h('button', { class: 'lc-cp-jogar', disabled: true, dataset: { a: 'jogar' } }, 'O LÍDER BUSCA', h('small', {}, `${f.n} · escolha as suas posições`)));
@@ -678,7 +679,7 @@ function pintar(s, cab) {
     if (armado) {
       const cont = h('span', { class: 'lc-cp-cont' }, `${Math.max(0, Math.ceil((s.armadoAte - s.agora()) / 1000))} s`);
       s.refs.freioCont = cont;
-      filhos.push(h('div', { class: 'lc-cp-freio', dataset: { a: 'freio' } }, '⚠ ', s.textoFreio, ' ', cont));
+      filhos.push(h('div', { class: 'lc-cp-freio', dataset: { a: 'freio' } }, comIcone('aviso', s.textoFreio, { tam: 12 }), ' ', cont));
     }
   }
 

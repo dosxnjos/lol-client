@@ -278,7 +278,7 @@ const todasEscritas = [];
     t.titulo.textContent.startsWith('BANIMENTO') && t.extras.querySelector('span.lc-cp-sel-t')?.textContent === '15' && t.raiz.classList.contains('lc-cp-sel'));
   // protótipo (tela 3): relógio, 💬 com o contador, expandir; o contador só lê (GET /lol-chat/v1/conversations)
   const bt = t.extras.querySelector('button[data-a="chat"]');
-  caso('topo: 💬 com o contador depois do relógio (protótipo da tela 3)', !!bt && t.extras.children.indexOf?.(bt) !== 0
+  caso('topo: botão de chat com o contador depois do relógio (protótipo da tela 3)', !!bt && t.extras.children.indexOf?.(bt) !== 0
     && t.extras.children[0]?.classList.contains('lc-cp-sel-t') && t.extras.children[1] === bt && t.subs.has('/lol-chat/v1/conversations'));
   caso('banir: botão BANIR desligado sem campeão escolhido', t.achar('button[data-a="acao"]')?.disabled && /BANIR/.test(t.achar('button[data-a="acao"]').textContent));
   t.achar('button.lc-cp-sel-gc[data-id="58"]').click(); await tick();
@@ -361,7 +361,7 @@ const todasEscritas = [];
   const n = t.escritas().length;
   await t.emitir(S(53));
   t.rodarTimers(tela.CONFERIR_MS); await tick();
-  caso('escolher: 204 sem a ação completar em CONFERIR_MS (relida por GET) vira aviso "não travou" com ⤢, sem 2ª escrita',
+  caso('escolher: 204 sem a ação completar em CONFERIR_MS (relida por GET) vira aviso "não travou" com expandir, sem 2ª escrita',
     t.avisos.some(([m, e]) => e && /não travou Zac/.test(m) && /expandir/.test(m)) && t.escritas().length === n && n === 1, JSON.stringify(t.avisos));
   caso('escolher: depois do "não travou" o botão TRAVAR volta ligado (tentar de novo é clique dele)',
     !t.achar('button[data-a="acao"]').disabled && /^TRAVAR Zac$/.test(t.achar('button[data-a="acao"]').textContent), t.achar('button[data-a="acao"]').textContent);
@@ -502,7 +502,7 @@ const todasEscritas = [];
   aceito.pickOrderSwaps = disponiveis([[1, 24], [0, 25], [3, 26], [4, 27]]);
   await t.emitir(aceito);
   const parceiro = linhaDo(t, 4)?.textContent || '';
-  caso('troca: ⇅ ordem pedida e aceita com ids regenerados (como na partida real): "troca de ordem feita" na linha do aliado, sem "sem resposta"',
+  caso('troca: ordem pedida e aceita com ids regenerados (como na partida real): "troca de ordem feita" na linha do aliado, sem "sem resposta"',
     pediu && /troca de ordem feita/.test(parceiro) && semAvisoRuim(t) && String(t.achar('div.lc-cp-sel-lin.lc-cp-sel-eu')?.dataset.cell) === '2' && t.falhas.length === 0,
     JSON.stringify({ parceiro, avisos: t.avisos, falhas: t.falhas.map(e => e.message) }));
   todasEscritas.push(...t.escritas());
@@ -517,7 +517,7 @@ const todasEscritas = [];
   pos(depois, 1).assignedPosition = 'jungle'; pos(depois, 4).assignedPosition = 'top';
   depois.pickOrderSwaps = disponiveis([[2, 30], [0, 31], [3, 32], [4, 33]]);
   await t2.emitir(depois);
-  caso('troca: ⇅ ordem recebida e aceita por ti: "troca de ordem feita" na linha de quem pediu (agora no teu cell antigo)',
+  caso('troca: ordem recebida e aceita por ti: "troca de ordem feita" na linha de quem pediu (agora no teu cell antigo)',
     t2.escritas().at(-1) === 'POST /lol-champ-select/v1/session/pick-order-swaps/4/accept' && /troca de ordem feita/.test(linhaDo(t2, 4)?.textContent || '') && semAvisoRuim(t2),
     linhaDo(t2, 4)?.textContent);
   todasEscritas.push(...t2.escritas());
@@ -530,7 +530,7 @@ const todasEscritas = [];
   const d3 = S(28);
   d3.positionSwaps.find(x => x.cellId === 0).id = 40;
   await t3.emitir(d3);
-  caso('troca: ⇄ posição recusada por ti e contrato regenerado sem DECLINED: "você recusou", sem aviso de "sem resposta"',
+  caso('troca: posição recusada por ti e contrato regenerado sem DECLINED: "você recusou", sem aviso de "sem resposta"',
     t3.escritas().at(-1) === 'POST /lol-champ-select/v1/session/position-swaps/6/decline' && /você recusou a troca de posição/.test(linhaDo(t3, 0)?.textContent || '') && semAvisoRuim(t3),
     linhaDo(t3, 0)?.textContent);
   todasEscritas.push(...t3.escritas());
@@ -604,14 +604,16 @@ const todasEscritas = [];
   t.achar('button[data-a="feitico-abrir"][data-slot="0"]').click(); await tick();
   t.achar('button[data-a="feitico"][data-id="4"]').click(); await tick();
   caso('feitiço: Flash no D com Flash no F = troca de lugar (PATCH spell1 4, spell2 11)', t.escritas().at(-1) === 'PATCH /lol-champ-select/v1/session/my-selection {"spell1Id":4,"spell2Id":11}', t.escritas().join('; '));
-  caso('runa: Zac com 1 página já atual = "✓ aplicada sozinha", nada escrito', /aplicada sozinha/.test(t.achar('div[data-a="runa"]').textContent) && !t.escritas().some(e => /perks/.test(e)));
+  caso('runa: Zac com 1 página já atual = ícone ok e "aplicada sozinha", nada escrito', /aplicada sozinha/.test(t.achar('div[data-a="runa"]').textContent)
+    && !!t.achar('div[data-a="runa"]').querySelector('[data-icone="ok"]') && !t.escritas().some(e => /perks/.test(e)));
   // troca de campeão: myTeam muda para Renekton (2 páginas): escolha dentro da tela, popup do runas.js fechado
   const ren = S(58); ren.myTeam.find(c => c.cellId === 4).championId = 58;
   await t.emitir(ren);
   const pags = t.todos('button[data-a="runa-pagina"]');
   caso('runa: Renekton com 2 páginas mostra as 2 e fecha o popup escondido do runas.js', pags.length === 2 && fechou.length >= 1 && /escolha uma/.test(t.achar('div[data-a="runa"]').textContent));
   pags[0].click(); await tick();
-  caso('runa: clique = PUT currentpage com o id puro', t.escritas().at(-1) === 'PUT /lol-perks/v1/currentpage 1409260191' && /✓ aplicada/.test(t.achar('div[data-a="runa"]').textContent), t.escritas().join('; '));
+  caso('runa: clique = PUT currentpage com o id puro', t.escritas().at(-1) === 'PUT /lol-perks/v1/currentpage 1409260191' && /aplicada/.test(t.achar('div[data-a="runa"]').textContent)
+    && !!t.achar('div[data-a="runa"]').querySelector('[data-icone="ok"]'), t.escritas().join('; '));
   // achado 5: o runas.js sabe da escolha no clique, ANTES do PUT (um ⤢ logo depois não reabre o popup)
   caso('runa: o clique avisa o runas.js (escolheu) antes do PUT sair', escolheu.length === 1 && !t.escritas().slice(0, escolheu[0]).some(e => /currentpage/.test(e)), JSON.stringify(escolheu));
   caso('skin: troca de campeão relê o carrossel (Renekton: 1 skin dele + nenhuma do Zac)', t.todos('button.lc-cp-sel-sk').every(b => String(b.dataset.id).startsWith('58')));
@@ -825,7 +827,7 @@ const todasEscritas = [];
     t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
     t.achar('button[data-a="acao"]').click(); await tick();
     t.rodarTimers(tela.PRAZO_HOVER_MS); await tick(6);
-    caso('hover mudo + TRAVAR: no PRAZO_HOVER_MS aviso "não respondeu" com ⤢ e nenhum travamento às cegas',
+    caso('hover mudo + TRAVAR: no PRAZO_HOVER_MS aviso "não respondeu" com expandir e nenhum travamento às cegas',
       t.avisos.some(([m, e]) => e && /não respondeu/.test(m) && /expandir/.test(m)) && !t.escritas().some(e => /"completed":true/.test(e)), JSON.stringify(t.avisos));
     const b = t.achar('button[data-a="acao"]');
     caso('hover mudo + TRAVAR: o botão volta "TRAVAR Yasuo" ligado', /^TRAVAR Yasuo$/.test(b.textContent) && !b.disabled, b.textContent);
@@ -843,7 +845,7 @@ const todasEscritas = [];
     t.achar('button.lc-cp-sel-gc[data-id="157"]').click(); await tick();
     caso('travar em voo: clique na grade ignorado (só o PATCH de travar saiu)', igual(t.escritas(), [`${P13} {"completed":true,"championId":58}`]), t.escritas().join('; '));
     t.rodarTimers(tela.PRAZO_MS); await tick(6);
-    caso('travar mudo: no PRAZO_MS aviso "não foi possível travar Renekton (sem resposta)" com ⤢, botão de volta e nenhuma 2ª escrita',
+    caso('travar mudo: no PRAZO_MS aviso "não foi possível travar Renekton (sem resposta)" com expandir, botão de volta e nenhuma 2ª escrita',
       t.avisos.some(([m, e]) => e && /não foi possível travar Renekton \(sem resposta\)/.test(m) && /expandir/.test(m)) && !t.achar('button[data-a="acao"]').disabled
       && t.escritas().length === 1, JSON.stringify(t.avisos));
   }
@@ -863,7 +865,7 @@ const todasEscritas = [];
     const t = await montarTela({ inicial: SR(14), rotas: { 'GET /lol-champ-select/v1/pickable-champion-ids': [] } });
     t.rodarTimers(tela.ARMAR_MS);
     const nota = t.achar('[data-a="sem-lista"]')?.textContent || '';
-    caso('escolha sem lista de picks: grade = só os favoritos, cinza; TRAVAR cinza; nota com ⤢ (nunca mostra campeão que ele não tem)',
+    caso('escolha sem lista de picks: grade = só os favoritos, cinza; TRAVAR cinza; nota com expandir (nunca mostra campeão que ele não tem)',
       igual(grade(t).map(x => Number(x.dataset.id)).sort((a, b) => a - b), [58, 154]) && ligados(t).length === 0 && t.achar('button[data-a="acao"]').disabled
       && /expandir/.test(nota), JSON.stringify({ g: grade(t).map(x => x.dataset.id), nota }));
   }

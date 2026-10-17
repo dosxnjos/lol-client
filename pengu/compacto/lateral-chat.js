@@ -17,7 +17,7 @@
 // - sala do time: só a conversa type 'championSelect' (da conversa ficam só id e type; password e mucJwtDto nunca). Quem falou
 //   aparece só como campeão e posição (cruzando o remetente com myTeam da sessão); sem casar = "aliado". Nenhum nome da sala
 //   nem da sessão é lido: nome oculto da ranqueada nunca aparece.
-import { h, esc, fotoCampeao } from './comum.js';
+import { h, esc, fotoCampeao, icone, comIcone } from './comum.js';
 import { corpoMensagem } from './chat-sala.js';
 import { podeConvidar, secoesAmigos } from './amigos.js';
 
@@ -265,10 +265,12 @@ export function criarListaAmigos(amb) {
   // etapa 2 de 2026-10-16: menu do clique direito, diálogos e campos (anotação, pasta) moram AO LADO do corpo, nunca dentro dele: o
   // corpo é recriado no repintar e levaria junto o menu aberto e o foco do campo (ARMADILHAS "Campo de texto ou botão recriado")
   const sobre = h('div', { doc, class: 'lc-lt-sobre', dataset: { a: 'lt-sobre' } });
-  const novaPasta = h('button', { doc, class: 'lc-lt-x lc-lt-npasta', title: 'criar pasta', dataset: { a: 'lt-nova-pasta' }, on: { click: amb.seguro(e => amb.aoNovaPasta?.(e)) } }, '＋');
+  const novaPasta = h('button', { doc, class: 'lc-lt-x lc-lt-npasta', title: 'criar pasta', 'aria-label': 'criar pasta', dataset: { a: 'lt-nova-pasta' },
+    on: { click: amb.seguro(e => amb.aoNovaPasta?.(e)) } }, icone('adicionar', { doc, tam: 15 }));
   const el = h('section', { doc, class: 'lc-lt-pn lc-lt-amigos', dataset: { painel: 'lista' } },
     h('header', { doc, class: 'lc-lt-cab' }, h('div', { doc, class: 'lc-lt-tit' }, titulo, sub), novaPasta,
-      h('button', { doc, class: 'lc-lt-x', title: 'fechar a lista', dataset: { a: 'lt-fechar-lista' }, on: { click: amb.seguro(e => amb.aoFechar?.(e)) } }, '✕')),
+      h('button', { doc, class: 'lc-lt-x', title: 'fechar a lista', 'aria-label': 'fechar a lista', dataset: { a: 'lt-fechar-lista' }, on: { click: amb.seguro(e => amb.aoFechar?.(e)) } },
+        icone('fechar', { doc, tam: 14 }))),
     h('div', { doc, class: 'lc-lt-buscacx' }, busca), corpo, sobre);
   const arr = amb.arrasto || {};
   // Shift+F10 ou a tecla de menu abrem o mesmo menu do clique direito (as teclas não vão para os atalhos da Riot)
@@ -315,7 +317,7 @@ export function criarListaAmigos(amb) {
       dragleave: amb.seguro(e => arr.saiuGrupo?.(s, e, e.currentTarget || e.target)),
       drop: amb.seguro(e => { e.preventDefault?.(); arr.soltarGrupo?.(s, e, e.currentTarget || e.target?.closest?.('[data-a="lt-grupo"]')); }),
     } },
-  h('span', { doc, class: 'lc-lt-seta' }, aberto ? '▾' : '▸'), ' ', h('span', { doc }, s.rotulo), ' ', h('small', { doc }, `(${s.online}/${s.total})`));
+  h('span', { doc, class: 'lc-lt-seta' }, icone(aberto ? 'aberto' : 'fechado', { doc, tam: 12 })), ' ', h('span', { doc }, s.rotulo), ' ', h('small', { doc }, `(${s.online}/${s.total})`));
 
   // dados = verAmigos(...) + {ok, motivo, pedidos, reordena: {ok, motivo}}. Com menu, diálogo, campo ou arrasto em andamento
   // (amb.congelado()), o corpo não é recriado: guarda os dados e repinta quando eles fecham (forcar)
@@ -340,7 +342,7 @@ export function criarListaAmigos(amb) {
     const casa = a => !f || a.nome.toLocaleLowerCase('pt-BR').includes(f);
     const filhos = [];
     if (d.pedidos > 0) filhos.push(h('button', { doc, class: 'lc-lt-pedidos', dataset: { a: 'lt-pedidos' }, title: 'aceitar ou recusar é no client normal',
-      on: { click: amb.seguro(e => amb.aoPedidos?.(e)) } }, `${d.pedidos} ${d.pedidos === 1 ? 'pedido' : 'pedidos'} de amizade`, h('span', { doc }, 'abrir ⤢')));
+      on: { click: amb.seguro(e => amb.aoPedidos?.(e)) } }, `${d.pedidos} ${d.pedidos === 1 ? 'pedido' : 'pedidos'} de amizade`, h('span', { doc }, 'abrir ', icone('expandir', { doc, tam: 11 }))));
     if (d.secoes) {
       // grupos da Riot, na ordem dela (etapa 2): buscando, mostra quem casa em todos os grupos, recolhidos ou não
       for (const s of d.secoes) {
@@ -358,7 +360,7 @@ export function criarListaAmigos(amb) {
       }
       if (!d.online.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhum amigo online'));
       filhos.push(h('button', { doc, class: 'lc-lt-grupo lc-lt-offbt', dataset: { a: 'lt-offline' }, on: { click: amb.seguro(() => { offAberto = !offAberto; pintar(dados, true); }) } },
-        `${offAberto || f ? '▾' : '▸'} offline (${d.offline.length})`));
+        comIcone(offAberto || f ? 'aberto' : 'fechado', `offline (${d.offline.length})`, { doc, tam: 12 })));
       if (offAberto || f) filhos.push(...d.offline.filter(casa).map(linha));
     }
     let topo = 0;
@@ -380,7 +382,7 @@ export function criarConversaView(amb, { placeholder = 'mensagem (Enter envia)',
   const ms = h('div', { doc, class: 'lc-lt-ms', dataset: { a: 'lt-msgs' } });
   const input = h('input', { doc, class: 'lc-lt-in', maxlength: String(TEXTO_MAX), autocomplete: 'off', dataset: { a: 'lt-texto' }, placeholder });
   const bt = h('button', { doc, class: 'lc-cp-btn lc-cp-prim lc-lt-env', dataset: { a: 'lt-enviar' } }, 'enviar');
-  const bloq = h('div', { doc, class: 'lc-lt-bloq' }, '⛔ chat bloqueado pela Riot nesta conta: só leitura, sem envio');
+  const bloq = h('div', { doc, class: 'lc-lt-bloq' }, comIcone('bloqueado', 'chat bloqueado pela Riot nesta conta: só leitura, sem envio', { doc, tam: 12 }));
   const en = h('div', { doc, class: 'lc-lt-en' }, input, bt);
   const el = h('div', { doc, class: 'lc-lt-conversa' }, ms, en);
   const enviar = async e => {
@@ -448,7 +450,7 @@ export function criarRecentes(amb) {
   h('span', { doc, class: 'lc-lt-rdir' }, h('small', { doc }, r.hora || ''), r.un ? h('span', { doc, class: 'lc-lt-un' }, r.un > 99 ? '99+' : String(r.un)) : null));
   const linhaTime = (t, ativa) => h('div', { doc, class: 'lc-lt-recente lc-lt-rtime' + (ativa === 'time' ? ' lc-lt-on' : '') + (t.un ? ' lc-lt-nova' : ''),
     dataset: { a: 'lt-recente', k: 'time' }, title: 'chat do seu time na seleção (só campeão e posição)', on: { click: abrir({ k: 'time', tipo: 'time' }) } },
-  h('span', { doc, class: 'lc-lt-av lc-lt-avtime' }, '🗨'),
+  h('span', { doc, class: 'lc-lt-av lc-lt-avtime' }, icone('salaTime', { doc, tam: 14 })),
   h('div', { doc, class: 'lc-lt-nm' }, h('span', { doc }, 'sala do time'), h('small', { doc }, 'só campeão e posição de quem fala')),
   h('span', { doc, class: 'lc-lt-rdir' }, t.un ? h('span', { doc, class: 'lc-lt-un' }, t.un > 99 ? '99+' : String(t.un)) : null));
   function pintar(itens, { ativa = null, time = null } = {}) {
@@ -459,7 +461,7 @@ export function criarRecentes(amb) {
     const filhos = [];
     if (time) filhos.push(linhaTime(time, ativa));
     filhos.push(...lista.map(r => linha(r, ativa)));
-    if (!filhos.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhuma conversa recente: abra uma pela lista de amigos (👥)'));
+    if (!filhos.length) filhos.push(h('div', { doc, class: 'lc-lt-vazio' }, 'nenhuma conversa recente: abra uma pela lista de amigos'));
     let topo = 0;
     try { topo = el.scrollTop || 0; } catch { /* sem layout */ }
     el.replaceChildren(...filhos);

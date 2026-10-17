@@ -304,7 +304,7 @@ function cenario({ fase = 'Lobby', dm = false, semGrupos = false } = {}) {
   caso('recolher com clique sintético: nada sai', s.escritas().length === 0);
   s.cab(0).click(); await tick();
   caso('recolher Geral (clique dele): PUT /lol-chat/v1/friend-groups/0 com o grupo como lido e collapsed true; os amigos dele somem da lista',
-    igual(s.escritas(), [{ m: 'PUT', u: '/lol-chat/v1/friend-groups/0', c: { ...GRUPO(0), collapsed: true } }]) && !s.linha('a2@br1.pvp.net') && /▸/.test(s.cab(0).textContent), JSON.stringify(s.escritas()));
+    igual(s.escritas(), [{ m: 'PUT', u: '/lol-chat/v1/friend-groups/0', c: { ...GRUPO(0), collapsed: true } }]) && !s.linha('a2@br1.pvp.net') && !!s.cab(0).querySelector('[data-icone="fechado"]'), JSON.stringify(s.escritas()));
   s.zerar(); s.est.falhar = 500;
   s.cab(1).click(); await tick();
   caso('recolher que a Riot recusa: volta como estava e avisa com o status', !!s.linha('a1@br1.pvp.net') && s.avisos.some(([m, e]) => e && /500/.test(m)), JSON.stringify(s.avisos));
@@ -343,7 +343,8 @@ function cenario({ fase = 'Lobby', dm = false, semGrupos = false } = {}) {
   await s.menu('a1@br1.pvp.net');
   const itens = s.lista().querySelectorAll('.lc-lt-mi').map(b => b.textContent);
   caso('clique direito no amigo abre o menu com os itens da Riot', s.lat.amigos().menu === 'a:a1@br1.pvp.net'
-    && igual(itens, ['Convidar para partida', 'Enviar mensagem', 'Exibir perfil', 'Adicionar anotação', 'Mover ›', 'Desfazer amizade/Bloquear']), JSON.stringify(itens));
+    && igual(itens, ['Convidar para partida', 'Enviar mensagem', 'Exibir perfil', 'Adicionar anotação', 'Mover ', 'Desfazer amizade/Bloquear'])
+    && !!s.lista().querySelector('.lc-lt-mseta [data-icone="fechado"]'), JSON.stringify(itens));
   const menuEl = s.lista().querySelector('[data-a="lt-menu"]');
   await s.lat.lerAmigos(); await s.lat.lerAmigos(); await tick();
   caso('o menu aberto sobrevive à releitura dos amigos (mora fora do corpo que repinta)', menuEl.isConnected && s.lat.amigos().menu === 'a:a1@br1.pvp.net' && menuEl.style.display !== 'none');
@@ -456,7 +457,7 @@ function cenario({ fase = 'Lobby', dm = false, semGrupos = false } = {}) {
   caso('diálogo Desfazer amizade/Bloquear com o texto da Riot, o Riot ID do amigo e a caixa "Também denunciar"',
     s.lat.amigos().dialogo && /Desfazer amizade\/Bloquear jogador/.test(txt) && /amigo 1#BR1/.test(txt) && /Também denunciar/.test(txt), txt);
   s.dlg('fechar').click(); await tick();
-  caso('✕ do diálogo: nada sai', s.escritas().length === 0 && !s.lat.amigos().dialogo);
+  caso('fechar do diálogo: nada sai', s.escritas().length === 0 && !s.lat.amigos().dialogo);
   await abrirRemover('a1@br1.pvp.net');
   s.dlg('desfazer').click({ isTrusted: false }); await tick();
   caso('Desfazer amizade com clique sintético: nada sai', s.escritas().length === 0);

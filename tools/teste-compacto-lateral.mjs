@@ -1,8 +1,8 @@
 // Testa a lateral do client compacto (roadmap/2026-10-13-client-compacto.md, passo 13; parecer do Gabriel de 14/10/2026 ~20:00):
-// chat ao lado (A1/A2), sala do time na seleção, configurações à esquerda (B1), coach da seleção (B2), "📊 última partida" (B3) e
+// chat ao lado (A1/A2), sala do time na seleção, configurações à esquerda (B1), coach da seleção (B2), "coach última partida" (B3) e
 // as 3 travas do roteador (LIMITES.larg, LARGURA_COMPACTA_MAX, noTamanho na troca de tela) com o estado único de largura.
-// Etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md (16/10/2026): 💬 = painel de chat (recentes em cima, a conversa
-// embaixo, ✕ da conversa), 👥 = lista de amigos, 📊 no lugar do chat; nada do chat abre sozinho em fase nenhuma; rascunho por
+// Etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md (16/10/2026): chat = painel de chat (recentes em cima, a conversa
+// embaixo, fechar da conversa), amigos = lista de amigos, coach no lugar do chat; nada do chat abre sozinho em fase nenhuma; rascunho por
 // conversa; "lida" no clique dele (recente, amigo ou a própria conversa) e DELETE ao sair de vista.
 // Sem o client: roteador e lateral de verdade, janela falsa que faz o que o client faz (ResizeTo em px CSS mantendo o canto,
 // MoveTo e ScreenData em px físicos, escala 1,25), LCU falsa (tools/lcu-falsa.mjs) e DOM mínimo feito aqui.
@@ -401,7 +401,7 @@ function conferir(s) {
     screenAvailWidth: 2560, screenAvailHeight: 1020, zoomScale: 1.25 }).minimizada === true && normalizarTela(null) === null);
   caso('layout: lista 300 + painel 360 à direita, configurações 360 à esquerda; monitor estreito divide a vaga (chat no lugar da lista)',
     igual(layout({ lista: true, painel: 'chat', config: true }, { util: 4000, col: 420 }), { esq: 360, dir: 660, lista: true, painel: true, config: true, editor: false, estreito: false, total: 1440, cabe: true })
-      // etapa 3: o editor do perfil ocupa a mesma esquerda da ⚙ (um dos dois; com os dois pedidos, vale a ⚙) e o perfil, o painel
+      // etapa 3: o editor do perfil ocupa a mesma esquerda da configurações (um dos dois; com os dois pedidos, vale a configurações) e o perfil, o painel
       && igual(layout({ editor: true, painel: 'perfil' }, { util: 4000, col: 420 }), { esq: 360, dir: 360, lista: false, painel: true, config: false, editor: true, estreito: false, total: 1140, cabe: true })
       && layout({ editor: true, config: true }, { util: 4000, col: 420 }).esq === 360 && layout({ editor: true, config: true }, { util: 4000, col: 420 }).editor === false
       && layout({ lista: true, painel: 'chat', vistaEstreita: 'painel' }, { util: 1024, col: 420 }).dir === 360
@@ -419,29 +419,29 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
   s.ancora = s.win.x;
   caso('entra no compacto em 420×680 sem mexer na posição (âncora = onde a janela está)', s.win.w === 420 && s.win.h === 680 && s.win.x === 640 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   await s.passo(() => s.lat.alternarLista());
-  caso('👥: a janela alarga para a direita (420 → 720) com a lista; coluna parada', s.win.w === 720 && s.win.x === 640 && s.partes().dir.children[0]?.dataset.painel === 'lista' && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
+  caso('amigos: a janela alarga para a direita (420 → 720) com a lista; coluna parada', s.win.w === 720 && s.win.x === 640 && s.partes().dir.children[0]?.dataset.painel === 'lista' && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   await s.passo(() => s.lat.abrirConversa(A1));
   caso('amigo clicado: o chat abre mais à direita (720 → 1080) com a conversa dele embaixo dos recentes, coluna parada', s.win.w === 1080 && s.win.x === 640 && s.partes().dir.children.length === 2
     && s.lat.estado().painel === 'chat' && s.lat.estado().conversa?.pid === A1.pid && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   const nPedidos = s.win.pedidos.length;
   await s.passo(() => s.lat.alternarConfig());
   const cfgPed = s.win.pedidos.slice(nPedidos).map(p => p.name);
-  // ordem desde 15/10/2026 ("flickada" ao clicar na ⚙): janela que cresce alarga ANTES de andar; que encolhe anda antes de estreitar
-  caso('⚙: as configurações crescem para a ESQUERDA (1440), a coluna fica no mesmo lugar da tela; alarga antes de andar',
+  // ordem desde 15/10/2026 ("flickada" ao clicar na configurações): janela que cresce alarga ANTES de andar; que encolhe anda antes de estreitar
+  caso('configurações: as configurações crescem para a ESQUERDA (1440), a coluna fica no mesmo lugar da tela; alarga antes de andar',
     s.win.w === 1440 && s.win.x === 640 - 450 && s.win.x + 360 * 1.25 === 640 && igual(cfgPed, ['Window.ResizeTo', 'Window.MoveTo']) && conferir(s).length === 0, JSON.stringify([s.win, cfgPed, conferir(s)]));
   const n2 = s.win.pedidos.length;
   await s.passo(() => s.lat.alternarConfig());
   const ped2 = s.win.pedidos.slice(n2).map(p => p.name);
   caso('fechar as configurações: anda e só então encolhe; coluna volta ao mesmo lugar (x 640)', s.win.w === 1080 && s.win.x === 640 && igual(ped2, ['Window.MoveTo', 'Window.ResizeTo']), JSON.stringify([s.win, ped2]));
   await s.passo(() => s.lat.alternarLista());
-  caso('✕ da lista com a conversa aberta: fica 780 (coluna + conversa)', s.win.w === 780 && conferir(s).length === 0, JSON.stringify(s.win));
+  caso('fechar da lista com a conversa aberta: fica 780 (coluna + conversa)', s.win.w === 780 && conferir(s).length === 0, JSON.stringify(s.win));
   const nX = s.win.pedidos.length;
   await s.passo(() => s.lat.fecharConversa());
-  caso('✕ da conversa: fecha só a conversa; o chat fica com os recentes na altura toda, largura e posição iguais (780, nenhum pedido à janela)',
+  caso('fechar da conversa: fecha só a conversa; o chat fica com os recentes na altura toda, largura e posição iguais (780, nenhum pedido à janela)',
     s.win.w === 780 && s.win.x === 640 && s.lat.estado().painel === 'chat' && s.lat.estado().conversa === null && s.win.pedidos.length === nX
       && !s.partes().dir.querySelector('[data-a="lt-chat"]')?.classList.contains('lc-lt-com-conversa') && conferir(s).length === 0, JSON.stringify([s.win, s.lat.estado().conversa]));
   await s.passo(() => s.lat.fecharPainel());
-  caso('✕ do chat: volta a 420 e a coluna na âncora', s.win.w === 420 && s.win.x === 640 && conferir(s).length === 0, JSON.stringify(s.win));
+  caso('fechar do chat: volta a 420 e a coluna na âncora', s.win.w === 420 && s.win.x === 640 && conferir(s).length === 0, JSON.stringify(s.win));
   // troca de tela não encolhe a lateral (trava 3)
   await s.passo(() => s.lat.alternarLista());
   const n3 = s.win.pedidos.length;
@@ -454,12 +454,12 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
   caso('Riot devolveu 1280×720 com a lista aberta: reencolhe para 720×680 (coluna + lista), não para 420', s.win.w === 720 && s.win.h === 680, JSON.stringify(s.win));
   // expandir com a lateral aberta e voltar: a lateral volta igual (A2)
   await s.passo(() => s.rot.expandir());
-  caso('⤢ expandir com a lista aberta: client normal 1280×720 e a lateral some junto (estado guardado)',
+  caso('expandir com a lista aberta: client normal 1280×720 e a lateral some junto (estado guardado)',
     s.win.w === 1280 && !s.doc.getElementById('lc-compacto') && s.lat.estado().lista === true && igual(s.rot.larguraLateral(), { esq: 0, dir: 300 }), JSON.stringify(s.win));
   const xExp = s.win.x;
   await s.passo(() => s.rot.compactar());
   s.ancora = xExp;
-  caso('▣ modo compacto de volta: 720×680 com a lista no lugar, a coluna onde a janela normal estava', s.win.w === 720 && s.partes().dir.children.length === 1 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
+  caso('modo compacto de volta: 720×680 com a lista no lugar, a coluna onde a janela normal estava', s.win.w === 720 && s.partes().dir.children.length === 1 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   caso('nenhuma escrita na LCU só por abrir/fechar painéis e trocar de tela (só GET)', s.falsa.escritas().length === 0, JSON.stringify(s.falsa.escritas()));
   globalThis.document = ANTES.document;
 }
@@ -468,7 +468,7 @@ const A2 = { pid: 'a2@br1.pvp.net', nome: 'amigo 2' };
 const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes([...l.slice(0, i), ...l.slice(i + 1)]).map(r => [x, ...r])));
 {
   const ABRE = { lista: s => s.lat.alternarLista(), conversa: s => s.lat.abrirConversa(A1), config: s => s.lat.alternarConfig() };
-  // "conversa": abre = amigo clicado (chat com a conversa); fecha = 💬 de novo (o painel inteiro; o ✕ da conversa não muda a largura)
+  // "conversa": abre = amigo clicado (chat com a conversa); fecha = chat de novo (o painel inteiro; o fechar da conversa não muda a largura)
   const FECHA = { lista: s => s.lat.alternarLista(), conversa: s => s.lat.alternarChat(), config: s => s.lat.alternarConfig() };
   const LUGARES = [['meio', 640], ['borda direita', 1900], ['borda esquerda', 0], ['monitor pequeno', 300]];
   let n = 0;
@@ -487,7 +487,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
         if (erros.length) { falhas.push(`${lugar} ${abre}/${fecha} depois de ${op.join(' ')}: ${erros.join('; ')}`); break; }
       }
       // fecha o que sobrou aberto (monitor pequeno) e confere a volta à âncora
-      // (o painel antes da lista: no monitor estreito o 👥 com a lista escondida a mostra em vez de fechar)
+      // (o painel antes da lista: no monitor estreito o amigos com a lista escondida a mostra em vez de fechar)
       if (s.lat.estado().config) await s.passo(() => s.lat.alternarConfig());
       if (s.lat.estado().painel) await s.passo(() => s.lat.fecharPainel());
       if (s.lat.estado().lista) await s.passo(() => s.lat.alternarLista());
@@ -564,7 +564,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   for (const i of [1, 2, 3, 4]) await s.passo(() => s.lat.abrirConversa({ pid: `x${i}@br1.pvp.net`, nome: `amigo ${i}` }));
   caso('4 conversas abertas em seguida: a última clicada fica embaixo dos recentes, sem abas; o painel continua 360 (780)',
     s.lat.estado().conversa?.pid === 'x4@br1.pvp.net' && s.win.w === 780 && !s.partes().dir.querySelector('[data-a="lt-aba"]'), JSON.stringify([s.lat.estado().conversa, s.win.w]));
-  // monitor pequeno: lista + chat não cabem → o chat entra no lugar da lista (←)
+  // monitor pequeno: lista + chat não cabem → o chat entra no lugar da lista (voltar)
   const p = cenario({ mon: 'pequeno', x: 0 });
   await p.ir('Lobby');
   await p.passo(() => p.lat.alternarLista());
@@ -572,7 +572,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   const l1 = p.lat.layout();
   await p.passo(() => p.lat.voltarLista());
   const l2 = p.lat.layout();
-  caso('monitor pequeno (1024 CSS úteis): a conversa entra no lugar da lista e ← volta à lista; nunca 1080',
+  caso('monitor pequeno (1024 CSS úteis): a conversa entra no lugar da lista e voltar volta à lista; nunca 1080',
     l1.estreito && l1.painel && !l1.lista && l2.lista && !l2.painel && p.win.w === 720, JSON.stringify([l1, l2, p.win.w]));
   await p.passo(() => p.lat.alternarConfig());
   caso('monitor pequeno: abrir as configurações quando não cabe com o chat fecha o chat (o que ele abriu por último vence) e avisa',
@@ -598,16 +598,16 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   s.est.conversas[0].unreadMessageCount = 2;
   for (let i = 0; i < 6; i++) await s.passo(() => s.lat.volta());
   caso('mensagem nova na seleção não abre nada (a coluna não anda embaixo do mouse perto do TRAVAR)', s.lat.estado().painel === null && s.win.w === 420, JSON.stringify(s.lat.estado()));
-  // 📊 coach (do painel fechado)
+  // coach coach (do painel fechado)
   await s.passo(() => s.lat.alternarCoach());
-  caso('📊: o coach abre ao lado (780) só no clique', s.win.w === 780 && s.lat.estado().painel === 'coach' && s.lat.estado().anterior === null, JSON.stringify(s.lat.estado()));
+  caso('coach: o coach abre ao lado (780) só no clique', s.win.w === 780 && s.lat.estado().painel === 'coach' && s.lat.estado().anterior === null, JSON.stringify(s.lat.estado()));
   await s.passo(() => s.lat.alternarCoach());
-  caso('📊 de novo: o coach fecha e volta ao que estava (painel fechado, 420)', s.lat.estado().painel === null && s.win.w === 420, JSON.stringify(s.lat.estado()));
+  caso('coach de novo: o coach fecha e volta ao que estava (painel fechado, 420)', s.lat.estado().painel === null && s.win.w === 420, JSON.stringify(s.lat.estado()));
   // chat na seleção: a sala do time é a 1ª linha dos recentes (nada abre sozinho)
   await s.passo(() => s.lat.alternarChat());
   await s.passo(() => s.lat.volta()); await s.passo(() => s.lat.volta());
   const linhas1 = s.partes().dir.querySelectorAll('[data-a="lt-recente"]');
-  caso('seleção: o 💬 abre os recentes com a sala do time na 1ª linha; a sala não abre sozinha (embaixo segue a última conversa que ele abriu)',
+  caso('seleção: o chat abre os recentes com a sala do time na 1ª linha; a sala não abre sozinha (embaixo segue a última conversa que ele abriu)',
     linhas1[0]?.dataset.k === 'time' && linhas1.length >= 2 && s.lat.estado().conversa?.pid === A1.pid, JSON.stringify([linhas1.map(n => n.dataset.k), s.lat.estado().conversa]));
   // sala do time: clique na 1ª linha
   linhas1[0].click();
@@ -628,14 +628,14 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   ta.disparar('keydown', { key: 'Enter', isTrusted: false });
   await tick(8);
   caso('sala do time: Enter sintético (isTrusted false) não envia', s.falsa.escritas().length === nEsc);
-  // 📊 por cima do chat (sala do time aberta, com rascunho): fechar o coach volta ao chat com a mesma conversa e o rascunho
+  // coach por cima do chat (sala do time aberta, com rascunho): fechar o coach volta ao chat com a mesma conversa e o rascunho
   ta.value = 'rascunho do time'; ta.disparar('input');
   await s.passo(() => s.lat.alternarCoach());
   const noCoach = s.lat.estado();
   await s.passo(() => s.lat.alternarCoach());
   const voltou = s.lat.estado();
   const taDepois = s.partes().dir.querySelector('[data-a="lt-texto"]');
-  caso('📊 no lugar do chat (mesma largura) e, fechado, volta ao chat com a sala do time e o rascunho dela',
+  caso('coach no lugar do chat (mesma largura) e, fechado, volta ao chat com a sala do time e o rascunho dela',
     noCoach.painel === 'coach' && noCoach.anterior === 'chat' && voltou.painel === 'chat' && voltou.conversa?.k === 'time' && taDepois === ta && ta.value === 'rascunho do time' && s.win.w === 780,
     JSON.stringify([noCoach.painel, noCoach.anterior, voltou.painel, voltou.conversa, ta.value]));
   ta.value = ''; ta.disparar('input');
@@ -669,7 +669,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   s.rot.aoFase('ChampSelect');
   s.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
   await tick(8); await s.geo.ocioso(); await tick(4);
-  caso('coach aberto ao sair da seleção: sai e volta ao que cobria (fechado); na seleção seguinte NÃO volta sozinho (só pelo 📊)',
+  caso('coach aberto ao sair da seleção: sai e volta ao que cobria (fechado); na seleção seguinte NÃO volta sozinho (só pelo coach)',
     foraDaSelecao.painel === null && s.lat.estado().painel === null && s.win.w === 420, JSON.stringify([foraDaSelecao.painel, s.lat.estado().painel, s.win.w]));
   globalThis.document = ANTES.document;
 }
@@ -698,7 +698,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
 }
 
 {
-  // corrida da revisão adversarial do passo 14 (achado 1): ele fecha ⚙ (painel da ESQUERDA: a geometria teria de andar a janela)
+  // corrida da revisão adversarial do passo 14 (achado 1): ele fecha configurações (painel da ESQUERDA: a geometria teria de andar a janela)
   // nos últimos ms da seleção e a fase vira GameStart antes de a tarefa da geometria rodar. Antes do passo 14 a fase expandia e a
   // guarda ativo() abortava; com a tela "jogo" compacta a guarda dava verdadeiro e saíam ResizeTo + MoveTo com o jogo abrindo
   const champ = { partidas: () => [], estatisticas: () => ({ geral: { n: 0 } }), coach: () => ({}), lerCoach: async () => {}, estado: () => ({}) };
@@ -711,11 +711,11 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   await tick(8); await s.geo.ocioso(); await tick(4);
   const esqAntes = s.rot.estado().lateral.esq;
   const n = s.win.pedidos.length;
-  s.lat.alternarConfig(); // fecha ⚙: pedirLateral enfileira a tarefa da geometria (sem esperar)
+  s.lat.alternarConfig(); // fecha configurações: pedirLateral enfileira a tarefa da geometria (sem esperar)
   s.rot.aoFase('GameStart'); // a fase vira na mesma volta, antes do ScreenData
   await tick(8); await s.geo.ocioso(); await tick(8); await s.geo.ocioso(); await tick(8);
   const depois = s.win.pedidos.slice(n).map(p => `${p.name} ${p.params.join('x')}`);
-  caso('corrida ⚙ fechada + GameStart: a tarefa atrasada da geometria não move a janela (nenhum MoveTo/CenterToScreen na partida)',
+  caso('corrida configurações fechada + GameStart: a tarefa atrasada da geometria não move a janela (nenhum MoveTo/CenterToScreen na partida)',
     esqAntes > 0 && s.rot.estado().tela === 'jogo' && !depois.some(p => /MoveTo|CenterToScreen/.test(p)),
     JSON.stringify([esqAntes, depois]));
   globalThis.document = ANTES.document;
@@ -762,7 +762,7 @@ async function nadaSozinho() {
     vistos.push(`${fase}/${como}: ${s.rot.estado().efetivo}`);
     if (!igual(antes, depois)) { falhas.push(`${fase} ${como}: ${JSON.stringify(antes)} → ${JSON.stringify(depois)}`); continue; }
     if (como !== 'fechado' && s.rot.estado().efetivo === 'compacto') {
-      // o painel à vista: quem chamou sobe nos recentes com as não lidas (o 💬 conta pelo chat-botao)
+      // o painel à vista: quem chamou sobe nos recentes com as não lidas (o chat conta pelo chat-botao)
       const r = s.lat.recentes();
       const linha = s.partes().dir.querySelector('[data-a="lt-recente"][data-k="c:a5@br1.pvp.net"]');
       if (r[0]?.pid !== 'a5@br1.pvp.net' || r[0]?.un !== 2 || !linha?.querySelector('.lc-lt-un') || linha.querySelector('.lc-lt-un').textContent !== '2')
@@ -835,7 +835,7 @@ async function nadaSozinho() {
   const campo2 = s.partes().dir.querySelector('[data-a="lt-texto"]');
   caso('o campo de texto é o mesmo depois de repintar (não perde o foco no meio da digitação)', campo2 === campo);
   await s.passo(() => s.lat.fecharConversa());
-  caso('✕ da conversa que ele marcou como ativa devolve (DELETE conversations/active, o mesmo da Riot)', s.falsa.escritas().some(c => c.metodo === 'DELETE' && c.url === '/lol-chat/v1/conversations/active'));
+  caso('fechar da conversa que ele marcou como ativa devolve (DELETE conversations/active, o mesmo da Riot)', s.falsa.escritas().some(c => c.metodo === 'DELETE' && c.url === '/lol-chat/v1/conversations/active'));
   // amigo sem conversa ainda: cria pelo corpo do client e tenta uma vez
   await s.passo(() => s.lat.abrirConversa(A2));
   const c2 = s.partes().dir.querySelector('[data-a="lt-texto"]');
@@ -853,18 +853,18 @@ async function nadaSozinho() {
   globalThis.document = ANTES.document;
 }
 
-// =================== 8. chat desligado, ⚙ e configurações da Riot ===================
+// =================== 8. chat desligado, configurações e configurações da Riot ===================
 {
   const s = cenario({ cfgCompacto: { chatLateral: false } });
   await s.ir('Lobby');
-  caso('chat ao lado desligado: 💬 não abre a lateral (o botão cai nas janelas do coletor)', s.lat.alternarLista() === false && s.win.w === 420);
+  caso('chat ao lado desligado: chat não abre a lateral (o botão cai nas janelas do coletor)', s.lat.alternarLista() === false && s.win.w === 420);
   s.cfg.compacto.chatLateral = true;
   await s.passo(() => s.lat.alternarLista());
   await s.passo(() => s.lat.abrirConversa(A1));
   s.cfg.compacto.chatLateral = false;
   await s.passo(() => s.lat.sincronizar());
   caso('desligar a chave com o chat aberto: lista e chat fecham na hora (420)', s.win.w === 420 && s.lat.estado().painel === null && !s.lat.estado().lista, JSON.stringify(s.lat.estado()));
-  // ⚙ com o cfg de verdade (PADRAO): os blocos da seção lol-client, sem "restaurar padrão"
+  // configurações com o cfg de verdade (PADRAO): os blocos da seção lol-client, sem "restaurar padrão"
   const r = cenario();
   const cfgReal = JSON.parse(JSON.stringify(PADRAO));
   Object.assign(r.cfg, cfgReal, { compacto: { ...cfgReal.compacto } });
@@ -872,20 +872,20 @@ async function nadaSozinho() {
   await r.passo(() => r.lat.alternarConfig());
   const pcfg = r.partes().esq.querySelector('[data-painel="config"]');
   const tc = pcfg.textContent;
-  caso('⚙: painel à esquerda com os blocos do lol-client (Interface, Aceitar partida, Fila rápida...) e sem "Restaurar padrão"',
+  caso('configurações: painel à esquerda com os blocos do lol-client (Interface, Aceitar partida, Fila rápida...) e sem "Restaurar padrão"',
     /Interface/.test(tc) && /Aceitar partida/.test(tc) && /Fila rápida/.test(tc) && !/Restaurar padrão/.test(tc) && /Configurações da Riot/.test(tc), tc.slice(0, 300));
   const bloco = [...pcfg.querySelectorAll('[data-a="cfg-bloco"]')].find(b => b.dataset.bloco === 'Aceitar partida');
   bloco.click();
-  caso('⚙: um bloco aberto por vez (clicar "Aceitar partida" abre ele)', /Aceitar partida automaticamente/.test(pcfg.textContent), pcfg.textContent.slice(0, 200));
+  caso('configurações: um bloco aberto por vez (clicar "Aceitar partida" abre ele)', /Aceitar partida automaticamente/.test(pcfg.textContent), pcfg.textContent.slice(0, 200));
   const busca = pcfg.querySelector('[data-a="cfg-busca"]');
   busca.value = 'madrugada'; busca.disparar('input');
-  caso('⚙: busca acha a opção em qualquer bloco ("madrugada" → Fila rápida)', /Pedir confirmação de madrugada/.test(pcfg.textContent) && !/Aceitar partida automaticamente/.test(pcfg.textContent));
+  caso('configurações: busca acha a opção em qualquer bloco ("madrugada" → Fila rápida)', /Pedir confirmação de madrugada/.test(pcfg.textContent) && !/Aceitar partida automaticamente/.test(pcfg.textContent));
   // seção Som (etapa B de 2026-10-16): a lateral passa a LCU; abrir a Som só lê (GET), nunca grava (corpos: teste-compacto-som.mjs)
   busca.value = ''; busca.disparar('input');
   const escAntes = r.falsa.escritas().length;
   [...pcfg.querySelectorAll('[data-a="cfg-bloco"]')].find(b => b.dataset.bloco === 'Som').click();
   await tick(8);
-  caso('⚙ › Som: a lateral entrega a LCU (1 GET /lol-settings/v1/local/lol-audio), nenhuma escrita; sem a rota, o motivo e as chaves do plugin',
+  caso('configurações › Som: a lateral entrega a LCU (1 GET /lol-settings/v1/local/lol-audio), nenhuma escrita; sem a rota, o motivo e as chaves do plugin',
     r.falsa.chamadas.some(c => c.metodo === 'GET' && c.url === '/lol-settings/v1/local/lol-audio') && r.falsa.escritas().length === escAntes
       && /não foi possível ler o som do client/.test(pcfg.textContent) && /Silenciar o som depois de aceitar/.test(pcfg.textContent), pcfg.textContent.slice(0, 300));
   const nAntes = r.win.pedidos.length;
@@ -943,8 +943,9 @@ async function nadaSozinho() {
   const m3 = modeloSelo({ sessao: sessaoCS(58), est: null, coach: { campeao: 58, fora: true, dados: null }, nome });
   caso('coletor fora / histórico ainda não lido: "carregando histórico…" e a marca de coletor fora', m3.fora && /carregando/.test(m3.linhas[0]), JSON.stringify(m3));
   caso('sem campeão em hover nem travado: o painel pede para passar o mouse', !!modeloSelo({ sessao: { localPlayerCellId: 2, myTeam: [{ cellId: 2 }], actions: [] } }).vazio && meuNaSessao(null) === null);
-  caso('📊 última partida: pronta / analisando / falhou / nunca / descartada',
-    linhaUltima({ gameId: 1, pronta: true, resumo: { vitoria: false, campeao: 58, k: 8, d: 9, a: 5, fila: 400, criacao: 0 } }, nome).titulo === '📊 última partida: derrota · Renekton 8/9/5'
+  caso('última partida: pronta / analisando / falhou / nunca / descartada (o ícone coach mora na tela, não no título)',
+    linhaUltima({ gameId: 1, pronta: true, resumo: { vitoria: false, campeao: 58, k: 8, d: 9, a: 5, fila: 400, criacao: 0 } }, nome).titulo === 'última partida: derrota · Renekton 8/9/5'
+      && linhaUltima({ gameId: 1, pronta: true }).botao.rotulo === 'reabrir' && linhaUltima({ gameId: 1, pronta: true }).botao.icone === 'expandir'
       && linhaUltima({ gameId: 1, pronta: false }).botao.acao === null && linhaUltima({ gameId: 1, pronta: false, erro: 'x' }).botao.rotulo === 'tentar de novo'
       && linhaUltima({ nunca: true }).botao.acao === 'analisar' && linhaUltima(null) === null);
   // botões das telas: sem lateral (teste antigo) não aparecem; com ela, chamam o clique certo
@@ -952,8 +953,8 @@ async function nadaSozinho() {
   let chamado = '';
   const ctx = { extras: doc.createElement('div'), seguro: f => f, servicos: { lateral: { alternarCoach: () => { chamado += 'coach'; }, alternarConfig: () => { chamado += 'config'; } } } };
   botaoCoach(ctx).click(); botaoConfig(ctx).click();
-  caso('📊 e ⚙ chamam a lateral; sem lateral não existem', chamado === 'coachconfig' && botaoCoach({ extras: doc.createElement('div'), servicos: {} }) === null);
-  // 💬 e 👥 (etapa 1 de 2026-10-16): 💬 = painel de chat; 👥 logo depois dele = lista de amigos; sem o chat ao lado, nada de 👥
+  caso('coach e configurações chamam a lateral; sem lateral não existem', chamado === 'coachconfig' && botaoCoach({ extras: doc.createElement('div'), servicos: {} }) === null);
+  // chat e amigos (etapa 1 de 2026-10-16): chat = painel de chat; amigos logo depois dele = lista de amigos; sem o chat ao lado, nada de amigos
   globalThis.document = doc;
   const cx = (lat, extra = {}) => ({ extras: doc.createElement('div'), seguro: f => f, servicos: { lateral: lat }, lcu: async () => ({ ok: true, status: 200, json: [] }),
     observar: () => {}, intervalo: () => {}, vivo: () => true, expandir: () => { chamado += 'expandir'; }, avisar: () => {}, ...extra });
@@ -967,9 +968,20 @@ async function nadaSozinho() {
   c1.extras.children[2].click(); await tick(4);
   const c2 = cx({ ligada: () => false, alternarChat: () => { chamado += 'X'; }, alternarLista: () => { chamado += 'X'; } }, { servicos: { lateral: { ligada: () => false, alternarLista: () => {} }, coletor: async () => ({ status: 202, dados: { ok: true } }) } });
   botaoChat(c2);
-  caso('💬 abre/fecha o painel de chat e o 👥 (logo depois do 💬) a lista; com o chat ao lado desligado não há 👥',
+  caso('chat abre/fecha o painel de chat e o amigos (logo depois do chat) a lista; com o chat ao lado desligado não há amigos',
     igual(ordem, ['tempo', 'chat', 'lista-amigos']) && chamado === 'chatlista' && c2.extras.children.length === 1 && botaoAmigos(cx({ ligada: () => false, alternarLista: () => {} })) === null
       && /chat/.test(b1.getAttribute('title')), JSON.stringify([ordem, chamado, c2.extras.children.length]));
+  // etapa C de 2026-10-16 (ícones Lucide): os 4 botões do topo são só ícone; o nome vai no title e no aria-label; o contador de não
+  // lidas segue dentro do botão de chat, depois do ícone (a bolha é absoluta, por cima dele)
+  const bAm = c1.extras.children[2], bCo = botaoCoach(ctx), bCf = botaoConfig(ctx);
+  const ic = b => b.children[0]?.dataset?.icone;
+  caso('topo: chat, amigos, coach e configurações com o ícone Lucide (nada de emoji), aria-label com o nome e o contador por cima do ícone de chat',
+    ic(b1) === 'chat' && ic(bAm) === 'amigos' && ic(bCo) === 'coach' && ic(bCf) === 'configuracoes'
+      && b1.getAttribute('aria-label') === 'chat' && bAm.getAttribute('aria-label') === 'amigos' && bCo.getAttribute('aria-label') === 'coach da seleção'
+      && bCf.getAttribute('aria-label') === 'configurações' && [b1, bAm, bCo, bCf].every(b => !!b.getAttribute('title')) && [bAm, bCo, bCf].every(b => b.textContent === '')
+      && b1.textContent === b1.children[1]?.textContent
+      && b1.children[1]?.classList.contains('lc-cp-bolha') && b1.children.length === 2,
+    JSON.stringify([ic(b1), ic(bAm), ic(bCo), ic(bCf), b1.textContent]));
   globalThis.document = ANTES.document;
 }
 {
@@ -1009,7 +1021,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   // depois do arrasto, abrir a lista usa o lugar novo como âncora
   s.ancora = s.win.x;
   await s.passo(() => s.lat.alternarLista());
-  caso('arrasto e depois 💬: a coluna fica onde ele largou (âncora nova)', s.win.x === 778 && s.win.w === 720 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
+  caso('arrasto e depois chat: a coluna fica onde ele largou (âncora nova)', s.win.x === 778 && s.win.w === 720 && conferir(s).length === 0, JSON.stringify([s.win, conferir(s)]));
   // no MEIO do arrasto (botão ainda apertado, antes da releitura do fim) a geometria já sabe onde a janela está
   s.arrasto.down({ button: 0, screenX: 0, screenY: 0, target: null });
   s.arrasto.move({ screenX: -40, screenY: 0 });
@@ -1053,9 +1065,9 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const fecha = s.win.pedidos.slice(n2).map(p => [p.name, p.esqCss]);
   // desde 15/10/2026: crescer = ResizeTo com a esquerda VELHA (0) e o CSS novo só na volta do MoveTo; encolher = CSS e MoveTo
   // juntos, ResizeTo por último
-  caso('⚙ abre: no clique a variável fica em 0 (a coluna não sai de vista); ResizeTo ainda com 0, MoveTo já com 360',
+  caso('configurações abre: no clique a variável fica em 0 (a coluna não sai de vista); ResizeTo ainda com 0, MoveTo já com 360',
     naHora === 0 && igual(abre, [['Window.ResizeTo', 0], ['Window.MoveTo', 360]]), JSON.stringify([naHora, abre]));
-  caso('⚙ fecha: no clique segue 360; MoveTo já com 0 (CSS e MoveTo juntos), ResizeTo por último',
+  caso('configurações fecha: no clique segue 360; MoveTo já com 0 (CSS e MoveTo juntos), ResizeTo por último',
     naHora2 === 360 && igual(fecha, [['Window.MoveTo', 0], ['Window.ResizeTo', 0]]), JSON.stringify([naHora2, fecha]));
   caso('CSS: a esquerda vazia não some (sem .lc-cp-esq:empty), senão a coluna pulava para a esquerda antes do MoveTo',
     !/\.lc-cp-esq:empty/.test(CSS_MODO) && /\.lc-cp-dir:empty/.test(CSS_MODO));
@@ -1111,11 +1123,11 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const p1 = puts(a);
   await a.passo(() => a.lat.abrirConversa(A2));
   caso('lida: clicou na conversa A (PUT) e foi para a conversa B → DELETE (A deixa de ser a ativa do client)', p1 === 1 && deletes(a) === 1 && a.lat.estado().ativaPorMim === null, JSON.stringify(a.falsa.escritas()));
-  // os outros jeitos de a conversa sair de vista no chat novo: ✕ da conversa, ✕/💬 do painel, 📊 por cima, monitor estreito na lista
+  // os outros jeitos de a conversa sair de vista no chat novo: fechar da conversa, fechar/chat do painel, coach por cima, monitor estreito na lista
   const saidas = {
-    '✕ da conversa': async s => s.passo(() => s.lat.fecharConversa()),
-    '💬 fecha o painel': async s => s.passo(() => s.lat.alternarChat()),
-    '✕ do painel': async s => s.passo(() => s.lat.fecharPainel()),
+    'fechar da conversa': async s => s.passo(() => s.lat.fecharConversa()),
+    'chat fecha o painel': async s => s.passo(() => s.lat.alternarChat()),
+    'fechar do painel': async s => s.passo(() => s.lat.fecharPainel()),
   };
   const ruins = [];
   for (const [nome, sair] of Object.entries(saidas)) {
@@ -1130,7 +1142,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
     await abrirEMarcar(s);
     await irFase(s, 'ChampSelect');
     await s.passo(() => s.lat.alternarCoach());
-    if (deletes(s) !== 1) ruins.push(`📊 por cima: ${JSON.stringify(s.falsa.escritas())}`);
+    if (deletes(s) !== 1) ruins.push(`coach por cima: ${JSON.stringify(s.falsa.escritas())}`);
     globalThis.document = ANTES.document;
   }
   {
@@ -1140,10 +1152,10 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
     await s.passo(() => s.lat.abrirConversa(A1));
     s.partes().dir.querySelector('[data-a="lt-texto"]').disparar('pointerdown'); await tick(6);
     await s.passo(() => s.lat.voltarLista());
-    if (puts(s) !== 1 || deletes(s) !== 1) ruins.push(`monitor estreito, ← lista: ${JSON.stringify(s.falsa.escritas())}`);
+    if (puts(s) !== 1 || deletes(s) !== 1) ruins.push(`monitor estreito, voltar lista: ${JSON.stringify(s.falsa.escritas())}`);
     globalThis.document = ANTES.document;
   }
-  caso('lida: ✕ da conversa, 💬 ou ✕ fechando o painel, 📊 por cima e ← da lista no monitor estreito → DELETE (só sai de vista, a Riot recebe de volta)',
+  caso('lida: fechar da conversa, chat ou fechar fechando o painel, coach por cima e voltar da lista no monitor estreito → DELETE (só sai de vista, a Riot recebe de volta)',
     ruins.length === 0, ruins.join(' | '));
   const b = cenario();
   await abrirEMarcar(b);
@@ -1179,7 +1191,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
       && !JSON.stringify(acharSalaTime([velha, nova], ses('nova'))).includes(NUNCA));
 }
 {
-  // achado 8 (no chat novo): ⚙ fechou o chat por falta de espaço; o 💬 de novo traz a mesma conversa com o rascunho
+  // achado 8 (no chat novo): configurações fechou o chat por falta de espaço; o chat de novo traz a mesma conversa com o rascunho
   const p = cenario({ mon: 'pequeno', x: 0 });
   await p.ir('Lobby');
   await p.passo(() => p.lat.abrirConversa(A1));
@@ -1190,7 +1202,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   await p.passo(() => p.lat.alternarConfig());
   await p.passo(() => p.lat.alternarChat());
   const campo2 = p.partes().dir.querySelector('[data-a="lt-texto"]');
-  caso('monitor pequeno: ⚙ fechou o chat; o 💬 de novo abre a mesma conversa (a última aberta) com o rascunho no campo',
+  caso('monitor pequeno: configurações fechou o chat; o chat de novo abre a mesma conversa (a última aberta) com o rascunho no campo',
     fechou && p.lat.estado().conversa?.pid === A1.pid && campo2?.value === 'meio escrito', JSON.stringify([fechou, p.lat.estado().conversa, campo2?.value]));
   globalThis.document = ANTES.document;
 }
@@ -1213,7 +1225,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   globalThis.document = ANTES.document;
 }
 {
-  // 💬 abre com a última conversa aberta; ✕ dela esquece (decisão 3 do plano de 16/10); 👥 abre/fecha sem mexer no chat
+  // chat abre com a última conversa aberta; fechar dela esquece (decisão 3 do plano de 16/10); amigos abre/fecha sem mexer no chat
   const s = cenario();
   await s.ir('Lobby');
   s.ancora = s.win.x;
@@ -1230,15 +1242,15 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   await s.passo(() => s.lat.fecharConversa());
   await s.passo(() => s.lat.alternarChat());
   await s.passo(() => s.lat.alternarChat());
-  caso('💬 sem conversa ainda = só recentes; com conversa aberta, fechar e reabrir o 💬 mostra a mesma (a última aberta); depois do ✕ dela, o 💬 abre só com os recentes',
+  caso('chat sem conversa ainda = só recentes; com conversa aberta, fechar e reabrir o chat mostra a mesma (a última aberta); depois do fechar dela, o chat abre só com os recentes',
     vazio.painel === 'chat' && vazio.conversa === null && reaberto.painel === 'chat' && reaberto.ultima === A1.pid && s.lat.estado().painel === 'chat' && s.lat.estado().conversa === null,
     JSON.stringify([vazio, reaberto.ultima, s.lat.estado().conversa]));
-  caso('👥 abre e fecha a lista (1080 ↔ 780) sem mexer no chat (painel e conversa iguais)', comLista.w === 1080 && semLista.w === 780 && comLista.e.lista && !semLista.e.lista
+  caso('amigos abre e fecha a lista (1080 ↔ 780) sem mexer no chat (painel e conversa iguais)', comLista.w === 1080 && semLista.w === 780 && comLista.e.lista && !semLista.e.lista
     && comLista.e.painel === 'chat' && semLista.e.conversa?.pid === A1.pid && conferir(s).length === 0, JSON.stringify([comLista, semLista]));
   globalThis.document = ANTES.document;
 }
 {
-  // monitor estreito: 👥 com a lista escondida atrás do chat mostra a lista; 💬 com o chat escondido mostra o chat (não fecham)
+  // monitor estreito: amigos com a lista escondida atrás do chat mostra a lista; chat com o chat escondido mostra o chat (não fecham)
   const p = cenario({ mon: 'pequeno', x: 0 });
   await p.ir('Lobby');
   await p.passo(() => p.lat.alternarLista());
@@ -1247,12 +1259,12 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const l1 = p.lat.layout();
   await p.passo(() => p.lat.alternarChat());
   const l2 = p.lat.layout();
-  caso('monitor estreito: 👥 mostra a lista escondida e 💬 mostra o chat escondido (o clique não fecha o que não está à vista)',
+  caso('monitor estreito: amigos mostra a lista escondida e chat mostra o chat escondido (o clique não fecha o que não está à vista)',
     l1.estreito && l1.lista && !l1.painel && l2.painel && !l2.lista && p.lat.estado().lista && p.lat.estado().painel === 'chat' && p.win.w === 780, JSON.stringify([l1, l2]));
   globalThis.document = ANTES.document;
 }
 {
-  // rascunho por conversa (decisão 6): troca, ✕, fechar e reabrir guardam; envio ok apaga; nunca vai para storage, coletor ou log
+  // rascunho por conversa (decisão 6): troca, fechar, fechar e reabrir guardam; envio ok apaga; nunca vai para storage, coletor ou log
   const espia = [];
   const storage = nome => ({ setItem: (k, v) => espia.push([nome, k, v]), getItem: () => null, removeItem: () => {} });
   const antesLS = globalThis.localStorage, antesSS = globalThis.sessionStorage, antesDS = globalThis.DataStore;
@@ -1275,7 +1287,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   await s.passo(() => s.lat.alternarChat());
   await s.passo(() => s.lat.alternarChat());
   const depoisPainel = campo().value;
-  caso('rascunho: trocar de conversa guarda o texto de cada uma (a2 nasce vazio); ✕ da conversa e fechar/reabrir o 💬 guardam',
+  caso('rascunho: trocar de conversa guarda o texto de cada uma (a2 nasce vazio); fechar da conversa e fechar/reabrir o chat guardam',
     emA2 === '' && voltaA1 === 'texto pro a1' && depoisX === 'texto pro a1' && depoisPainel === 'texto pro a1' && s.lat.estado().rascunhos === 2,
     JSON.stringify([emA2, voltaA1, depoisX, depoisPainel, s.lat.estado().rascunhos]));
   campo().disparar('keydown', { key: 'Enter' });
@@ -1356,7 +1368,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   globalThis.document = ANTES.document;
 }
 
-// =================== quadro a quadro: a ⚙ não pisca (relato do Gabriel, 15/10/2026 ~00:30) ===================
+// =================== quadro a quadro: a configurações não pisca (relato do Gabriel, 15/10/2026 ~00:30) ===================
 // "ao clicar na engrenagem, o client dá uma flickada rápida antes da janela de configurações ir pra esquerda". Antes: CSS da
 // esquerda (360) + MoveTo + ResizeTo na mesma volta; a página ainda de 420 pintava [configurações 360][coluna 60] (coluna cortada,
 // configurações no lugar dela) até saber do tamanho novo. Cada quadro abaixo é o que a tela mostra.
@@ -1373,31 +1385,31 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
     s.ancora = s.win.x + s.camada.medidas().esq * s.win.z;
     return s;
   };
-  // 1. ⚙ abre e fecha sozinha
+  // 1. configurações abre e fecha sozinha
   let s = await base();
   const n0 = s.win.pedidos.length;
   const ruins1 = await abrirFechar(s, [() => s.lat.alternarConfig()]);
   const ped1 = s.win.pedidos.slice(n0).map(p => [p.name, p.esqCss]);
   const ruins1b = await abrirFechar(s, [() => s.lat.alternarConfig()]);
-  caso('quadro a quadro, ⚙ abre: nenhum quadro com a coluna cortada ou fora do lugar (ResizeTo com a esquerda velha, MoveTo com a nova)',
+  caso('quadro a quadro, configurações abre: nenhum quadro com a coluna cortada ou fora do lugar (ResizeTo com a esquerda velha, MoveTo com a nova)',
     ruins1.length === 0 && igual(ped1, [['Window.ResizeTo', 0], ['Window.MoveTo', 360]]) && s.win.quadros.length > 0 && conferir(s).length === 0 || false,
     JSON.stringify([ruins1.slice(0, 3), ped1]));
-  caso('quadro a quadro, ⚙ fecha: nenhum quadro ruim (anda com o CSS, encolhe por último)', ruins1b.length === 0 && s.win.w === 420 && s.win.x === 640, JSON.stringify([ruins1b.slice(0, 3), s.win.w, s.win.x]));
+  caso('quadro a quadro, configurações fecha: nenhum quadro ruim (anda com o CSS, encolhe por último)', ruins1b.length === 0 && s.win.w === 420 && s.win.x === 640, JSON.stringify([ruins1b.slice(0, 3), s.win.w, s.win.x]));
   // o painel da esquerda aparece só depois de a janela andar e segue visível no fim
   const qs = s.win.quadros;
   caso('quadro a quadro: o painel da esquerda nunca aparece antes da janela andar; ao fim de cada passo nada fica escondido',
     !qs.some(q => q.esq > 0 && q.temEsq && !q.mudando && q.x !== 640 - 450) && !s.camada.estaMudando?.(), JSON.stringify(qs.filter(q => q.esq > 0 && q.temEsq && !q.mudando).slice(0, 2)));
   globalThis.document = ANTES.document;
 
-  // 2. ⚙ com o chat aberto, ⚙ + 💬 na mesma volta (abrir e fechar), conversa no meio
+  // 2. configurações com o chat aberto, configurações + chat na mesma volta (abrir e fechar), conversa no meio
   s = await base();
   const ruins2 = await abrirFechar(s, [() => s.lat.alternarLista(), () => s.lat.abrirConversa(A1), () => s.lat.alternarConfig(), () => s.lat.alternarConfig(),
     () => { s.lat.alternarConfig(); s.lat.alternarLista(); }, () => { s.lat.alternarConfig(); s.lat.alternarLista(); }]);
-  caso('quadro a quadro, ⚙ com o chat aberto e ⚙ + 💬 juntos (abrir e fechar): nenhum quadro ruim, estado final certo',
+  caso('quadro a quadro, configurações com o chat aberto e configurações + chat juntos (abrir e fechar): nenhum quadro ruim, estado final certo',
     ruins2.length === 0 && conferir(s).length === 0, JSON.stringify([ruins2.slice(0, 3), conferir(s)]));
   globalThis.document = ANTES.document;
 
-  // 3. toda ordem de abrir e fechar (lista, conversa, ⚙), duas vezes
+  // 3. toda ordem de abrir e fechar (lista, conversa, configurações), duas vezes
   const falhas = [];
   for (const abre of permutacoes(['lista', 'conversa', 'config'])) {
     const p = await base();
@@ -1408,14 +1420,14 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
     }
     globalThis.document = ANTES.document;
   }
-  caso('quadro a quadro, toda ordem de lista/conversa/⚙ (abrir e fechar): nenhum quadro com a coluna fora do lugar', falhas.length === 0, falhas.slice(0, 2).join(' | '));
+  caso('quadro a quadro, toda ordem de lista/conversa/configurações (abrir e fechar): nenhum quadro com a coluna fora do lugar', falhas.length === 0, falhas.slice(0, 2).join(' | '));
 
-  // 4. monitor pequeno: ⚙ fecha o chat (caber('esq'): a esquerda cresce e a direita encolhe na mesma volta)
+  // 4. monitor pequeno: configurações fecha o chat (caber('esq'): a esquerda cresce e a direita encolhe na mesma volta)
   const pq = await base({ mon: 'pequeno', x: 300 });
   await pq.passo(() => pq.lat.abrirConversa(A1));
   pq.ancora = pq.win.x;
   const ruins4 = await abrirFechar(pq, [() => pq.lat.alternarConfig(), () => pq.lat.alternarConfig()]);
-  caso('quadro a quadro, monitor pequeno (⚙ fecha o chat na mesma volta e reabre): nenhum quadro ruim', ruins4.length === 0 && conferir(pq).length === 0,
+  caso('quadro a quadro, monitor pequeno (configurações fecha o chat na mesma volta e reabre): nenhum quadro ruim', ruins4.length === 0 && conferir(pq).length === 0,
     JSON.stringify([ruins4.slice(0, 3), conferir(pq)]));
   globalThis.document = ANTES.document;
 
@@ -1457,11 +1469,11 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   gs.rot.aoFase('GameStart');
   await gs.win.rodar(40);
   const naPartida = gs.win.pedidos.slice(nGs).map(p => p.name);
-  caso('partida no meio da transição da ⚙ (ResizeTo já saiu, esperando o resize): nenhum MoveTo depois, nada fica escondido',
+  caso('partida no meio da transição da configurações (ResizeTo já saiu, esperando o resize): nenhum MoveTo depois, nada fica escondido',
     jaRedimensionou && !naPartida.some(n => /MoveTo|CenterToScreen/.test(n)) && !gs.camada.estaMudando?.(), JSON.stringify([jaRedimensionou, naPartida]));
   globalThis.document = ANTES.document;
 
-  // 6c. revisão adversarial (15/10/2026): ⚙ aberta numa partida inteira. Na partida a lateral some só pelo CSS (porLarguras com
+  // 6c. revisão adversarial (15/10/2026): configurações aberta numa partida inteira. Na partida a lateral some só pelo CSS (porLarguras com
   // esq 0) e a janela encolhe a 420 sem a geometria saber: ela seguia achando 360 pintado. Ao sair da partida, a montagem do
   // pós-jogo punha esq 360 numa página de 420 antes do ResizeTo e a geometria crescia "com a esquerda velha" 360: o mesmo pisca
   // (configurações no lugar da coluna, coluna cortada) por uma ida e volta
@@ -1476,12 +1488,12 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   await pg.ir('WaitingForStats');
   const ruinsPos = quadrosRuins(pg, desdePos);
   pg.ancora = ancoraPg;
-  caso('⚙ aberta numa partida inteira: entrar sem coluna cortada; sair da partida volta [configurações][coluna] sem nenhum quadro ruim',
+  caso('configurações aberta numa partida inteira: entrar sem coluna cortada; sair da partida volta [configurações][coluna] sem nenhum quadro ruim',
     ruinsEntra.length === 0 && noJogo.w === 420 && noJogo.esq === 0 && ruinsPos.length === 0 && pg.win.w === 780 && conferir(pg).length === 0,
     JSON.stringify([ruinsEntra.slice(0, 2), noJogo, ruinsPos.slice(0, 3), pg.win.w, conferir(pg)]));
   globalThis.document = ANTES.document;
 
-  // 6d. fechar a ⚙ e a partida começar nos 2 quadros antes do ResizeTo (CSS e MoveTo já saíram): a geometria tem de saber que
+  // 6d. fechar a configurações e a partida começar nos 2 quadros antes do ResizeTo (CSS e MoveTo já saíram): a geometria tem de saber que
   // a esquerda pintada é 0 e onde a janela ficou; senão, depois da partida, a âncora sai 360 px à direita e a janela pula
   const fg = await base();
   await fg.passo(() => fg.lat.alternarConfig());
@@ -1495,7 +1507,7 @@ const PERTO_DIREITA = 2560 - 420 * 1.25 - 10; // 2025: 780 não cabe sem mover
   const desdeChat = fg.win.quadros.length;
   await fg.passo(() => fg.lat.alternarLista());
   fg.ancora = 640;
-  caso('⚙ fechada nos quadros antes do ResizeTo e a partida começa: depois dela, abrir o chat não pula a janela (âncora certa)',
+  caso('configurações fechada nos quadros antes do ResizeTo e a partida começa: depois dela, abrir o chat não pula a janela (âncora certa)',
     movida && fg.win.x === xPos && fg.win.x === 640 && quadrosRuins(fg, desdeChat).length === 0 && conferir(fg).length === 0,
     JSON.stringify([movida, xPos, fg.win.x, fg.geo.estado().ancora, quadrosRuins(fg, desdeChat).slice(0, 2), conferir(fg)]));
   globalThis.document = ANTES.document;

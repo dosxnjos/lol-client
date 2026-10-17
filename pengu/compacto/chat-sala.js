@@ -22,7 +22,7 @@
 //   isHistorical:false, timestamp, body}. Chat bloqueado pela Riot (player-mutes[eu].isSystemMuted): o client nem
 //   manda; aqui o campo fica cinza com o motivo.
 // Importável no node: nada de DOM no topo.
-import { h, estilo, fotoCampeao } from './comum.js';
+import { h, estilo, fotoCampeao, icone, comIcone } from './comum.js';
 import { nomeCompleto } from './jogador-acoes.js';
 
 export const SALA = { cadaMs: 1500, textoMax: 500, msgsMax: 100, participantesCada: 4 };
@@ -273,7 +273,7 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
   }));
   const bt = h('button', { doc, class: 'lc-cp-btn', dataset: { a: 'sala-enviar' }, on: { click: ctx.seguro(e => enviar(e)) } }, 'enviar');
   const en = h('div', { doc, class: 'lc-cp-en' }, input, bt);
-  const bloq = h('div', { doc, class: 'lc-cp-bloq' }, '⛔ chat bloqueado pela Riot nesta conta: só leitura, sem envio');
+  const bloq = h('div', { doc, class: 'lc-cp-bloq' }, comIcone('bloqueado', 'chat bloqueado pela Riot nesta conta: só leitura, sem envio', { doc, tam: 12 }));
   const ms = h('div', { doc, class: 'lc-cp-ms' });
   const cab = h('div', { doc, class: 'lc-cp-dh', dataset: { a: 'sala-tam' },
     on: { click: ctx.seguro(e => { if (e?.target?.closest?.('button')) return; mudarTam(est.tam === 'recolhido' ? 'normal' : 'recolhido'); }) } });
@@ -317,13 +317,15 @@ export function criarSala(ctx, { jogadores = () => [], gameId = () => null, nome
     // aberta e com o eog: a faixa de quem está na sala toma o lugar do contador (ícone de cada campeão; quem saiu, apagado)
     const pres = recolhido || !est.sala ? [] : presenca();
     // h() descarta os null; replaceChildren do DOM não (escreveria "null"): filtrar
-    cab.replaceChildren(...['💬 ', h('b', { doc }, T.titulo),
+    cab.replaceChildren(...[icone('chat', { doc, tam: 12 }), h('b', { doc }, T.titulo),
       pres.length ? faixaPresenca(pres) : est.naSala !== null ? h('span', { doc }, ` · ${est.naSala} na sala`) : null,
       recolhido && nl ? h('span', { doc, class: 'lc-cp-un' }, String(nl)) : null,
       recolhido && ult ? h('span', { doc, class: 'lc-cp-ult' }, ...nomeDo(quemFalou(ult, mapa)).map(p => h('span', { doc, class: p.classe }, p.texto)), ' ', ult.texto) : null,
       h('span', { doc, class: 'lc-cp-tam' },
-        !recolhido ? h('button', { doc, title: 'recolher', dataset: { a: 'sala-recolher' }, on: { click: ctx.seguro(() => mudarTam('recolhido')) } }, '▾') : null,
-        est.tam !== 'alto' ? h('button', { doc, title: 'aumentar', dataset: { a: 'sala-aumentar' }, on: { click: ctx.seguro(() => mudarTam(recolhido ? 'normal' : 'alto')) } }, '▴') : null),
+        !recolhido ? h('button', { doc, title: 'recolher', 'aria-label': 'recolher', dataset: { a: 'sala-recolher' }, on: { click: ctx.seguro(() => mudarTam('recolhido')) } },
+          icone('aberto', { doc, tam: 13 })) : null,
+        est.tam !== 'alto' ? h('button', { doc, title: 'aumentar', 'aria-label': 'aumentar', dataset: { a: 'sala-aumentar' }, on: { click: ctx.seguro(() => mudarTam(recolhido ? 'normal' : 'alto')) } },
+          icone('aumentar', { doc, tam: 13 })) : null),
     ].filter(Boolean));
     // estrutura só muda com o tamanho ou o bloqueio: o campo (com o foco e o que ele digitou) fica no mesmo lugar
     const chave = recolhido ? 'r' : `a${est.mudo ? 'm' : ''}`;
@@ -362,7 +364,8 @@ export const CSS_SALA = `
   display:inline-grid; place-items:center; line-height:1; }
 #lc-compacto .lc-cp-ult { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; color:#e8e2d0; margin-left:4px; }
 #lc-compacto .lc-cp-tam { margin-left:auto; display:flex; gap:2px; }
-#lc-compacto .lc-cp-tam button { background:none; border:1px solid transparent; color:var(--lc-mudo); font-size:11px; width:22px; height:20px; padding:0; cursor:pointer; }
+#lc-compacto .lc-cp-tam button { background:none; border:1px solid transparent; color:var(--lc-mudo); font-size:11px; width:22px; height:20px; padding:0; cursor:pointer;
+  display:inline-grid; place-items:center; }
 #lc-compacto .lc-cp-tam button:hover { color:var(--lc-ouro2); border-color:var(--lc-linha); }
 #lc-compacto .lc-cp-ms { flex:1; min-height:0; overflow:auto; padding:5px 8px; display:flex; flex-direction:column; gap:3px; user-select:text; }
 #lc-compacto .lc-cp-cm { display:flex; gap:6px; align-items:flex-start; font-size:12px; line-height:1.3; color:#e8e2d0; }
