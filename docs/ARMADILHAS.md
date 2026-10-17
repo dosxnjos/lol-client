@@ -619,6 +619,19 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `id`, `shortName`, `colors` (1 cor = sólida, 2 = diagonal 135°, o `color` do skin-button), `unlocked`/`ownership.owned` e
   `disabled` (o jmx `DisabledChromas`); escolher = o mesmo `PATCH session/my-selection {selectedSkinId: id do chroma}` do
   `requestSetSkin`. Com chroma escolhido, `selectedSkinId` é o do filho: a skin-mãe sai por `skinMarcada` (`filhos`).
+- **Som do client: rota, corpo e o que a Riot faz junto** (rcp-fe-lol-settings / rcp-fe-audio 16.20, lidos em 16/10/2026; GET medido no client
+  real, **nenhum PATCH enviado**) → `GET /lol-settings/v1/local/lol-audio` volta **só o que difere do padrão** (`{data: {musicEnabled: false},
+  schemaVersion: 5}` aqui): ausente = `defaultValue` (bools true, volumes 100). Gravar = `PATCH` da mesma rota `{schemaVersion: 5, data:
+  {<propriedade>: valor}}`, uma propriedade por PATCH; `sfxEnabled` manda um 2º PATCH `{voiceEnabled: v}` e `sfxVolume` um 2º `{voiceVolume:
+  0,5 × v}` (fracionado). O volume da Riot grava no `slideEnd` do `lol-uikit-slider`, evento **sintético** (`isTrusted` false): no compacto o
+  controle é `<input type=range>` (o `change` do soltar é dele) com espera de 400 ms para a seta do teclado. O init da página da Riot zera tudo se
+  `schemaVersion` < 5 (escreve ao abrir): o compacto mostra só leitura com o motivo. Efeitos desligados calam o `sfx-notifications` (o aviso de
+  partida encontrada, § Client "Sons do ready-check"). Nada disso mexe no som **da partida**: é `/lol-game-settings/v1/game-settings` seção
+  `Volume` (float 0–1, `*Mute`), que a Riot grava pela GamePreferences da conta. `compacto/som.js`, prova em `teste-compacto-som.mjs`.
+  Pegadinhas do controle (revisão de 16/10/2026): arrastando, a ⚙ não repinta (recriar tira o controle do lugar), então um arrasto sem
+  `pointerup` congela a ⚙ inteira se só a seção soltar (quem solta é a ⚙ toda e o documento, na captura); a repintura do soltar espera o fim do
+  evento, porque o `change` vem depois do `pointerup` no mesmo evento do mouse; e a ⚙ aberta sobrevive à ida ao client normal, então a volta
+  precisa reler (`lateral.aoEfetivo` apaga o `pintado`).
 
 ## Live Client Data API (`127.0.0.1:2999`, medido na partida 3292746609, 13/10/2026)
 

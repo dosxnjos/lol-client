@@ -17,6 +17,8 @@ const SEL = {
 };
 const POSICOES = [['TOP', 'Topo'], ['JUNGLE', 'Selva'], ['MIDDLE', 'Meio'], ['BOTTOM', 'Atirador'], ['UTILITY', 'Suporte']];
 const FILAS = [[420, 'Solo/Duo'], [440, 'Flex']];
+// rótulo e explicação da caixa aceite.silenciarSom: "Aceitar partida" e a seção Som da ⚙ do compacto (blocos.js blocoSomPlugin)
+export const TEXTO_SILENCIAR = ['Silenciar o som depois de aceitar', 'Ligado (padrão): corta o som em loop que toca depois do seu aceite, até todos aceitarem. O aviso de partida encontrada continua tocando.'];
 
 // blocos que os passos 7c (champSelect) e 7d (runas) preenchem; até lá mostram o aviso
 const blocos = new Map([
@@ -105,7 +107,7 @@ function montar(painel, cfg, definir, restaurar) {
     ui.explica(`Conta pelo relógio do servidor; ${cfg.aceite.limiteS - 2} s é o máximo seguro (a janela da Riot é de ~${cfg.aceite.limiteS} s).`),
     caixa('aceite.trazerClient', 'Trazer o client para a frente ao achar partida', 'Desligado (padrão), com o aceite automático: se outra janela estava na frente, o client pisca e some de novo (o Windows devolve a janela de antes); no champ select ele volta sozinho.'),
     caixa('aceite.esconderPopup', 'Esconder o popup de partida encontrada', 'Some a janela de aceitar do client; a contagem do lol-client continua. Só vale com o aceite automático ligado.'),
-    caixa('aceite.silenciarSom', 'Silenciar o som depois de aceitar', 'Ligado (padrão): corta o som em loop que toca depois do seu aceite, até todos aceitarem. O aviso de partida encontrada continua tocando.'),
+    caixa('aceite.silenciarSom', ...TEXTO_SILENCIAR),
     caixa('coach.aceiteFlutuante', 'Aceitar ou recusar fora do client', 'Janelinha no canto da tela, por cima de tudo e sem roubar o foco, com a contagem e os botões "aceitar agora" e "recusar". Precisa do coletor ligado.'));
 
   add(ui.secao('Fila rápida'),

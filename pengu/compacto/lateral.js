@@ -131,7 +131,7 @@ export function criarLateral({
         h('header', { doc, class: 'lc-lt-ccab' }, h('div', { doc, class: 'lc-lt-tit' }, baixoNome, baixoSub),
           h('button', { doc, class: 'lc-lt-x', title: 'fechar a conversa', dataset: { a: 'lt-fechar-conversa' }, on: { click: seguro(() => fecharConversa()) } }, '✕')),
         baixoCorpo));
-    configView = criarConfigView({ doc, cfg, definir, aoConfigRiot: seguro(() => configRiot()), aoFechar: seguro(() => { e.config = false; render(); }) });
+    configView = criarConfigView({ doc, cfg, definir, lcu, avisar, aoConfigRiot: seguro(() => configRiot()), aoFechar: seguro(() => { e.config = false; render(); }) });
     coachView = criarCoachView({ doc });
     // etapa 3 (perfil): o de outro jogador no painel da direita; o editor do meu à esquerda. Ações do perfil = as do menu do amigo
     perfilView = criarPerfilView({ doc, lcu, seguro, avisar, agora, campeoes, acoes: {
@@ -201,7 +201,7 @@ export function criarLateral({
       garantirDom();
       trocar(st.partes.esq, lay.config ? [configView.el] : lay.editor ? [editorView.el] : []);
       trocar(st.partes.dir, [lay.lista ? listaView.el : null, lay.painel ? painelEl : null].filter(Boolean));
-      if (lay.config && !configView.el.dataset.pintado) { configView.el.dataset.pintado = '1'; configView.pintar(); }
+      if (lay.config && !configView.el.dataset.pintado) { configView.el.dataset.pintado = '1'; configView.aoAbrir(); configView.pintar(); }
       if (lay.painel) pintarPainel(lay);
       if (lay.lista) listaView.pintar(st.amigos, false);
       else fecharSobre(); // lista fora de vista: menu, diálogo e campo dela fecham sem escrever nada
@@ -1044,7 +1044,11 @@ export function criarLateral({
     aoEfetivo(efetivo) {
       st.efetivo = efetivo;
       if (efetivo === 'compacto') { ligarRelogio(); volta(); }
-      else { pararRelogio(); fecharSobre(); limparArrasto(); st.partes = null; limparAtiva(); }
+      else {
+        pararRelogio(); fecharSobre(); limparArrasto(); st.partes = null; limparAtiva();
+        // a ⚙ aberta volta igual, mas repintada e com o som do client relido (ele pode ter mexido no client normal: Configurações da Riot)
+        if (configView) delete configView.el.dataset.pintado;
+      }
     },
     // a janela some (o "–" dela, visibilitychange oculto): a conversa marcada como lida deixa de ser a ativa do client
     aoOculto() { limparAtiva(); },

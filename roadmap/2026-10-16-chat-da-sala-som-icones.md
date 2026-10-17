@@ -113,6 +113,62 @@ O `CLAUDE.md` do projeto já foi atualizado com essa exceção (linha da Lateral
    `coach.voz` e os avisos com voz). Nada de duplicar a dona: as chaves do plugin continuam em `config.js`.
 3. Prova com LCU falsa (corpo enviado igual ao do front, nada enviado sem `isTrusted`), `teste-textos`.
 
+### Estado da etapa B (16/10/2026, noite; construída, revisada e commitada)
+
+- **Medido (front, `tools/ler-wad.py` em rcp-fe-lol-settings `064ffa45e442e12a.js` e rcp-fe-audio `93b2b851e3644d46.js`; GET no client real,
+  fase `None`, jogo fechado):** a página Som da Riot = 13 `bindSetting` do namespace `lol-audio`, scope `local`, `LOL_SOUND_SCHEMA_VERSION` 5
+  (`masterSoundEnabled`, `masterVolume`, `sfxEnabled`, `sfxVolume`, `ambientSfxEnabled`, `pickChampVoEnabled`, `banChampVoEnabled`,
+  `musicEnabled`, `musicVolume`, `championSelectionMusicEnabled`, `ambienceMusicEnabled`, `clientAmbienceMusicEnabled`, `loginMusicEnabled`).
+  Escrita = `persistence.saveSetting` → `PATCH /lol-settings/v1/local/lol-audio {schemaVersion: 5, data: {<prop>: valor}}`, uma por PATCH;
+  `onSaveSetting` manda um 2º PATCH: `sfxEnabled` → `voiceEnabled` (mesmo valor), `sfxVolume` → `voiceVolume` (0,5 × valor). GET real:
+  `{data: {musicEnabled: false}, schemaVersion: 5}` (só o que difere do padrão); `/help` tem `GetLolSettingsV1LocalByCategory` e
+  `PatchLolSettingsV1LocalByCategory`. Rota local, estável: a seção grava.
+- **Afeta o som do jogo em partida? Não.** `lol-audio` só alimenta os canais do CEF do client (rcp-fe-audio). O som da partida é
+  `/lol-game-settings/v1/game-settings` seção `Volume` (`MasterVolume`… float 0–1, `*Mute`, medido por GET), que o componente
+  `lol-settings-game-sound` da Riot grava pela GamePreferences **da conta** (`PATCH /lol-settings/v2/account/GamePreferences/game-settings`, lido,
+  não medido). **Fica fora (decisão técnica, reversível):** escopo da conta, o jogo regrava o arquivo dele no fim da partida [S], e nada no pedido
+  exige; a seção diz "o som dentro da partida fica no menu do jogo (Esc) e nas Configurações da Riot". Reverter: proposta ao Gabriel, mesmo padrão
+  (`corposSom` por seção `Volume`).
+- **Passo 1/2 (o que virou):** `pengu/compacto/som.js` (novo): `OPCOES_SOM` (ordem e padrão do template, rótulo pt-BR perto do trans.json),
+  `lerSom` (ausente/tipo errado = padrão; versão ≠ 5 = só leitura com motivo, nunca o reset do init da Riot), `cinzaDe` (soundDisabled/sfxDisabled/
+  musicDisabled do template), `corposSom` (PATCH + alias na ordem), `volumeDe`, e `criarSomView` (nó criado uma vez, `pintar` só muda valor, texto e
+  `disabled`). `compacto/lateral-config.js`: grupo **Som** (2º, depois de Client compacto) = som do client + "Som do lol-client" (`blocos.js`
+  `blocoSomPlugin`: `aceite.silenciarSom`, `blocoVoz` inteiro e a coluna voz dos avisos, com `trocarAviso` extraído de `blocoAlertas`); o
+  bloco **Voz** sai da ⚙ do compacto (os controles dele estão na Som); no modal da Riot nada muda (lá a página Som é a dela). Chaves do plugin
+  seguem no `config.js`, nenhuma chave nova, sem `VERSAO`. `configuracoes.TEXTO_SILENCIAR` = um texto só para as duas caixas do silenciar.
+  `lateral.js` passa `lcu`/`avisar` e chama `aoAbrir()` ao abrir a ⚙.
+- **Gravar:** caixa grava no `change` com `isTrusted` (sintético volta ao lido); volume é `<input type=range>` nativo: `input` só muda o número,
+  `change` (soltar, ou cada passo da seta) com `isTrusted` agenda o PATCH em `ESPERA_VOLUME_MS` (400) e só o último sai. **Decisão:** não usar o
+  `lol-uikit-slider` (o `slideEnd` dele é sintético, e o filtro de `isTrusted` recusaria sempre). Arrastando, a ⚙ não repinta (repinta no soltar).
+  PATCH que falha = aviso com o status e releitura (para no 1º erro). Ler: só quando a Som está à vista (clique no bloco ou busca), de novo a cada
+  reabertura da ⚙; repintar nunca lê nem grava. GET que falha (ou sem LCU) = controles da Riot cinza + motivo; as chaves do plugin seguem.
+- **Completado fora do passo a passo:** nota em "Habilitar áudio do client" e "Habilitar efeitos sonoros": desligar cala também o aviso de partida
+  encontrada (`sfx-notifications` é filho de `sfx`); `compacto/som.js` na prova de carga do CEF (`tools/compacto-importar.js`).
+- **Passo 3 (prova):** `tools/teste-compacto-som.mjs` (novo, 47 casos, em `rodar-testes.py`): corpos exatos e ordem do alias, padrão do GET
+  esparso, cinza, abrir/repintar/buscar sem escrita, `isTrusted` (mutação tirando o filtro: 3 casos vermelhos), debounce de 3 changes → 1 PATCH,
+  arrasto sem repintura, PATCH 500, GET 404, versão 4, sem LCU, caixas do plugin no `definir` e nunca na LCU. Revisão (advisor): o
+  `pointerdown` num volume cinza prendia o "arrastando" e congelava a ⚙ (nenhum `pointerup`/`change` viria): cinza não arrasta e o próximo
+  clique na seção fora de um volume solta; PATCH gravado consolida o valor (uma releitura no meio da espera voltava o controle). `teste-compacto-lateral.mjs` §8:
+  a lateral entrega a LCU e abrir a Som só faz GET.
+- **Revisão adversarial do fechamento (16–17/10/2026), 5 furos corrigidos com teste que falhava antes** (`teste-compacto-som.mjs` bloco
+  "revisão do fechamento" e §2, `teste-compacto-lateral.mjs` §8): (1) a ⚙ aberta sobrevive à ida ao client normal (o próprio botão
+  "Configurações da Riot (vídeo, som, teclas)") e voltava com o som velho, sem GET: agora `lateral.aoEfetivo` (saindo do compacto) apaga o
+  `pintado` e a volta repinta e relê (só GET); (2) arrasto preso + clique no cabeçalho de outro bloco, na busca ou no ✕ congelava a ⚙ (só a
+  seção Som soltava): quem solta é a ⚙ inteira (`som.soltarSeFora`) e o `pointerup`/`pointercancel` do documento, na captura; (3) a repintura
+  pendente rodava no `pointerup`, antes do `change` do mesmo evento do mouse, tirando o controle do DOM no meio (risco de perder a gravação):
+  agora espera o fim do evento (`esperar(…, 0)`); (4) dois cliques seguidos em "efeitos sonoros" misturavam os PATCHes (sfx, sfx, voice, voice)
+  e o gesto velho podia pintar por cima do novo: fila única de gravação (sfx, voice, sfx, voice, a ordem do front) e só o último gesto de cada
+  chave consolida; (5) caixa ou volume cinza com `change` dele gravava (o caso estava declarado no teste sem asserção): o handler confere o
+  cinza. Conferido sem furo: corpo igual ao front (`voiceVolume = .5*t`, sem arredondar, lido de novo no `onSaveSetting`; reset só com
+  `Number.isInteger(v) && v < 5`), nenhuma chave a mais no `data`, nenhuma escrita ao abrir/buscar/repintar, sem websocket (nada de eco
+  regravando), volume fora da faixa barrado em `corposSom`, `erro` do `lcu` sem credencial (só a mensagem do fetch), geometria intocada,
+  textos no guia, chat 1:1 e lateral sem abrir sozinhos (bateria inteira verde).
+- **Proposta ao Gabriel (não decidida):** o som **da partida** (`game-settings` § Volume, escopo da conta) ficou fora; recomendação: deixar
+  fora (o jogo regrava o arquivo no fim da partida e a Riot já mostra no Esc do jogo).
+- **Só o client real prova:** a resposta do PATCH (status) e que o rcp-fe-audio aplica na hora pelo evento da rota; o `isTrusted` do `change`
+  do range no CEF 108 (Chromium dá true no soltar do mouse e na seta); `voiceVolume` fracionado aceito pela LCU; o desenho do range com o tema
+  (`accent-color`) e a altura da seção na ⚙ de 360 px; que a página Som da Riot reflete o que o compacto gravou.
+
 ## Etapa C — ícones Lucide no lugar de emojis
 
 1. Inventário de todo emoji usado como ícone em `pengu/**` (botões, títulos, testes que usam o glifo como nome).

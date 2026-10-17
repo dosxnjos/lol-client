@@ -880,13 +880,26 @@ async function nadaSozinho() {
   const busca = pcfg.querySelector('[data-a="cfg-busca"]');
   busca.value = 'madrugada'; busca.disparar('input');
   caso('⚙: busca acha a opção em qualquer bloco ("madrugada" → Fila rápida)', /Pedir confirmação de madrugada/.test(pcfg.textContent) && !/Aceitar partida automaticamente/.test(pcfg.textContent));
+  // seção Som (etapa B de 2026-10-16): a lateral passa a LCU; abrir a Som só lê (GET), nunca grava (corpos: teste-compacto-som.mjs)
+  busca.value = ''; busca.disparar('input');
+  const escAntes = r.falsa.escritas().length;
+  [...pcfg.querySelectorAll('[data-a="cfg-bloco"]')].find(b => b.dataset.bloco === 'Som').click();
+  await tick(8);
+  caso('⚙ › Som: a lateral entrega a LCU (1 GET /lol-settings/v1/local/lol-audio), nenhuma escrita; sem a rota, o motivo e as chaves do plugin',
+    r.falsa.chamadas.some(c => c.metodo === 'GET' && c.url === '/lol-settings/v1/local/lol-audio') && r.falsa.escritas().length === escAntes
+      && /não foi possível ler o som do client/.test(pcfg.textContent) && /Silenciar o som depois de aceitar/.test(pcfg.textContent), pcfg.textContent.slice(0, 300));
   const nAntes = r.win.pedidos.length;
+  const getsSom = () => r.falsa.chamadas.filter(c => c.metodo === 'GET' && c.url === '/lol-settings/v1/local/lol-audio').length;
+  const somAntes = getsSom();
   pcfg.querySelector('[data-a="cfg-riot"]').click();
   await tick(8); await r.geo.ocioso();
   caso('Configurações da Riot: abre o client normal (o modal dela é de 1280)', r.rot.estado().efetivo === 'expandido' && r.win.w === 1280 && r.configRiot === 1, JSON.stringify([r.rot.estado().forcado, r.win.w]));
   r.rot.configRiotFechou(); await tick(8); await r.geo.ocioso(); await tick(6);
   caso('fechou as Configurações da Riot: volta ao compacto com as configurações do lol-client abertas à esquerda (comportamento novo, decisão v)',
     r.rot.estado().efetivo === 'compacto' && r.win.w === 780 && r.partes().esq.children.length === 1, JSON.stringify([r.rot.estado().efetivo, r.win.w, r.win.pedidos.slice(nAntes).map(p => p.name)]));
+  // revisão da etapa B: ele pode ter mexido no som nas Configurações da Riot; com a Som à vista, a volta relê (GET, nunca escrita)
+  caso('volta das Configurações da Riot com a Som aberta: relê o som do client (1 GET novo), nenhuma escrita',
+    getsSom() === somAntes + 1 && r.falsa.escritas().length === escAntes && /não foi possível ler o som do client/.test(r.partes().esq.textContent), JSON.stringify([somAntes, getsSom()]));
   globalThis.document = ANTES.document;
 }
 

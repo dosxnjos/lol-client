@@ -18,6 +18,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   Exceção: a faixa da sala do time na coluna (seleção, pós-jogo, honra) cresce sozinha com mensagem de outro jogador, só a altura: sem foco, sem geometria, sem "lida"; na ranqueada só campeão/posição ([plano](roadmap/2026-10-16-chat-da-sala-som-icones.md)); provar com `teste-compacto-selecao.mjs` §10 e `teste-compacto-fim-de-partida.mjs` §7.
   Amigos (pastas, menu, arrastar): regra e corpos só em `compacto/amigos.js`; convite só na fase `Lobby` com lobby criado (a lista nunca cria lobby); provar com `teste-compacto-amigos.mjs`.
   Perfil (editor, perfil de amigo, fundo): corpos só em `compacto/perfil.js`; grava só no "salvar" dele e só o que mudou (nunca ao fechar); fundo só a imagem, véu medido (`compacto/fundo.js`); provar com `teste-compacto-perfil.mjs`.
+  Som da ⚙ (`lol-audio` do client, só o client, não a partida): corpos só em `compacto/som.js`; grava só no clique ou no soltar do volume dele, abrir nunca grava; provar com `teste-compacto-som.mjs`.
   Ordem CSS/`ResizeTo`/`MoveTo` só pela fila da geometria, partindo da esquerda pintada (ARMADILHAS § Client, "Pisca ao abrir ⚙").
   Saída do compacto só pelo `resolver()` (o registro das expansões compara antes/depois); `est.forcado` só por `forcar(motivo, tipo)`; texto de camada da Riot só por `expansoes.textoSeguro` (vocabulário, nunca nome) ([COLETOR](docs/COLETOR.md) § Registro das expansões).
 - Texto de interface (`pengu/**`, `painel/**`): tom de produto, impessoal ou "você", nunca "tu"/gíria/1ª pessoa do app;

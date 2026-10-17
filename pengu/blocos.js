@@ -3,6 +3,7 @@
 // (campeões, páginas) e o rascunho da regra nova ficam aqui no módulo, não no DOM.
 import { campeoes, paginasEditaveis } from './runas.js';
 import { JUNGLER_LONGE, OVERLAY_CORES, OVERLAY_FORCAS } from './config.js';
+import { TEXTO_SILENCIAR } from './configuracoes.js';
 
 const POSICOES = [['*', 'Qualquer posição'], ['TOP', 'Topo'], ['JUNGLE', 'Selva'], ['MIDDLE', 'Meio'], ['BOTTOM', 'Atirador'], ['UTILITY', 'Suporte']];
 const clonar = o => JSON.parse(JSON.stringify(o));
@@ -171,6 +172,30 @@ export const blocoVoz = (corpo, ctx) => corpo.append(
   ctx.ui.linha(ctx.ui.lista('coach.tomVoz', 'Tom', TONS, ctx.cfg.coach.tomVoz, v => ctx.definir('coach.tomVoz', v))),
   caixaCoach(ctx, 'cortarFalaRepetida', 'Não repetir a mesma frase em menos de 1 minuto', 'Se a voz acabou de dizer a mesma coisa, pula (aviso de perigo igual só é pulado nos primeiros 10 s). A borda e o painel mostram do mesmo jeito.'));
 
+// liga/desliga um tipo de aviso num destino ('voz' | 'tela'); lê o valor vivo: duas caixas seguidas sem remontar o painel
+export function trocarAviso(cfg, definir, destino, tipo, ligado) {
+  const atual = cfg.coach.avisosDesligados, resto = atual[destino].filter(t => t !== tipo);
+  definir('coach.avisosDesligados', { ...atual, [destino]: ligado ? resto : [...resto, tipo] });
+}
+
+// seção "Som" da ⚙ do compacto (compacto/lateral-config.js, etapa B de roadmap/2026-10-16-chat-da-sala-som-icones.md): as chaves de
+// som do plugin numa casa só, com os mesmos controles e chaves de "Aceitar partida", "Voz" e "Alertas na tela" (a dona segue o config.js)
+export function blocoSomPlugin(corpo, ctx) {
+  const { cfg, definir, ui } = ctx;
+  corpo.append(ui.caixa('aceite.silenciarSom', ...TEXTO_SILENCIAR, cfg.aceite.silenciarSom, v => definir('aceite.silenciarSom', v)));
+  blocoVoz(corpo, ctx);
+  const titulo = document.createElement('div');
+  titulo.className = 'lol-settings-window-size-text';
+  titulo.textContent = 'Avisos com voz';
+  const grade = document.createElement('div');
+  grade.className = 'lc-som-avisos';
+  for (const [tipo, rotulo, destinos = ['voz', 'tela']] of AVISOS) {
+    if (!destinos.includes('voz')) continue;
+    grade.append(ui.caixa(`coach.aviso.voz.${tipo}`, rotulo, '', !cfg.coach.avisosDesligados.voz.includes(tipo), v => trocarAviso(cfg, definir, 'voz', tipo, v)));
+  }
+  corpo.append(titulo, grade, ui.explica('Desmarcar cala só a voz do aviso: a borda e o painel continuam (bloco "Alertas na tela").'));
+}
+
 export function blocoAlertas(corpo, ctx) {
   const { cfg, definir, ui } = ctx;
   corpo.append(caixaCoach(ctx, 'alertasTela', 'Moldura de alertas na tela', 'Borda colorida pulsando + rótulo curto por ~2 s, só com o jogo em primeiro plano.'),
@@ -181,10 +206,7 @@ export function blocoAlertas(corpo, ctx) {
     caixaCoach(ctx, 'midSumiuFiltro', 'Avisar "mid sumiu" só quando faz sentido', 'Ligado: só no começo do jogo (de 1:30 a 14:00, antes de cair a 1ª torre do meio) e calado quando você está morto ou na base, quando atacam a sua base ou no meio de uma briga. Desligado: avisa toda vez que o mid some. Nos dois casos, no máximo 4 vezes por partida, com 2 minutos entre um e outro.'),
     ui.explica('Por tipo: "voz" fala o aviso; "tela" mostra no painel e na moldura. Desmarcar os dois cala o aviso.'));
   const desl = cfg.coach.avisosDesligados;
-  const trocar = (destino, tipo, ligado) => {  // lê o valor vivo: duas caixas seguidas sem remontar o painel
-    const atual = cfg.coach.avisosDesligados, resto = atual[destino].filter(t => t !== tipo);
-    definir('coach.avisosDesligados', { ...atual, [destino]: ligado ? resto : [...resto, tipo] });
-  };
+  const trocar = (destino, tipo, ligado) => trocarAviso(cfg, definir, destino, tipo, ligado);
   const coluna = (...filhos) => { const d = document.createElement('div'); d.className = 'lc-campo'; d.append(...filhos); return d; };
   // 3º campo opcional: destinos que o tipo tem (o retorno do F8 só pinta a moldura, não fala: sem caixa "voz")
   for (const [tipo, rotulo, destinos = ['voz', 'tela']] of AVISOS) {
