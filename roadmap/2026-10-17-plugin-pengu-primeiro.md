@@ -6,15 +6,18 @@ Plano para um executor que nunca viu a conversa. Projeto `C:\Dev\lol-client`: pl
 § Live Client), `docs/TEXTOS-DA-INTERFACE.md`, `docs/INSIGHTS.md` (dona das heurísticas do pós-jogo) e `docs/COLETOR.md`
 § Quem aceita.
 
-**Portão:** nenhuma fase que edita `pengu/**` começa antes de o plano
+**Portão:** nenhuma fase que edita `pengu/**` **ou `coletor/**`** começa antes de o plano
 [telas que tiram o compacto](2026-10-17-telas-que-expandem.md) fechar (ele mexe em `compacto/index.js`, `expansoes.js`,
-`tela-champselect.js` e `aceite.js`, os mesmos arquivos daqui). "Fechar" = as três coisas: (1) o § Estado daquele plano
+`tela-champselect.js` e `aceite.js`, os mesmos arquivos daqui, e no coletor: em 17/10 a árvore tem `coletor/coletor.py`,
+`coach_vivo.py` e `ao_vivo.py` alterados por ele, partida assistida, e a Fase 1 daqui mexe no `coletor.py` e no
+`servidor_local.py`; revisão 17/10). "Fechar" = as três coisas: (1) o § Estado daquele plano
 registra as provas da lista "O que só o client real prova" do
 [relatório dele](2026-10-17-telas-que-expandem.d/2026-10-17-relatorio-de-execucao.md), ou o Gabriel declara o plano fechado
-sem elas; (2) os commits dele estão na `main`; (3) `git status -- pengu/` limpo e nenhuma sessão viva com aquele plano
+sem elas; (2) os commits dele estão na `main`; (3) `git status -- pengu/ coletor/ tools/` limpo e nenhuma sessão viva com aquele plano
 (`mcp__central__sessoes`). A Fase 0 (só medição) pode correr antes.
 
-Estado (17/10/2026): só o plano, sem código. Relatório de execução de cada fase no sidecar
+Estado (17/10/2026): só o plano, sem código. Revisão adversarial do mesmo dia conferida contra o código (correções
+marcadas "revisão 17/10" no corpo). Relatório de execução de cada fase no sidecar
 `roadmap/2026-10-17-plugin-pengu-primeiro.d/`, nunca no corpo.
 
 ## Pedido (Gabriel, 17/10/2026, palavras dele)
@@ -49,8 +52,9 @@ Três camadas, do mesmo código:
 
 1. **Edição Pengu** (pública): o plugin sozinho. Modo compacto cheio de tweaks, pós-jogo com análise e lições, selo da
    seleção com winrate, matchup, trauma e força do draft, chat e amigos ao lado, fila rápida com freios. Instala com o
-   Pengu Loader e uma pasta copiada. **Sem Python, sem token do Claude, sem chave de API, sem admin.** Nada fica cinza
-   sem motivo e nada bate na porta 8765.
+   Pengu Loader e uma pasta copiada. **Sem Python, sem token do Claude, sem chave de API, sem admin** (medido em 17/10: o
+   instalador do Pengu dá controle total a "Todos" em `C:\Program Files\Pengu Loader\plugins`, `icacls`; copiar a pasta
+   não pede elevação). Nada fica cinza sem motivo e nada bate na porta 8765.
 2. **Complemento coach** (Python, opcional, distribuível depois de decisão): só o que precisa de fora do client. Coach ao
    vivo (painel da 2ª tela, voz, moldura, minimapa e overlay do jungler, feitiços por OCR, F7/F8), reserva do aceite e a
    janelinha "aceitar/recusar" fora do client, revisão da previsão do jungler, tela de carregamento.
@@ -74,7 +78,7 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
 | Reserva do aceite e janelinha fora do client | coletor | C | janela Win32 e processo independente; o CEF não abre janela fora do client |
 | Selo da seleção: partidas, winrate, KDA | plugin | P | histórico pela LCU, já está |
 | Selo: matchup e trauma | coletor (`/draft`) | P (Fase 5), C/G mais rico | aritmética sobre o resumo por partida; falta o acumulador local (Fase 4) |
-| Selo: rota provável do inimigo e força do draft | coletor (`draft.py` + `meta.db`) | P (Fase 6) | modelo aditivo puro; o `meta.db` vira JSON embutido gerado pelo mantenedor, quem baixa não precisa de chave |
+| Selo: rota provável do inimigo e força do draft | coletor (`draft.py` + `meta.db`) | P (Fase 6, se a [[DECISAO]] do meta deixar) | modelo aditivo puro; o `meta.db` vira módulo embutido gerado pelo mantenedor, quem baixa não precisa de chave |
 | Pós-jogo grande (6 abas, análise, 3 lições) | plugin | P | já roda sozinho |
 | Pós-jogo: contexto (matchup, traumas, tilt por horário e sequência, farm média) | coletor (`/contexto`, `/licoes`) | P (Fase 5), C/G preferido quando responde | o motor JS já aceita o mesmo contexto (`licoes.js:231-287`); falta gerar em JS |
 | Mentor do pós-jogo | coletor (`claude -p`) | G | depende do plano do Claude dele; ferramenta que autentica pelo plano não se distribui (`C:\Dev\CLAUDE.md`, Invioláveis) |
@@ -93,7 +97,10 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
 
 - **Nada em `pengu/**` fala com a 8765 sem `cfg.coletor.ligado` e sem aperto de mão válido** (`GET /ola` com
   `app: "lol-client-coletor"`). Porta que responde sem isso = outro programa: tratar como ausente.
-- **Reserva do aceite só arma se o plugin fez o aperto de mão nesta sessão do client.** Hoje ela arma com a rota
+- **Reserva do aceite só arma se o plugin falou com o complemento desde a última entrada em `Matchmaking`** (aperto de
+  mão ou `POST /aceite/plugin`, com Origin do client ou do Pengu, regra de `origem_aceite_ok`; pedido sem Origin, como
+  curl ou o painel, não conta), conferido na hora em que a reserva vai agir. "Nesta sessão do client" não basta (revisão
+  17/10): o plugin visto uma vez e a chave desligada depois deixariam a reserva armada sem o "não aceitar". Hoje ela arma com a rota
   `/aceite/plugin` no ar no próprio coletor (`coletor/coletor.py:476-493`, `:677`), sem saber se o plugin fala com ele: com
   `coletor.ligado` desligado e o complemento rodando, o "não aceitar" do plugin não chegaria e a reserva aceitaria contra a
   vontade dele. Com o complemento visto, o "não aceitar" e o diagnóstico (`aceite.js:204-215`, `:283`) nunca entram no
@@ -144,9 +151,13 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
    `coletor/analise.py` e `coach.py` ficam para o coach ao vivo (`regiao`), o MCP e o prompt do mentor, que seguem lendo o
    SQLite sem mudança. A spec continua uma só (`docs/INSIGHTS.md`); a paridade é guardada por fixture comum (Fase 5).
    Confiança alta. Reverte: retirar `contexto` do `/ola` deixa o Gabriel no motor local, sem código novo.
-6. **Força do draft por snapshot embutido**, não por fonte de terceiros em tempo de execução: `pengu/dados/meta.js`
-   (módulo ES) gerado do `dados/meta.db` pelo mantenedor, com data, patch, elo e n no próprio arquivo e mostrados no selo. Confiança
-   média (amostra de 309 partidas Esmeralda, 13/10). Reverte: [[DECISAO]] do Gabriel por outra fonte.
+6. **Força do draft por snapshot embutido**, não por fonte de terceiros em tempo de execução: `pengu/meta-draft.js`
+   (módulo ES) gerado do `dados/meta.db` pelo mantenedor, com data, patch, elo e n no próprio arquivo e mostrados no selo.
+   Caminho fora de `dados/` de propósito (revisão 17/10): o `.gitignore` tem `dados/` sem barra, que pega qualquer pasta
+   `dados` (`git check-ignore -v pengu/dados/meta.js` → `.gitignore:1`); `pengu/meta-draft.js` não é ignorado. Confiança
+   média (amostra de 309 partidas Esmeralda, 13/10). O técnico (snapshot ou nada) é decisão daqui; **distribuir** um dado
+   coletado com a chave pessoal da Riot API dele é do Gabriel ([[DECISAO]] do meta). Reverte: a decisão dele dizer não
+   (a Fase 6 não roda e o selo fica sem força do draft na edição Pengu).
 
 ## Como o plugin se comporta sem o complemento
 
@@ -156,7 +167,11 @@ complemento coach. Nunca chave cinza, nunca "coletor fora do ar", nunca chamada 
 - **Configurações (e a ⚙ ao lado do compacto):** o bloco "Coach: coletor" vira "Complemento coach" com uma linha de
   estado (desligado / procurando / encontrado, versão) e a chave `coletor.ligado`. Painel, Voz, Alertas na tela,
   Minimapa e jungler, Mentor, Tela de carregamento e a chave `coach.aceiteFlutuante` (`configuracoes.js:111`) só aparecem com o recurso
-  anunciado. Sem complemento, um único bloco recolhido "Coach ao vivo" com 2 linhas: o que ele faz (voz, painel na 2ª tela,
+  anunciado. Com `coletor.ligado` e o complemento ainda não visto (o coletor sobe depois do client, `coach.js:41-42`), os
+  blocos dos recursos do último aperto de mão bom (guardados em `lol-client.ponte`) continuam à mostra com a linha
+  "procurando o complemento coach", e a mudança feita nesse meio vai no próximo aperto de mão (revisão 17/10: sem isso o
+  Gabriel perderia as chaves do coach a cada abertura do client até o 1º aperto de mão). A linha de estado diz também que
+  desligar a ponte **não** desliga o coach ao vivo: o complemento segue com a última config que recebeu. Sem complemento, um único bloco recolhido "Coach ao vivo" com 2 linhas: o que ele faz (voz, painel na 2ª tela,
   alertas no minimapa) e que precisa do complemento coach. Os atalhos `coach.*` do Ctrl+K (`config.js:205`, `:225-229`)
   saem da lista.
 - **Lobby:** igual a hoje; a dica do coach é a local (o `GET /dica` sai).
@@ -196,11 +211,17 @@ Arquivos: `pengu/coach.js`, `pengu/config.js`, `pengu/index.js`, `pengu/blocos.j
 `pengu/compacto/{index,chat-botao,chat-ponte,expansoes,lateral-coach,lateral-config,tela-jogo,tela-lobby,tela-posjogo}.js`,
 `coletor/servidor_local.py`, `coletor/coletor.py`, `docs/TEXTOS-DA-INTERFACE.md`, README, ARMADILHAS, `CLAUDE.md`.
 
-1. `coletor/servidor_local.py`: `GET /ola` → `{app, versao, recursos}` (a lista da decisão 3; na instalação do Gabriel,
-   todos). Teste Python junto dos que já sobem o servidor em porta de teste.
-2. `coletor/coletor.py`: a reserva do aceite arma só depois de um `GET /ola` ou `POST /aceite/plugin` do plugin nesta
-   sessão do client (zera quando o client fecha). Log: "reserva do aceite desarmada: o plugin não falou". Prova com
-   `teste-aviso-partida.py` (caso novo: rota no ar e plugin mudo = desarmada).
+1. `coletor/servidor_local.py`: `GET /ola` → `{app, versao, recursos}`. `recursos` se **calcula na hora** a partir do
+   que está pendurado, nunca lista fixa (revisão 17/10): as rotas são montadas por módulos diferentes e podem faltar
+   (`/draft` e `/revisao/` pelo `coach_vivo.py:787` no commit `4f86026`, `/chat/` pelo `chat_janelas.py:397`, `/aceite/` só quando
+   `_sinal_aceite` arma, `coletor.py:476-493`, `/compacto/` pelo `coletor.py:502`, mentor só com `srv.mentor` ou
+   `mentor_http`). Anunciar `aceite-reserva` com a reserva desarmada ou `draft` com `--sem-coach` faria o plugin chamar
+   rota que não existe. Teste Python junto dos que já sobem o servidor em porta de teste (com e sem cada módulo).
+2. `coletor/coletor.py`: a reserva do aceite arma só com contato do plugin desde a última entrada em `Matchmaking`
+   (regra em "Linhas que não se cruzam"), conferido quando a reserva vai agir. Log: "reserva do aceite desarmada: o
+   plugin não falou nesta fila". Prova com `teste-aviso-partida.py`, casos novos: rota no ar e plugin mudo = desarmada;
+   plugin visto na fila anterior e mudo nesta = desarmada; `GET /ola` sem Origin = desarmada; `POST /aceite/plugin`
+   do diagnóstico no início do ready check (`aceite.js:268`, `diag('evento')`) = armada.
 3. `pengu/config.js`: `coletor: { ligado: false }` no `PADRAO`; `VERSAO = 4` com a migração "config salva de versão < 4 →
    `coletor.ligado = true`", uma vez só, igual às 2 e 3. `restaurar()` (`config.js:156`) mantém `coletor.ligado` como já
    mantém `runas.regras`: é instalação, não preferência (sem isso, "restaurar padrões" desliga a ponte do Gabriel calado).
@@ -209,14 +230,22 @@ Arquivos: `pengu/coach.js`, `pengu/config.js`, `pengu/index.js`, `pengu/blocos.j
    e com recuo 30 s → 2 min → 5 min enquanto não acha; **fora do recuo**, uma tentativa imediata ao entrar em
    `Matchmaking` e outra em `ReadyCheck` (o complemento que subiu no meio do recuo tem de ser visto antes do ready check,
    senão a reserva fica desarmada: o caso de 14/10); `temRecurso(nome)` exportado. `sincronizarConfig` só com `coach`
-   anunciado e sem o laço eterno de 30 s.
+   anunciado e sem o laço eterno de 30 s; no lugar dele, **todo aperto de mão bom com `coach` manda a config uma vez**
+   (revisão 17/10: o laço de 30 s é hoje o que entrega a config ao coletor que subiu depois do client, `coach.js:40-52`;
+   tirar o laço sem isto deixa o coach ao vivo do Gabriel com a config velha). Último aperto de mão bom gravado em
+   `lol-client.ponte` (`{versao, recursos, em}`), para os blocos da seção "Como o plugin se comporta".
 5. Cada chamador passa por `temRecurso`: `/estado` (`tela-jogo.js:172-187`) com `estado-partida`; `/draft`
    (`champselect.js:115-126`, `lateral-coach.js`) com `draft`; `/contexto` e `/licoes` (`posjogo/index.js:271-299`,
    `tela-posjogo.js:347-385`) com `contexto`; `/mentor` com `mentor`; `/revisao` (`posjogo/index.js:473`) com `revisao`;
-   `/aceite/plugin` com `aceite-reserva`; `/chat/*` com `chat-janelas`; `/compacto/expansoes` com `expansoes` (sem o
-   recurso, `expansoes.js` não enfileira nada).
+   `/aceite/plugin` com `aceite-reserva`; `/chat/*` com `chat-janelas`; `/compacto/expansoes` com `expansoes`. Registro
+   das expansões: com `coletor.ligado` e o aperto de mão ainda pendente, `expansoes.js` segue guardando na fila em memória
+   como hoje (as saídas da abertura do client acontecem antes do coletor subir); descarta só com a chave desligada ou
+   com aperto de mão bom sem `expansoes` (revisão 17/10: descartar já no "pendente" apagaria do registro da tarefa #37
+   justamente as saídas da carga).
 6. Remover as chamadas mortas: `GET /dica` (`tela-lobby.js:376-381`, fica a `dicaLocal`) e `estadoChat`/`abrirAmigos`
-   (`chat-ponte.js:14-31`, sem chamador no plugin; o `tools/teste-chat-janelas.py` usa a rota do coletor, não a função).
+   (`chat-ponte.js:14-31`, sem chamador no plugin). **Correção (revisão 17/10):** o `tools/teste-chat-janelas.py:584-591`
+   importa e testa as duas funções direto do `chat-ponte.js`: o mesmo commit tira esses casos do teste (os de
+   `avisarModo` e `naoLidasDaLcu` ficam). Prova: `python tools/teste-chat-janelas.py` verde.
 7. Interface sem complemento: o § "Como o plugin se comporta" acima, bloco a bloco (`index.js` registra os blocos do coach
    só com recurso; `blocos.js:140-245`, `configuracoes.js:111`, Ctrl+K). Os blocos reagem quando o aperto de mão muda
    (complemento que sobe depois do client aparece sem recarregar).
@@ -237,11 +266,19 @@ de 5 min e fase `Lobby → Matchmaking → ReadyCheck` → aperto de mão feito 
 `teste-config.mjs`: instalação nova
 = `false`; config v3 salva = `true` uma vez; `false` escolhido depois fica `false`. Bateria node inteira do plugin e
 `teste-textos`/`teste-icones` verdes. Mutação: tirar o `temRecurso` de uma chamada deixa (d) vermelho.
+**Aplicar na instalação dele (revisão 17/10):** o coletor novo exige contato do plugin na fila; o plugin velho já manda
+o `POST /aceite/plugin` do diagnóstico no início de cada ready check, então a ordem não abre buraco, mas a de menor
+risco é: recarregar o plugin só em `None`/`Lobby` (CLAUDE.md), conferir na ⚙ o "complemento coach encontrado", e só
+então `python tools/vigia-coletor.py pausar`, reiniciar o coletor e religar o vigia. A 1ª fila depois disso confere no
+`dados/coletor.log` a linha "reserva … armada".
 **Reverte:** `git revert` do commit; ou só `coletor.ligado` = `true` e `/ola` anunciando tudo (comportamento de hoje).
 
 ## Fase 2 — aposentar as janelas antigas do chat (só depois da [[DECISAO]])
 
-Se o Gabriel aprovar: sair `coletor/chat_janelas.py`, as rotas `/chat/*` do `servidor_local.py`, `compacto/chat-ponte.js`,
+Se o Gabriel aprovar: antes de apagar, mover `naoLidasDaLcu` (só LCU, sem coletor) de `chat-ponte.js` para
+`chat-botao.js`, que a importa (`chat-botao.js:9`), e tirar `compacto/chat-ponte.js` da lista do
+`tools/compacto-importar.js:9` (revisão 17/10: apagar o arquivo direto quebra o 💬 da lateral). Depois sair
+`coletor/chat_janelas.py`, as rotas `/chat/*` do `servidor_local.py`, `compacto/chat-ponte.js`,
 o caminho desligado de `chat-botao.js` (fica o fallback "expandir para o chat da Riot", `chat-botao.js:55-57`), o aviso de
 60 s (`compacto/index.js` ~1181 e ~1220-1232, linhas aproximadas: a outra sessão mexeu nelas), a chave `chatLateral`
 (o valor salvo some na mescla, `config.js:93-101`), `tools/teste-chat-janelas.py` e o perfil `dados/edge-chat` (só depois do
@@ -255,13 +292,18 @@ Se ele não aprovar: nada a fazer, a Fase 1 já esconde o caminho de quem não t
    salva, `config.js:98`; `restaurar()` mantém as regras, `:156`). Anotar a semente dele (ids das páginas do Renekton e do
    Zac, favoritos 58 e 154) no README § Instalar, para uma reinstalação.
 2. `filaRapida.fila/pos1/pos2` ficam (qualquer par válido serve; a tela do lobby grava a escolha).
-3. Freios sem os números de outra pessoa: `MEDICAO` (`freios.js:11`) vira parâmetro `medicao` (null = texto sem número);
-   `tela-lobby.js:169-175` idem. Os números voltam calculados na Fase 5.
-4. Comentários "decisão do Gabriel" ficam (história do código, e o empacotador não mexe em código); texto visível e
-   valor padrão não citam o Gabriel. A prova do pacote (Fase 8) olha texto visível e literais, não comentários.
+3. Freios sem os números de outra pessoa: **sai desta fase e vai para a Fase 5, passo 3** (revisão 17/10). Feito aqui,
+   o mesmo código tiraria os números dele também (não há build por edição, decisão 1) e ele ficaria sem eles até a Fase
+   5; o pacote só sai na Fase 8, então nada se perde esperando. Todos os lugares que citam `MEDICAO` (a lista do plano
+   original esquecia os dois últimos): `freios.js:11` e textos em `:54-58`, `compacto/tela-lobby.js:169-175`,
+   `configuracoes.js:120-121` (texto visível das Configurações), e o teste `tools/teste-compacto-lobby.mjs:17`.
+4. Texto visível e valor padrão não citam o Gabriel. Os comentários (39 linhas em `pengu/` citam "Gabriel", nenhuma o
+   Riot ID, conferido em 17/10) seguem para o pacote como estão, porque o empacotador não mexe em código (decisão 1), a
+   menos que a [[DECISAO]] "nome nos comentários" diga outra coisa (revisão 17/10: publicar o primeiro nome dele junto
+   do código é escolha dele, não técnica). A prova do pacote (Fase 8) olha texto visível e literais, não comentários.
 
 **Prova:** `teste-config.mjs` (instalação nova sem regras nem favoritos; config salva do Gabriel igual antes e depois),
-`teste-jogar-de-novo.mjs` (freio com `medicao` null tem texto sem número e passa no `teste-textos`), `teste-runas.mjs`.
+`teste-runas.mjs`.
 **Reverte:** `git revert`; a config dele não depende disto.
 
 ## Fase 4 — acumulador do histórico no plugin
@@ -271,7 +313,8 @@ Arquivos novos: `pengu/historico.js`, `tools/teste-historico.mjs`. Toca `pengu/p
 
 1. **Formato** (`lol-client.historico`): `{v: 1, campos: [...], linhas: [[...], ...]}`, uma linha por partida própria com os
    campos que `analise.matchups`/`traumas` (`coletor/analise.py:222`, `:272`), `coach.historico_tilt`/`_traumas`/
-   `contexto_partida`/`farm_media` (`coletor/coach.py:448-532`) e `draft.indices_pessoais` (`draft.py:144`) leem. O
+   `contexto_partida` (`coletor/coach.py:448-516`), a média de farm por campeão (`analise.py:205`) e
+   `draft.indices_pessoais` (`draft.py:144`) leem. O
    executor lista os campos lendo essas funções; regra de corte: só agregado próprio (Linhas que não se cruzam). Teto de
    500 linhas (ou o da medição C), mais recentes ficam.
 2. **Alimentação:** a partida nova entra no `EndOfGame` a partir das GET que o pós-jogo já faz (`games/{id}` +
@@ -297,12 +340,18 @@ Arquivos novos: `pengu/posjogo/contexto.js`, `tools/fixtures/historico-1.json` (
 campeão, sem nome nem puuid), `tools/teste-contexto.mjs`, `tools/teste-contexto.py`.
 
 1. Portar para JS, sobre as linhas do acumulador: `matchups`, `traumas`, `historico_tilt`, `_traumas`,
-   `contexto_partida`, `farm_media`. Mesma assinatura de saída que o `/contexto` devolve hoje, para o `licoes.js`
-   (`:231-287`) e as abas não mudarem.
+   `contexto_partida`. Mesma assinatura de saída que o `/contexto` devolve hoje, para o `licoes.js`
+   (`:231-287`) e as abas não mudarem. **Farm média não se porta** (revisão 17/10: `farm_media` não é função do
+   `coach.py`; o `analise.js:143-158` já calcula `farm {valor, media, n, diferenca}` sobre o histórico da LCU, e o
+   `posjogo/index.js:284-285` só troca pelo do coletor quando a local é null): basta o `analise.js` também aceitar as
+   linhas do acumulador como amostra, para passar de 20–200 partidas.
 2. Ordem da fonte: complemento com `contexto` → `/contexto`; senão `contexto.js` local. O selo da seleção usa o mesmo
    para matchup e trauma.
-3. `MEDICAO` dos freios passa a vir do acumulador (winrate depois de 2 derrotas, de madrugada e de dia), com piso de
-   amostra (abaixo de 30 partidas, texto sem número).
+3. `MEDICAO` dos freios (vindo da Fase 3, todos os lugares listados lá) vira parâmetro `medicao` calculado do
+   acumulador (winrate depois de 2 derrotas, de madrugada e de dia), com piso de amostra (abaixo de 30 partidas, texto
+   sem número). Na instalação dele o acumulador começa com a importação do `/resumos` (Fase 4), então os números dele
+   seguem aparecendo sem intervalo. Prova a mais: `teste-jogar-de-novo.mjs` e `teste-compacto-lobby.mjs` (freio com
+   `medicao` null tem texto sem número e passa no `teste-textos`).
 4. Chave "Mostrar traumas" aparece quando há fonte.
 5. Docs: `docs/INSIGHTS.md` (a terceira implementação é a mesma spec; quem muda uma muda as duas, como já é com o
    `analise.js`); ARMADILHAS (a amostra local começa pequena).
@@ -312,12 +361,17 @@ gravada em `tools/fixtures/contexto-esperado.json`); `teste-licoes.mjs`, `teste-
 `teste-abas.mjs` verdes; `teste-traumas.py` verde. Com o fetch espião da Fase 1 e `ligado:false`, o pós-jogo mostra matchup
 e trauma sem nenhuma chamada à 8765. **Reverte:** `git revert`; o complemento continua servindo o Gabriel.
 
-## Fase 6 — draft em JS com snapshot do meta
+## Fase 6 — draft em JS com snapshot do meta (só com a [[DECISAO]] do meta dizendo sim)
 
-1. `tools/exportar-meta.py` (mantenedor; lê `dados/meta.db`, sem rede, sem chave) → `pengu/dados/meta.js` com
-   `export default {data, patch, elo, partidas, campeoes: {id: {rota: [jogos, vitorias]}}}`.
+Sem a decisão: a porta do modelo (passo 2) pode rodar sem o snapshot, com rotas e índices pessoais só do acumulador, e
+o selo mostra a força do draft só quando o complemento anuncia `draft`. O passo 1 e o arquivo gerado esperam a decisão.
+
+1. `tools/exportar-meta.py` (mantenedor; lê `dados/meta.db`, sem rede, sem chave) → `pengu/meta-draft.js` com
+   `export default {data, patch, elo, partidas, campeoes: {id: {rota: [jogos, vitorias]}}}`. Nunca em `pengu/dados/`:
+   o `.gitignore` (`dados/`) ignora a pasta e o arquivo nunca entraria no commit (decisão 6). A prova confere com
+   `git ls-files pengu/meta-draft.js` não vazio.
 2. `pengu/draft.js`: porta de `rotas_provaveis` (`draft.py:88`), `indices_pessoais` (`:144`) e `forca_draft` (`:154`),
-   lendo o snapshot e o acumulador. O snapshot sai do `exportar-meta.py` como módulo ES (`pengu/dados/meta.js`,
+   lendo o snapshot e o acumulador. O snapshot sai do `exportar-meta.py` como módulo ES (`pengu/meta-draft.js`,
    `export default {...}`) importado direto: sem `fetch` e sem depender do nome da pasta do plugin (o caminho
    `https://plugins/<nome>/` não está fixo no código hoje e o nome público é [[DECISAO]]).
 3. Selo da seleção e 📊: draft local quando o complemento não anuncia `draft`; mostra a data e o elo da amostra.
@@ -349,12 +403,15 @@ pular; o relógio local continua.
 4. Docs: README dividido em "edição Pengu" e "instalação completa"; hub com o link do pacote.
 
 **Prova:** `tools/teste-pacote.py`: o zip tem só arquivos servíveis, todos os `import` resolvem dentro dele, nenhum `.py`,
-`dados/` do coletor (o `pengu/dados/meta.js` vai) nem symlink; em literais de string e texto visível (não em comentário,
+pasta `dados/` nem symlink (o `pengu/meta-draft.js` vai, se a Fase 6 rodou); em literais de string e texto visível (não em comentário,
 ver Fase 3 passo 4), nenhum "Gabriel", "Xerekton", id de página de runa nem caminho `C:\Dev`; `LICENSE` e `TERCEIROS.md`
-presentes.
+presentes. O zip sai de `git ls-files pengu/` (arquivo ignorado ou não commitado não entra calado).
 Prova no client: só numa instalação limpa (2ª máquina, ou o Gabriel trocando a junção por uma cópia, decisão dele), com o
-complemento parado (`python tools/vigia-coletor.py pausar` antes, CLAUDE.md). **Reverte:** apagar `dist/`; nada no client
-dele muda.
+complemento parado (`python tools/vigia-coletor.py pausar` antes, CLAUDE.md). **Na troca da junção, o DataStore dele
+continua lá** (é um arquivo só do Pengu, `C:\Program Files\Pengu Loader\datastore`, e a config dele já está na versão 4
+com a ponte ligada): o teste não seria de instalação nova. Antes: client fechado, copiar o `datastore` para o scratchpad
+e deixar o do Pengu vazio; depois: client fechado, devolver a cópia e conferir que `lol-client.config` lê igual
+(revisão 17/10). **Reverte:** apagar `dist/` e devolver o `datastore`; nada no client dele muda.
 
 ## Fase 9 — complemento coach público (plano próprio, depois de decisão)
 
@@ -390,25 +447,33 @@ assistida), que é dependência.
   outra permissiva / fechada | recomendo: MIT (compatível com o trecho MIT do better-lol-chat e o ISC do Lucide que o pacote
   já carrega) | dono: gabriel
 - [[DECISAO]] onde publicar (repo público novo, release do `dosxnjos/lol-client` privado como zip, ou só mandar o zip para
-  amigos) e com que nome público (o prefixo `lol-client.` do DataStore é comum a todos os plugins) | recomendo: começar
+  amigos), **em qual conta do GitHub** (repo novo pede a conta dona, `C:\Dev\CLAUDE.md` § Invioláveis) e com que nome público (o prefixo `lol-client.` do DataStore é comum a todos os plugins) | recomendo: começar
   mandando o zip para 2–3 amigos, repo público só depois | dono: gabriel
-- [[DECISAO]] aceite automático na edição pública (a política do Pengu cita "auto-accept queue" como causa comum de
-  banimento) | opções: ligado como hoje / desligado por padrão com aviso / fora do pacote | recomendo: desligado por padrão,
+- [[DECISAO]] aceite automático na edição pública (aceite automático é automação de fila que a Riot pode punir;
+  a citação de uma "política do Pengu" que o plano trazia não tem fonte no repo e saiu na revisão 17/10) | opções: ligado como hoje / desligado por padrão com aviso / fora do pacote | recomendo: desligado por padrão,
   com o aviso da 1ª execução | dono: gabriel
 - [[DECISAO]] coleta automática de recompensas, avisos calados por resposta falsa (`sem-popups.js`), runas aplicadas ao
   travar e minimizar o client no ready check, na edição pública | recomendo: recompensas e avisos calados desligados por
   padrão; runas ligadas (sem regra, nada acontece até o usuário criar uma); minimizar desligado | dono: gabriel
 - [[DECISAO]] aposentar as janelas antigas do chat (Fase 2; perde o chat em janela solta fora do client) | recomendo:
   aposentar (a lateral é o padrão e substitui) | dono: gabriel
-- [[DECISAO]] fonte do meta do draft para quem baixa | opções: snapshot embutido gerado por ele a cada patch / fonte de
-  terceiros em tempo de execução (Lolalytics, U.GG: termos e endpoint próprios) / sem força do draft | recomendo: snapshot
-  embutido | dono: gabriel
+- [[DECISAO]] força do draft para quem baixa. O snapshot sai do `dados/meta.db`, que o `tools/coletar-meta.py` junta com
+  a chave **pessoal** dele da Riot API (Doppler) e no elo dele: distribuir esse agregado num pacote público é questão das
+  regras de desenvolvedor da Riot (chave pessoal, não de produto) e expõe o elo dele, não questão técnica (revisão 17/10) |
+  opções: snapshot embutido gerado por ele a cada patch / fonte de terceiros em tempo de execução (Lolalytics, U.GG:
+  termos e endpoint próprios) / sem força do draft na edição Pengu | recomendo: sem força do draft na primeira versão
+  (o selo segue com winrate, matchup e trauma do próprio histórico); snapshot só depois de ele conferir as regras da chave
+  que usa | dono: gabriel
 - [[DECISAO]] verificar versão nova pela `api.github.com` (dado de uso saindo da máquina de quem instala; CORS medido ok) |
   recomendo: só depois de existir repo público, 1 vez por dia, com chave para desligar | dono: gabriel
 - [[DECISAO]] distribuir o complemento coach a terceiros (coach que "dá ordem" é risco de conta de quem usa; hub
   § Fronteira) e o pacote de voz gerado pelo Gemini (termos do Google) | recomendo: primeira versão só com a edição Pengu;
   complemento depois, sem a voz Aoede (fica a voz Maria do Windows) | dono: gabriel
 - [[DECISAO]] idioma do pacote | recomendo: só pt-BR na primeira versão | dono: gabriel
+- [[DECISAO]] nome dele nos comentários do código (39 linhas de `pengu/` citam "Gabriel" em comentário, com datas e
+  decisões; nenhuma o Riot ID) | opções: publicar como está / trocar por "o mantenedor" antes do 1º pacote (um commit só de
+  comentários) | recomendo: publicar como está se o repo e a conta forem dele com o próprio nome; trocar se ele quiser o
+  pacote sem ligação com a pessoa | dono: gabriel
 
 ## O que o pedido não dizia
 
@@ -416,7 +481,8 @@ assistida), que é dependência.
   "não aceitar"; a Fase 1 amarra a reserva ao aperto de mão (sem isso, o interruptor novo abriria o buraco).
 - Porta 8765 de outro programa: quem baixa pode ter algo nela; o aperto de mão com `app` evita falar com estranho.
 - Chamadas mortas: `GET /dica` (o coletor nunca teve a rota) e `estadoChat`/`abrirAmigos` sem chamador.
-- Sondagem eterna com a porta fechada (30 s config, 2 s em partida, 10–15 s mentor e lições, 60 s chat): some com a ponte
+- Sondagem eterna com a porta fechada (30 s config, 3 s do `/draft` na seleção, `champselect.js:113-122` e
+  `lateral.js:1005`, 2 s em partida, 10–15 s mentor e lições, 60 s chat): some com a ponte
   desligada e vira recuo com ela ligada.
 - Números do Gabriel em texto que outro usuário leria como dele (`MEDICAO`) e regras de runa com ids da conta dele.
 - Telemetria (registro das expansões) não pode sair num pacote alheio: fica presa ao recurso `expansoes`.
@@ -424,3 +490,9 @@ assistida), que é dependência.
 - localStorage e IndexedDB parecem banco mas morrem a cada abertura do client (porta na origem, medido): a escolha do
   DataStore vem disso, não de preferência.
 - O pós-jogo do Gabriel não perde nada: enquanto o complemento dele responde, o contexto continua vindo do SQLite inteiro.
+- (revisão 17/10) A versão dele não perde nada no meio do caminho: a config do coach chega no aperto de mão (substitui o
+  laço de 30 s), as chaves do coach não somem enquanto o coletor sobe, o registro das expansões não descarta as saídas da
+  carga, os números dos freios só mudam quando o acumulador dele já tem a importação, e `/ola` anuncia só a rota que está
+  de fato pendurada.
+- (revisão 17/10) Desligar a ponte não desliga o coach ao vivo: o complemento segue com a última config; a linha de estado
+  diz isso para ninguém achar que desligou o Python.
