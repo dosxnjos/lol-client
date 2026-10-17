@@ -158,8 +158,10 @@ inteira. Correção:
 - Aceite: D2 não toca `aviso_partida` nem o ready check; `teste-aceite.mjs` 50/50.
 
 **Bateria (LoL fechado):** `rodar-testes.py .mjs teste-assistida teste-champselect teste-mcp teste-coach.py teste-banco teste-vitrine
-teste-medir-compacto`: 34/34. Fora, por porta: `ensaio-coach.py` (8766/2996), `teste-expansoes.py` (8798, fora da faixa liberada),
-`teste-aviso-partida.py` (8797), `teste-chat-janelas.py`, `teste-vida.py`, `teste-vigia.py` (8765/8766/8799/2998).
+teste-medir-compacto`: 34/34. `ensaio-coach.py --sem-prints --seg-1x 5 --velocidade 20 --porta 8831 --porta-sim 8832` (as portas são
+parâmetro): 0 falhas, log "seleção: partida própria" e nenhuma "assistida" na partida gravada 3292746609. Fora, por porta fixa:
+`teste-expansoes.py` (8798, fora da faixa liberada), `teste-aviso-partida.py` (8797), `teste-chat-janelas.py`, `teste-vida.py`,
+`teste-vigia.py` (8765/8766/8799/2998).
 
 Regra da casa: as 4 substituições da D1 em `tools/teste-compacto.mjs` foram feitas por heredoc Python (não pelo Edit) na sessão de
 construção; o diff confere e foi commitado como está.

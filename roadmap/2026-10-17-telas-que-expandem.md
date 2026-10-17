@@ -319,7 +319,7 @@ Revisão adversarial (17/10, noite), corrigido com teste que falhava antes (`tes
   prazo da sessão recomeça a cada entrada em `ChampSelect` (seleção → `None` → seleção em < 2 s encurtava o da 2ª).
 - Sem achado: ranqueada (`ReadyCheck → ChampSelect`, sessão vazia, dodge), botão de janela da Riot sem clique dele, aceite (só GET,
   mesma decisão do socket), nome oculto, ícones, textos. Limite aceito: a seleção assistida ainda pode mostrar a tela compacta por
-  um instante antes de ceder (ARMADILHAS § Client); a correção só na entrada vinda de `None` fica para decisão do Gabriel.
+  um instante antes de ceder (ARMADILHAS § Client); resolvido depois pela D1, abaixo.
 - Bateria inteira (`rodar-testes.py`, jogo fechado) no código da construção: 58/58; depois das correções, todas as `.mjs` +
   `teste-expansoes` + `teste-medir-compacto`: 29/29 (`teste-compacto-expansoes` 60/60, `teste-textos` 9/9, `teste-icones` 14/14).
 
@@ -336,7 +336,7 @@ Decisões D1 e D2 do orquestrador (17/10, noite), construídas e provadas offlin
   a partida era sabida dele). Agora `Coletor.assistindo` tem 3 estados e a partida sabida dele (seleção, busca, ready check ou gameId
   conhecido) chega como `propria=True`: reserva desarmada e `ao_vivo` grava sem esperar o jogador ativo; a reserva vale só com o
   coletor religado no meio. Passo 2 (plugin) sem achado. Prova: `teste-assistida.py` 20/20 (8 novos, falham sem a correção); bateria
-  34/34 com o LoL fechado.
+  34/34 e `ensaio-coach.py` (portas 8831/8832) sem falha, com o LoL fechado.
 
 ## O que o pedido não dizia
 
