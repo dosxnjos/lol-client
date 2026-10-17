@@ -591,6 +591,7 @@ const permutacoes = l => (l.length <= 1 ? [l] : l.flatMap((x, i) => permutacoes(
   s.est.sessao = sessaoCS(0, 58, 24);
   s.rot.aoFase('ChampSelect');
   s.rot.aoSessao({ gameData: { queue: { id: 420, mapId: 11 } }, map: { id: 11 } });
+  s.rot.aoSelecao({ isSpectating: false }); // vinda do Lobby: a sessão da seleção confirma antes de montar (D1 de 17/10/2026)
   await tick(8); await s.geo.ocioso(); await tick(4);
   caso('seleção: a conversa aberta segue ao lado (780) e a coluna não anda', s.win.w === 780 && s.win.x === 640 && s.rot.estado().tela === 'champselect', JSON.stringify([s.win, s.rot.estado().tela]));
   // mensagem nova na seleção: nunca abre nada sozinha

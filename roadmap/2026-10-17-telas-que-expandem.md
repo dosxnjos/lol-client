@@ -323,6 +323,21 @@ Revisão adversarial (17/10, noite), corrigido com teste que falhava antes (`tes
 - Bateria inteira (`rodar-testes.py`, jogo fechado) no código da construção: 58/58; depois das correções, todas as `.mjs` +
   `teste-expansoes` + `teste-medir-compacto`: 29/29 (`teste-compacto-expansoes` 60/60, `teste-textos` 9/9, `teste-icones` 14/14).
 
+Decisões D1 e D2 do orquestrador (17/10, noite), construídas e provadas offline ([relatório](2026-10-17-telas-que-expandem.d/2026-10-17-relatorio-de-execucao.md) § D1 e D2):
+
+- D1 (piscada ao assistir): seleção vinda de `None`/`Lobby` espera o `isSpectating` até `ESPERA_SELECAO_MS` (1 s) antes de montar; a do
+  `ReadyCheck` nunca espera. Personalizada: + o atraso da sessão da seleção (41–91 ms no medidor). Prova: `teste-compacto-expansoes.mjs`
+  § 3b (falhava antes) e § 3c.
+- D2 (etapa 7, coletor): `Coletor.assistindo` pelo `isSpectating` + reserva da Live Client (sem jogador ativo em jogo); nada de coach,
+  voz, painel, medidor, retrato, game_id, histórico nem `ao_vivo`. Prova: `tools/teste-assistida.py` (10 de 12 falhavam antes). A
+  limpeza das linhas já gravadas das 2 partidas assistidas (3293888206 e 3292972402) espera o Gabriel.
+- Revisão adversarial de D1 e D2 (17/10, noite; [relatório](2026-10-17-telas-que-expandem.d/2026-10-17-relatorio-de-execucao.md)
+  § Revisão adversarial de D1 e D2): a reserva da Live Client podia calar a ranqueada dele (5 leituras sem o jogador ativo, sem olhar se
+  a partida era sabida dele). Agora `Coletor.assistindo` tem 3 estados e a partida sabida dele (seleção, busca, ready check ou gameId
+  conhecido) chega como `propria=True`: reserva desarmada e `ao_vivo` grava sem esperar o jogador ativo; a reserva vale só com o
+  coletor religado no meio. Passo 2 (plugin) sem achado. Prova: `teste-assistida.py` 20/20 (8 novos, falham sem a correção); bateria
+  34/34 com o LoL fechado.
+
 ## O que o pedido não dizia
 
 - O caso "grave" não era bug na ranqueada; o bug real na ranqueada é outro (B), menor, e entra primeiro.

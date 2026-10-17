@@ -228,6 +228,10 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
     ass('ChampSelect') === 'expandir:' && destinoDaFase('ChampSelect', { lida: false, assistindo: true }).tipo === 'expandir'
       && ['GameStart', 'InProgress', 'Reconnect'].every(f => ass(f) === 'jogo:') && ['WaitingForStats', 'PreEndOfGame', 'EndOfGame'].every(f => ass(f) === 'expandir:')
       && ass('Lobby') === 'tela:lobby', ['ChampSelect', 'InProgress', 'EndOfGame'].map(ass).join());
+  // D1 de 2026-10-17: seleção vinda do menu inicial espera o isSpectating; o espectador já sabido expande sem esperar
+  caso('destino: seleção com esperaSelecao espera (mesmo 420/SR e personalizada); com assistindo, expande na hora',
+    destinoDaFase('ChampSelect', { ...info, esperaSelecao: true }).tipo === 'esperar' && destinoDaFase('ChampSelect', { ...info, fila: 3140, custom: true, esperaSelecao: true }).tipo === 'esperar'
+      && destinoDaFase('ChampSelect', { ...info, esperaSelecao: true, assistindo: true }).tipo === 'expandir' && destinoDaFase('Lobby', { ...info, esperaSelecao: true }).tela === 'lobby');
   caso('destino: flex e normal (440, 400) vão para a tela 3', ['440', '400'].every(f => destinoDaFase('ChampSelect', { ...info, fila: Number(f) }).tela === 'champselect'));
   caso('destino: ReadyCheck com aceite desligado expande', destinoDaFase('ReadyCheck', { ...info, aceiteLigado: false }).tipo === 'expandir');
   caso('destino: ReadyCheck com o popup devolvido (aceite manual) expande', destinoDaFase('ReadyCheck', { ...info, aceiteManual: true }).tipo === 'expandir');
@@ -910,11 +914,13 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   s2.rot.marcarPronto();
   await s2.ir('Lobby');
   await s2.ir('ChampSelect', sessao(450, 12));
+  s2.rot.aoSelecao({ isSpectating: false }); await tick(); // vinda do Lobby: a sessão da seleção confirma (D1 de 17/10)
   caso('seleção do ARAM: expande (tela da Riot)', s2.foto().efetivo === 'expandido' && !s2.foto().camada);
   const s3 = cenario();
   s3.rot.marcarPronto();
   await s3.ir('Lobby', sessao(450, 12)); // sessão velha de ARAM
   await s3.ir('ChampSelect', sessao(3100, 11, true));
+  s3.rot.aoSelecao({ isSpectating: false }); await tick();
   caso('personalizada no SR: tela 3 (sessão nova vence a velha)', s3.foto().tela === 'champselect');
 }
 
@@ -959,6 +965,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   s.rot.marcarPronto();
   await s.ir('Lobby');
   await s.ir('ChampSelect', sessao(420));
+  s.rot.aoSelecao({ isSpectating: false }); await tick(); // vinda do Lobby: a sessão da seleção confirma (D1 de 17/10)
   const antes = s.aplicados.length;
   s.rot.aoSessao({}); await tick();
   const durante = s.foto();
@@ -971,6 +978,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   t.rot.marcarPronto();
   await t.ir('Lobby');
   await t.ir('ChampSelect', sessao(420));
+  t.rot.aoSelecao({ isSpectating: false }); await tick();
   t.rot.aoSessao(sessao(450, 12)); await tick();
   caso('sessão com outra fila no meio da seleção continua valendo (ARAM expande)', t.foto().efetivo === 'expandido', JSON.stringify(t.foto()));
 }

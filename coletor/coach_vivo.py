@@ -33,6 +33,15 @@ OCR_S = 3.0              # passo do OCR do chat (feitiços)
 RESUMO_CHAT_S = 300.0    # resumo do OCR do chat no log a cada 5 min de partida e no fim (só contagens, nunca texto)
 PREVISAO_S = 10          # uma previsão do jungler gravada a cada 10 s de gameTime (revisão no pós-jogo)
 ROTA_CURTA = {"TOP": "top", "MIDDLE": "mid", "BOTTOM": "bot", "UTILITY": "bot"}
+# partida assistida (D2 de 17/10/2026): o sinal principal é o isSpectating da sessão da seleção (Coletor.assistindo ->
+# fase(..., assistida=True)). Reserva para quando a seleção não foi vista (coletor religado no meio da partida assistida):
+# na Live Client, nenhum jogador de allPlayers é o activePlayer (ao_vivo: est["eu"] None) por SEM_EU_LEITURAS leituras seguidas
+# com a partida já em jogo. Medido em dados/lol.db: as 2 partidas assistidas (3292972402 e 3293888206, 51 amostras) nunca têm
+# "eu"; as 18 dele têm exatamente 1 "eu" em toda amostra, inclusive a 3293149183 (coletor religado aos 80 s de jogo).
+# No carregamento ("carregando") não vale: lá não foi medido. Nunca vale em partida sabida dele (propria=True: o coletor viu a
+# seleção dele com isSpectating false, passou por busca/ready check ou já conhece o gameId): uma mudança de formato do activePlayer
+# num patch calaria toda ranqueada (revisão adversarial de 17/10/2026)
+SEM_EU_LEITURAS = 5
 GANK_OUTRA_S = 30.0   # gank de outra rota: no máximo 1 a cada 30 s de jogo (o da minha rota não espera)
 ESQUEMA_PREVISAO = """
 create table if not exists previsoes_jungler (
@@ -179,6 +188,8 @@ class _Partida:
         self.campeoes = {"meu_time": None, "campeoes": [], "mortos": []}
         self.icones_pedidos = False
         self.previsoes = []
+        self.assistida = False            # reserva da Live Client marcou a partida como assistida: nada gravado no fim
+        self.propria = False              # o coletor sabe que é dele: a reserva da Live Client nunca vale nela
         self.balde_prev = None
         self.gank_outra_em = float("-inf")   # gameTime do último gank de OUTRA rota publicado (1 a cada GANK_OUTRA_S)
         self.runas_ok = False
@@ -725,7 +736,7 @@ class _Partida:
         self._gravar_previsoes()
 
     def _gravar_previsoes(self):
-        if not self.previsoes or not self.game_id:
+        if not self.previsoes or not self.game_id or self.assistida:
             return
         try:
             c = banco.abrir(self.coach.db)
@@ -791,6 +802,8 @@ class Coach:
         self.jan = self.fab["janela"](f"http://127.0.0.1:{porta}/", lambda: self.cfg()["painelAoVivo"])
         self.servidor_no_ar = False
         self._selo = {}    # campeão -> (monotonic, matchups, traumas) do GET /draft/<campeão>
+        self.assistidas = set()   # gameIds de partidas assistidas (espectador): nada liga de novo nelas (D2 de 17/10/2026)
+        self._sem_eu = 0          # leituras seguidas em jogo sem o jogador ativo na Live Client (reserva do espectador)
         self._mentor_cfg(self.cfg())
 
     def _mentor_cfg(self, cfg):
@@ -845,13 +858,25 @@ class Coach:
                 self.avisa("janela do painel", e)
 
     # -- gameflow --
-    async def fase(self, fase, game_id=None, fila=None, lcu=None):
-        """chamado pelo Coletor.fase() a cada mudança; nada aqui bloqueia o laço do websocket"""
+    async def fase(self, fase, game_id=None, fila=None, lcu=None, assistida=False, propria=False):
+        """chamado pelo Coletor.fase() a cada mudança; nada aqui bloqueia o laço do websocket.
+        assistida=True (o Coletor viu isSpectating na seleção) ou gameId já marcado pela reserva da Live Client: partida de
+        outro jogador, nada de coach, voz, painel, overlay, minimapa nem gravação (D2 de 17/10/2026).
+        propria=True (o Coletor sabe que a partida é dele): a reserva da Live Client fica desarmada nela"""
         self.lcu = lcu or self.lcu
+        if assistida or (game_id is not None and game_id in self.assistidas):
+            if game_id is not None:
+                self.assistidas.add(game_id)
+            await asyncio.to_thread(self.encerrar_partida)
+            try:
+                await asyncio.to_thread(self.jan.fechar)
+            except Exception as e:
+                self.avisa("janela do painel", e)
+            return
         if fase not in FASES_LIGA:
             self.aquecer_estatico()
         if fase in FASES_LIGA:
-            await asyncio.to_thread(self.iniciar_partida, game_id, fila)
+            await asyncio.to_thread(self.iniciar_partida, game_id, fila, propria)
         elif fase in FASES_TELA_FORA:
             await asyncio.to_thread(self.parar_tela)
         elif fase != "GameStart":
@@ -896,11 +921,17 @@ class Coach:
         t.start()
         return t
 
-    def iniciar_partida(self, game_id=None, fila=None):
+    def iniciar_partida(self, game_id=None, fila=None, propria=False):
         from voz import prioridade_do_processo
         with self.trava:
+            if game_id is not None and game_id in self.assistidas:
+                return None   # partida assistida (reserva da Live Client já marcou): nada liga de novo
             if self.partida is not None and self.partida.game_id == game_id and self.av.ativo():
-                return self.partida  # Reconnect/InProgress repetido: segue a mesma
+                if propria:   # Reconnect/InProgress repetido: segue a mesma (e, sabida dele agora, a reserva desarma)
+                    self.partida.propria = True
+                    self.av.iniciar(game_id, fila, exigir_eu=False)
+                return self.partida
+            self._sem_eu = 0
             if self.partida is not None:   # mesma partida recomeçada (ou id desconhecido): a vitrine retoma
                 velho = self.partida.game_id
                 self._encerrar_partida(fim=velho is not None and game_id is not None and velho != game_id)
@@ -923,8 +954,9 @@ class Coach:
             except Exception as e:
                 self.avisa("prioridade do processo", e)
             self.partida = _Partida(self, game_id, fila, cfg)
+            self.partida.propria = bool(propria)
             self.av.lcu = self.lcu
-            self.av.iniciar(game_id, fila, gravar=cfg["amostrasAoVivo"] and sugestoes.amostrar(fila))
+            self.av.iniciar(game_id, fila, gravar=cfg["amostrasAoVivo"] and sugestoes.amostrar(fila), exigir_eu=not propria)
             log.info("coach: partida %s (fila %s) ligada: voz %s, minimapa %s, feitiços %s, carregamento %s",
                      game_id, fila, cfg["voz"], cfg["minimapa"], cfg["feiticos"], cfg["carregamento"])
             return self.partida
@@ -961,10 +993,37 @@ class Coach:
 
     def _ao_ler(self, bruto, limpo, est):
         p = self.partida
-        if p is None:
+        if p is None or p.assistida:
             return None
+        # reserva do espectador (SEM_EU_LEITURAS): em jogo, nenhum jogador é o activePlayer = partida de outro jogador.
+        # Só na partida que o coletor não sabe se é dele (p.propria False: religado no meio da partida)
+        if not p.propria and est.get("fase") == "jogo" and est.get("eu") is None:
+            self._sem_eu += 1
+            if self._sem_eu >= SEM_EU_LEITURAS:
+                self._assistida_pela_live(p)
+                return None
+        elif est.get("eu") is not None:
+            self._sem_eu = 0
         self._bruto = bruto
         return p.passo(bruto, limpo, est)
+
+    def _assistida_pela_live(self, p):
+        """thread do laço ao vivo: marca e desliga em outra thread (o encerrar espera o laço, que é esta thread)"""
+        p.assistida = True
+        if p.game_id is not None:
+            self.assistidas.add(p.game_id)
+        log.warning("coach: partida %s sem o jogador ativo na Live Client por %d leituras em jogo: partida assistida "
+                    "(espectador), coach, voz, painel e gravação desligados", p.game_id, self._sem_eu)
+
+        def desligar():
+            with self.trava:
+                if self.partida is p:
+                    self._encerrar_partida()
+            try:
+                self.jan.fechar()
+            except Exception as e:
+                self.avisa("janela do painel", e)
+        threading.Thread(target=desligar, name="coach-assistida", daemon=True).start()
 
     # -- champ select --
     def champ_select(self, sessao):

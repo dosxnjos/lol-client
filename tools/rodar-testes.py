@@ -47,6 +47,7 @@ TESTES = [
     [PY, "tools/teste-medir-compacto.py"],
     [PY, "tools/teste-chat-janelas.py"],   # sem janela de verdade (o --real abre o Edge: só à mão, jogo fechado)
     [PY, "tools/teste-coach.py"],
+    [PY, "tools/teste-assistida.py"],      # partida assistida (espectador): nada de coach, voz, painel, medidor nem gravação (17/10/2026)
     [PY, "tools/teste-pacote-voz.py"],
     [PY, "tools/teste-alertas.py"],
     ["node", "tools/teste-painel.mjs"],    # painel da 2ª tela em DOM falso (inimigo morto: "morto, volta em N s")

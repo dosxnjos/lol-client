@@ -540,6 +540,12 @@ class Coletor:
         self.fila_atual = None
         self.fase_atual = self.partida_atual = None   # última fase do gameflow (batimento do vida.py)
         self.ultima_cs = None  # chave do último retrato, para ligar o game_id
+        # partida assistida (espectador, D2 de 17/10/2026): isSpectating da sessão da seleção. Três estados: True = assistida
+        # (as fases de jogo não ligam coach, voz, painel, medidor de travadas nem gravação, e nada vira partida dele); False =
+        # dele (seleção com isSpectating false, ou busca/ready check: espectador não passa por eles); None = não sei (coletor
+        # religado no meio, ou None/Lobby). Só com None a reserva da Live Client (coach_vivo.SEM_EU_LEITURAS) pode valer
+        self.assistindo = None
+        self.proprias = set()   # gameIds sabidos dele: o Reconnect depois de um None (client reaberto) segue sendo dele
         self.chat = _chat_padrao(coach, lambda: self.lcu)  # janelas do chat (tela 5); None sem coach/servidor
 
     def ocioso(self):
@@ -627,11 +633,25 @@ class Coletor:
             banco.gravar_lp(self.c, "evento", dado)
         elif uri == "/lol-champ-select/v1/session" and dado and corpo.get("eventType") != "Delete":
             # o Delete não decide nada: a ordem dele contra o gameflow não é garantida; quem fecha é fase()
+            self.marcar_assistindo(dado)
+            if self.assistindo:
+                return   # seleção de outro jogador: nem retrato (RetratoChampSelect já pula) nem draft do coach
             if self.cs.sessao(dado, banco.agora_ms()):
                 await self.ler_runa()
                 self.gravar_cs(self.cs.retrato())
             if self.coach:  # rota provável e força do draft para o selo (GET /draft do servidor local)
                 await asyncio.to_thread(self.coach.champ_select, dado)
+
+    def marcar_assistindo(self, s):
+        """isSpectating (booleano) da sessão da seleção. Medido em 16/10/2026: assistir a um amigo passa por ChampSelect
+        (timer GAME_STARTING) e InProgress, nunca WatchInProgress. Nas fases de jogo o sinal da seleção vale até zerar
+        (Update atrasado não muda nada); sem o campo, nada muda"""
+        esp = s.get("isSpectating") if isinstance(s, dict) else None
+        if not isinstance(esp, bool) or self.fase_atual in FASES_JOGO or esp == self.assistindo:
+            return
+        self.assistindo = esp
+        log.info("seleção: %s", "partida assistida (de outro jogador): coach, voz, painel, medidor e gravação ficam "
+                 "desligados nela" if esp else "partida própria")
 
     async def ler_runa(self):
         try:
@@ -706,14 +726,28 @@ class Coletor:
             fila = ((gd.get("queue") or {}).get("id")) or None
         except Exception:
             pass
+        if fase in ("None", "Lobby"):
+            self.assistindo = None    # a partida assistida acabou (ou nunca houve); a próxima seleção diz de quem é
+        elif fase in FASES_LOBBY:
+            self.assistindo = False   # busca e ready check são da fila dele: espectador não passa por eles
+        assistida = self.assistindo is True and fase in FASES_JOGO
+        # partida sabida dele: a reserva da Live Client (sem jogador ativo) fica desarmada nela (revisão adversarial de 17/10)
+        propria = fase in FASES_JOGO and not assistida and (self.assistindo is False or (gid is not None and gid in self.proprias))
+        if propria and gid is not None:
+            self.proprias.add(gid)
         banco.gravar_fase(self.c, fase, gid, fila)
         try:
             banco.gravar_lp(self.c, fase, await asyncio.to_thread(self.lcu.get, "/lol-ranked/v1/current-ranked-stats"))
         except Exception as e:
             log.warning("snapshot de LP falhou: %s", e)
-        log.info("fase %s (partida %s)", fase, gid)
+        log.info("fase %s (partida %s%s)", fase, gid, ", assistida" if assistida else "")
         self.fase_atual, self.partida_atual = fase, gid   # o batimento (vida) lê
         self.fila_atual = fila or self.fila_atual
+        if assistida:
+            # partida de outro jogador: nada de medidor, retrato, game_id, histórico nem coach (D2 de 17/10/2026)
+            if self.coach:
+                await self.coach.fase(fase, gid, fila, self.lcu, assistida=True)
+            return
         if fase == "InProgress":
             import travadas      # medidor de travadas: processo próprio, sai quando o jogo fecha (COLETOR § Medidor)
             travadas.iniciar(gid, db=getattr(self.args, "db", None))   # só com o banco real (ensaio/teste: não)
@@ -738,7 +772,7 @@ class Coletor:
                 self.coach.fim_champ_select()
             # InProgress liga o ao vivo; WaitingForStats para o que olha a tela; EndOfGame ou fora do jogo
             # desliga tudo (o EndOfGame está em FASES_JOGO: quem decide é o coach_vivo, não esta lista)
-            await self.coach.fase(fase, gid, self.fila_atual, self.lcu)
+            await self.coach.fase(fase, gid, self.fila_atual, self.lcu, propria=propria)
 
     def buscar_partida(self, gid):
         if self.buscando and not self.buscando.done():

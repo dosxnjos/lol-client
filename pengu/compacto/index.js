@@ -98,6 +98,13 @@ export const MODAIS = {
 // /lol-champ-select/v1/session (nunca localPlayerCellId -1 sozinho: aparece no início de uma seleção real ainda sem sessão)
 export const MOTIVO_ASSISTINDO = 'assistindo a uma partida: tela da Riot';
 export const FASES_POS = ['WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
+// seleção que começa no menu inicial (fase anterior None ou Lobby: sem ReadyCheck) espera o isSpectating da sessão da seleção antes
+// de montar a tela compacta (decisão D1 de 17/10/2026): a seleção assistida não pisca a tela da seleção antes de ceder. Medido no
+// medidor de 14–16/10: a sessão da seleção chega 41–91 ms depois da fase nas 8 entradas None/Lobby (3 assistidas, 5 personalizadas);
+// a tela da seleção mostra "lendo a seleção…" até essa mesma sessão. A ranqueada e a normal vêm do ReadyCheck e nunca esperam.
+// Sem confirmação no prazo, segue a regra de antes (monta). Reverte: 0
+export const ESPERA_SELECAO_MS = 1000;
+export const FASES_ANTES_ESPERA_SELECAO = ['None', 'Lobby'];
 
 // info: {lida, fila, mapa, custom, aceiteLigado, aceiteVivo, aceiteManual, assistindo} -> {tipo: 'tela'|'jogo'|'expandir'|'esperar', tela?, motivo?}
 // aceiteVivo === false: o aceite.js falhou no init (index.js: seguro() devolveu null); undefined = não sei, vale o ligado
@@ -125,6 +132,8 @@ export function destinoDaFase(fase, info = {}) {
       return { tipo: 'tela', tela: 'fila' };
     case 'ChampSelect': {
       if (!info.lida) return { tipo: 'esperar', motivo: 'lendo a fila da seleção' };
+      // vinda do menu inicial: espera o isSpectating (ESPERA_SELECAO_MS) antes de qualquer destino da seleção
+      if (info.esperaSelecao) return { tipo: 'esperar', motivo: 'conferindo se é uma partida assistida' };
       const fila = Number(info.fila) || 0, mapa = Number(info.mapa) || 0;
       if (mapa && mapa !== MAPA_SR) return { tipo: 'expandir', motivo: 'seleção fora do Summoner\'s Rift (ARAM e outros): tela da Riot' };
       if (FILAS_CHAMPSELECT.includes(fila) || (info.custom && mapa === MAPA_SR)) return { tipo: 'tela', tela: 'champselect' };
@@ -367,6 +376,14 @@ export function criarRoteador({
   const modulos = new Map(); // nome -> {estado: 'carregando'|'ok'|'falta', mod}
   const assinadas = new Set();
   let montagem = null, token = 0, aplicando = false, pendente = false, timerSessao = null, timerContagem = null, timerModalRc = null, timerSeq = null;
+  let timerSelecao = null; // prazo do isSpectating na seleção vinda do menu inicial (D1 de 17/10/2026)
+  // libera a espera do isSpectating; -> true se havia espera
+  function soltarEsperaSelecao() {
+    if (timerSelecao) { limpar(timerSelecao); timerSelecao = null; }
+    const havia = !!est.esperaSelecao;
+    est.esperaSelecao = false;
+    return havia;
+  }
 
   const carregar = nome => {
     let m = modulos.get(nome);
@@ -386,7 +403,7 @@ export function criarRoteador({
     // sem DOM ou sem a 1ª leitura da fase: não mexe em nada (recarga com a janela pequena não pisca)
     if (!est.pronto || !est.faseLida) return { modo: 'nada' };
     const d = destinoDaFase(est.fase, { ...est.info, aceiteLigado: !!cfg.aceite?.ligado, aceiteVivo: aceiteVivo(), aceiteManual: !!aceiteManual(), semContagem: semContagem(),
-      assistindo: !!est.assistindo, ...infoSequencia() });
+      assistindo: !!est.assistindo, esperaSelecao: !!est.esperaSelecao, ...infoSequencia() });
     const chave = d.tipo === 'esperar' ? est.chave : `${d.tipo}:${d.tela || ''}`;
     // virou de destino: a escolha manual e a regra 7 valem só até aqui ("lembrar o modo por fase", plano)
     if (chave !== est.chave) { est.chave = chave; est.override = null; est.forcado = null; est.configRiot = false; est.voltaModalGasta = false; }
@@ -532,7 +549,7 @@ export function criarRoteador({
   }
 
   function aplicar(a) {
-    if (a.modo === 'esperar' && est.destino?.tipo === 'esperar' && !timerSessao && est.fase === 'ChampSelect') {
+    if (a.modo === 'esperar' && est.destino?.tipo === 'esperar' && !timerSessao && est.fase === 'ChampSelect' && !est.info.lida) {
       // sessão do champ select não chegou: não encolhe nem expande no escuro por até 2 × ESPERA_SESSAO_MS (relê no meio)
       timerSessao = agendar(esgotouSessao, ESPERA_SESSAO_MS);
     }
@@ -885,6 +902,19 @@ export function criarRoteador({
       }
       // o prazo da sessão é de uma entrada só: ChampSelect -> None -> ChampSelect em < 2 s encurtava o da 2ª (revisão de 17/10)
       if (timerSessao) { limpar(timerSessao); timerSessao = null; }
+      // D1 de 17/10/2026: seleção vinda do menu inicial (None/Lobby, sem ReadyCheck: assistir ou personalizada) espera o isSpectating
+      // da sessão da seleção por até ESPERA_SELECAO_MS antes de montar a tela compacta; vinda do ReadyCheck (ranqueada, normal) nunca
+      soltarEsperaSelecao();
+      if (fase === 'ChampSelect' && ESPERA_SELECAO_MS > 0 && FASES_ANTES_ESPERA_SELECAO.includes(est.fase) && !est.assistindo) {
+        est.esperaSelecao = true;
+        timerSelecao = agendar(() => {
+          timerSelecao = null;
+          if (!est.esperaSelecao) return;
+          est.esperaSelecao = false;
+          log('seleção sem o isSpectating no prazo: segue a regra da fila');
+          resolver();
+        }, ESPERA_SELECAO_MS);
+      }
       // saiu do ready check (outro não aceitou: Matchmaking de novo): "⤢ expandir" e regra 7 daquele ready check não
       // seguem para a busca. Matchmaking e ReadyCheck têm a mesma chave (tela:fila) desde 14/10/2026; antes o "ceder"
       // trocava a chave e zerava isso. Entrar no ready check não zera: expandido por ti segue expandido no aceite
@@ -922,7 +952,9 @@ export function criarRoteador({
     aoSelecao(s) {
       if (!s || typeof s !== 'object' || typeof s.isSpectating !== 'boolean') return;
       if (FASES_JOGO.includes(est.fase) || FASES_POS.includes(est.fase)) return;
-      if (!!est.assistindo === s.isSpectating) return;
+      // qualquer isSpectating booleano confirma a seleção vinda do menu inicial (D1): a personalizada (false com false) também solta
+      const esperava = soltarEsperaSelecao();
+      if (!!est.assistindo === s.isSpectating) { if (esperava) resolver(); return; }
       est.assistindo = s.isSpectating;
       log(`seleção: ${s.isSpectating ? 'assistindo a uma partida' : 'partida própria'}`);
       resolver();

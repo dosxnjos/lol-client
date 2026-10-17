@@ -12,7 +12,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar } from './lcu-falsa.mjs';
 import { criarJanela, invocadorRiot, criarCamada } from '../pengu/compacto/modo.js';
-import { criarRoteador, descreverCamadas, CLASSE, SEQ_FIRME_MS, GESTO_MS, MODAIS, gestoDentro, GRACA_VOLTA_MS, ESPERA_SESSAO_MS } from '../pengu/compacto/index.js';
+import { criarRoteador, descreverCamadas, CLASSE, SEQ_FIRME_MS, GESTO_MS, MODAIS, gestoDentro, GRACA_VOLTA_MS, ESPERA_SESSAO_MS, ESPERA_SELECAO_MS } from '../pengu/compacto/index.js';
 import { criarRegistroExpansoes, textoSeguro, descreverCamada, DEPOIS_MS, REENVIO_MS, ROTA, enviarAoColetor } from '../pengu/compacto/expansoes.js';
 import { h } from '../pengu/compacto/comum.js';
 
@@ -312,6 +312,7 @@ const J = x => JSON.stringify(x);
   // personalizada no SR (fila 0 = null, mapa 11): a sessão vazia da saída da seleção também não vira "fila desconhecida"
   const s = await pronto('Lobby');
   await s.ir('ChampSelect', { gameData: { queue: { id: 0 }, isCustomGame: true }, map: { id: 11 } });
+  s.rot.aoSelecao({ isSpectating: false, localPlayerCellId: 0 }); await tick(); // vinda do Lobby: monta com a sessão da seleção (D1)
   const montou = s.rot.estado().tela;
   s.rot.aoSessao({}); await tick();
   await s.passar();
@@ -364,13 +365,18 @@ const J = x => JSON.stringify(x);
 {
   const assistida = { isSpectating: true, localPlayerCellId: -1, isCustomGame: true, benchEnabled: false, timer: { phase: 'GAME_STARTING', totalTimeInPhase: 170000 } };
   const s = await pronto('None', { comGesto: 771 });
-  await s.ir('ChampSelect', sessao(420, 11));       // 20:48:19,150: o gameflow chega antes; a tela da seleção monta
-  const montou = s.rot.estado().tela;
+  s.rot.aoFase('ChampSelect');                       // 20:48:19,140: fase None -> ChampSelect (menu inicial, sem ReadyCheck)
+  s.rel.avancar(10); s.rot.aoSessao(sessao(420, 11)); await tick(); // 20:48:19,150: o gameflow (420/11) chega antes da seleção
+  const montou = s.rot.estado().tela;                // até a decisão D1 de 17/10 a tela da seleção montava aqui e cedia logo depois
+  s.rel.avancar(35);
   s.rot.aoSelecao(assistida); await tick();          // 20:48:19,185: a sessão da seleção diz espectador
   await s.passar();
   const e = s.inicio()[0];
   caso('espectador 16/10 20:48 (ranqueada de um amigo, 420/11): expande pela fase, motivo "assistindo", nunca "por-ele" (gesto de 771 ms era o Assistir)',
-    montou === 'champselect' && e && e.origem === 'fase' && e.porEle === false && /assistindo a uma partida/.test(e.motivo) && e.fila === 420 && e.telaAntes === 'champselect', J([montou, e]));
+    e && e.origem === 'fase' && e.porEle === false && /assistindo a uma partida/.test(e.motivo) && e.fila === 420, J([montou, e]));
+  // D1 de 17/10/2026: vinda do menu inicial, a seleção espera o isSpectating; a tela compacta da seleção nunca monta (sem piscar)
+  caso('espectador 16/10 20:48 (D1): a tela compacta da seleção nunca monta antes de ceder; sai do lobby compacto direto para a tela da Riot',
+    montou === 'lobby' && e && e.telaAntes === 'lobby' && s.telas.champselect.ctx === null, J([montou, e && e.telaAntes, !!s.telas.champselect.ctx]));
   s.rot.aoSessao({}); await tick();                  // 20:48:23,57: sessão vazia
   const naoTrilhou = !s.fim().length;
   s.rel.avancar(180);
@@ -406,6 +412,54 @@ const J = x => JSON.stringify(x);
   await c.ir('ChampSelect');
   c.rot.aoSelecao({ localPlayerCellId: -1, myTeam: [] }); await tick();
   caso('localPlayerCellId -1 sem isSpectating não tira a ranqueada do compacto', c.rot.estado().tela === 'champselect' && !c.inicio().length, J(c.eventos()));
+}
+
+// ---------- 3c. D1 de 17/10/2026: seleção vinda do menu inicial espera o isSpectating (ESPERA_SELECAO_MS) ----------
+// tempos do medidor (14–16/10, hora local): a sessão da seleção chegou 35–91 ms depois da fase nas 8 entradas None/Lobby
+{
+  // tela da seleção que anota o relógio falso na montagem: mede o atraso da tela compacta
+  const comHora = s => { const t = telaFalsa('champselect'); const m = t.montar; t.montar = (r, ctx) => { t.em = s.rel.agoraMs(); return m(r, ctx); }; s.telas.champselect = t; return t; };
+  const personalizada = { gameData: { queue: { id: 3140, mapId: 11 }, isCustomGame: true }, map: { id: 11 } };
+  // personalizada (treino 15/10 02:23:58,957 -> sessão da seleção em 02:23:59,026: 69 ms; gameflow em +28 ms)
+  const p = cenario(); p.rot.marcarPronto(); await p.ir('Lobby');
+  const tp = comHora(p);
+  const t0 = p.rel.agoraMs();
+  p.rot.aoFase('ChampSelect'); p.rel.avancar(28); p.rot.aoSessao(personalizada); await tick();
+  const antes = p.rot.estado().tela;
+  p.rel.avancar(41); p.rot.aoSelecao({ isSpectating: false, localPlayerCellId: 0, isCustomGame: true, timer: { phase: 'BAN_PICK' } }); await tick();
+  await p.passar();
+  caso(`personalizada (Lobby -> ChampSelect, isSpectating false em 69 ms): monta a seleção compacta assim que a sessão chega (atraso ${tp.em - t0} ms), sem expansão nem piscada`,
+    antes === 'lobby' && p.rot.estado().tela === 'champselect' && tp.em - t0 === 69 && !p.inicio().length, J([antes, p.rot.estado().tela, tp.em - t0, p.eventos()]));
+  // prazo esgotado sem a sessão da seleção (client ocupado): segue a regra de antes (personalizada no SR monta), sem expandir
+  const q = cenario(); q.rot.marcarPronto(); await q.ir('Lobby');
+  const tq = comHora(q);
+  q.rot.aoFase('ChampSelect'); q.rot.aoSessao(personalizada); await tick();
+  q.rel.avancar(ESPERA_SELECAO_MS - 1); await tick();
+  const aindaLobby = q.rot.estado().tela;
+  q.rel.avancar(1); await tick(); await q.passar();
+  caso(`sem isSpectating no prazo (${ESPERA_SELECAO_MS} ms): segue a regra da fila (personalizada no SR monta a seleção), sem expansão`,
+    aindaLobby === 'lobby' && q.rot.estado().tela === 'champselect' && tq.em === ESPERA_SELECAO_MS && !q.inicio().length, J([aindaLobby, q.rot.estado().tela, tq.em, q.eventos()]));
+  // ranqueada dele (ReadyCheck -> ChampSelect): nunca espera, nem sem a sessão da seleção chegar
+  const r = cenario(); r.rot.marcarPronto(); await r.ir('ReadyCheck');
+  r.rot.aoSessao(sessao(420)); await tick();
+  const tr = comHora(r);
+  const r0 = r.rel.agoraMs();
+  await r.ir('ChampSelect');
+  caso('ranqueada (ReadyCheck -> ChampSelect) sem sessão da seleção nenhuma: monta a seleção compacta na hora (0 ms), sem espera',
+    r.rot.estado().tela === 'champselect' && tr.em === r0 && !r.inicio().length, J([r.rot.estado(), tr.em, r0]));
+  // ordem trocada: a sessão da seleção (espectador) chega antes do evento de fase
+  const o = cenario(); o.rot.marcarPronto(); await o.ir('None');
+  o.rot.aoSelecao({ isSpectating: true, localPlayerCellId: -1 }); await tick();
+  await o.ir('ChampSelect', sessao(2400, 12)); await o.passar();
+  const eo = o.inicio()[0];
+  caso('espectador com a sessão da seleção antes da fase: expande na entrada, motivo "assistindo", sem montar a seleção',
+    eo && /assistindo a uma partida/.test(eo.motivo) && o.telas.champselect.ctx === null, J(eo));
+  // personalizada que sai da seleção antes do prazo: a espera não vaza para a próxima entrada (Lobby -> ChampSelect -> Lobby -> ReadyCheck -> ChampSelect)
+  const v = cenario(); v.rot.marcarPronto(); await v.ir('Lobby');
+  await v.ir('ChampSelect', personalizada); await v.ir('Lobby'); await v.ir('ReadyCheck'); v.rot.aoSessao(sessao(420)); await tick();
+  await v.ir('ChampSelect');
+  caso('espera da seleção não vaza: personalizada desfeita antes do prazo e depois uma ranqueada = seleção compacta na hora',
+    v.rot.estado().tela === 'champselect' && !v.inicio().length, J([v.rot.estado(), v.eventos()]));
 }
 
 // ---------- 4. celebração do fim de partida (etapa) ----------
@@ -529,6 +583,7 @@ const J = x => JSON.stringify(x);
   // (fora da camada, que nem existia) ~650 ms antes de a tela da seleção montar; a tela pediu o client normal 771 ms depois do clique
   const s4 = await pronto('None', { comGesto: null });
   await s4.ir('ChampSelect', sessao(420, 11));
+  s4.rel.avancar(ESPERA_SELECAO_MS); await tick();  // sem a sessão da seleção, o prazo da D1 (17/10) esgota e a tela monta (o classificador é o que se prova aqui)
   s4.rel.avancar(120);
   s4.gesto = { haMs: 771, dentro: false };
   s4.telas.champselect.ctx.expandir();

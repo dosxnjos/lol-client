@@ -383,8 +383,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Assistir a um amigo não é `WatchInProgress`** (medido em 16/10/2026) → o client entra em `ChampSelect` (timer `GAME_STARTING` =
   atraso do espectador, 75–170 s) e depois `InProgress`. Sinal: `isSpectating` da `/lol-champ-select/v1/session` (`aoSelecao` do
   roteador); nunca `localPlayerCellId === -1` sozinho (aparece numa seleção real ainda sem sessão). Sem isso o compacto encolhia na
-  "partida em andamento" de quem ele só assistia ([plano](../roadmap/2026-10-17-telas-que-expandem.md), etapa 2; o coletor ainda
-  liga voz/painel na partida assistida: etapa 7, card à parte).
+  "partida em andamento" de quem ele só assistia ([plano](../roadmap/2026-10-17-telas-que-expandem.md), etapa 2). O coletor ligava
+  voz, painel, medidor de travadas e gravava `ao_vivo` na partida assistida (3292972402 de 13/10 e 3293888206 de 16/10); desde
+  17/10 (D2) não liga nada nela: § Live Client, "partida assistida".
 - **"Seleção da fila desconhecida" piscando na ranqueada** (15/10/2026 13:50) → o GET da sessão do gameflow na entrada da seleção
   travou ~6 s (client ocupado) e o prazo de 2 s esgotou. A fila do ready check vale na seleção (`aoFase`), o prazo relê a sessão uma
   vez e espera 2 × `ESPERA_SESSAO_MS`. E a sessão do gameflow chega **vazia** ~150–190 ms antes de a fase sair da seleção: `aoSessao`
@@ -395,10 +396,11 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   "Fechou" ali = nenhuma camada **visível** (`getClientRects` vazio conta como fechada) e a vigia só vê **nó novo**: janela da Riot que
   só se esconde e reaparece sem nó novo ficaria embaixo da camada. Por isso a releitura segue `GRACA_VOLTA_MS` (5 s) depois da volta,
   e reaparecer = expande e não volta mais até a virada de destino (sem laço 420 → 1280 → 420). Prova: `teste-compacto-expansoes.mjs` § 2b.
-- **Seleção assistida pisca o compacto por um instante** (limite aceito em 17/10/2026) → a sessão do gameflow (420/11) costuma chegar
-  antes da sessão da seleção (`isSpectating`), a tela compacta da seleção monta e logo cede. Esperar a sessão da seleção só na
-  entrada vinda de `None` (as 3 seleções `None → ChampSelect` do medidor de 15–16/10 eram todas assistidas; a dele vem de
-  `ReadyCheck`/`Lobby`) tiraria a piscada sem tocar na ranqueada; não feito sem o OK dele.
+- **Seleção assistida piscava o compacto por um instante** (resolvido em 17/10/2026, D1) → a sessão do gameflow (420/11) chega antes
+  da sessão da seleção (`isSpectating`), e a tela compacta da seleção montava e logo cedia. Hoje a seleção vinda de `None`/`Lobby`
+  (sem `ReadyCheck`: assistir ou personalizada) espera o `isSpectating` até `ESPERA_SELECAO_MS` (1 s) antes de montar; a ranqueada e a
+  normal (vêm do `ReadyCheck`) nunca esperam. Na personalizada custa o atraso da sessão da seleção (41–91 ms no medidor; a tela já
+  mostrava "lendo a seleção…" até ela). Prova: `teste-compacto-expansoes.mjs` § 3b e § 3c.
 - **Relógios diferentes nos registros** → `dados\expansoes-compacto.jsonl` em UTC (`...Z`); `dados\medicao-compacto-*.jsonl` e
   `dados\coletor.log` em hora local sem fuso. "16/10 23:45 UTC" no registro = "20:45" no medidor (o relatório já converte).
 - **POST ao coletor com mais de 64 KiB volta 400 e, reenviado igual, trava a fila** (15/10/2026) → o `servidor_local.do_POST`
@@ -684,6 +686,17 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 1.
   dela anda de **10 em 10**: andando ou farmando devagar, o K'Sante à vista no minimapa ficava "visto há 34 s: dados
   dele parados" (34 de 142 amostras dele vivo; a vitrine o achou no minimapa em 7 de 12 recortes). A última detecção
   do minimapa também conta (`ao_vivo.mesclar_vistos`, `teste-coach.py`).
+- **Partida assistida: nenhum jogador é o `activePlayer`** (medido em 17/10/2026 no `dados\lol.db`) → nas 2 partidas assistidas
+  (3292972402, 3293888206: 51 amostras) a coluna `eu` de `ao_vivo` é 0 em toda amostra; nas 18 dele há exatamente 1 `eu` por amostra
+  (inclusive 3293149183, coletor religado aos 80 s). Sinal principal da partida assistida no coletor: `isSpectating` da sessão da
+  seleção (`Coletor.assistindo`); reserva: 5 leituras em jogo sem `eu` (`coach_vivo.SEM_EU_LEITURAS`) desligam o coach, e o
+  `ao_vivo.py` só grava depois de ver o `eu` uma vez. No carregamento não vale (não medido). Prova: `tools/teste-assistida.py`.
+  **A reserva nunca vale em partida sabida dele** (revisão adversarial de 17/10/2026): o `eu` depende do `riotId` do `activePlayer`
+  casar com o de `allPlayers` (o `limpar_live` passa os dois pelo mesmo mapa); um patch que mude esse formato calaria voz, painel e
+  overlay de toda ranqueada no 5º segundo. Por isso o coletor só deixa a reserva armada sem a seleção vista (`propria=False`: coletor
+  religado no meio da partida); com a seleção dele, a busca, o ready check ou o gameId já conhecido, passa `propria=True`. Risco
+  residual: coletor religado no meio da partida dele **e** o `eu` sumir 5 s (duas falhas juntas). Limite: com a reserva, o medidor
+  de travadas já foi lançado no `InProgress` e segue até o jogo fechar.
 - **Recusa a conexão fora da partida, mas responde 200 na tela de carregamento** → ~7 s depois de
   `InProgress` já vem `allPlayers` completo (campeão, time, rota, feitiços, keystone), com
   `gameData.gameTime` parado em ~0,025 e `events` vazio por ~99 s. Quem usa "resposta ok" ou

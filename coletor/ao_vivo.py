@@ -542,6 +542,7 @@ class AoVivo:
         self._est = {"partida": False}
         self.game_id = self.fila = None
         self.gravar = True
+        self.exigir_eu = True
         self.amostras = 0
         self.ouvintes = []
 
@@ -559,15 +560,17 @@ class AoVivo:
     def ativo(self):
         return bool(self.thread and self.thread.is_alive())
 
-    def iniciar(self, game_id=None, fila=None, gravar=True):
+    def iniciar(self, game_id=None, fila=None, gravar=True, exigir_eu=True):
         """idempotente na mesma partida; partida nova reinicia. Grava amostras só com game_id, fila
-        fora de FORA_DAS_CONTAS (treino e personalizada só no painel) e gravar=True (config amostrasAoVivo)"""
+        fora de FORA_DAS_CONTAS (treino e personalizada só no painel) e gravar=True (config amostrasAoVivo).
+        exigir_eu=False: o coletor viu a seleção dele (partida própria), grava sem esperar o jogador ativo"""
         if self.ativo():
             if game_id and game_id != self.game_id:
                 self.parar()
             else:
+                self.exigir_eu = self.exigir_eu and exigir_eu   # Reconnect da mesma partida, agora sabida dele
                 return
-        self.game_id, self.fila, self.gravar = game_id, fila, gravar
+        self.game_id, self.fila, self.gravar, self.exigir_eu = game_id, fila, gravar, exigir_eu
         self.amostras = 0
         self.parando.clear()
         self.thread = threading.Thread(target=self._rodar, name="ao-vivo", daemon=True)
@@ -611,6 +614,11 @@ class AoVivo:
         ultimo_ok = time.monotonic()
         ultimo_balde = None
         erros = 0
+        # nada vai para ao_vivo/eventos_ao_vivo antes de a Live Client mostrar o jogador ativo (est["eu"]) uma vez: partida
+        # assistida (espectador) nunca tem (D2 de 17/10/2026, medido em 2/2 assistidas contra 18/18 dele); os eventos ficam
+        # em partida.novos e saem inteiros na 1ª amostra com ele. Só sem a seleção dele vista (exigir_eu): partida sabida dele grava
+        # como antes, mesmo se a Live Client mudar o formato do activePlayer (revisão adversarial de 17/10)
+        eu_visto = False
         try:
             while not self.parando.is_set():
                 t0 = time.monotonic()
@@ -630,7 +638,8 @@ class AoVivo:
                                 log.warning("ouvinte do ao vivo falhou: %s", e)
                         with self.trava:
                             self._est = est  # publicado pronto: ninguém mexe depois
-                        if c is not None and est["fase"] != "carregando":
+                        eu_visto = eu_visto or not self.exigir_eu or est.get("eu") is not None
+                        if c is not None and est["fase"] != "carregando" and eu_visto:
                             self._gravar(c, partida)
                             balde = int(est["gt"] // AMOSTRA_S)
                             if balde != ultimo_balde:
@@ -648,7 +657,8 @@ class AoVivo:
                 self.parando.wait(max(0.05, self.intervalo - (time.monotonic() - t0)))
         finally:
             if c is not None:
-                self._gravar(c, partida)
+                if eu_visto:
+                    self._gravar(c, partida)
                 c.close()
             log.info("ao vivo parado (%d amostras)", self.amostras)
 
