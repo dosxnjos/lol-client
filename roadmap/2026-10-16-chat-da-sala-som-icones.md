@@ -244,6 +244,19 @@ O `CLAUDE.md` do projeto já foi atualizado com essa exceção (linha da Lateral
   `replay.js`) depois de recarregar a interface; o ícone fechar nas fichas de runa (`#lc-config-painel`, modal da Riot, fora do harness);
   o "abrir" + ícone do botão de pedidos de amizade na lista.
 
+### Conferência de completude (17/10/2026)
+
+- **Pedido × etapa:** "expandir sozinho na seleção" = A (faixa da sala na coluna); "pós-jogo também" = A passo 5 (honra e pós-jogo,
+  `teste-compacto-fim-de-partida.mjs` §7); "na principal ou janela separada" = na principal, decisão reversível registrada (coube nas
+  4 fases do harness); "som no compacto" = B; "Lucide no lugar de emojis" = C (`pengu/**`; painel e coletor ficam como proposta).
+- **Docs:** ARMADILHAS "Conversa que abre sozinha" ganhou a exceção da faixa (dizia só "contador, ordem e selo"); 4 descrições de texto
+  de interface que ainda citavam o glifo de expandir viraram "expandir". O ⚙ segue como abreviação das configurações na prosa dos docs.
+  Hub `cerebro/projetos/lol-client.md` § Planos passou a listar este plano. README, CLAUDE.md e TEXTOS já estavam coerentes.
+- **Carga do CEF:** `tools/compacto-importar.js` cobre `som.js`, `icones.js`, `replay.js` e `chat-sala.js`; `blocos.js`/`configuracoes.js`
+  sobem por dentro do `lateral-config.js`. `compacto/index.js` não precisa de import novo (som e ícones chegam pela lateral e pelo `comum.js`).
+- **Bateria (jogo fechado, client aberto, nenhuma chamada ao client real):** os 27 `tools/teste-*.mjs` passam, `teste-textos` 9/9,
+  `python tools/rodar-testes.py` 58/58 (o `teste-pacote-voz.py` leva ~400 s: um prazo externo curto corta e parece falha).
+
 ## O que reverteria cada decisão
 
 - Faixa na janela principal → janela separada: se o print mostrar que não cabe ou se ele pedir.

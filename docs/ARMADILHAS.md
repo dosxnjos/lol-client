@@ -92,7 +92,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Conversa que abre sozinha** (relato de 16/10/2026: "eu não quero que a janela abra sozinha com a mensagem") → a decisão 1
   do passo 13 abria a conversa ao lado quando cabia. Saiu inteira (`talvezAbrirSozinha`, `conversaSozinha`, coach lembrado):
   mensagem nova só muda contador, ordem e selo dos recentes. Prova: "nada sozinho" de `teste-compacto-lateral.mjs` (7 fases ×
-  3 estados do chat); religar uma abertura no `volta()` deixa o caso vermelho.
+  3 estados do chat); religar uma abertura no `volta()` deixa o caso vermelho. Exceção (pedido da noite de 16/10/2026): a faixa
+  da sala do time **na coluna** (seleção, honra, pós-jogo) cresce sozinha com mensagem de outro jogador, só a altura, sem foco nem
+  "lida" (chave `compacto.chatSalaCresce`; [plano](../roadmap/2026-10-16-chat-da-sala-som-icones.md) etapa A); a lateral e a 1:1 seguem
+  sem abrir. Prova: `teste-compacto-selecao.mjs` §10 e `teste-compacto-fim-de-partida.mjs` §7.
 - **Nome da fase cortado no topo da seleção** ("FINALIZAÇÃ", harness de 16/10/2026) → o botão de amigos ao lado do de chat pôs 3
   botões no topo (coach, chat, amigos) e sobraram 91 px para os 97 px de "FINALIZAÇÃO". Com 3 botões nas `.lc-cp-extras` os ícones
   ficam mais justos (`CSS_CHAT` de `chat-botao.js`, `:has`, CEF 108). Botão novo no topo: medir o título da seleção no harness. Com os
@@ -173,7 +176,7 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   manda o evento da busca a cada ~1 s e `replaceChildren` recriava o anel: elemento novo (ou solto e reposto) = o
   `::after` gira do zero. Elemento animado vive a montagem inteira e só muda classe e miolo (`tela-fila.anelDe`).
 - **Escolha de um ready check vazando para a busca** (revisão de 14/10/2026) → `Matchmaking` e `ReadyCheck` têm a mesma
-  chave no roteador (`tela:fila`), então "⤢ expandir" e a regra 7 não zeram sozinhos entre eles: `aoFase` zera ao sair do
+  chave no roteador (`tela:fila`), então o botão expandir e a regra 7 não zeram sozinhos entre eles: `aoFase` zera ao sair do
   ready check. Um `div.modal` no ready check é conferido de novo em 1 s (`MODAL_RC_MS`) antes de expandir: o conteúdo
   `.ready-check-root-element` pode chegar depois da folga da vigia, que só vê filhos diretos do wrapper.
 - **No compacto o popup da Riot do ready check fica embaixo da camada** → quem responde é o `#lc-aceite` ("aceitar agora" /
@@ -200,7 +203,7 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   marca `tratado`; sem cuidado, expandir antes de escolher deixava a runa atual sem aviso. `runas.js` guarda a pendência e,
   quando `lc-modo-compacto` sai (`comum.vigiarClasse`), abre o popup se a página atual não é uma das candidatas (sem
   `ux-show`/`ux-flash`); "manter a atual"/Esc é escolha, `fecharPopup()` de fora (tela 3) não. O clique numa página da
-  tela 3 avisa no ato (`runas.escolheu`): esperar o PUT deixava um "⤢" logo depois ler a página antiga e reabrir o popup.
+  tela 3 avisa no ato (`runas.escolheu`): esperar o PUT deixava um expandir logo depois ler a página antiga e reabrir o popup.
 - **Dois painéis do pós-jogo no Ctrl+K do fim de partida compacto** (revisão do passo 11, 14/10/2026) → tirar a camada
   dispara a vigia `vigiarSaidaDoCompacto` (um `abrirPainel` automático) e o `analisarUltima` abria outro, talvez da
   partida anterior (o match-history demora a listar a que acabou). Quem expande para abrir o painel para a vigia antes, na
@@ -463,12 +466,12 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   ocupa sempre o mesmo lugar e fica "TRAVANDO…" (clique duplo e clique na grade ignorados) até a sessão fechar a ação.
 - **`fetch` do CEF não tem prazo** → hover que nunca volta deixava o TRAVAR esperando para sempre (o travar espera o
   hover em voo: a ordem de chegada na LCU não é garantida). Escrita da tela 3 tem prazo (`PRAZO_MS`, hover
-  `PRAZO_HOVER_MS`): sem resposta = aviso com ⤢ e o botão volta; o travamento pendente nunca sai às cegas.
+  `PRAZO_HOVER_MS`): sem resposta = aviso com "use expandir" e o botão volta; o travamento pendente nunca sai às cegas.
 - **Grade do ban vazia no compacto** (mesma ranqueada) → os 5 `GET bannable-champion-ids` da tela voltaram 200 e ele
   não achou campeão para banir (ban -1); o corpo não foi capturado (o tracing do client só guarda status): causa
   deduzida (lista vazia ou sem id do catálogo deixa só os favoritos, cinza), a provar na próxima seleção. No ban, lista
   assim não filtra mais a grade (nota "o client não mandou a lista"); na escolha segue filtrando (só favoritos, cinza,
-  com ⤢). O tamanho vai para o `LeagueClientUx.log` (`[lol-client] compacto: bannable-champion-ids … n=`) e para o
+  com "use expandir"). O tamanho vai para o `LeagueClientUx.log` (`[lol-client] compacto: bannable-champion-ids … n=`) e para o
   medidor (evento `listas`).
 - **Requisição do compacto × da Riot no `LeagueClient-tracing.json`** → registro `br1` (`me` 2 GET, 5 PATCH, 6 POST,
   `ur`, `hc` = nº de cabeçalhos, `bl` = 1 com corpo) e a resposta em `rb1` (mesmo `ri`, `rc` = status). O `fetch` do
