@@ -116,9 +116,10 @@ Causa medida: nesses 3 ready checks o `aceite.js` **não recebeu nenhum evento**
 (`aceite.js:241`). No `coletor.log` não há `evento=evento` nem `evento=agendou` do plugin; só o `evento=foco` (que vem do
 socket de fase, que funcionava). O medidor, com socket próprio, viu os eventos do ready check normalmente (12:36:38–47).
 Sem evento, o `aceite.js` não mostra a contagem; o compacto, corretamente, expandiu. Quem aceitou foi a janelinha do
-coletor (12:01:16) e a reserva do coletor (12:36:47, 12:38:05: "último sinal do plugin há 2125 s"). Nas outras
-entradas em fila do período (02:23, 02:29, 03:19, 04:12, 04:15, 04:25, 05:25, 13:50 de 15/10 e 12:41 de 16/10) o evento
-chegou e nada expandiu. A causa de o socket do plugin perder só essa rota entre ~05:30 e ~13:50 de 15/10 **não foi
+coletor (12:01:16) e a reserva do coletor (12:36:47, 12:38:05: "último sinal do plugin há 2125 s"). Nos outros
+ready checks de 15–16/10 (02:23, 02:29, 03:19, 04:12, 04:15, 04:25, 05:25 e 13:50 de 15/10; 12:41 de 16/10) o log mostra
+`evento=agendou`, ou seja, o evento chegou ao `aceite.js`; dos que vieram depois do início do registro (05:59 de 15/10),
+13:50 e 12:41 não expandiram. A causa de o socket do plugin perder só essa rota entre ~05:30 e ~13:50 de 15/10 **não foi
 medida** (hipótese: inscrição perdida numa recarga/atualização do client nesse intervalo).
 
 O que a tela da Riot tem (`rcp-fe-lol-navigation` 16.20, `2d07c2d59aefa2f7.js` @1141469 e @1142318): botões "aceitar" e
@@ -214,7 +215,9 @@ aparecer, ela entra em `#lol-uikit-layer-manager-wrapper` como `.vignette-celebr
 5. Corrigir o comentário de `index.js:105` ("Espectador já é outra fase (WatchInProgress)"): medido em 16/10 que não é.
 6. Texto: rodar `node tools/teste-textos.mjs` (motivo novo).
 7. Prova: casos no teste do roteador e em `tools/teste-compacto-selecao.mjs`: sessão `isSpectating:true` com fila 420/11 =
-   expande na hora, origem `fase`, sem montar a tela; depois `GameStart` mapa 12 = client normal (nada de `tela: jogo`);
+   expande assim que a sessão da seleção chega, origem `fase` (não `por-ele`), antes de qualquer ação da tela (a sessão do
+   gameflow costuma chegar antes e a tela pode montar por alguns ms; exigir a sessão da seleção para `lida` evitaria isso,
+   mas faria a ranqueada depender de mais um GET na entrada: não fazer sem medição); depois `GameStart` mapa 12 = client normal (nada de `tela: jogo`);
    `None` zera. Ranqueada normal (`isSpectating:false`, `localPlayerCellId 4`) segue compacta em toda a sequência.
 8. Reverte: `git revert`; sem o sinal, volta ao comportamento de hoje.
 
