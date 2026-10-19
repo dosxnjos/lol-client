@@ -1,6 +1,7 @@
 // Testa a carga da configuração do plugin (pengu/config.js): migração de avisosDesligados (lista até
 // 13/10/2026 -> {voz, tela}), a mescla com o padrão e a VERSAO 4 (ponte com o complemento coach: instalação nova false,
 // config salva antes dela true uma vez, restaurar mantém). uso: node tools/teste-config.mjs
+import { readFileSync } from 'node:fs';
 import { carregar, cfg, migrar, PADRAO, classes, definir, restaurar } from '../pengu/config.js';
 import { corpoConfig } from '../pengu/coach.js';
 
@@ -202,6 +203,25 @@ const mesmos = (c, ref = GABRIEL) => ['aceite', 'filaRapida', 'compacto', 'runas
       && c.aceite.trazerClient === true && c.aceite.atrasoS === 10]);
   casos.push(['Fase 3: restaurar() numa instalação nova continua sem favoritos nem regras', (() => { carregarCom(null); restaurar(); return recarregar(); })(),
     c => igual(c.compacto.favoritos, []) && igual(c.runas.regras, []) && c.coletor.ligado === false]);
+
+  // a semente do README § Instalar roda como está escrita (revisão adversarial da Fase 3, 19/10/2026): numa reinstalação o
+  // DataStore não tem lol-client.config até o 1º salvar() (o trecho antigo, DataStore.get(...).compacto, dava TypeError), e
+  // uma mudança nas Configurações antes de recarregar regravava o cfg da memória por cima de um DataStore.set feito por fora
+  const readme = readFileSync(new URL('../README.md', import.meta.url), 'utf8');
+  const trecho = (readme.match(/`([^`\n]*compacto\.favoritos[^`\n]*)`/) || [])[1] || '';
+  const rodar = () => new Function('__lolClient', 'DataStore', trecho)({ cfg, definir }, globalThis.DataStore);
+  gravacoes = 0;
+  carregarCom(null);
+  const vazio = salvo;
+  let erro = null;
+  try { rodar(); } catch (e) { erro = String(e); }
+  const depois = copia(salvo);
+  definir('filaRapida.ligado', false);   // muda uma chave nas Configurações antes de recarregar
+  const r2 = recarregar();
+  casos.push(['Fase 3: a semente do README roda numa instalação nova (DataStore vazio) e sobrevive a mudar outra chave antes de recarregar',
+    { trecho, vazio, erro, depois, r2 }, v => v.vazio === null && v.erro === null && /__lolClient\.definir/.test(v.trecho)
+      && igual(v.depois?.compacto?.favoritos, [58, 154]) && v.depois?.aceite?.trazerClient === false
+      && igual(v.r2.compacto.favoritos, [58, 154]) && v.r2.aceite.trazerClient === false && v.r2.filaRapida.ligado === false]);
 }
 
 // ponta a ponta do foco no ready check (aceite.js criarFoco) com a config carregada: outra janela na frente, ReadyCheck, o client

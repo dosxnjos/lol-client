@@ -47,9 +47,11 @@ Ele sai sozinho 10 min depois do client fechar. Se ele cair com o client aberto,
    **Semente desta conta** (19/10/2026, Fase 3 do [plano plugin Pengu primeiro](roadmap/2026-10-17-plugin-pengu-primeiro.md)):
    o padrão do plugin não traz regra de runa nem favorito e traz o client para a frente no ready check. Esta máquina tem os
    valores salvos no DataStore (`lol-client.config`) e a mescla mantém; só numa reinstalação com o DataStore vazio, refazer
-   as regras em Configurações › Runas e, para o resto, no console do CDP (client em `None`/`Lobby`):
-   `const c = DataStore.get('lol-client.config'); c.compacto.favoritos = [58, 154]; c.aceite.trazerClient = false; DataStore.set('lol-client.config', c)`
-   e recarregar. Regras (ids de `GET /lol-perks/v1/pages`, medidos em 13/10/2026; conferir se as páginas ainda existem):
+   as regras em Configurações › Runas e, para o resto, no console do CDP (passo 6; client em `None`/`Lobby`), em qualquer ordem:
+   `__lolClient.definir('compacto.favoritos', [58, 154]); __lolClient.definir('aceite.trazerClient', false)`.
+   Vale na hora, sem recarregar. Nunca `DataStore.get/set` direto: numa instalação nova a chave só existe depois do 1º
+   `salvar()` (o `get` volta `null`) e a próxima mudança nas Configurações regrava o `cfg` da memória por cima (ARMADILHAS
+   § Client e Pengu). Regras (ids de `GET /lol-perks/v1/pages`, medidos em 13/10/2026; conferir se as páginas ainda existem):
    `{championId: 58, posicao: '*', paginas: [1409260191, 2147419287]}` (Renekton) e
    `{championId: 154, posicao: '*', paginas: [1540029809]}` (Zac); favoritos 58 e 154; `aceite.trazerClient: false`
    (minimiza o client que pulou na frente no ready check).

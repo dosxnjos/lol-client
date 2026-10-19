@@ -360,7 +360,14 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   só na config salva, e a mescla mantém lista salva inteira e valor salvo do mesmo tipo. Perder o DataStore = voltar ao padrão;
   a semente está no README § Instalar. "Restaurar padrão" mantém favoritos, regras e a ponte, mas liga o `trazerClient`.
   Chave nova com padrão diferente do que esta máquina usa só fica do jeito dela se o valor já estiver salvo (confirmado no
-  DataStore em 19/10 para as três); sem o valor salvo, a mescla dá o padrão novo calada.
+  DataStore em 19/10 para as três); sem o valor salvo, a mescla dá o padrão novo calada. Na seleção sem a lista de campeões do
+  client e sem favorito visível, a grade fica vazia e só a nota fala (expandir); "nenhum campeão com esse nome" só com busca
+  digitada (revisão adversarial da Fase 3, `teste-compacto-selecao.mjs` nº 5).
+- **`DataStore.get('lol-client.config')` volta `null` numa instalação nova, e `DataStore.set` por fora some** (revisão
+  adversarial da Fase 3, 19/10/2026) → `carregar()` não grava nada sem migração (a chave só nasce no 1º `salvar()`), e o
+  plugin guarda o `cfg` em memória: a próxima mudança nas Configurações regrava o `cfg` inteiro por cima do que o console
+  gravou. Semear ou mudar config pelo console só com `__lolClient.definir(caminho, valor)` (atualiza a memória e grava);
+  guarda em `teste-config.mjs` (roda o trecho do README § Instalar com o DataStore vazio).
 - **Regex com aspas confunde o varredor do `teste-textos.mjs`** (19/10/2026) → ele não entende regex: `/[&<>"]/` abria uma
   "string" que engolia o resto do arquivo (comentários viraram literais e a regra nova acusou). Aspas dentro de regex vão
   como `\x22` / `\x27`.
