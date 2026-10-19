@@ -403,6 +403,41 @@ def parte_d(g):
     caso("(d) a lista sai 2 vezes: a do GET e a do download (URL e digest lidos na hora do download)",
          sum(1 for h in g.hits if "/releases?" in h) == 2, g.hits)
 
+    # corrida (revisão adversarial da P5): POST recusado (fila) durante a consulta lenta, saída da fila, POST aceito, e um 3º
+    # clique depois do fim da consulta. Antes: a recusa apagava o "consultando", o fim da consulta gravava "parado" por cima do
+    # "baixando" e o 3º POST abria um 2º download sobre a mesma .nova
+    g.limpar()
+    publicar(g)
+    g.atraso = {"releases": 1.5, NOME: 1.0}
+    inst = Inst()
+    fase = ["Matchmaking"]
+    pv = novo(inst, g, fase=lambda: fase[0])
+    t0 = time.monotonic()
+    pv.rota_get("/voz/estado")
+    time.sleep(0.2)
+    st1, e1 = pv.pedir()
+    caso("(d) corrida: POST na fila durante a consulta lenta = 409 recusado partida na resposta, e a consulta segue "
+         "'consultando'", st1 == 409 and e1["estado"] == "recusado" and e1["motivo"] == "partida"
+         and pv.estado()["estado"] == "consultando", (st1, e1, pv.estado()))
+    fase[0] = "Lobby"
+    st2, e2 = pv.pedir()
+    vistos, st3, baixadores = set(), None, 0
+    fim = time.monotonic() + 15
+    while time.monotonic() < fim and pv.estado()["estado"] not in ("pronto", "erro"):
+        vistos.add(pv.estado()["estado"])
+        baixadores = max(baixadores, sum(1 for t in threading.enumerate() if t.name == "voz-baixar" and t.is_alive()))
+        if st3 is None and time.monotonic() - t0 > 1.8:   # a consulta do GET já terminou; o download ainda corre
+            st3, _ = pv.pedir()
+        time.sleep(0.02)
+    for t in threading.enumerate():
+        if t.name in ("voz-baixar", "voz-consulta"):
+            t.join(10)
+    caso("(d) corrida: POST no lobby aceito (202) e o estado nunca passa por 'parado' até o pronto",
+         st2 == 202 and "parado" not in vistos and pv.estado()["estado"] == "pronto" and inst.foto() == esperado(NOVO),
+         (st2, vistos, pv.estado()))
+    caso("(d) corrida: 3º POST depois do fim da consulta = 409, 1 download só do zip, nunca 2 em paralelo",
+         st3 == 409 and sum(1 for h in g.hits if h.endswith(NOME)) == 1 and baixadores <= 1, (st3, baixadores, g.hits))
+
 
 # ---------- (e) troca ----------
 

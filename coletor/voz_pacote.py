@@ -266,7 +266,7 @@ class PacoteVoz:
             pendente, self._pendente = self._pendente, False
             if pendente:
                 self._est.update(estado="baixando", motivo=None, baixados=0, total=None)
-            else:
+            elif self._est["estado"] == "consultando":   # nunca por cima de um estado que não é desta consulta
                 self._est.update(estado="parado", motivo=motivo)
         if pendente:
             self._rodar()
@@ -282,8 +282,14 @@ class PacoteVoz:
         if not motivo and self.acao(self.instalada()) == "nada":
             motivo = "em-dia"
         if motivo:
-            self._por("recusado", motivo=motivo, baixados=0, total=None)
-            return 409, self.estado()
+            # com a consulta do GET em voo, a recusa vai só na resposta: gravá-la por cima do "consultando" soltava o _ocupado()
+            # com a thread da consulta viva, e o fim dela pisava ("parado") no download aceito logo depois (2º download em
+            # paralelo sobre a mesma .nova; revisão adversarial da P5)
+            with self._trava:
+                if not self._ocupado():
+                    self._est.update(estado="recusado", motivo=motivo, baixados=0, total=None)
+            log.info("voz: recusado (%s)", motivo)
+            return 409, {**self.estado(), "estado": "recusado", "motivo": motivo, "baixados": 0, "total": None}
         with self._trava:
             if self._est["estado"] == "consultando" and not self._pendente:
                 # a consulta do GET /voz/estado ainda em voo (GitHub lento: até PRAZO_S): responde já e o download sai no fim
