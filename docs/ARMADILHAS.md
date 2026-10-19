@@ -1400,6 +1400,13 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   índice só recebe o alvo do próprio índice ou um conferido contra a lista da API.
 - **Tarefa desativada e o catálogo cresceu** (fala nova no `LICOES.md`) → as novas tocam na Maria e ninguém grava;
   o `estado` avisa "desativada mas faltam N": `python tools\voz-agendada.py instalar` reativa.
+- **Botão "baixar vozes" de volta no meio do download e 2 downloads sobre a mesma `.nova`** (revisão adversarial da P5,
+  19/10/2026) → `POST /voz/baixar` recusado (fila) durante a consulta lenta do `GET /voz/estado` gravava `recusado` por cima do
+  `consultando` com a thread viva; o POST seguinte (lobby) abria o download e o fim da consulta pisava com `parado`. Recusa
+  durante a consulta vai só na resposta, e a consulta só grava `parado` sobre o próprio `consultando` (`teste-voz-baixar.py` (d)).
+- **Zip da voz que o complemento não acha** → `voz_pacote.achar` lê só a 1ª página de 100 releases; o `publicar.py` anexa o
+  zip de novo quando o release dele sai dos 90 mais novos (`JANELA_VOZ`), não "quando nenhum release tem o nome"
+  (`teste-publicar.py`, release 0.1.4).
 
 ## Riot API (servidores da Riot, não a LCU)
 

@@ -955,16 +955,21 @@ bloco Voz (`pengu\vozes.js`) só com esse recurso. A geração continua só na m
   disponivel: {versao, tag, tamanho} | null, acao: baixar | atualizar | nada, recusa, baixados, total}`; estados `parado`,
   `consultando`, `baixando`, `conferindo`, `trocando`, `pronto`, `erro`, `recusado`. Um download por vez (409). POST que chega
   durante a consulta do `GET` (GitHub lento) responde na hora (202, `consultando`) e o download sai no fim dela, sem `parado` no
-  meio (revisão da P5: esperar a consulta no handler passava dos 8 s do plugin).
+  meio (revisão da P5: esperar a consulta no handler passava dos 8 s do plugin). POST recusado durante a consulta (fila) vai só na
+  resposta (409 `recusado`), sem gravar por cima do `consultando`, e o fim da consulta só grava `parado` sobre o próprio estado
+  (revisão adversarial: senão o POST seguinte e o fim da consulta abriam 2 downloads). Plugin recarregado no meio do download vê
+  o progresso pelo `GET` e acompanha a cada 1 s (`pengu\vozes.js`).
 - **Qual pacote:** `voz-<pacote>-<versao>.zip` com `<versao>` = `avisos.versao_catalogo()` **do código instalado** (as falas que
   este coach diz). O `publicar.py` só anexa o zip no release em que o catálogo mudou, então ele mora num release qualquer: **1
   consulta** a `https://api.github.com/repos/<REPO>/releases?per_page=100` e vale o release mais novo (sem rascunho nem
-  pré-lançamento) que tem o asset com esse nome exato e o `SHA256SUMS.txt`. O `GET /voz/estado` faz essa consulta em segundo plano
+  pré-lançamento) que tem o asset com esse nome exato e o `SHA256SUMS.txt` (só a 1ª página: o `publicar.py` anexa o zip de novo
+  quando o release dele sai dos 90 mais novos, `JANELA_VOZ`). O `GET /voz/estado` faz essa consulta em segundo plano
   para o tamanho do botão, no máximo 1 vez em 6 h (falha: 10 min), e só com o botão possível (sem recusa, pacote ausente ou de
   outra versão).
 - **Recusa antes de qualquer rede** (409): `desenvolvimento` (complemento numa pasta com `.git` ou junção, a do mantenedor; pasta
   de pacotes que é junção), `gerado-aqui` (pacote instalado sem `"origem": "release"` no `indice.json`: gerado neste computador,
-  o botão apagaria a geração), `partida` (fora de `None`/`Lobby`), `em-dia`, `versao` (sem `REPO` ou catálogo).
+  o botão apagaria a geração), `partida` (fora de `None`/`Lobby`), `em-dia`, `versao` (sem `REPO` ou catálogo). As do `recusa`
+  do `GET` (`desenvolvimento`, `gerado-aqui`, `versao`) o plugin já mostra na linha do bloco, sem botão.
 - **Origem e hash:** os mesmos do `atualizar.py` (`Rede`, `ORIGENS_DOWNLOAD`, redirecionamento conferido salto a salto): sha256 do
   zip = linha do `SHA256SUMS.txt` daquele release = `digest`; `digest` nulo = falha. Progresso em bytes (`baixados`/`total`).
 - **Conferência:** extrai em `%LOCALAPPDATA%\lol-client\voz\pacotes\<pacote>.nova` (zip com `..`, contrabarra, absoluto ou outra
@@ -974,6 +979,7 @@ bloco Voz (`pengu\vozes.js`) só com esse recurso. A geração continua só na m
 - **Troca com volta:** a pasta inteira (não há dados dentro): `<pacote>` → `<pacote>.anterior` (guarda 1) e `<pacote>.nova` →
   `<pacote>`; 2º rename que falha devolve o anterior; queda do processo entre os dois se recupera no próximo `PacoteVoz`
   (`recuperar()`). Rename que falha com `PermissionError` (um `.wav` aberto: fala tocando, antivírus) tenta de novo por 10 s.
+  Falha com pacote antes = `troca` (ele continua); sem pacote antes = `troca-nova` (a voz segue a do Windows).
 - **Fala em curso:** o pedido só sai em `None`/`Lobby`, mas a troca pode cair numa partida se a fila andou no download. Não
   atrapalha: o `voz.Voz` lê o pacote **entre** falas (`Pacote.relido`, pelo mtime do `indice.json`), a fala em curso termina
   inteira e a seguinte já sai do pacote novo; sem pacote no começo da partida, ele vale a partir da próxima.

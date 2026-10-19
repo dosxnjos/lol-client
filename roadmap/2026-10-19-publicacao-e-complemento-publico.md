@@ -51,6 +51,10 @@ pip, complemento parado e venv apagado na falha; `teste-instalacao.py` 47/47 (41
 exato do catálogo do código (desvio: o zip só sobe quando o catálogo muda), troca da pasta com volta, fala em curso intacta;
 bloco Voz com "baixar vozes (36 MB)" (`pengu/vozes.js`); `desinstalar.cmd` apaga o pacote baixado
 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p5.md)).
+Revisão adversarial da P5 (19/10, `6a010e5` a `ba8d30b`; 6 achados = 5 distintos, todos reais e corrigidos, tabela no relatório):
+POST recusado durante a consulta abria 2 downloads, zip da voz além do 100º release (`publicar.py` `JANELA_VOZ = 90`), plugin
+recarregado no meio do download, recusa na linha, `troca-nova`; `teste-voz-baixar.py` 70/70 (64/67 antes), `teste-vozes.mjs` 48/48,
+`teste-publicar.py` 67/67.
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 

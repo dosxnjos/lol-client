@@ -105,7 +105,8 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
   vozes (36 MB)" e "atualizar vozes (36 MB)" (minúsculas, como "atualizar" e "recarregar agora"), etapas "Baixando as vozes… 12
   de 36 MB", "Conferindo as vozes…", "Instalando as vozes…", fim "Vozes instaladas (versão …): valem a partir da próxima
   partida." e recusas em fato + saída ("Baixe as vozes na tela inicial ou no lobby.", "Pacote de vozes gerado neste computador: o
-  botão não troca este pacote.").
+  botão não troca este pacote.", que sem botão vai na própria linha do pacote; falha na 1ª instalação: "Não foi possível instalar
+  as vozes: os avisos seguem na voz Maria do Windows.", nunca "o pacote anterior continua instalado" sem pacote nenhum).
 - Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
   "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026). O que mostra a amostra dele (Fase 5 do plano plugin Pengu
   primeiro: nota do pós-jogo, freios, dica do lobby, selo, Configurações) segue este guia: diz "partidas guardadas neste
