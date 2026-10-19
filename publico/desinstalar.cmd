@@ -11,7 +11,8 @@ rem endlocal da saida voltaria para a pasta atual de antes, que este arquivo aca
 #             comando (pid reaproveitado e o coletor de outra instalação ficam de fora)
 #   apaga     o atalho lol-ultra-client.lnk da pasta Inicializar; plugins\lol-ultra-client (nunca junção nem pasta num
 #             repositório git: instalação de desenvolvimento); %LOCALAPPDATA%\lol-client\complemento inteira; a pasta
-#             %LOCALAPPDATA%\lol-client só se ficar vazia
+#             %LOCALAPPDATA%\lol-client só se ficar vazia. Rodando de dentro dela, este arquivo sai por último (um cmd solto,
+#             2 s depois da saída: o cmd relê o arquivo dele ao sair)
 #   recusa    partida aberta; complemento que é instalação de desenvolvimento
 # Teste (tools/teste-instalar.py): LOCALAPPDATA no temp, LUC_PLUGINS, LUC_INICIALIZAR, LUC_SEM_PAUSA (sem a pergunta).
 $ErrorActionPreference = 'Stop'
@@ -121,8 +122,19 @@ function Principal {
   } elseif (-not $plugins) { Write-Host 'Pasta plugins do Pengu Loader não encontrada: se o plugin estiver instalado, apague a pasta plugins\lol-ultra-client.' }
 
   if ([IO.Directory]::Exists($base)) {
-    try { Apagar $base; Write-Host "Complemento coach apagado: $base" }
-    catch { Write-Host "Parte do complemento não foi apagada (arquivo em uso): reinicie o computador e apague a pasta $base."; $codigo = 1 }
+    # rodando de dentro da pasta que apaga (o desinstalar.cmd instalado): o cmd relê o próprio arquivo ao sair e, sem ele,
+    # sai com erro ("caminho não encontrado"). Fica só este arquivo, e um cmd solto apaga o resto 2 s depois da saída
+    $proprio = [IO.Path]::GetFullPath($env:LUC_CMD)
+    $dentro = $proprio.StartsWith([IO.Path]::GetFullPath($base).TrimEnd('\') + '\', [StringComparison]::OrdinalIgnoreCase)
+    try {
+      if ($dentro) {
+        foreach ($e in [IO.Directory]::GetFileSystemEntries($base)) { if (-not (MesmaPasta $e $destino)) { Apagar $e } }
+        foreach ($e in [IO.Directory]::GetFileSystemEntries($destino)) { if (-not (MesmaPasta $e $proprio)) { Apagar $e } }
+        $limpar = 'ping -n 3 127.0.0.1 >nul & rd /s /q "' + $base + '" & rd "' + $raiz + '" 2>nul'
+        Start-Process -FilePath "$env:SystemRoot\System32\cmd.exe" -ArgumentList '/c', $limpar -WindowStyle Hidden -WorkingDirectory ([IO.Path]::GetTempPath())
+      } else { Apagar $base }
+      Write-Host "Complemento coach apagado: $base"
+    } catch { Write-Host "Parte do complemento não foi apagada (arquivo em uso): reinicie o computador e apague a pasta $base."; $codigo = 1 }
   }
   if ([IO.Directory]::Exists($raiz) -and -not (Reparse $raiz) -and @([IO.Directory]::GetFileSystemEntries($raiz)).Count -eq 0) {
     [IO.Directory]::Delete($raiz)
