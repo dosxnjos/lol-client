@@ -413,6 +413,12 @@ def _prova(a, tmp, falsos):
     rodando = processo_falso(destino / "coletor" / "relancador.py")
     falsos.append(rodando)
     (dados / "relancador.lock").write_text(str(rodando.pid), encoding="utf-8")
+    # P5: pacote de vozes baixado pelo botão (origem release) e o anterior dele: saem com o resto
+    pacotes = local / "lol-client" / "voz" / "pacotes"
+    for n in ("aoede", "aoede.anterior"):
+        (pacotes / n).mkdir(parents=True, exist_ok=True)
+        (pacotes / n / "indice.json").write_text('{"voz": "aoede", "origem": "release", "frases": {}}', encoding="utf-8")
+        (pacotes / n / "a1.wav").write_bytes(b"RIFF")
     time.sleep(0.5)
     rc, out, _ = cmd(destino / "desinstalar.cmd", base_env, destino)
     fim = time.time() + 15   # o último arquivo (o próprio desinstalar.cmd) sai por um cmd solto, 2 s depois
@@ -422,6 +428,8 @@ def _prova(a, tmp, falsos):
          "plugin e complemento, e a pasta lol-client vazia some",
          rc == 0 and "caminho especificado" not in out and not vivo(rodando.pid) and not lnk.exists()
          and not plug.exists() and not (local / "lol-client").exists() and "desinstalado" in out, out[-800:])
+    caso("(g) o pacote de vozes do release (e o anterior) saiu junto e o desinstalar diz", not pacotes.exists()
+         and "Pacote de vozes apagado" in out, out[-400:])
     alvo = tmp / "plugin-dev"
     alvo.mkdir()
     (alvo / "index.js").write_text("// código de trabalho", encoding="utf-8")
@@ -430,12 +438,17 @@ def _prova(a, tmp, falsos):
     caso("(g) instalar com o plugin de desenvolvimento (junção): plugin não copiado, código intacto",
          rc == 0 and (alvo / "index.js").read_text(encoding="utf-8") == "// código de trabalho"
          and "desenvolvimento" in out, out[-400:])
+    gerado = pacotes / "aoede"   # pacote gerado neste computador (sem "origem": "release"): o desinstalar não apaga
+    gerado.mkdir(parents=True)
+    (gerado / "indice.json").write_text('{"voz": "aoede", "frases": {}}', encoding="utf-8")
     rc, out, _ = cmd(destino / "desinstalar.cmd", base_env, destino)
     fim = time.time() + 15
     while destino.exists() and time.time() < fim:
         time.sleep(0.5)
     caso("(g) desinstalar com o plugin de desenvolvimento: plugin mantido, código intacto, complemento apagado",
          rc == 0 and (alvo / "index.js").exists() and plug.exists() and not destino.exists(), out[-400:])
+    caso("(g) pacote de vozes gerado neste computador (sem origem release): fica", (gerado / "indice.json").exists()
+         and "Pacote de vozes apagado" not in out, out[-400:])
 
     print(f"{'ok' if not falhas else 'FALHOU'}: {n_ok[0]}/{n_ok[0] + len(falhas)}" + (f"; falhas: {falhas}" if falhas else ""))
     return 1 if falhas else 0

@@ -10,7 +10,8 @@ rem endlocal da saida voltaria para a pasta atual de antes, que este arquivo aca
 #   fecha     relançador e coletor pelo pid das travas em dados\, só processo python com a pasta do complemento na linha de
 #             comando (pid reaproveitado e o coletor de outra instalação ficam de fora)
 #   apaga     o atalho lol-ultra-client.lnk da pasta Inicializar; plugins\lol-ultra-client (nunca junção nem pasta num
-#             repositório git: instalação de desenvolvimento); %LOCALAPPDATA%\lol-client\complemento inteira; a pasta
+#             repositório git: instalação de desenvolvimento); %LOCALAPPDATA%\lol-client\complemento inteira; o pacote de
+#             vozes baixado pelo botão (%LOCALAPPDATA%\lol-client\voz\pacotes\aoede, só com "origem": "release"; P5); a pasta
 #             %LOCALAPPDATA%\lol-client só se ficar vazia. Rodando de dentro dela, este arquivo sai por último (um cmd solto,
 #             2 s depois da saída: o cmd relê o arquivo dele ao sair)
 #   recusa    partida aberta; complemento que é instalação de desenvolvimento
@@ -120,6 +121,23 @@ function Principal {
       catch { Write-Host "O plugin não foi apagado (arquivo em uso): feche o client e apague a pasta $dest."; $codigo = 1 }
     }
   } elseif (-not $plugins) { Write-Host 'Pasta plugins do Pengu Loader não encontrada: se o plugin estiver instalado, apague a pasta plugins\lol-ultra-client.' }
+
+  # pacote de vozes baixado pelo botão "baixar vozes" (P5, coletor/voz_pacote.py): só pasta cujo indice.json diz "origem":
+  # "release" (aoede, aoede.nova, aoede.anterior); pacote gerado neste computador fica. voz\pacotes e voz\ saem só se vazias
+  $voz = Join-Path $raiz 'voz'
+  $pacotes = Join-Path $voz 'pacotes'
+  if ([IO.Directory]::Exists($pacotes) -and -not (Reparse $voz) -and -not (Reparse $pacotes)) {
+    try {
+      foreach ($n in @('aoede', 'aoede.nova', 'aoede.anterior')) {
+        $p = Join-Path $pacotes $n
+        if (-not [IO.Directory]::Exists($p) -or (Reparse $p)) { continue }
+        $origem = $null
+        try { $origem = ([IO.File]::ReadAllText((Join-Path $p 'indice.json'), [Text.Encoding]::UTF8) | ConvertFrom-Json).origem } catch { }
+        if ($origem -eq 'release') { Apagar $p; if ($n -eq 'aoede') { Write-Host "Pacote de vozes apagado: $p" } }
+      }
+      foreach ($p in @($pacotes, $voz)) { if (@([IO.Directory]::GetFileSystemEntries($p)).Count -eq 0) { [IO.Directory]::Delete($p) } }
+    } catch { Write-Host "O pacote de vozes não foi apagado (arquivo em uso): apague a pasta $pacotes depois."; $codigo = 1 }
+  }
 
   if ([IO.Directory]::Exists($base)) {
     # rodando de dentro da pasta que apaga (o desinstalar.cmd instalado): o cmd relê o próprio arquivo ao sair e, sem ele,
