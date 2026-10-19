@@ -492,6 +492,31 @@ def parte_e(g):
     caso("(e) 2º rename falha: o anterior volta, erro troca", e["estado"] == "erro" and e["motivo"] == "troca"
          and inst.foto() == antes and chamadas == ["aoede.anterior", "aoede", "aoede"], (e, chamadas))
 
+    # 1ª instalação (sem pacote antes): a troca que falha não diz "o pacote anterior continua instalado" (revisão adversarial)
+    inst = Inst()
+    pv = novo(inst, g)
+
+    def mover_preso(de, para):
+        raise PermissionError(5, "Acesso negado")
+    pv.mover = mover_preso
+    st, e = rodar(pv)
+    caso("(e) 1ª instalação com o rename preso: erro troca-nova (nenhum pacote antes), nada na pasta",
+         e["estado"] == "erro" and e["motivo"] == "troca-nova" and e["instalada"] is None and not inst.foto(), (e, inst.foto()))
+    inst = Inst()
+    pv = novo(inst, g)
+
+    def trocar_quebrado():
+        raise RuntimeError("inesperado")
+    pv.trocar = trocar_quebrado
+    st, e = rodar(pv)
+    caso("(e) 1ª instalação com erro inesperado: erro troca-nova", e["estado"] == "erro" and e["motivo"] == "troca-nova", e)
+    inst = Inst(VELHO)
+    pv = novo(inst, g)
+    pv.trocar = trocar_quebrado
+    st, e = rodar(pv)
+    caso("(e) erro inesperado com pacote de antes: erro troca (ele continua)", e["estado"] == "erro" and e["motivo"] == "troca"
+         and e["instalada"]["versao"] == VELHA, e)
+
     # queda do processo entre os dois renames: aoede sumiu, aoede.anterior inteira, .nova solta
     inst = Inst()
     escrever_pasta(inst.pacotes / "aoede.anterior", VELHO)

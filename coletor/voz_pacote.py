@@ -313,10 +313,14 @@ class PacoteVoz:
             log.warning("voz: %s", f)
             return
         except Exception as e:   # noqa: BLE001
-            self._por("erro", motivo="troca")
+            self._por("erro", motivo=self._motivo_troca())
             log.exception("voz: %s", type(e).__name__)
             return
         self._por("pronto", motivo=None)
+
+    def _motivo_troca(self):
+        """'troca' (o pacote de antes continua no lugar) ou 'troca-nova' (não havia pacote: a voz segue a do Windows)"""
+        return "troca" if self.pasta.exists() else "troca-nova"
 
     def executar(self):
         versao = self.esperada()
@@ -341,8 +345,8 @@ class PacoteVoz:
         if not A._HEX.match(linha) or h != linha or h != dig_zip:
             raise A.Falha("hash", f"{nome} não confere")
         self._por("conferindo")
-        if A.reparse(self.pacotes) or A.reparse(self.nova):
-            raise A.Falha("troca", "pasta de pacotes é junção")
+        if A.reparse(self.pacotes) or A.reparse(self.nova):   # a recusa() já pega antes da rede; virou junção no download
+            raise A.Falha("desenvolvimento", "pasta de pacotes é junção")
         try:
             A._apagar(self.nova)
             self.nova.mkdir(parents=True)
@@ -396,7 +400,8 @@ class PacoteVoz:
                     volta = False
                     log.error("voz: o pacote anterior não voltou (%s): fica em %s", e2, self.anterior)
             self._apagar_nova()
-            raise A.Falha("troca" if volta else "troca-incompleta", f"{type(e).__name__}: {e}") from None
+            motivo = ("troca" if tinha else "troca-nova") if volta else "troca-incompleta"
+            raise A.Falha(motivo, f"{type(e).__name__}: {e}") from None
 
     # ---- rotas do servidor_local ----
     def rota_post(self, rota, bruto):
