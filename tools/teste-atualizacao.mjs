@@ -427,6 +427,90 @@ const porTexto = (n, t) => botoes(n).find(b => b.textContent === t);
   inst.parar();
 }
 
+// ---------- (r) revisão adversarial da P2 (19/10/2026): cada caso falha no código de antes da correção ----------
+const blocoDe = v => { const c = doc.createElement('div'); A.blocoAtualizacao(c, { cfg: { atualizacao: { verificar: v.estado().ligado } }, definir: () => {}, ui }, v); return c; };
+{
+  // DataStore que não grava (ausente ou set que lança): o limite de 1 por dia vale pela memória da sessão
+  const m = montar({ fase: 'Lobby', ds: { get: () => null, set: () => {} } });
+  await m.v.iniciar();
+  await m.rel.avancar(50 * H);
+  caso(`(r) DataStore que não grava, parado no Lobby 50 h: ${m.g.chamadas.length} consultas (0 h, 24 h e 48 h; antes, 1 por volta do laço)`, m.g.chamadas.length === 3
+    && m.g.chamadas.map(x => (x.em - m.g.chamadas[0].em) / H).join() === '0,24,48', JSON.stringify(m.g.chamadas.map(x => (x.em - m.g.chamadas[0].em) / H)));
+  m.v.parar();
+}
+{
+  // painel montado com a consulta automática em voo: "procurar agora" à vista durante e depois (o fim da automática sem novidade
+  // não repinta; o clique no meio cai na consulta em voo, sem 2º fetch)
+  const m = montar({ resposta: () => 'nunca' });
+  const p = m.v.iniciar();
+  await flush();
+  const emVoo = m.v.estado().verificando;
+  const durante = !!porTexto(blocoDe(m.v), 'procurar agora');
+  await m.rel.avancar(PRAZO_MS);
+  await p;
+  caso('(r) bloco montado durante a consulta automática: "procurar agora" à vista (antes sumia até outro repaint)', emVoo && durante && !!porTexto(blocoDe(m.v), 'procurar agora')
+    && m.g.chamadas.length === 1, JSON.stringify({ emVoo, durante }));
+  m.v.parar();
+}
+{
+  // "procurar agora": o repaint de "Procurando…" já vê a consulta em voo e esconde o botão
+  const m = montar({ ligado: false, resposta: () => ({ status: 200, json: release('v0.2.0') }) });
+  await m.v.iniciar();
+  const vistos = [];
+  m.v.aoMudar(e => vistos.push([e.resultado, e.verificando, !!porTexto(blocoDe(m.v), 'procurar agora')]));
+  await m.v.procurar();
+  caso('(r) "procurar agora": o repaint de "Procurando…" já está em voo e sem o botão; no fim o botão volta', JSON.stringify(vistos) === '[["procurando",true,false],["nova",false,true]]', JSON.stringify(vistos));
+  m.v.parar();
+}
+{
+  // resultado manual antigo não contradiz a consulta automática de depois
+  const m = montar();
+  await m.v.iniciar(); await flush();
+  const r1 = await m.v.procurar();
+  m.g.resposta = () => ({ status: 200, json: release('v0.2.0') });
+  await rodar(m, 30);
+  const e = m.v.estado();
+  const txt = blocoDe(m.v).textContent;
+  caso('(r) "procurar agora" = nenhuma e no dia seguinte a automática acha 0.2.0: o bloco não diz mais "Nenhuma versão nova."', r1 === 'nenhuma' && e.aviso?.versao === '0.2.0'
+    && e.resultado === '' && !txt.includes('Nenhuma versão nova.'), JSON.stringify({ r1, res: e.resultado, txt }));
+  // automática que falha depois não apaga o que se sabe
+  m.v.parar();
+  const m2 = montar({ ligado: false });
+  await m2.v.iniciar();
+  await m2.v.procurar();
+  m2.g.resposta = () => 'rede';
+  m2.cfg.atualizacao.verificar = true; m2.v.sincronizar(m2.cfg);
+  await rodar(m2, 30);
+  caso('(r) automática que falha não apaga o "Nenhuma versão nova." do clique', m2.v.estado().resultado === 'nenhuma' && m2.g.chamadas.length >= 2, `${m2.v.estado().resultado} ${m2.g.chamadas.length}`);
+  m2.v.parar();
+}
+{
+  // chave ligada, "procurar agora" acha 0.2.0, depois a chave desliga: a linha e o ponto somem
+  const m = montar({ resposta: () => ({ status: 200, json: release('v0.2.0') }) });
+  await m.v.iniciar(); await flush();
+  await m.v.procurar();
+  const antes = m.v.estado().aviso?.versao;
+  m.cfg.atualizacao.verificar = false; m.v.sincronizar(m.cfg);
+  caso('(r) chave ligada, "procurar agora" achou e a chave desligou: o aviso some (antes ficava até recarregar)', antes === '0.2.0' && !m.v.estado().aviso
+    && A.linhaVersaoNova(ui, m.v) === null && m.avisos.at(-1)?.aviso === null && m.v.estado().nova?.versao === '0.2.0', JSON.stringify({ antes, aviso: m.v.estado().aviso }));
+  m.v.parar();
+}
+{
+  // a mensagem do "atualizar" é da versão que estava no aviso: versão mais nova depois tira a mensagem velha
+  const m = montar({ resposta: () => ({ status: 200, json: release('v0.2.0') }) });
+  await m.v.iniciar(); await flush();
+  await m.v.atualizar();
+  const antes = A.linhaVersaoNova(ui, m.v).textContent;
+  m.g.resposta = () => ({ status: 200, json: release('v0.3.0') });
+  await rodar(m, 30);
+  const depois = A.linhaVersaoNova(ui, m.v).textContent;
+  caso('(r) "atualizar" citou 0.2.0 e a automática achou 0.3.0: a linha não mistura as duas versões', antes.includes('baixe a versão 0.2.0') && depois.includes('Versão 0.3.0 disponível')
+    && !depois.includes('0.2.0') && m.v.estado().mensagem === '', depois);
+  await m.v.atualizar();
+  caso('(r) "atualizar" de novo cita a 0.3.0', A.linhaVersaoNova(ui, m.v).textContent.includes('baixe a versão 0.3.0'));
+  m.v.parar();
+}
+
 // ---------- (i) PADRAO e mescla ----------
 {
   const mem = new Map([['lol-client.config', { versao: 4, esconderTft: false, coletor: { ligado: true } }]]);

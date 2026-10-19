@@ -60,9 +60,11 @@ const lerFasePadrao = async () => {
 export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f = (...a) => fetch(...a), agendar = (fn, ms) => setTimeout(fn, ms),
   cancelar = t => clearTimeout(t), agora = () => Date.now(), ds = dsPadrao, lerFase = lerFasePadrao, ouvintes = new Set(),
   log = m => console.log('[lol-client]', m) } = {}) {
-  let cfgVivo = cfg, fase = null, emVoo = null, laco = null, ligadoAntes = null;
-  // só da sessão: o resultado do último "procurar agora" e o que a linha mostra (sobrevive à remontagem do painel)
-  const tela = { resultado: '', notas: false, mensagem: '' };
+  // ultimaEm: a hora da última tentativa também em memória (DataStore ausente ou que não grava não vira 1 GET por virada de fase)
+  let cfgVivo = cfg, fase = null, emVoo = null, laco = null, ligadoAntes = null, ultimaEm = 0;
+  // só da sessão: o resultado do último "procurar agora" e o que a linha mostra (sobrevive à remontagem do painel); a mensagem do
+  // "atualizar" vale só para a versão em mensagemDe (versão mais nova vista depois apaga a mensagem velha)
+  const tela = { resultado: '', notas: false, mensagem: '', mensagemDe: '' };
   let atualizador = null;
 
   const ligado = () => !!cfgVivo?.atualizacao?.verificar;
@@ -74,18 +76,19 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
     const s = salvo();
     return s && compararVersoes(s.versao, versao) === 1 ? { versao: lerVersao(s.versao).join('.'), tag: String(s.tag || ''), corpo: typeof s.corpo === 'string' ? s.corpo : '' } : null;
   };
-  // a linha e o ponto: com a chave ligada, ou depois de um "procurar agora" que achou versão nova nesta sessão (desligar a chave
-  // some com o aviso do dia a dia; o bloco Atualizações segue mostrando a versão vista)
+  // a linha e o ponto: com a chave ligada, ou depois de um "procurar agora" feito com a chave já desligada que achou versão nova
+  // nesta sessão (desligar a chave apaga o resultado 'nova' de antes: sincronizar)
   const aviso = () => (ligado() || tela.resultado === 'nova' ? nova() : null);
   const vencida = () => {
-    const em = Number(salvo()?.em) || 0;
+    const em = Math.max(ultimaEm, Number(salvo()?.em) || 0);
     const t = agora();
     return !em || t - em >= DIA_MS || em > t + 60000;   // relógio que voltou não trava a consulta para sempre
   };
   const podeAuto = () => ligado() && repoValido(repo) && FASES_CONSULTA.includes(fase) && vencida();
 
+  const mensagem = () => (tela.mensagem && tela.mensagemDe === (nova()?.versao || '') ? tela.mensagem : '');
   const estado = () => ({ ligado: ligado(), versao, repo, fase, verificando: !!emVoo, salvo: salvo(), nova: nova(), aviso: aviso(),
-    resultado: tela.resultado, notas: tela.notas, mensagem: tela.mensagem, atualizador: typeof atualizador === 'function' });
+    resultado: tela.resultado, notas: tela.notas, mensagem: mensagem(), atualizador: typeof atualizador === 'function' });
   const avisar = () => { const e = estado(); for (const fn of ouvintes) try { fn(e); } catch (err) { console.error('[lol-client] atualização', err); } };
 
   // GET com prazo -> {status, dados}; status 0 = sem resposta (rede, prazo, CORS)
@@ -118,9 +121,10 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
     const antes = salvo() || {};
     const t0 = agora();
     // a hora da tentativa vai antes do fetch: erro ou recarga no meio não fazem a consulta repetir no mesmo dia
+    ultimaEm = t0;
     ds.set(CHAVE_ATUALIZACAO, { ...antes, repo, em: t0 });
-    if (manual) { tela.resultado = 'procurando'; avisar(); }
     const tinhaAviso = aviso()?.versao || '';
+    const tinhaResultado = tela.resultado;
     emVoo = pedir().then(r => {
       const rel = r.status === 200 ? lerRelease(r.dados) : null;
       if (!rel) return 'falhou';   // calado: 404 (repositório ainda não existe), 403, rede, prazo, resposta malformada
@@ -130,10 +134,15 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
       return cmp === 1 ? 'nova' : 'nenhuma';
     }).catch(() => 'falhou').then(res => {
       emVoo = null;
+      // a automática que respondeu apaga o resultado de um clique antigo ("Nenhuma versão nova." com a linha dizendo 0.2.0);
+      // a que falhou não apaga o que se sabe
       if (manual) tela.resultado = res;
-      if (manual || (aviso()?.versao || '') !== tinhaAviso) avisar();
+      else if (res !== 'falhou' && tela.resultado !== 'procurando') tela.resultado = '';
+      if (manual || tela.resultado !== tinhaResultado || (aviso()?.versao || '') !== tinhaAviso) avisar();
       return res;
     });
+    // o repaint de "Procurando…" já vê a consulta em voo (o botão some só durante o clique dele)
+    if (manual) { tela.resultado = 'procurando'; avisar(); }
     return emVoo;
   }
 
@@ -156,6 +165,8 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
     if (c) cfgVivo = c;
     const agoraLigado = ligado();
     if (agoraLigado === ligadoAntes) return null;
+    // desligou: o 'nova' de um "procurar agora" feito com a chave ligada não segura a linha nem o ponto
+    if (ligadoAntes && !agoraLigado && tela.resultado === 'nova') tela.resultado = '';
     ligadoAntes = agoraLigado;
     avisar();
     return agoraLigado ? tentar('chave ligada') : null;
@@ -175,6 +186,7 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
   async function atualizar() {
     const n = nova();
     if (!n) return '';
+    tela.mensagemDe = n.versao;
     if (typeof atualizador === 'function') {
       try { const t = await atualizador({ versao: n.versao, tag: n.tag, repo }); tela.mensagem = typeof t === 'string' ? t : ''; }
       catch (e) { tela.mensagem = 'Não foi possível atualizar agora: tente de novo mais tarde.'; console.error('[lol-client] atualizar', e); }
@@ -246,5 +258,7 @@ export const blocoAtualizacao = (corpo, { cfg, definir, ui }, v = verificador) =
   corpo.append(ui.explica(`Versão instalada: ${e.versao}.${okEm ? ` Última consulta: ${quando(okEm)}.` : ''}`));
   const res = e.resultado === 'nova' && e.nova ? `Versão ${e.nova.versao} disponível.` : TEXTO_RESULTADO[e.resultado] || '';
   if (res) corpo.append(ui.explica(res));
-  if (!e.verificando) corpo.append(ui.linha(botao('procurar agora', 'lc-versao-procurar', () => { v.procurar(); })));
+  // some só durante o clique dele ("Procurando…"); com a automática em voo fica (o clique espera ela, sem 2º fetch): o fim da
+  // automática sem novidade não repinta, e um botão escondido nela não voltaria
+  if (e.resultado !== 'procurando') corpo.append(ui.linha(botao('procurar agora', 'lc-versao-procurar', () => { v.procurar(); })));
 };
