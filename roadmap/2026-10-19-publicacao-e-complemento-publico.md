@@ -11,6 +11,10 @@ Estado (19/10/2026): plano escrito; nada executado. Depende da Fase 1 do plano P
 P0-b, c e d medidos em 19/10 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md)); P0-a pendente
 (orquestrador, com o Gabriel). Achados que mudam fases: `dados/` dentro da pasta trocada (P3/P4), `travadas` sem proteção,
 `/ola` sem chave de edição, `ddragon` fora da origem fixa.
+Revisão adversarial do P0 (19/10, 7 achados reais, tabela no relatório): o código da lista leva 31 citações de 8 gameIds
+dele nos comentários (varredura nova `tools/varrer-publico.py` reprova; P4 tira), `coletor.py` sai ocioso em 10 min sem
+o gatilho e o vigia (P4.3), faixas de calibração do chat fixas em 1080 de altura (P4.2), `ensaio-coach.py` não roda na
+lista (P4.5), `vida.py` vai junto; nome tirado do `docs/ITENS.md` e de 1 string do `aviso_partida.py`.
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
@@ -99,10 +103,16 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 2. Varredura que reprova a foto: credencial (padrões do `guarda-segredo`, `RGAPI-`, `gho_`, token, `-RiotClientAuthToken`),
    "Xerekton", puuid, `C:\Dev`, `C:\Users\`, e-mail, nome de projeto Nomura, chave do Doppler. "Gabriel" em comentário
    passa (decisão dele); em texto visível ou literal reprova (Fase 8 do plano Pengu).
+   **Já existe (revisão do P0, 19/10):** `tools/varrer-publico.py` (`varrer(raiz, arquivos, banco)`; prova
+   `tools/teste-varrer-publico.py`); o `publicar.py` chama ela sobre a foto montada, nunca sobre o privado. Regras que a
+   revisão fixou: **partida** = número de 10 dígitos, `PLATAFORMA_<n>` e qualquer `game_id` do `dados/lol.db` (aberto
+   `mode=ro`); **puuid** = o valor (78 caracteres ou UUID) e o puuid e o Riot ID do `meta` do banco, nunca a palavra
+   `puuid` (é nome de campo em 7 módulos); Python: comentário **e docstring** passam, string e f-string reprovam; JS, CSS,
+   HTML: comentário passa; `.md` da lista reprova sempre. Varre os 21 módulos, `painel/` e os 4 `.md` (não só a voz).
 3. Zips e `SHA256SUMS.txt` em `dist/`; commit da foto em `dist/publico/` e `gh release create` **só com `--publicar`**;
    sem a opção, é ensaio (monta, varre, mostra o que entraria).
-4. Prova: `tools/teste-publicar.py` com uma árvore falsa (arquivo com segredo plantado reprova; arquivo fora da lista não
-   entra; zip reabre e todo `import` do plugin resolve dentro dele).
+4. Prova: `tools/teste-publicar.py` com uma árvore falsa (arquivo com segredo plantado reprova; `# partida 3293149183`
+   plantado num módulo reprova; arquivo fora da lista não entra; zip reabre e todo `import` do plugin resolve dentro dele).
 
 ### P2 — aviso de versão nova no plugin
 
@@ -133,14 +143,35 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 
 1. Pasta do complemento montada pela lista do P0-d; `/ola` sem `mentor`, `expansoes`, `resumos`; nada da Riot API
    (tela de carregamento fica fora da 1ª versão, até a medição B do plano Pengu).
+   **gameIds nos comentários (revisão do P0):** 28 linhas em 9 módulos citam 8 partidas (6 dele no banco); pela
+   match-v5 qualquer um chega à conta dele. Decisão técnica: **editar os comentários no próprio privado** (o número vira
+   "partida de 15/10/2026"; o número continua nos roadmaps e na ARMADILHAS, que não vão), não transformar o código na
+   hora de publicar (a foto fica igual ao privado byte a byte). Confiança média-alta. Reverte: tirar só na cópia do
+   `publicar.py`, com a varredura rodando depois da troca. Pronto quando `python -I tools/varrer-publico.py` sai 0.
 2. Config por usuário no lugar do que é fixo da máquina dele (monitor da 2ª tela, `janela_painel.py:25-26`; caminhos).
+   **Faixas de calibração do chat** (`feiticos.FAIXAS_CALIBRAR`, revisão do P0): coordenadas absolutas de 2560×1080,
+   `calibrar_chat` só corta na borda; em 1440 ou 2160 de altura o chat padrão fica abaixo de y=1080, a calibração devolve
+   `None` para sempre (só "não achou o chat na tela" no log) e o `/ola` segue anunciando `feiticos`. Derivar as faixas da
+   proporção do monitor do jogo, com a escala do OCR baixando para a faixa × escala ficar abaixo de 2600 px
+   (`Windows.Media.Ocr`); prova com print falso de 2560×1440 e 3840×2160, e a leitura em 2560×1080 igual à de hoje.
 3. `instalar.cmd` sem admin: confere Python (3.12+; sem ele, diz onde baixar), cria o venv em
    `%LOCALAPPDATA%\lol-client\complemento\venv`, `pip install -r requirements.txt` (versões fixas), copia o plugin para a
    pasta de plugins do Pengu (achada pelo registro de instalação ou perguntada), cria o atalho na pasta Inicializar do
    Windows (`pythonw`, sem janela) que espera o client. Nada de tarefa agendada nem gatilho que pede admin.
+   **Esperar o client (revisão do P0):** o `coletor.py` sai sozinho com `--ocioso-min` padrão 10 ("ocioso 10 min sem
+   client"); na máquina dele o gatilho 4688 relança quando o client abre e o vigia relança se cair, e os dois ficam fora.
+   O atalho passa `--ocioso-min inf` (medido em 19/10: `inf` espera para sempre, `0` sai na hora, 10 sai em 10 min).
+   **No lugar do vigia:** decisão técnica, um relançador no próprio atalho (laço Python que sobe o `coletor.py` e o sobe
+   de novo se sair, espera crescente de 5 s a 5 min, sem duplicar: a trava do coletor já recusa a 2ª instância). Confiança
+   média. Reverte: a tarefa do vigia (`tools/vigia-coletor.py`, já sem admin) entra no pacote.
 4. Coach calado em partida assistida já vem pronto (`Coletor.assistindo`).
 5. Prova: instalação limpa numa pasta de teste com `LOCALAPPDATA` apontado para o scratchpad; `ensaio-coach.py` contra o
-   complemento montado.
+   complemento montado. **O ensaio de hoje não roda na lista (revisão do P0):** importa `riotapi`, `carregamento` e
+   `mentor` sem proteção (linhas 97, 265-266), exige a chave `carregamento` no `/estado` (398), lê a gravação local
+   `temp/gravacao/20261013-071040` e usa a porta 8766. Fazer uma variante `--publico` sem esses imports nem a chave,
+   com as fábricas `carregamento`, `mentor` e `vitrine` ausentes (o caminho real do complemento), porta de teste
+   8831–8840, rodada com `python -I` e `sys.path` só na pasta montada (senão enxerga o `coletor/` inteiro do repo e não
+   prova a lista); a mesma variante num Python 3.12 prova o "3.12+" do `instalar.cmd`.
 
 ### P5 — voz: botão que baixa os áudios
 

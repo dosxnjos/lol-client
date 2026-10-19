@@ -900,6 +900,10 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   movido, escala, HUD) não deu para provar depois: nenhum print da tela daquelas partidas. Hoje o `LeitorChat`
   recalibra quando o recorte passa ~60 s sem linha `mm:ss` e o coach resume as contagens no log (a cada 5 min e no fim):
   [COLETOR](COLETOR.md) § Feitiços, "Recorte que não vê o chat". Laço que lê e não acha nada também tem de dizer isso.
+- **Calibração do chat só acha em 1080 de altura** → `feiticos.FAIXAS_CALIBRAR` são coordenadas absolutas de 2560×1080
+  e `calibrar_chat` só corta na borda: em 1440 ou 2160 de altura o chat padrão fica abaixo de y=1080, a calibração dá
+  `None` para sempre e a leitura de feitiço pelo chat morre (só o log diz). Outra resolução precisa das faixas derivadas
+  da tela, com faixa × escala do OCR abaixo de 2600 px (P4.2 do plano da publicação; revisão de 19/10/2026).
 - **Painel pós-jogo não deixa rastro de sucesso** → `fechar()` remove `#lc-posjogo` sem log; depois
   que o Gabriel fecha, não dá para provar de fora que abriu sozinho (13/10/2026).
 - **Overlay próprio aparece no print do minimapa** → o `mss` (BitBlt com `CAPTUREBLT`) captura
@@ -1086,6 +1090,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **Caminho da Riot fixo em `C:\Games\Riot Games`** (instalação desta máquina) → `coletor.LOCKFILE_PADRAO` tem reserva
   (pasta do `LeagueClientUx.exe`), mas `teclas.CONFIG_LOL` e `minimapa.GAME_CFG` não: na instalação padrão da Riot
   (`C:\Riot Games`) não acham `game.cfg`/`input.ini` (P0-d do plano da publicação, 19/10/2026).
+- **Coletor sem gatilho e sem vigia some depois de 10 min** → `--ocioso-min` padrão 10: sem client nesse tempo ele sai
+  ("encerrado (ocioso 10 min sem client)") e só o gatilho 4688 e o vigia desta máquina o trazem de volta. Instalação sem
+  eles passa `--ocioso-min inf` (`0` sai na hora). Medido em 19/10/2026 (revisão do P0 da publicação).
+- **gameId em comentário entrega a conta** → um número de partida (`partida 3293…`) basta para a match-v5 da Riot devolver
+  os participantes, e o único comum a várias é o dono. Arquivo que vai para o público passa por
+  `python -I tools/varrer-publico.py` (19/10/2026); a palavra `puuid` e o nome em comentário passam, o valor não.
 - **Tarefa com `pythonw` abre janela de console para cada filho** (`doppler`, `ffmpeg`, `py`, `tasklist`): processo sem
   console que lança programa de console dá a ele um console novo, visível. O `tools\voz-agendada.py` lança o gerador
   com `CREATE_NO_WINDOW` (console oculto) e os netos herdam esse console: medido em 13/10/2026, `GetConsoleWindow()` = 0

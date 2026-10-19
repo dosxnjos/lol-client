@@ -168,7 +168,7 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
 | Registro das expansões do compacto | plugin coleta, coletor grava | G | medição de desenvolvimento (tarefa #37); nada sai sem o complemento anunciar `expansoes` |
 | Config do plugin e espelho do `cfg.coach` | DataStore + `POST /config` | P (config), C (espelho) | o dono já é o DataStore; o espelho só vai a quem anuncia `coach` |
 | Banco SQLite `dados/lol.db` | coletor | G (e C, se o coach gravar) | MCP e mentor leem; o plugin passa a ter o próprio resumo no DataStore |
-| MCP, `riotapi.py`, `coletar-meta.py`, vitrine, travadas, vida/vigia | coletor | G | credencial, diagnóstico ou ferramenta do Claude dele |
+| MCP, `riotapi.py`, `coletar-meta.py`, vitrine, travadas, vigia (`tools/vigia-coletor.py`) | coletor | G | credencial, diagnóstico ou ferramenta do Claude dele; o `vida.py` vai no complemento (o `coletor.py` importa sem `try`, linhas 69 e 814; P0 da publicação) |
 
 ## Linhas que não se cruzam (valem para todas as fases)
 
@@ -518,8 +518,9 @@ assistida), que é dependência.
 ## Fica de fora (e por quê)
 
 - Mentor, MCP, Riot API, `coletar-meta.py`: credencial do Gabriel (camada G).
-- Vitrine, medidor de travadas, `medir-compacto`, registro das expansões, vida e vigia: diagnóstico de desenvolvimento ou
-  do coach dele; a tarefa #37 decide quando o medidor desliga.
+- Vitrine, medidor de travadas, `medir-compacto`, registro das expansões e vigia: diagnóstico de desenvolvimento ou
+  do coach dele; a tarefa #37 decide quando o medidor desliga. O `vida.py` **não** fica de fora: o `coletor.py` importa sem
+  `try` (P0 da [publicação](2026-10-19-publicacao-e-complemento-publico.md)); o que substitui o vigia no público é do P4.3 de lá.
 - Voz sintetizada no plugin (`speechSynthesis` tem Maria e Daniel pt-BR, medido): sem gatilho no plugin (o motor de avisos é
   Python e a partida acontece com o client atrás); volta à mesa se a medição A passar e alguém quiser avisos só da Live
   Client no plugin.

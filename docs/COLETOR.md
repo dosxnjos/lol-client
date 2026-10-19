@@ -16,14 +16,17 @@ Visão de uso (o que o coach faz, ligar e desligar, instalar e desinstalar): [RE
    Champ select: § Retrato do champ select. O servidor local (8765) sobe junto com o coletor e o
    coach liga e desliga pelas fases: § Coach na partida.
 4. Websocket caiu (recarga da interface) → reconecta. Sem lockfile ou LCU muda por
-   `--ocioso-min` (padrão 10) → grava "encerrado (ocioso …)" e sai com rc 0.
+   `--ocioso-min` (padrão 10) → grava "encerrado (ocioso …)" e sai com rc 0. `--ocioso-min inf` espera o client para
+   sempre (o atalho do complemento público, que não tem gatilho nem vigia); `0` sai na hora (medido em 19/10/2026).
 
 Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fase …",
 "backfill: …", "encerrado (motivo)" e "coletor saindo (motivo; vivo há N min)". Morte e vigia: § Vida, queda e vigia.
 
 Bibliotecas com versão fixa: `requirements-complemento.txt`. O que o complemento coach público leva (21 dos 28 módulos;
 fora `mentor`, `riotapi`, `carregamento`, `draft`, `vitrine`, `travadas`, `expansoes`) e os pontos de corte: relatório
-[P0 da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md) § P0-d.
+[P0 da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md) § P0-d. O `vida.py` vai
+junto (o `coletor.py` importa sem `try`); o vigia não. Dado pessoal nesses arquivos (gameId, nome em texto literal, Riot ID,
+credencial, caminho): `python -I tools/varrer-publico.py` reprova; prova `tools/teste-varrer-publico.py`.
 
 ## Vida, queda e vigia (15/10/2026)
 
