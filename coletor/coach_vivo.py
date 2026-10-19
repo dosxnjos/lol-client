@@ -23,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 import ao_vivo  # noqa: E402
 import avisos  # noqa: E402
 import banco  # noqa: E402
+import instalacao  # noqa: E402
 import janela_painel  # noqa: E402
 import servidor_local  # noqa: E402
 
@@ -788,21 +789,29 @@ class Coach:
         self.av.ao_ler(self._ao_ler)   # uma vez só: cada partida troca o _Partida, não o ouvinte
         self.car = None
         self.mentor = None
-        try:
-            self.mentor = self.fab["mentor"](self.db, self.ultimo_bruto)
-            self.mentor.ler_estado = self.estado   # quem está parado na fog vai marcado no prompt ao vivo
-        except Exception as e:
-            self.avisa("mentor", e)
+        # edição pública (instalacao.PUBLICA, P4 da publicação): mentor e draft são da instalação do mantenedor (módulos fora
+        # do zip); nem tenta, nem pendura (/ola sem "mentor" nem "draft")
+        if not instalacao.PUBLICA:
+            try:
+                self.mentor = self.fab["mentor"](self.db, self.ultimo_bruto)
+                self.mentor.ler_estado = self.estado   # quem está parado na fog vai marcado no prompt ao vivo
+            except Exception as e:
+                self.avisa("mentor", e)
+        rotas = {"/revisao/": self._rota_revisao}
+        if not instalacao.PUBLICA:
+            rotas["/draft"] = self._rota_draft
         self.srv = servidor_local.ServidorLocal(
             self.estado, db=self.db, porta=porta, config=config,
             mentor_http=self.mentor.rota_http if self.mentor else None, ao_config=self.configurar,
-            rotas_get={"/draft": self._rota_draft, "/revisao/": self._rota_revisao},
+            rotas_get=rotas,
             garantir_partida=self.garantir_partida,
             # módulos do coach ao vivo anunciados no aperto de mão (GET /ola); as rotas o servidor calcula sozinho
             recursos=servidor_local.RECURSOS_COACH)
         self._busca = {}   # gameId -> monotonic da última busca avulsa na LCU (no máximo 1 a cada 3 s)
         self._trava_busca = threading.Lock()
         self.jan = self.fab["janela"](f"http://127.0.0.1:{porta}/", lambda: self.cfg()["painelAoVivo"])
+        if isinstance(self.jan, janela_painel.JanelaPainel):   # monitor escolhido na config deste coach (monitorPainel)
+            self.jan.monitor = lambda: self.cfg()["monitorPainel"]
         self.servidor_no_ar = False
         self._selo = {}    # campeão -> (monotonic, matchups, traumas) do GET /draft/<campeão>
         self.assistidas = set()   # gameIds de partidas assistidas (espectador): nada liga de novo nelas (D2 de 17/10/2026)
@@ -1031,6 +1040,8 @@ class Coach:
     # -- champ select --
     def champ_select(self, sessao):
         """rota provável e força do draft a cada sessão (o selo do plugin lê GET /draft)"""
+        if instalacao.PUBLICA:   # draft.py fica na instalação do mantenedor; o plugin calcula o selo sozinho
+            return
         try:
             if self._draft is None:
                 import draft

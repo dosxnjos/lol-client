@@ -1,6 +1,7 @@
 # coletor do lol-client: backfill do histórico + websocket da LCU -> dados/lol.db
-# nasce com o LeagueClientUx (tarefa "lol-client-coletor") e sai sozinho após
-# --ocioso-min minutos sem client. A credencial do lockfile só vive em memória.
+# nasce com o LeagueClientUx (tarefa "lol-client-coletor") e sai sozinho após --ocioso-min minutos sem client; no
+# complemento público quem sobe é o relançador do atalho da Inicializar (relancador.py, --ocioso-min inf).
+# A credencial do lockfile só vive em memória.
 import argparse
 import asyncio
 import base64
@@ -20,8 +21,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import banco  # noqa: E402
+import instalacao  # noqa: E402
 
-LOCKFILE_PADRAO = Path(r"C:\Games\Riot Games\League of Legends\lockfile")
 DADOS = banco.RAIZ / "dados"
 TRAVA = DADOS / "coletor.lock"
 LOG = DADOS / "coletor.log"
@@ -73,19 +74,24 @@ def configurar_log(console=False):
 # ---------- lockfile e LCU ----------
 
 _ultima_busca = [-60.0]
-_achado = [None]
 
 
 def achar_lockfile():
-    """lockfile padrão; senão, pelo --install-directory do LeagueClientUx.exe em execução
-    (no máximo 1 busca por minuto: é um powershell novo a cada vez)"""
-    if LOCKFILE_PADRAO.exists():
-        return LOCKFILE_PADRAO
-    if _achado[0] and _achado[0].exists():
-        return _achado[0]
+    """lockfile nas pastas do LoL conhecidas (instalacao.pastas_lol: a já achada, as do RiotClientInstalls.json da Riot e a
+    padrão da Riot); senão, pelo --install-directory do LeagueClientUx.exe em execução (no máximo 1 busca por minuto: é um
+    powershell novo a cada vez). A pasta achada vale para o game.cfg e o input.ini (instalacao.aprender)"""
+    for pasta in instalacao.pastas_lol():
+        cand = pasta / "lockfile"
+        if cand.exists():
+            instalacao.aprender(pasta)
+            return cand
     if time.monotonic() - _ultima_busca[0] < 60:
         return None
     _ultima_busca[0] = time.monotonic()
+    # sem o LeagueClientUx.exe aberto, nada a procurar: o atalho público espera o client o dia inteiro (--ocioso-min inf)
+    # e sem isto subia um powershell por minuto (Toolhelp32: milissegundos, nenhum programa lançado)
+    if instalacao.processo_existe("LeagueClientUx.exe") is False:
+        return None
     try:
         saida = subprocess.run(
             ["powershell", "-NoProfile", "-Command",
@@ -102,7 +108,7 @@ def achar_lockfile():
         pasta = resto[1:].split('"', 1)[0] if resto.startswith('"') else resto.split('"', 1)[0].split(" --", 1)[0]
         cand = Path(pasta.strip()) / "lockfile"
         if cand.exists():
-            _achado[0] = cand
+            instalacao.aprender(cand.parent)
             return cand
     return None
 
@@ -496,7 +502,7 @@ def _registro_expansoes(coach):
     """POST /compacto/expansoes (registro das saídas do client compacto, passo 15 do plano do compacto) pendurado no
     servidor do coach. Sem servidor: o plugin guarda em memória e reenvia. Falha aqui nunca derruba o coletor."""
     srv = getattr(coach, "srv", None)
-    if srv is None:
+    if srv is None or instalacao.PUBLICA:   # edição pública: o registro é da instalação do mantenedor (módulo fora do zip)
         return False
     try:
         import expansoes
@@ -824,9 +830,15 @@ class Coletor:
             if self.coach:
                 await self.coach.fase(fase, gid, fila, self.lcu, assistida=True)
             return
-        if fase == "InProgress":
-            import travadas      # medidor de travadas: processo próprio, sai quando o jogo fecha (COLETOR § Medidor)
-            travadas.iniciar(gid, db=getattr(self.args, "db", None))   # só com o banco real (ensaio/teste: não)
+        if fase == "InProgress" and not instalacao.PUBLICA:
+            # medidor de travadas: processo próprio, sai quando o jogo fecha (COLETOR § Medidor); só na instalação do
+            # mantenedor (o módulo e o tools/medir-travadas.py não vão no complemento público). Falha aqui nunca impede o
+            # coach.fase() da partida, logo abaixo (P0-d: sem o try, ImportError em todo InProgress)
+            try:
+                import travadas
+                travadas.iniciar(gid, db=getattr(self.args, "db", None))   # só com o banco real (ensaio/teste: não)
+            except Exception as e:
+                log.warning("medidor de travadas fora: %s: %s", type(e).__name__, e)
         if fase in FASES_LOBBY or (fase == "ChampSelect" and not self.cs.prefs):
             await self.ler_preferidas()
         if self.cs.ativo and fase in FASES_JOGO:

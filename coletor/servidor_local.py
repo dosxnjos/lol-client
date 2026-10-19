@@ -17,9 +17,11 @@
 #   POST /compacto/expansoes registro das saídas do client compacto (expansoes.rota_expansoes; coletor.py pendura)
 #   POST /atualizar        {versao}: baixa da origem fixa, confere hash e troca plugin e complemento (atualizar.Atualizador;
 #                          coletor.py pendura, junto com GET /atualizar/estado); recurso "atualizar" no /ola
-#   GET  /ola              aperto de mão do plugin (pengu/coach.js): {app, versao, recursos}; recursos calculados na hora
-#                          do que está pendurado (rotas e o que o dono declarou), nunca lista fixa. Com Origin do client ou
-#                          do Pengu conta como contato do plugin (reserva do aceite, coletor.py _sinal_aceite)
+#   GET  /ola              aperto de mão do plugin (pengu/coach.js): {app, versao, recursos, edicao, pacote}; recursos
+#                          calculados na hora do que está pendurado (rotas e o que o dono declarou), nunca lista fixa, menos
+#                          o que a edição pública não leva (instalacao.ocultos); versao = a da ponte (VERSAO_PONTE), pacote =
+#                          a do pengu/versao.js. Com Origin do client ou do Pengu conta como contato do plugin (reserva do
+#                          aceite, coletor.py _sinal_aceite)
 # CORS: só origem local (o client roda em https://127.0.0.1:<porta da LCU>; o Pengu em
 # https://plugins); site qualquer no navegador não lê nem muda nada. Host fora de 127.0.0.1/localhost
 # é recusado (rebinding de DNS).
@@ -35,6 +37,7 @@ from urllib.parse import parse_qs, urlsplit
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import avisos  # noqa: E402
 import banco  # noqa: E402
+import instalacao  # noqa: E402
 
 PORTA = 8765
 # aperto de mão (GET /ola): o plugin só fala com quem responde este app (porta 8765 de outro programa = ausente)
@@ -79,7 +82,13 @@ CONFIG_PADRAO = {
     "overlayCor": "vermelho",      # cor da mancha do jungler: overlay_minimapa.CORES
     "overlayForca": "normal",      # opacidade: overlay_minimapa.FORCAS (normal = ALPHA/ALPHA_MIN)
     "overlaySuave": True,          # a mancha cresce e some aos poucos (TAU_S); desligado = muda na hora
+    # monitor do painel ao vivo (P4 da publicação): "" = o secundário de menor número (\\.\DISPLAY1 antes de DISPLAY2);
+    # um nome de dispositivo (ex.: "\\.\DISPLAY3") escolhe outro secundário. Antes era DISPLAY1 fixo (o desta máquina)
+    "monitorPainel": "",
 }
+# só na instalação do mantenedor (instalacao.SO_COMPLETA): na edição pública ficam desligadas mesmo que o plugin mande
+# true (o PADRAO.coach do plugin liga as duas e o POST /config grava o cfg inteiro dele)
+SO_COMPLETA_CFG = ("carregamento", "mentor")
 ATRASO_MAX_S = 60
 # valores aceitos das chaves de texto; fora disto = o padrão (na leitura do arquivo e no POST). As do overlay
 # são as chaves de overlay_minimapa.CORES/FORCAS (conferido pelo teste-alertas.py; o servidor não importa o
@@ -106,7 +115,15 @@ def ler_config(caminho=CONFIG):
         a = _atraso(salvo["aceiteAtrasoS"])
         cfg["aceiteAtrasoS"] = CONFIG_PADRAO["aceiteAtrasoS"] if a is _INVALIDO else a
     _escolhas_validas(cfg)
+    _edicao(cfg)
     return {k: list(v) if isinstance(v, list) else v for k, v in cfg.items()}  # lista do padrão não vaza
+
+
+def _edicao(cfg):
+    """edição pública: o que não vai no complemento fica desligado na leitura e na gravação"""
+    if instalacao.PUBLICA:
+        for k in SO_COMPLETA_CFG:
+            cfg[k] = False
 
 
 def _escolhas_validas(cfg):
@@ -151,6 +168,7 @@ def salvar_config(parcial, caminho=CONFIG):
             elif k in CONFIG_PADRAO and type(v) is type(CONFIG_PADRAO[k]):
                 cfg[k] = [x for x in v if isinstance(x, str)] if isinstance(v, list) else v
         _escolhas_validas(cfg)
+        _edicao(cfg)
         caminho = Path(caminho)
         caminho.parent.mkdir(parents=True, exist_ok=True)
         tmp = caminho.with_suffix(".tmp")
@@ -357,7 +375,9 @@ class _Handler(BaseHTTPRequestHandler):
                 self._enviar(200, (PAINEL / nome).read_bytes(), tipo)
             elif rota == "/ola":
                 self._contato(rota)
-                self._enviar(200, {"app": APP, "versao": VERSAO_PONTE, "recursos": srv.recursos()})
+                self._enviar(200, {"app": APP, "versao": VERSAO_PONTE, "recursos": srv.recursos(),
+                                   "edicao": "publica" if instalacao.PUBLICA else "completa",
+                                   "pacote": instalacao.versao()})
             elif rota == "/estado":
                 self._enviar(200, srv.estado())
             elif rota == "/config":
@@ -375,7 +395,7 @@ class _Handler(BaseHTTPRequestHandler):
                 self._enviar(200 if r else 404, {"gameId": gid, "mentor": r})
             elif rota.startswith(("/contexto/", "/licoes/")):
                 self._enviar(*srv.licoes_ou_contexto(rota))
-            elif rota == "/resumos":
+            elif rota == "/resumos" and "resumos" not in instalacao.ocultos():
                 self._enviar(*srv.resumos(self.path))
             elif any(rota.startswith(p) for p in srv.rotas_get):
                 prefixo = next(p for p in srv.rotas_get if rota.startswith(p))
@@ -485,7 +505,7 @@ class ServidorLocal:
                               ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes"), ("/atualizar", "atualizar")):
             if any(p.startswith(prefixo) for p in pendurados):
                 r.add(nome)
-        return sorted(r)
+        return sorted(r - instalacao.ocultos())   # edição pública: nada do que fica só na instalação do mantenedor
 
     def licoes_ou_contexto(self, rota):
         """GET /contexto/<gameId> (o JSON que o pós-jogo do client junta às lições) e /licoes/<gameId>"""
