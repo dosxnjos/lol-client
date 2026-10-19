@@ -37,6 +37,9 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   28/28, Python 29/29 sem `ensaio-coach`/`teste-expansoes` por porta, grep de aceite vazio); falta recarregar o plugin,
   reiniciar o coletor e apagar `dados/edge-chat` com o Edge fechado:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-2.md).
+- **Revisão adversarial da Fase 2 (19/10/2026):** 2 achados, os 2 reais, só doc (ARMADILHAS): o chat ao lado não abre
+  conversa sozinho (frase velha das janelas virou história) e **`5971068` só reverte junto com `2d523bf`** (o revert
+  sozinho aplica limpo e derruba o plugin inteiro pelo import do `chat-ponte.js` apagado); tabela no relatório.
 
 ## Decisões do Gabriel (19/10/2026)
 
