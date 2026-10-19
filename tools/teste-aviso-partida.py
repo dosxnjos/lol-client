@@ -559,17 +559,19 @@ def aperto_de_mao():
     caso("H4 reserva desarmada (sem /aceite/): 'aceite-reserva' fora", "aceite-reserva" not in antes)
     sinal = coletor._sinal_aceite(coach)
     coletor._registro_expansoes(coach)
-    cheio.rotas_post["/chat/"] = lambda r, b: (200, {})
     rec = cheio.recursos()
-    caso("H5 /aceite/, /compacto/ e /chat/ pendurados: aceite-reserva, expansoes e chat-janelas anunciados",
-         {"aceite-reserva", "expansoes", "chat-janelas"} <= set(rec) and "resumos" not in rec, rec)
-    original = coletor._chat_padrao
-    coletor._chat_padrao = lambda *a, **k: None   # sem a thread das janelas do chat neste teste
-    try:
-        args = SimpleNamespace(db=str(TMP / "teste.db"), ocioso_min=10, lockfile=None, config=str(TMP / "cfg-ola.json"))
-        col = coletor.Coletor(args, SimpleNamespace(srv=cheio, servidor_no_ar=True), fab_aviso=lambda *a, **k: None)
-    finally:
-        coletor._chat_padrao = original
+    # as janelas do chat (rotas /chat/, recurso chat-janelas) saíram em 19/10/2026 (Fase 2 do plano plugin Pengu primeiro):
+    # nem um /chat/ pendurado por engano volta a anunciar o recurso
+    cheio.rotas_post["/chat/"] = lambda r, b: (200, {})
+    rec_chat = cheio.recursos()
+    del cheio.rotas_post["/chat/"]
+    caso("H5 /aceite/ e /compacto/ pendurados: aceite-reserva e expansoes anunciados; chat-janelas nunca (aposentado)",
+         {"aceite-reserva", "expansoes"} <= set(rec) and "resumos" not in rec and "chat-janelas" not in rec_chat, [rec, rec_chat])
+    args = SimpleNamespace(db=str(TMP / "teste.db"), ocioso_min=10, lockfile=None, config=str(TMP / "cfg-ola.json"))
+    col = coletor.Coletor(args, SimpleNamespace(srv=cheio, servidor_no_ar=True), fab_aviso=lambda *a, **k: None)
+    caso("H5b o Coletor não monta mais as janelas do chat (nem atributo chat, nem rota /chat/ pendurada)",
+         not hasattr(col, "chat") and not any(p.startswith("/chat/") for p in [*cheio.rotas_get, *cheio.rotas_post]),
+         [*cheio.rotas_get, *cheio.rotas_post])
     caso("H6 o Coletor declara a janelinha (aceite-flutuante) e liga o contato do plugin ao sinal",
          "aceite-flutuante" in cheio.recursos() and cheio.contato_plugin == col.sinal.contato, cheio.recursos())
     col.c.close()

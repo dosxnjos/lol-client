@@ -3,8 +3,7 @@ do pós-jogo de cada partida). Banco em pasta temporária; nunca toca em dados/.
 uso: python tools/teste-banco.py
 - gravar_eog não grava a senha nem o token da sala (nem as mesmas chaves aninhadas), o resto intacto;
 - limpar_segredos limpa o que já estava gravado (idempotente) e roda sozinho no abrir();
-- a CLI (--limpar-segredos) faz o backup antes e termina com 0 linhas suspeitas;
-- banco.SEGREDOS ⊆ chat_janelas.PROIBIDOS (uma lista não esquece o que a outra filtra).
+- a CLI (--limpar-segredos) faz o backup antes e termina com 0 linhas suspeitas.
 Valores inventados na hora (uuid): nada parecido com credencial fica no arquivo.
 """
 import json
@@ -139,10 +138,8 @@ def principal():
     confere("CLI: o backup é a cópia de antes (por isso o ARMADILHAS manda apagar depois de conferir)",
             bool(backups) and V[0] in texto_do_banco(backups[0]))
 
-    # 4. uma dona só para a lista
-    import chat_janelas
-    confere("banco.SEGREDOS ⊆ chat_janelas.PROIBIDOS", set(banco.SEGREDOS) <= set(chat_janelas.PROIBIDOS),
-            str(set(banco.SEGREDOS) - set(chat_janelas.PROIBIDOS)))
+    # (o antigo caso 4, banco.SEGREDOS contido na lista das janelas do chat, saiu com elas em 19/10/2026: o chat ao lado do
+    # plugin guarda só os campos que usa, lateral-chat.js limparConversas, e é provado no teste-compacto-lateral.mjs)
 
     print(f"\n{'tudo ok' if not falhas else f'{len(falhas)} falha(s)'}")
     return 1 if falhas else 0

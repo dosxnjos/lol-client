@@ -9,8 +9,8 @@
 #                          plugin (as chaves do coach dentro de "coach") ou só as chaves soltas
 #   GET  /contexto/<gameId> contexto do coletor para as lições do pós-jogo (coach.contexto_partida)
 #   GET  /licoes/<gameId>  as 3 lições da partida (coach.licoes_partida)
-#   GET  <rotas extras>    o coletor pendura outras (ex.: /draft, /revisao/<gameId>)
-#   GET/POST /chat/...     janelas do chat fora do client (coletor/chat_janelas.py pendura em rotas_get/rotas_post)
+#   GET  <rotas extras>    o coletor pendura outras (ex.: /draft, /revisao/<gameId>); as /chat/* das janelas do chat
+#                          fora do client saíram em 19/10/2026 (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
 #   POST /aceite/plugin    sinal e diagnóstico do aceite do plugin (aviso_partida.rota_aceite; coletor.py pendura)
 #   POST /compacto/expansoes registro das saídas do client compacto (expansoes.rota_expansoes; coletor.py pendura)
 #   GET  /ola              aperto de mão do plugin (pengu/coach.js): {app, versao, recursos}; recursos calculados na hora
@@ -183,24 +183,8 @@ def origem_ok(origem):
         return False
 
 
-# /chat/*: as janelas do chat escrevem na LCU em nome dele (enviar, convidar, lida) e leem conversas. Só as próprias
-# páginas (mesma origem: http://127.0.0.1|localhost:<esta porta>) ou pedido sem Origin (navegação, GET de mesma
-# origem). Outra página local ou outro plugin do Pengu não lê as chaves nem manda mensagem. O plugin só usa estas:
-CHAT_ORIGEM_LIVRE = ("/chat/plugin", "/chat/abrir/amigos", "/chat/estado")
-
-
-def origem_chat_ok(rota, origem, porta):
-    if not rota.startswith("/chat/") or rota in CHAT_ORIGEM_LIVRE or not origem:
-        return True
-    try:
-        u = urlsplit(origem)
-        return u.scheme == "http" and u.hostname in ("127.0.0.1", "localhost") and u.port == porta
-    except ValueError:
-        return False
-
-
 # /aceite/*: o plugin diz "não aceitar nesta vez" e manda o diagnóstico do aceite (aviso_partida.rota_aceite); a
-# reserva do coletor aceita a partida sozinha com base nisso. Inverso do /chat/: só a página do client (https em
+# reserva do coletor aceita a partida sozinha com base nisso. Só a página do client (https em
 # 127.0.0.1/localhost, a porta da LCU), o Pengu (https://plugins, riot) ou pedido sem Origin. As páginas do próprio
 # coletor (http://127.0.0.1:<esta porta>) e qualquer outra página local em http não escrevem aqui.
 # /compacto/*: registro das expansões do client compacto (expansoes.rota_expansoes, passo 15 do plano do compacto): a
@@ -261,9 +245,6 @@ class _Handler(BaseHTTPRequestHandler):
             self._enviar(403, {"erro": "host"})
             return True
         if not origem_ok(self.headers.get("Origin")):
-            self._enviar(403, {"erro": "origem"})
-            return True
-        if not origem_chat_ok(urlsplit(self.path).path, self.headers.get("Origin"), self.server.server_address[1]):
             self._enviar(403, {"erro": "origem"})
             return True
         if not origem_aceite_ok(urlsplit(self.path).path, self.headers.get("Origin")):
@@ -355,7 +336,7 @@ class _Handler(BaseHTTPRequestHandler):
         srv = self.server.dono
         self._contato(rota)   # POST /aceite/plugin com Origin do plugin: ele falou (neste ready check, para a reserva)
         prefixo = next((p for p in srv.rotas_post if rota.startswith(p)), None)
-        if prefixo:  # ex.: /chat/ (coletor/chat_janelas.py): f(rota, corpo bruto) -> (status, corpo[, tipo])
+        if prefixo:  # ex.: /aceite/, /compacto/: f(rota, corpo bruto) -> (status, corpo[, tipo])
             try:
                 self._enviar(*srv.rotas_post[prefixo](rota, bruto))
             except Exception as e:
@@ -411,7 +392,7 @@ class ServidorLocal:
         self.config = config
         self.ao_config = ao_config            # f(cfg) depois de cada POST /config
         self.rotas_get = dict(rotas_get or {})  # {prefixo: f(caminho) -> (status, dict)}
-        self.rotas_post = dict(rotas_post or {})  # {prefixo: f(caminho, corpo bruto) -> (status, dict)} (/chat/)
+        self.rotas_post = dict(rotas_post or {})  # {prefixo: f(caminho, corpo bruto) -> (status, dict)} (/aceite/, /compacto/)
         # f(gameId) -> bool: o pós-jogo pede o contexto no EndOfGame, antes do backfill (5–160 s depois)
         # gravar a partida; o coletor busca na LCU na hora (só GET)
         self.garantir_partida = garantir_partida
@@ -431,7 +412,7 @@ class ServidorLocal:
         if Path(self.db).exists():       # /contexto e /licoes leem o banco
             r.add("contexto")
         pendurados = [*self.rotas_get, *self.rotas_post]
-        for prefixo, nome in (("/draft", "draft"), ("/revisao/", "revisao"), ("/chat/", "chat-janelas"),
+        for prefixo, nome in (("/draft", "draft"), ("/revisao/", "revisao"),
                               ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes")):
             if any(p.startswith(prefixo) for p in pendurados):
                 r.add(nome)

@@ -8,7 +8,8 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 DB_PADRAO = RAIZ / "dados" / "lol.db"
 # credencial que a LCU põe em blocos que o coletor grava (eog: sala do chat do pós-jogo). Nunca vai ao banco
-# (sem_segredos); chat_janelas.PROIBIDOS contém todos (teste-banco confere). Achado de 14/10/2026.
+# (sem_segredos); o chat ao lado do plugin tira os mesmos campos (pengu/compacto/lateral-chat.js limparConversas).
+# Achado de 14/10/2026.
 SEGREDOS = ("password", "multiUserChatPassword", "mucJwtDto", "jwt")
 _SEGREDOS_MIN = {k.lower() for k in SEGREDOS}
 
