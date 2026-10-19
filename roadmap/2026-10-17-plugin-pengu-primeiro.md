@@ -61,7 +61,7 @@ você recomendou."
 | decisão | resolução |
 | --- | --- |
 | licença | MIT |
-| onde publicar | **repositório público novo** (não o `dosxnjos/lol-client` privado, que tem mentor, MCP, roadmaps e dados dele); sem a etapa do zip para amigos. Conta e nome: perguntados (regra "repo novo → conta dona"); recomendação `dosxnjos/lol-compacto` |
+| onde publicar | **repositório público novo** (não o `dosxnjos/lol-client` privado, que tem mentor, MCP, roadmaps e dados dele); sem a etapa do zip para amigos. Nome: `lol-ultra-client` (Gabriel, 19/10); conta `dosxnjos`, confirmada por ele em 1 linha antes de criar (regra "repo novo → conta dona") |
 | aceite automático | **ligado por padrão** (como hoje), listado no aviso da 1ª execução |
 | recompensas, avisos calados | **ligados por padrão** (como hoje), listados no aviso da 1ª execução |
 | runas | ligadas (sem regra, nada acontece) |
