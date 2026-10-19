@@ -79,9 +79,23 @@ class LCUFalsa:
         self.partida = json.loads((GRAV / f"partida-{GID}.json").read_text(encoding="utf-8"))
         self.timeline = json.loads((GRAV / f"timeline-{GID}.json").read_text(encoding="utf-8"))
         self.chamadas = []
+        # complemento público instalado agora não tem o cache dados\cache\catalogo.json: na partida ele baixa itens e
+        # campeões da LCU (ao_vivo.baixar_catalogo), como numa instalação nova de verdade. Aqui a LCU falsa serve os dois no
+        # formato da LCU, montados do cache do repositório (só leitura). Na instalação completa segue 404: o download
+        # gravaria no dados\ do repositório
+        self.game_data = None
+        if PUBLICO:
+            cat = json.loads((RAIZ / "dados" / "cache" / "catalogo.json").read_text(encoding="utf-8"))
+            self.game_data = {
+                "/lol-game-data/assets/v1/items.json": [{"id": int(k), "priceTotal": v.get("total"), "categories": v.get("cats")}
+                                                        for k, v in cat["itens"].items()],
+                "/lol-game-data/assets/v1/champion-summary.json": [{"id": v["id"], "alias": k, "name": v.get("nome"),
+                                                                    "roles": v.get("papeis")} for k, v in cat["campeoes"].items()]}
 
     def get(self, caminho, timeout=30):
         self.chamadas.append(caminho.split("?")[0])
+        if self.game_data and caminho in self.game_data:
+            return self.game_data[caminho]
         if caminho == "/lol-gameflow/v1/session":
             return {"gameData": {"gameId": GID, "queue": {"id": 400}}}
         if caminho == "/lol-ranked/v1/current-ranked-stats":
