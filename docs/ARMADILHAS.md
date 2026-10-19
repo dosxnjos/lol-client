@@ -371,6 +371,18 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   diferente de 1 (nada regravado por cima); linha sem linha do tempo não melhora sozinha (o `imp` já passou dela e o
   backfill pula gameId que já tem; só o pós-jogo aberto naquela partida troca, porque a mais completa ganha). Prova:
   `teste-historico.mjs`, `teste-resumos.py`. Conferir: `__lolClient.historico.estado()`.
+- **Contexto local (matchup, traumas, tilt, freios) a partir do acumulador começa pequeno** (Fase 5, 19/10/2026,
+  `pengu/posjogo/contexto.js`) → numa instalação nova o acumulador cresce 1 partida por pós-jogo e até 40 por abertura no
+  backfill: abaixo de 3 partidas não há contexto local (pós-jogo com "lições com o histórico do client", sem a chave "Mostrar
+  traumas"), abaixo de 30 os freios e a dica do lobby saem **sem número** ("2 derrotas seguidas. Buscar mesmo assim?") e cada
+  número precisa de 10 partidas na própria faixa (`PISO_FAIXA`). Na instalação com o complemento os números voltam com a
+  importação do `/resumos`, **coletor reiniciado antes do plugin recarregar**; sem ela, ficam sem número até o backfill.
+  Sintomas: **"cai para" virou "é"** = o número calculado não mostra queda (o texto só diz "cai" quando cai); **matchup da
+  seleção some sem o complemento** = nenhum inimigo travado foi adversário de rota deste campeão nesta posição no
+  acumulador (sem a rota provável do draft, Fase 6 fora); **faixa horária diferente entre JS e Python** = fuso: os dois usam a
+  hora local do PC (a paridade fixa `America/Sao_Paulo`, `tools/teste-contexto.*`); **ordem de matchups diferente** = texto
+  comparado com `localeCompare` (o Python compara por código; `contexto.js` usa `<`/`>`). Prova: `teste-contexto.mjs`/`.py`,
+  `teste-ponte.mjs` (g). Conferir: `__lolClient.historico.linhas().length`.
 - **Instalação nova sem favoritos, sem regra de runa e com o client vindo para a frente no ready check** (19/10/2026, Fase 3
   do plano plugin Pengu primeiro) → é o `PADRAO` público (`pengu/config.js`): `compacto.favoritos []`, `runas.regras []`,
   `aceite.trazerClient true`. Não é bug: o que esta máquina tem (favoritos 58 e 154, as 2 regras, `trazerClient false`) vive

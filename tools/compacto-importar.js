@@ -17,7 +17,9 @@
     // etapas B e C de roadmap/2026-10-16-chat-da-sala-som-icones.md (som do client nas configurações; ícones Lucide embutidos)
     'compacto/som.js', 'icones.js', 'replay.js',
     // Fase 4 de roadmap/2026-10-17-plugin-pengu-primeiro.md (acumulador do histórico)
-    'historico.js'];
+    'historico.js',
+    // Fase 5 (contexto do pós-jogo, selo e freios sobre o acumulador)
+    'posjogo/contexto.js', 'freios.js'];
   const out = {};
   for (const m of mods) {
     try { const mod = await import(`${base}${m}?v=${v}`); out[m] = Object.keys(mod).length + (typeof mod.montar === 'function' ? ' montar' : ''); }

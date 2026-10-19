@@ -58,6 +58,12 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   com as partidas da conta do meta (`21697bf`, `teste-resumos.py` 21/21), backfill confere o pós-jogo e a lista antes de cada
   GET e grava o lote incompleto na saída do lobby e no `beforeunload` (`35b57a7`, `teste-historico.mjs` 82/82); bateria node
   29/29; tabela no relatório.
+- **Fase 5 feita em 19/10/2026** (`3a1e0b2`, `6cb278e`, `2be350e`, `188c1c7`: `pengu/posjogo/contexto.js` com a saída do coletor,
+  `teste-contexto.py` 23/23 e `.mjs` 49/49 com 14 casos JS = Python = `contexto-esperado.json`; pós-jogo, selo e freios locais,
+  `MEDICAO` calculada com piso de 30 e de 10 por faixa: no banco desta máquina 191 partidas, depois de 2 = 41%, madrugada 47%,
+  dia 58%; `teste-ponte.mjs` 47/47 com o pós-jogo sem complemento mostrando matchup e trauma e zero fetch à 8765; Fase 6 fora,
+  decisão do Gabriel): falta reiniciar o coletor (importação) antes de recarregar o plugin, e as provas do client real:
+  [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-5.md).
 
 ## Decisões do Gabriel (19/10/2026)
 

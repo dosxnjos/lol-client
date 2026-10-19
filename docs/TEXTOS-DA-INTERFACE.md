@@ -72,6 +72,10 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
 | coletor fora do ar: as lições ficam na análise completa (19/10) | as lições ficam na análise completa (sem o complemento) / complemento coach sem resposta: … (com ele) |
 | coach: coletor fora do ar (sem matchup e draft) (19/10) | (some sem o complemento) / matchup e draft indisponíveis agora: nova tentativa em seguida |
 | indisponível: o coletor não está rodando (127.0.0.1:8765 não respondeu) (19/10) | indisponível: o complemento coach não respondeu (sem o recurso "mentor", a caixa some) |
+| 2 derrotas seguidas: depois disso o seu winrate cai para 44% (número fixo do mantenedor) (19/10) | o mesmo com o número das partidas guardadas; sem amostra: "2 derrotas seguidas. Buscar mesmo assim?"; número sem queda: "o seu winrate é 55%" |
+| de madrugada o seu winrate cai: 47% contra 58% de dia (número fixo) (19/10) | sem amostra: "é madrugada (entre 1h e 6h). Buscar mesmo assim?"; com: os números calculados |
+| lições com o histórico do client (sem o complemento, mesmo com partidas guardadas) (19/10) | lições com matchup, traumas e histórico das 53 partidas guardadas neste computador |
+| adversário da sua rota ainda não travou (selo sem o complemento) (19/10) | nenhum inimigo travado no seu histórico desta rota; rota: "adversário no seu histórico com este campeão (topo)" |
 
 A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/2026-10-13-client-compacto.md).
 
@@ -84,5 +88,6 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
   `VOCABULARIO` do registro das expansões (`expansoes.js`): são exceções nomeadas em `tools/teste-textos.mjs`.
 - O texto do mentor (gerado pelo Claude no coletor) e nome de jogador ou campeão vindo da LCU (sempre por `esc()`).
 - Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
-  "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026), que não tem texto visível até a Fase 5 do plano plugin
-  Pengu primeiro; o texto que mostrar a amostra dele (matchup, trauma, freios) entra no guia.
+  "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026). O que mostra a amostra dele (Fase 5 do plano plugin Pengu
+  primeiro: nota do pós-jogo, freios, dica do lobby, selo, Configurações) segue este guia: diz "partidas guardadas neste
+  computador", nunca "acumulador", e sem amostra não cita número (tabela acima).

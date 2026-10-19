@@ -18,7 +18,7 @@ painel, overlay), coisa que a Riot não aprova para produtos: risco da conta ass
 | --- | --- | --- |
 | client aberto | enxuga a interface (TFT, coluna larga), aceita a partida sozinho com contagem (e botão "não aceitar"), botão de fila rápida, troca a página de runa ao travar o campeão, coleta as recompensas sem escolha | client (plugin) |
 | partida encontrada | o client pisca e volta para trás (não rouba a tela; volta sozinho no champ select), janelinha "aceitar agora / recusar" no canto da tela, popup e som opcionais | client (plugin) e janelinha (coletor) |
-| champ select | selo com winrate e KDA do campeão, matchup contra o adversário de rota provável, "X é trauma", força do draft em faixa | client (plugin) |
+| champ select | selo com winrate e KDA do campeão, matchup contra o adversário de rota provável, "X é trauma", força do draft em faixa (sem o complemento: matchup e trauma das partidas guardadas no plugin, sem a força do draft) | client (plugin) |
 | tela de carregamento | os 10 (elo, winrate, tags com número: OTP, morre cedo, sequência…), previsão de vitória em faixa, composição inimiga e lembrete de build ([ITENS](docs/ITENS.md)) | painel da 2ª tela |
 | partida | 4 blocos fixos (tua rota, ameaça, teu padrão, time e objetivos) + 1 aviso por vez; voz (1 fala a cada 20 s, gank fura); moldura colorida na borda da tela; área provável do jungler por cima do minimapa; Flash dos inimigos pelo chat ou F7; preparo 60 s antes de cada objetivo; picos de força | 2ª tela, voz, tela do jogo |
 | pós-jogo | 6 abas (Resumo com o veredito do mentor no topo e as 3 lições recolhidas, Rota, Mortes, Objetivos, Tendência, Sessão), análise do mentor e caixa de pergunta; não bloqueia o client (clique fora da caixa fecha e vale no client; fechar e Esc também, até no carregamento, sem cancelar a análise); no fim da partida carrega só com o botão "analisando a partida…" no topo e abre sozinho se tu não mexeu no client nesse meio tempo (senão o botão vira "análise pronta"; se a análise falhar, "tentar a análise de novo", sem caixa por cima); fechado, o botão "reabrir análise" abre de novo na hora até o próximo aceite; botão "jogar de novo e buscar"; "baixar replay" e "assistir replay" no topo (só por clique; assistir abre o jogo no 1º clique, com um aviso curto, e a Riot minimiza o client até o replay fechar); 30 s depois, coleta o prêmio da partida; chat da tela de estatísticas com campeão, ícone e cor do time | client (plugin) |
@@ -81,8 +81,11 @@ adversário de rota e os 5 inimigos só por campeão, vitória, diferenças aos 
 que acaba (das leituras que o pós-jogo já faz), as que faltam da lista do histórico (1 a cada 5 s, só no lobby, no máximo 40
 por abertura do client) e, com o complemento, as do banco dele (`GET /resumos`, uma vez por abertura, só as da conta
 logada). É a amostra do
-contexto do pós-jogo e da seleção sem o complemento (Fase 5). Conferir: `__lolClient.historico.estado()` no CDP. Apagar:
-`DataStore.remove('lol-client.historico')` (nada mais lê a chave antes da Fase 5).
+contexto do pós-jogo e da seleção sem o complemento (Fase 5, `pengu/posjogo/contexto.js`, a mesma regra do coletor): com 3
+partidas ou mais, as lições, a Tendência e a Sessão do pós-jogo ganham matchup, traumas e winrate por horário e sequência
+(também enquanto o complemento não responde), o selo da seleção ganha matchup e trauma (sem a força do draft) e a média de
+farm passa a contar as partidas guardadas; os freios usam os números dele (acima). Conferir:
+`__lolClient.historico.estado()` no CDP. Apagar: `DataStore.remove('lol-client.historico')` (o contexto local volta a zero).
 
 | parte | bloco nas Configurações | chave do coach (precisa do complemento coach) |
 | --- | --- | --- |
@@ -115,7 +118,7 @@ contexto do pós-jogo e da seleção sem o complemento (Fase 5). Conferir: `__lo
 | Flash inimigo: OCR do chat e **F7** na partida = ele acabou de usar o flash. 1 batida = o adversário da tua rota; cada batida a mais passa para a próxima (top, jungler, mid, atirador, suporte, dando a volta), com a borda mostrando quem está escolhido ("flash: mid?"); parado ~1 s, marca e a voz diz "flash do mid marcado". **Segurar F7** 1 s desfaz a última marcação, até 1 min depois, e a borda diz qual ("desfeito: mid"); o que o chat já viu fica ("mid: chat confirmou"). Os números de cima nunca (são itens no LoL); o teclado numérico, para quem tiver, escolhe direto depois do F7 | Minimapa e jungler | `feiticos` |
 | os 10 na tela de carregamento (Riot API) | Tela de carregamento | `carregamento` |
 | mentor, modelo e esforço (padrão Sonnet + medium) | Mentor | `mentor`, `mentorModelo`, `mentorEffort` |
-| traumas no selo e na aba Tendência (o bloco só aparece com uma fonte: o complemento com `draft` ou `contexto`) | Traumas | (plugin: `traumas.ligado`) |
+| traumas no selo e na aba Tendência (o bloco só aparece com uma fonte: o complemento com `draft` ou `contexto`, ou 3 partidas no acumulador do plugin) | Traumas | (plugin: `traumas.ligado`) |
 
 **Jogar de novo:** só busca quando tu clica, nunca sozinho. Volta à mesma fila da partida que acabou, com as tuas
 posições; em grupo só volta ao lobby (quem busca é o líder); com penalidade (dodge, leaver) diz o motivo e o prazo e
@@ -125,7 +128,11 @@ não busca. Plano: [jogar de novo](roadmap/2026-10-13-jogar-de-novo.md).
 05:59), o 1º clique só mostra o motivo com o número medido ("de madrugada o seu winrate cai: 47% contra 58% de dia.
 Buscar mesmo assim?") e o 2º, entre 0,7 s e 8 s depois, busca (duplo clique rápido é ignorado); sem o 2º clique nada
 acontece. Nunca bloqueia de vez, nunca busca sozinho. Em grupo ou sem ser o líder o "jogar de novo" só volta ao lobby
-e não pede confirmação. Números e data da medição: `pengu/freios.js` (`MEDICAO`). O resultado da partida que acabou
+e não pede confirmação. Os números são calculados das partidas guardadas no plugin (acumulador; desde 19/10/2026, Fase 5
+do [plano plugin Pengu primeiro](roadmap/2026-10-17-plugin-pengu-primeiro.md)): abaixo de 30 partidas o texto sai sem
+número ("2 derrotas seguidas. Buscar mesmo assim?"), cada número precisa de 10 partidas na faixa, e o texto só diz "cai"
+quando cai; regra em [INSIGHTS](docs/INSIGHTS.md) § Contexto sem o complemento (`pengu/posjogo/contexto.js`
+`medicaoDe`). Com o complemento, o acumulador começa com a importação do `/resumos`. O resultado da partida que acabou
 vem do fim de partida (`eog-stats-block`) até o histórico trazê-la: vitória zera na hora. Histórico que não carregou
 a tempo = "sequência de derrotas desconhecida" e também pede o 2º clique.
 

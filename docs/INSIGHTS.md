@@ -1,8 +1,9 @@
 # INSIGHTS — spec das heurísticas do pós-jogo
 
-Dona única das regras do pós-jogo. Duas implementações seguem este arquivo à risca:
-`pengu/posjogo/` (JS, lê a LCU direto) e `coletor/analise.py` (Python, lê o SQLite).
-Mudou a regra? Muda aqui primeiro, depois as duas, e o caso de teste no fim.
+Dona única das regras do pós-jogo. As implementações seguem este arquivo à risca:
+`pengu/posjogo/` (JS, lê a LCU direto) e `coletor/analise.py` (Python, lê o SQLite); desde 19/10/2026 a terceira,
+`pengu/posjogo/contexto.js`, porta matchups, traumas e o contexto do pós-jogo sobre o acumulador do plugin (§ Contexto
+sem o complemento). Mudou a regra? Muda aqui primeiro, depois todas, e o caso de teste no fim.
 
 Medido em 13/10/2026 (patch 16.20, `gameVersion` 16.20.824.8524) sobre as 20 partidas
 de Summoner's Rift que a LCU devolvia. Unidades: tempo em **ms** (`timestamp`), duração
@@ -337,6 +338,36 @@ MCP: `traumas()`. Prova: `python tools/teste-traumas.py`.
 - **Trauma**: `n ≥ 3` e `lift ≥ 1,2`. Campeão que aparece em tudo fica com lift ~1. Com ~170 campeões
   comparados, 1–2 traumas podem ser acaso: mostrar sempre `n` e V/D ("Darius é trauma: 2V/7D").
 
+### Contexto sem o complemento (acumulador do plugin, `pengu/posjogo/contexto.js`)
+
+Fase 5 do [plano plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md), 19/10/2026. A mesma spec de
+§ Matchups, § Traumas e do contexto das lições (`coach.historico_tilt`, `_traumas`, `contexto_partida`), calculada sobre as
+linhas do acumulador (`lol-client.historico`, `pengu/historico.js`: uma linha por partida própria, com papel, adversário,
+diferenças aos 10/15, mortes cedo e os 5 inimigos por campeão) em vez do SQLite. Mesma saída, campo a campo.
+
+- **Equivalências**: "com linha do tempo" = `mortes10` não nulo (sem linha do tempo a linha não tem nenhum campo dela);
+  "sem papéis" = `papel` nulo com linha do tempo; diferenças aos M min = `ouroM` não nulo. Com isso `partidas` e `fora` do
+  `matchups` também batem. Só partidas que contam (mapa 11, fora `FORA_DAS_CONTAS`, ≥ 300 s).
+- **Ordem da fonte** (pós-jogo e selo): complemento coach com `contexto` (`/contexto`) ou `draft` (`/draft`); senão o local.
+  O pós-jogo usa o local também enquanto o complemento não responde (esperando, fora, sem a partida) e volta ao dele quando
+  chega. Amostra mínima do local: **3 partidas** (`AMOSTRA_LOCAL`, o mínimo de um trauma), contando a analisada.
+- **Selo sem o complemento**: matchups e traumas do meu campeão no formato do `/draft/<id>`; sem a rota provável do draft
+  (Fase 6 fora), o adversário de rota é o inimigo travado com grupo (meu campeão, minha posição, ele) no `matchups`, o de
+  maior `n`. Sem posição atribuída (às cegas), sem matchup. Nunca a faixa do draft.
+- **Farm por minuto**: a amostra de § Farm aceita também as linhas do acumulador (`cs` = tropas + selva), unidas à lista da
+  LCU por `gameId`: as 20 mais recentes com o mesmo campeão saem de até 500 partidas, não só do cache do client.
+- **Medição dos freios** (`medicaoDe`, no lugar da `MEDICAO` fixa de 13/10/2026): sobre todas as linhas, a regra de
+  `historico_tilt`: depois de **exatamente 2** derrotas seguidas na sessão (`apos_derrotas["2"]`), madrugada = faixa
+  `00-06`, dia = `06-12` + `12-18` somadas, e o geral. Piso: **30 partidas** no total (abaixo, `null`: texto sem número) e
+  **10 na própria faixa** (abaixo, só aquele número some). Números inteiros (arredondados); o texto diz "cai" só quando o
+  número é menor que o de comparação (geral ou dia).
+- **Hora local**: as faixas usam a hora local do PC nos dois lados (`getHours()` e `datetime.fromtimestamp`); a prova fixa
+  `America/Sao_Paulo`.
+- **Prova**: `python tools/teste-contexto.py` (as funções do coletor, sem mudança, sobre a fixture
+  `tools/fixtures/historico-1.json` num SQLite temporário, = `tools/fixtures/contexto-esperado.json`) e
+  `node tools/teste-contexto.mjs` (o JS = Python ao vivo e = esperado, 14 casos; medição, selo local). Mudou a regra aqui:
+  muda as três implementações e regrava o esperado com a saída do `teste-contexto.py --json`.
+
 ### Pós-jogo v2: Resumo, Objetivos, Tendência e Sessão
 
 Plano v2, passo 7 (`pengu/posjogo/abas.js`; prova sem client: `node tools/teste-abas.mjs`).
@@ -352,9 +383,9 @@ Plano v2, passo 7 (`pengu/posjogo/abas.js`; prova sem client: `node tools/teste-
   histórico do client, qualquer campeão: farm/min, ouro/min, dano em campeões/min e mortes. Seta "melhor" ou
   "pior" com diferença ≥ 5% da média (mortes: ≥ 1 morte); abaixo disso, "na média".
 - **Sessão**: mesma regra do `tilt()` (pausa ≥ 2 h entre o fim de uma e o início da outra abre sessão nova),
-  nos dois sentidos a partir da analisada. Alertas, com o histórico do coletor (`contexto.historico`): 2+
-  derrotas seguidas até esta → taxa depois de `min(k, 3)` derrotas; faixa horária de agora com n ≥ 10 e
-  taxa ≤ geral − 5 pontos. Sem coletor, sem alerta (não há número para sustentar).
+  nos dois sentidos a partir da analisada. Alertas, com o histórico do contexto (`contexto.historico`, do complemento ou
+  do acumulador local, § Contexto sem o complemento): 2+ derrotas seguidas até esta → taxa depois de `min(k, 3)` derrotas;
+  faixa horária de agora com n ≥ 10 e taxa ≤ geral − 5 pontos. Sem contexto nenhum, sem alerta (não há número para sustentar).
 
 ### Limites conhecidos
 

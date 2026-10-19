@@ -342,6 +342,11 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   fala com a 8765 com `cfg.coletor.ligado` e um `/ola` bom, e só chama a rota do recurso anunciado (`pengu/coach.js`
   `temRecurso`); porta que responde sem esse `app` = outro programa, tratado como ausente. Para o usuário o nome é
   "complemento coach" ([TEXTOS-DA-INTERFACE](TEXTOS-DA-INTERFACE.md)).
+  **`/contexto` e `/draft` têm par no plugin** (19/10/2026, Fase 5): sem `contexto`/`draft` anunciados (ou enquanto o
+  `/contexto` não responde), o plugin calcula o mesmo contexto e o matchup/trauma do selo sobre o acumulador
+  (`pengu/posjogo/contexto.js`, porta de `analise.matchups`/`traumas` e `coach.historico_tilt`/`_traumas`/`contexto_partida`).
+  Mudou uma dessas funções aqui: muda o `contexto.js` e regrava `tools/fixtures/contexto-esperado.json`
+  (`python tools/teste-contexto.py --json`), regra em [INSIGHTS](INSIGHTS.md) § Contexto sem o complemento.
   **`GET /resumos?desde=<gameId>`** (19/10/2026, Fase 4 de
   [plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md)): só leitura, `{v: 1, dono, campos, linhas}` no
   formato do acumulador do plugin (`pengu/historico.js`, chave `lol-client.historico`; `resumos_do_banco`, campos em

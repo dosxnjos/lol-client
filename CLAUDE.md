@@ -40,5 +40,5 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - Atalho do coach (F7 em batidas, F8) só **observa** o teclado (`coletor/teclas.py`), em tecla livre no LoL (número de cima é item); nunca
   `RegisterHotKey` (não dispara com o jogo na frente), `SendInput`/`keybd_event` ou hook que coma tecla (ARMADILHAS § Windows).
 - Credencial do lockfile e a linha `Command Line` do r3dlog (token e chave da partida) nunca em arquivo, log ou doc; senha/token de sala de chat nunca no banco (`banco.SEGREDOS`); DataStore só agregado próprio, nunca nome/puuid alheio (acumulador `pengu/historico.js`, prova `teste-historico.mjs`). Heurísticas do pós-jogo: dona é
-  [docs/INSIGHTS.md](docs/INSIGHTS.md) (JS e Python seguem ela). Coletor, banco e MCP:
+  [docs/INSIGHTS.md](docs/INSIGHTS.md) (JS, Python e o contexto local `pengu/posjogo/contexto.js` seguem ela; paridade `teste-contexto.*`). Coletor, banco e MCP:
   [docs/COLETOR.md](docs/COLETOR.md).
