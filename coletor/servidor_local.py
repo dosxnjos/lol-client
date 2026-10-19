@@ -17,6 +17,8 @@
 #   POST /compacto/expansoes registro das saídas do client compacto (expansoes.rota_expansoes; coletor.py pendura)
 #   POST /atualizar        {versao}: baixa da origem fixa, confere hash e troca plugin e complemento (atualizar.Atualizador;
 #                          coletor.py pendura, junto com GET /atualizar/estado); recurso "atualizar" no /ola
+#   POST /voz/baixar       baixa o pacote de voz do release, confere hash e troca a pasta do pacote (voz_pacote.PacoteVoz;
+#                          coletor.py pendura, junto com GET /voz/estado); recurso "voz-pacote" no /ola (P5 da publicação)
 #   GET  /ola              aperto de mão do plugin (pengu/coach.js): {app, versao, recursos, edicao, pacote}; recursos
 #                          calculados na hora do que está pendurado (rotas e o que o dono declarou), nunca lista fixa, menos
 #                          o que a edição pública não leva (instalacao.ocultos); versao = a da ponte (VERSAO_PONTE), pacote =
@@ -293,11 +295,13 @@ def origem_ok(origem):
 # /compacto/*: registro das expansões do client compacto (expansoes.rota_expansoes, passo 15 do plano do compacto): a
 # mesma regra (só quem roda dentro do client escreve no registro).
 # /atualizar (P3 da publicação, 19/10/2026): a mesma regra; um site no navegador nunca dispara a troca dos arquivos.
-ROTAS_SO_PLUGIN = ("/aceite/", "/compacto/", "/atualizar")
+# /voz/ (P5): a mesma regra (o botão "baixar vozes" baixa e troca a pasta do pacote de voz).
+ROTAS_SO_PLUGIN = ("/aceite/", "/compacto/", "/atualizar", "/voz/")
 # POST /atualizar troca arquivos e reinicia o complemento: ali nem o pedido SEM Origin passa (curl, outro processo, outra conta do
 # Windows no mesmo loopback), só o Origin do client ou do Pengu (revisão adversarial da P3). Não é autenticação (um processo
-# local forja o cabeçalho); tira o disparo por engano ou por ferramenta genérica. O GET /atualizar/estado segue a regra comum
-ROTAS_SO_PLUGIN_ESTRITO = ("/atualizar",)
+# local forja o cabeçalho); tira o disparo por engano ou por ferramenta genérica. O GET /atualizar/estado segue a regra comum.
+# POST /voz/baixar (P5): o mesmo (baixa ~40 MB e troca a pasta do pacote); o GET /voz/estado segue a regra comum
+ROTAS_SO_PLUGIN_ESTRITO = ("/atualizar", "/voz/baixar")
 
 
 def origem_aceite_ok(rota, origem):
@@ -530,7 +534,8 @@ class ServidorLocal:
             r.add("resumos")
         pendurados = [*self.rotas_get, *self.rotas_post]
         for prefixo, nome in (("/draft", "draft"), ("/revisao/", "revisao"),
-                              ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes"), ("/atualizar", "atualizar")):
+                              ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes"), ("/atualizar", "atualizar"),
+                              ("/voz/", "voz-pacote")):
             if any(p.startswith(prefixo) for p in pendurados):
                 r.add(nome)
         return sorted(r - instalacao.ocultos())   # edição pública: nada do que fica só na instalação do mantenedor

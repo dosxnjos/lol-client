@@ -62,7 +62,8 @@ class Pacote:
             if isinstance(v, dict) and v.get("suspeita"):   # o Whisper ouviu outra coisa: Maria ao vivo
                 self.suspeitas += 1
                 continue
-            if arq:
+            # nome simples, nunca caminho: o pacote público vem do release (coletor/voz_pacote.py confere também)
+            if isinstance(arq, str) and arq and "/" not in arq and "\\" not in arq and ":" not in arq and arq not in (".", ".."):
                 self.frases[normalizar(fala)] = self.pasta / arq
 
     @classmethod

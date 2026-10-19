@@ -177,7 +177,8 @@ class Rede:
             return None
         return f"{u.scheme.lower()}://{u.netloc.lower()}"
 
-    def pegar(self, url, origens, limite, aceitar="*/*"):
+    def pegar(self, url, origens, limite, aceitar="*/*", progresso=None):
+        """bytes do url; progresso(lidos, total ou None) a cada bloco (o pacote de voz, coletor/voz_pacote.py, mostra os MB)"""
         for _ in range(MAX_REDIRECIONAMENTOS + 1):
             if self.origem(url) not in origens:
                 raise Falha("origem", f"fora da origem fixa: {self.origem(url)}")
@@ -187,7 +188,7 @@ class Rede:
                     n = r.headers.get("Content-Length")
                     if n and n.isdigit() and int(n) > limite:
                         raise Falha("rede", f"grande demais ({n} bytes)")
-                    dados = r.read(limite + 1)
+                    dados = r.read(limite + 1) if progresso is None else self._em_blocos(r, limite, n, progresso)
                     if len(dados) > limite:
                         raise Falha("rede", "grande demais")
                     if n and n.isdigit() and len(dados) != int(n):
@@ -203,6 +204,24 @@ class Rede:
             except Exception as e:   # rede, prazo, conexão cortada no meio (IncompleteRead)
                 raise Falha("rede", f"{type(e).__name__}") from None
         raise Falha("origem", "redirecionamentos demais")
+
+    @staticmethod
+    def _em_blocos(r, limite, n, progresso):
+        """lê em blocos de 256 KB avisando o progresso; para no limite + 1 (o chamador recusa o grande demais). Conexão que cai
+        no meio sobe IncompleteRead (vira Falha rede em pegar) ou chega curta (a conferência do Content-Length recusa)"""
+        total = int(n) if n and n.isdigit() else None
+        partes, lidos = [], 0
+        while lidos <= limite:
+            b = r.read(min(1 << 18, limite + 1 - lidos))
+            if not b:
+                break
+            partes.append(b)
+            lidos += len(b)
+            try:
+                progresso(lidos, total)
+            except Exception:   # quem mostra o progresso nunca derruba o download
+                pass
+        return b"".join(partes)
 
 
 def _nome_seguro(nome, prefixo):

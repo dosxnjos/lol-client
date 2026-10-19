@@ -532,6 +532,23 @@ def _atualizador(coach, col):
         return None
 
 
+def _pacote_voz(coach, col):
+    """POST /voz/baixar e GET /voz/estado (voz_pacote.py, P5 do plano da publicação) pendurados no servidor do coach: o botão
+    "baixar vozes" do plugin baixa o pacote de voz do release. Sem servidor, nada. Falha aqui nunca derruba o coletor."""
+    srv = getattr(coach, "srv", None)
+    if srv is None:
+        return None
+    try:
+        import voz_pacote
+        vp = voz_pacote.PacoteVoz(fase=lambda: col.fase_atual)
+        srv.rotas_post["/voz/baixar"] = vp.rota_post
+        srv.rotas_get["/voz/estado"] = vp.rota_get
+        return vp
+    except Exception as e:
+        log.warning("pacote de voz pelo plugin fora: %s: %s", type(e).__name__, e)
+        return None
+
+
 SCRIPT = Path(os.path.abspath(__file__))   # na carga, antes de qualquer chdir (a troca da atualização sai das pastas trocadas)
 
 
@@ -595,6 +612,7 @@ class Coletor:
         self.reiniciar = False
         self.loop = self.tarefa = None
         self.atualizador = _atualizador(coach, self)   # POST /atualizar (botão "atualizar" do plugin)
+        self.pacote_voz = _pacote_voz(coach, self)     # POST /voz/baixar (botão "baixar vozes" do plugin)
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)

@@ -342,7 +342,7 @@ async def ensaio(a):
         st, ola, _ = http(a.porta, "/ola")
         rec = set((ola or {}).get("recursos") or [])
         base = {"coach", "painel", "voz", "alertas", "minimapa", "feiticos", "revisao", "estado-partida", "contexto",
-                "aceite-reserva", "aceite-flutuante", "atualizar"}
+                "aceite-reserva", "aceite-flutuante", "atualizar", "voz-pacote"}   # voz-pacote: P5 (botão baixar vozes)
         conferir(st == 200 and instalacao.PUBLICA and (ola or {}).get("edicao") == "publica" and base <= rec
                  and not rec & instalacao.SO_COMPLETA,
                  f"/ola da edição pública: {sorted(rec)} (pacote {(ola or {}).get('pacote')})")
