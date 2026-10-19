@@ -58,7 +58,7 @@ TESTES = [
     [PY, "tools/teste-vitrine.py"],
     [PY, "tools/teste-aviso-partida.py"],
     [PY, "tools/teste-varrer-publico.py"],   # varredura da foto pública: gameId, nome em literal, credencial (19/10/2026)
-    [PY, "tools/teste-publicar.py"],         # foto pública, zips e --publicar com remote e gh falsos (P1, 19/10/2026)
+    [PY, "tools/teste-publicar.py"],         # foto pública, zips e --publicar com remote e gh falsos (P1, 19/10/2026); ~2 min (git)
     [PY, "tools/teste-minimapa.py"],
     [PY, "tools/teste-jungler.py"],
     [PY, "tools/teste-alcance.py"],
