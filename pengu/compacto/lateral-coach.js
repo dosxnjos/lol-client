@@ -54,10 +54,16 @@ export function modeloSelo({ sessao, est = null, histN = 0, histErro = false, co
         rota: d.local ? `adversário no seu histórico com este campeão (${pos})` : `rota provável pelo draft: ${pos}` };
     }
     m.local = !!d.local;
+    // às cegas (sem posição) o acumulador não tem adversário de rota: a caixa "na sua rota" some como sem o complemento, só o
+    // trauma pode aparecer (revisão adversarial da Fase 5)
+    if (d.local && !eu.posicao) m.semCoach = true;
     m.trauma = traumas ? linhaTrauma(d.traumas, nome) : null;
     const dl = linhasDraft(d.draft);
     if (dl.length) m.draft = { faixa: dl[0], termos: dl[1] || '', p: Number.isFinite(Number(d.draft?.p)) ? Math.min(Math.max(Number(d.draft.p), 0), 1) : null };
   } else if (temColetor && coach?.fora) m.fora = true;
+  // texto da caixa sem matchup: "no seu histórico" só com inimigo travado (ninguém travou ainda = "ainda não travou")
+  m.avisoRota = m.rota || m.semCoach ? null : m.fora ? 'matchup e draft indisponíveis agora: nova tentativa em seguida'
+    : m.local && inimigosTravados(sessao).size ? 'nenhum inimigo travado no seu histórico desta rota' : 'adversário da sua rota ainda não travou';
   return m;
 }
 
@@ -80,8 +86,7 @@ export function criarCoachView({ doc }) {
     const rota = m.semCoach && !m.rota && !m.trauma ? null : h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'na sua rota'),
       m.rota ? h('div', { doc, class: 'lc-lt-mu' }, fotoCampeao(m.campeao.id, { tam: 28, doc }), h('span', { doc, class: 'lc-lt-mudo' }, '×'),
         fotoCampeao(m.rota.adv.id, { tam: 28, nome: m.rota.adv.nome, doc }), h('div', { doc }, h('div', { doc, class: 'lc-lt-az' }, m.rota.texto), h('small', { doc, class: 'lc-lt-mudo' }, m.rota.rota)))
-        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'matchup e draft indisponíveis agora: nova tentativa em seguida'
-          : m.local ? 'nenhum inimigo travado no seu histórico desta rota' : 'adversário da sua rota ainda não travou'),
+        : m.avisoRota ? h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.avisoRota) : null,
       m.trauma ? h('div', { doc, class: 'lc-lt-sl lc-lt-trauma' }, m.trauma) : null);
     const draft = m.draft ? h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'draft'),
       h('div', { doc, class: 'lc-lt-sl lc-lt-az' }, m.draft.faixa),

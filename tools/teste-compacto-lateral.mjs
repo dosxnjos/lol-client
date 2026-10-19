@@ -18,7 +18,7 @@ import { criarGeometria, lerTelaRiot, posicaoAlvo, cabeSemMover, normalizarTela 
 import { criarLateral, layout, lateralLigada } from '../pengu/compacto/lateral.js';
 import { verAmigos, statusAmigo, lerSalaTime, elencoTime, acharSalaTime, lobbyParaConvite, pedidosRecebidos, lerConversa, limparConversas, verRecentes,
   quandoCurto } from '../pengu/compacto/lateral-chat.js';
-import { modeloSelo, meuNaSessao } from '../pengu/compacto/lateral-coach.js';
+import { modeloSelo, meuNaSessao, criarCoachView } from '../pengu/compacto/lateral-coach.js';
 import { seloDoAcumulador } from '../pengu/champselect.js';
 import { linhaUltima } from '../pengu/compacto/tela-lobby.js';
 import { botaoCoach, botaoConfig, botaoChat, botaoAmigos } from '../pengu/compacto/chat-botao.js';
@@ -963,7 +963,23 @@ async function nadaSozinho() {
     local?.local === true && /contra Jax: 1V\/3D · ouro10 −250/.test(m4.rota?.texto) && /Jax é trauma: 1V\/3D/.test(m4.trauma || '') && !m4.draft
       && /no seu histórico/.test(m4.rota?.rota) && m4.local === true, JSON.stringify(m4));
   const m5 = modeloSelo({ sessao: sessaoCS(58, 58, 0), est, coach: { campeao: 58, dados: seloDoAcumulador(58, sessaoCS(58, 58, 0), linhasAc) }, nome, temColetor: true });
-  caso('selo local sem inimigo travado: sem matchup, marca local (texto próprio na caixa)', !m5.rota && m5.local === true, JSON.stringify(m5));
+  // revisão adversarial da Fase 5: o texto da caixa sai do modelo (avisoRota). Ninguém travou ainda = "ainda não travou", também
+  // no selo local (antes: "nenhum inimigo travado no seu histórico desta rota" sem nenhum inimigo travado)
+  caso('selo local sem inimigo travado: sem matchup, marca local, "adversário da sua rota ainda não travou"', !m5.rota && m5.local === true
+    && m5.avisoRota === 'adversário da sua rota ainda não travou', JSON.stringify(m5));
+  const m6 = modeloSelo({ sessao: sessaoCS(58, 58, 99), est, coach: { campeao: 58, dados: seloDoAcumulador(58, sessaoCS(58, 58, 99), linhasAc) }, nome, temColetor: true });
+  caso('selo local com inimigo travado fora do histórico da rota: "nenhum inimigo travado no seu histórico desta rota"', !m6.rota && m6.local === true
+    && m6.avisoRota === 'nenhum inimigo travado no seu histórico desta rota', JSON.stringify(m6));
+  // escolha às cegas (sem posição): o acumulador não tem adversário de rota; a caixa "na sua rota" some (como sem o complemento),
+  // só o trauma pode aparecer
+  const cega = s => ({ ...s, myTeam: s.myTeam.map(c => (c.cellId === s.localPlayerCellId ? { ...c, assignedPosition: '' } : c)) });
+  const vista = m => { const v = criarCoachView({ doc: novoDoc() }); v.pintar(m); return v.el.textContent; };
+  const m7 = modeloSelo({ sessao: cega(sessaoCS(58, 58, 86)), est, coach: { campeao: 58, dados: seloDoAcumulador(58, cega(sessaoCS(58, 58, 86)), linhasAc) }, nome, temColetor: true });
+  caso('selo local às cegas sem trauma: sem a caixa "na sua rota" (nada de "no seu histórico desta rota")', m7.semCoach === true && !m7.avisoRota
+    && !vista(m7).includes('na sua rota') && !vista(m7).includes('histórico desta rota'), [JSON.stringify(m7), vista(m7)]);
+  const m8 = modeloSelo({ sessao: cega(sessaoCS(58, 58, 24)), est, coach: { campeao: 58, dados: seloDoAcumulador(58, cega(sessaoCS(58, 58, 24)), linhasAc) }, nome, temColetor: true });
+  caso('selo local às cegas com trauma: só o trauma, sem texto de rota', /Jax é trauma/.test(vista(m8)) && !m8.avisoRota
+    && !/histórico desta rota|ainda não travou/.test(vista(m8)), vista(m8));
   caso('selo local: acumulador abaixo de 3 partidas ou sem campeão = nada', seloDoAcumulador(58, sessaoCS(58, 58, 24), linhasAc.slice(0, 2)) === null
     && seloDoAcumulador(0, sessaoCS(58, 58, 24), linhasAc) === null);
   caso('última partida: pronta / analisando / falhou / nunca / descartada (o ícone coach mora na tela, não no título)',
