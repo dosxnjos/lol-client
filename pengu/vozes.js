@@ -43,6 +43,8 @@ export const TEXTO_DEMORA = 'O download das vozes ainda não terminou: confira d
 export const TEXTO_CONSULTANDO = 'Consultando o pacote de vozes…';
 
 const obj = d => (d && typeof d === 'object' && !Array.isArray(d) ? d : null);
+// download em curso no complemento ('consultando' fica de fora: pelo GET é a consulta do tamanho, não um download)
+const emEtapa = d => ['baixando', 'conferindo', 'trocando'].includes(obj(d)?.estado);
 
 // estado do complemento -> a linha do bloco
 export function textoEstado(d) {
@@ -107,6 +109,7 @@ const el = (tag, classe, texto) => {
 // agendar/agora injetáveis (teste)
 export function criarVozes({ coletor, temRecurso, aoMudar = () => {}, agendar = (fn, ms) => setTimeout(fn, ms), agora = () => Date.now() } = {}) {
   let dados = null, consultadoEm = -Infinity, emVoo = null, trabalhando = false, mensagem = '', progresso = '', reconsultas = 0;
+  let acompanhaDesde = 0;   // download que esta instância não pediu (plugin recarregado no meio dele): acompanhado pelo GET
   const esperar = ms => new Promise(r => agendar(r, ms));
   const avisar = () => { try { aoMudar(); } catch (e) { console.error('[lol-client] vozes', e); } };
   const pode = () => typeof coletor === 'function' && !!temRecurso?.(RECURSO);
@@ -122,7 +125,15 @@ export function criarVozes({ coletor, temRecurso, aoMudar = () => {}, agendar = 
       if (d?.estado === 'consultando' && reconsultas < RECONSULTAS_MAX) {
         reconsultas++;
         agendar(() => { consultadoEm = -Infinity; avisar(); }, RECONSULTA_MS);
-      } else reconsultas = 0;
+      } else if (emEtapa(d)) {
+        // o complemento já está baixando (o clique foi de antes de um recarregamento): progresso a cada PASSO_MS, até o fim
+        reconsultas = 0;
+        if (!acompanhaDesde) { acompanhaDesde = agora(); mensagem = ''; }
+        if (agora() - acompanhaDesde < PRAZO_TOTAL_MS) agendar(() => { consultadoEm = -Infinity; avisar(); }, PASSO_MS);
+      } else {
+        reconsultas = 0;
+        if (acompanhaDesde && d) { mensagem = traduzir(d) || ''; acompanhaDesde = 0; }
+      }
       return d;
     }).catch(() => null).finally(() => { emVoo = null; avisar(); });
     return emVoo;
@@ -171,8 +182,9 @@ export function criarVozes({ coletor, temRecurso, aoMudar = () => {}, agendar = 
   function bloco(corpo, ui) {
     if (!pode()) return;
     if (!trabalhando && !emVoo && agora() - consultadoEm >= CONSULTA_MS) consultar();
-    corpo.append(ui.explica(progresso || textoEstado(dados)));
-    const rotulo = trabalhando ? null : rotuloBotao(dados);
+    const etapa = !trabalhando && emEtapa(dados) ? textoProgresso(dados) : '';
+    corpo.append(ui.explica(progresso || etapa || textoEstado(dados)));
+    const rotulo = trabalhando || etapa ? null : rotuloBotao(dados);
     if (rotulo) {
       const b = el('lol-uikit-flat-button-secondary', 'lc-vozes-baixar', rotulo);
       b.addEventListener('click', () => { baixar(); });

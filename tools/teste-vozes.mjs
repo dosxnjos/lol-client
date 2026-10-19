@@ -8,7 +8,8 @@
 //   (c) clique: POST /voz/baixar {} só; progresso "Baixando as vozes… 12 de 36 MB", "Conferindo…", "Instalando…"; o botão some
 //       enquanto trabalha e o 2º clique não pede; "pronto" = "Vozes instaladas (versão …)"; o bloco pergunta de novo no fim;
 //   (d) recusas e erros do complemento no texto do guia; 409 com outro download em curso acompanha; sem resposta; demora;
-//   (e) guardas: nenhum fetch, window.open, href, eval, innerHTML nem endereço https no vozes.js.
+//   (e) guardas: nenhum fetch, window.open, href, eval, innerHTML nem endereço https no vozes.js;
+//   (f) plugin recarregado no meio de um download: o progresso do complemento na linha, sem botão, até o fim.
 // uso: node tools/teste-vozes.mjs
 import { readFileSync } from 'node:fs';
 import { relatar } from './lcu-falsa.mjs';
@@ -258,6 +259,38 @@ for (const [motivo, texto] of Object.entries(VZ.TEXTOS)) {
     VZ.traduzir(D({ estado: 'erro', motivo: 'troca-nova' })));
   caso('(d) "parado" com a versão do código instalada do release = sucesso (o pronto passou sem ser lido)',
     VZ.traduzir(D({ estado: 'parado', instalada: INST })).startsWith('Vozes instaladas') && VZ.traduzir(D({ estado: 'parado' })) === VZ.TEXTO_FALHA);
+}
+
+// ---------- (f) plugin recarregado no meio do download (revisão adversarial da P5) ----------
+{
+  const r = relogio();
+  const c = complemento({ estados: [
+    { status: 200, dados: D({ estado: 'baixando', baixados: 12e6, total: TAM }) },
+    { status: 200, dados: D({ estado: 'conferindo', baixados: TAM, total: TAM }) },
+    { status: 200, dados: D({ estado: 'trocando' }) },
+    { status: 200, dados: D({ estado: 'parado', instalada: INST, acao: 'nada' }) },
+  ] });
+  const m = montar(c, r);
+  m.pintar();
+  await flush();
+  let corpo = m.pintar();
+  caso('(f) instância nova com o complemento já baixando: o progresso dele na linha e nenhum botão',
+    explicas(corpo).includes('Baixando as vozes… 12 de 36 MB') && !botoes(corpo).length && !m.v.estado().trabalhando, corpo.textContent);
+  const vistos = [];
+  for (let i = 0; i < 10; i++) {
+    if (!(await r.passo())) break;
+    m.pintar();
+    await flush();
+    corpo = m.pintar();
+    vistos.push([explicas(corpo).slice(-2).join(' | '), botoes(corpo).length]);   // as 2 últimas: as linhas do pacote
+  }
+  caso('(f) acompanha pelo GET a cada 1 s: conferindo e instalando, sem botão no meio',
+    vistos.some(([t, b]) => t.endsWith(' | Conferindo as vozes…') && !b) && vistos.some(([t, b]) => t.endsWith(' | Instalando as vozes…') && !b)
+    && r.agora < VZ.CONSULTA_MS, JSON.stringify([r.agora, vistos]));
+  caso('(f) no fim: o pacote novo na linha e a mensagem de instalado, sem botão, e o acompanhamento para',
+    vistos.at(-1)?.[0] === 'Pacote de vozes Aoede instalado (versão 76d3c16afdfb, 476 falas). | Vozes instaladas (versão 76d3c16afdfb): valem a partir da próxima partida.'
+    && vistos.at(-1)?.[1] === 0 && c.pedidos.filter(p => p.caminho === '/voz/estado').length === 4
+    && c.pedidos.every(p => p.metodo === 'GET'), JSON.stringify([vistos.at(-1), c.pedidos.length]));
 }
 
 // ---------- (e) guardas ----------
