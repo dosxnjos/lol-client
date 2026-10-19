@@ -340,8 +340,8 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
     chave falta. Depois de qualquer revert, conferir `__lolClient.cfg.coletor.ligado` no CDP.
   - **Revert de `5971068` sozinho derruba o plugin inteiro** (revisão da Fase 2, 19/10/2026) → o `git revert` aplica limpo,
     mas devolve ao `compacto/index.js` o `import './chat-ponte.js'`, que `2d523bf` apagou; o import estático em
-    `pengu/index.js` cai com `ERR_MODULE_NOT_FOUND` e o `seguro()` não cobre (somem aceite, recompensas, avisos calados,
-    Configurações). Reverter `2d523bf` e `5971068` juntos, nessa ordem, e rodar a bateria node antes de recarregar o client.
+    `pengu/index.js` falha (no node, `ERR_MODULE_NOT_FOUND`; no client, o módulo de entrada não sobe e nenhum recurso
+    aparece) e o `seguro()` não cobre (somem aceite, recompensas, avisos calados, Configurações). Reverter `2d523bf` e `5971068` juntos, nessa ordem, e rodar a bateria node antes de recarregar o client.
 - **Ponte desligada ou complemento não visto = `coletor()` devolve status 0 sem fetch** (19/10/2026, `pengu/coach.js`) →
   quem chama vê "fora do ar" mesmo com o coletor de pé. Conferir no CDP `__lolClient.coach.estado()` (`ligado`, `visto`,
   `recursos`, `proximaEm`); `__lolClient.coach.apertar()` força o aperto de mão (só `GET /ola`). Rota nova no coletor só chega
