@@ -21,7 +21,7 @@ import { iniciarCompacto, expandirAntes } from './compacto/index.js';
 const seguro = (nome, fn) => { try { return fn(); } catch (e) { console.error(`[lol-client] ${nome}`, e); return null; } };
 
 // "não aceitar" e diagnóstico do aceite ao complemento (POST /aceite/plugin; a reserva dele aceita se este não aceitar).
-// Só com a reserva vista num aperto de mão desta sessão; por evento (evento: true), nunca preso ao recuo da ponte
+// Só com a reserva no último aperto de mão bom (coach.js naSessao); por evento (evento: true), nunca preso ao recuo da ponte
 export const avisarAceite = (caminho, opcoes = {}) => (naSessao('aceite-reserva')
   ? coletor(caminho, { ...opcoes, evento: true }) : Promise.resolve({ status: 0, dados: null }));
 

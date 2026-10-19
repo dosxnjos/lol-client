@@ -7,13 +7,14 @@
 // está pendurado nele (servidor_local.recursos).
 // Aperto de mão: na carga, na virada para None/Lobby/EndOfGame e, sem achar, com recuo RECUO_MS (30 s -> 2 min -> 5 min);
 // fora do recuo, uma tentativa na hora ao entrar em Matchmaking e outra em ReadyCheck (a reserva do aceite do complemento
-// só age com contato do plugin desde a entrada na fila: o complemento que subiu no meio do recuo é visto antes do ready
-// check). Todo aperto de mão bom com "coach" manda a config uma vez (substitui o laço de 30 s de antes: é ele que entrega a
+// só age com contato do plugin durante o próprio ready check, revisão de 19/10: o aperto de mão do ReadyCheck e o diagnóstico
+// de cada evento do aceite são esse contato). Todo aperto de mão bom com "coach" manda a config uma vez (substitui o laço de 30 s de antes: é ele que entrega a
 // config ao complemento que subiu depois do client). Último aperto de mão bom no DataStore 'lol-client.ponte'
 // ({versao, recursos, em}): as Configurações mostram os blocos do coach enquanto procuram, sem perder as chaves a cada
 // abertura do client.
-// O "não aceitar" e o diagnóstico do aceite (aceite.js, POST /aceite/plugin) são por evento: com o recurso visto nesta
-// sessão, vão na hora mesmo no meio de um recuo (opção evento), e a falha deles não derruba a ponte.
+// O "não aceitar" e o diagnóstico do aceite (aceite.js, POST /aceite/plugin) são por evento: com o recurso visto no último
+// aperto de mão bom, vão na hora mesmo no meio de um recuo de porta fechada (opção evento), e a falha deles não derruba a
+// ponte. A sessão se esquece do complemento quando a porta responde sem ser ele (outro programa) e quando a chave desliga.
 // CORS: o servidor só aceita origem local (a página do client é https://127.0.0.1:<porta da LCU>).
 
 export const URL_COLETOR = 'http://127.0.0.1:8765';
@@ -49,7 +50,7 @@ const dsPadrao = {
 export function criarPonte({ cfg = null, f = (...a) => fetch(...a), agendar = (fn, ms) => setTimeout(fn, ms), cancelar = t => clearTimeout(t),
   agora = () => Date.now(), ds = dsPadrao, ouvintes = new Set(), log = m => console.log('[lol-client]', m) } = {}) {
   const est = { visto: false, versao: null, recursos: [], em: 0, tentativas: 0, falhas: 0, proximaEm: null, erro: '', enviadoEm: 0 };
-  const sessao = new Set();   // recursos de algum aperto de mão bom desde a carga (eventos do aceite; destino das expansões)
+  const sessao = new Set();   // recursos do último aperto de mão bom (eventos do aceite; destino das expansões); esquecerSessao zera
   let vistoNaSessao = false, timer = null, emVoo = null, cfgVivo = cfg, ultimaFase = null, ligadoAntes = null;
   let esperaCfg = null, pendenteCfg = null;
 
@@ -80,7 +81,7 @@ export function criarPonte({ cfg = null, f = (...a) => fetch(...a), agendar = (f
   }
 
   const temRecurso = nome => ligado() && est.visto && est.recursos.includes(nome);
-  // recurso visto em algum aperto de mão bom desde a carga (o "não aceitar" vai mesmo durante um recuo)
+  // recurso do último aperto de mão bom (o "não aceitar" vai mesmo durante um recuo de porta fechada)
   const naSessao = nome => ligado() && sessao.has(nome);
   // para os blocos das Configurações: anunciado agora, ou, procurando, o do último aperto de mão bom gravado
   const mostraRecurso = nome => ligado() && (est.visto ? est.recursos.includes(nome) : !!salva()?.recursos?.includes(nome));
@@ -97,10 +98,16 @@ export function criarPonte({ cfg = null, f = (...a) => fetch(...a), agendar = (f
     timer = agendar(() => { timer = null; apertar('recuo'); }, ms);
   }
 
-  function perder(erro) {
+  // respondeu = a porta atendeu sem ser o complemento (200 sem app, outro status): ausente de verdade, então a sessão também
+  // se esquece dele (nada por evento vai a um programa estranho). Porta fechada ou sem resposta (status 0) mantém a sessão:
+  // o "não aceitar" segue indo durante o recuo (complemento reiniciando)
+  function esquecerSessao() { sessao.clear(); vistoNaSessao = false; }
+
+  function perder(erro, respondeu = false) {
     const antes = est.visto;
     est.visto = false;
     est.erro = erro;
+    if (respondeu) esquecerSessao();
     agendarRecuo();
     if (antes) { log(`complemento coach perdido (${erro}); procurando`); avisar(); }
   }
@@ -119,6 +126,8 @@ export function criarPonte({ cfg = null, f = (...a) => fetch(...a), agendar = (f
         const recursos = [...new Set(d.recursos.filter(x => typeof x === 'string'))].sort();
         const mudou = !est.visto || est.versao !== (d.versao ?? null) || est.recursos.join() !== recursos.join();
         Object.assign(est, { visto: true, versao: d.versao ?? null, recursos, em: agora(), falhas: 0, proximaEm: null, erro: '' });
+        // a sessão vale o último aperto de mão bom, não a soma: complemento que voltou sem um recurso não recebe a rota dele
+        esquecerSessao();
         vistoNaSessao = true;
         for (const x of recursos) sessao.add(x);
         ds.set(CHAVE_PONTE, { versao: est.versao, recursos, em: est.em });
@@ -128,7 +137,7 @@ export function criarPonte({ cfg = null, f = (...a) => fetch(...a), agendar = (f
         return true;
       }
       // porta respondendo sem o app (outro programa) ou erro: ausente
-      perder(r.status === 0 ? r.erro : r.status === 200 ? 'outro programa na porta' : `respondeu ${r.status}`);
+      perder(r.status === 0 ? r.erro : r.status === 200 ? 'outro programa na porta' : `respondeu ${r.status}`, r.status !== 0);
       return false;
     }).finally(() => { emVoo = null; });
     return emVoo;
@@ -173,6 +182,7 @@ export function criarPonte({ cfg = null, f = (...a) => fetch(...a), agendar = (f
       if (!agoraLigado) {
         cancelar(timer); timer = null;
         cancelar(esperaCfg); esperaCfg = null;
+        esquecerSessao();   // religar começa do zero: nada por evento antes de um aperto de mão novo
         Object.assign(est, { visto: false, recursos: [], versao: null, falhas: 0, proximaEm: null, erro: '' });
         avisar();
         return false;

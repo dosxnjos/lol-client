@@ -7,7 +7,9 @@
 //   (c) porta respondendo 200 sem app (outro programa): ausente, nenhuma outra rota chamada;
 //   (d) /ola com recursos parciais (coach + draft): o plugin inteiro de pé chama só /ola, /config e /draft;
 //   (e) complemento que sobe no meio do recuo de 5 min e Lobby -> Matchmaking -> ReadyCheck: aperto de mão antes do
-//       ReadyCheck e o "não aceitar" chega (POST /aceite/plugin).
+//       ReadyCheck e o "não aceitar" chega (POST /aceite/plugin);
+//   (f) a sessão do aceite vale o último aperto de mão bom: outro programa na porta, complemento sem a reserva ou ponte
+//       desligada e religada = zero POST /aceite/plugin; porta fechada (complemento reiniciando) mantém a sessão.
 // uso: node tools/teste-ponte.mjs
 import { registerHooks } from 'node:module';
 import { readFileSync } from 'node:fs';
@@ -54,14 +56,15 @@ function relogio(inicio = 1_000_000) {
 }
 
 // complemento falso: no = porta atende; app = o que o /ola diz; recursos anunciados; chamadas gravadas com o instante
+// (no, app, recursos e semApp mudam no meio do caso: o complemento cai, volta sem um recurso, outro programa pega a porta)
 function complemento(rel, { no = true, app = APP, recursos = ['coach', 'draft'], semApp = false } = {}) {
-  const s = { no, chamadas: [] };
+  const s = { no, app, recursos, semApp, chamadas: [] };
   s.fetch = async (url, op = {}) => {
     if (!String(url).startsWith(URL_COLETOR)) throw new Error('fetch fora da 8765 na parte 1: ' + url);
     const caminho = String(url).slice(URL_COLETOR.length);
     s.chamadas.push({ caminho, metodo: op.method || 'GET', corpo: op.body ? JSON.parse(op.body) : undefined, em: rel.agora });
     if (!s.no) throw new TypeError('Failed to fetch');
-    const corpo = caminho === '/ola' ? (semApp ? { ok: true } : { app, versao: 1, recursos }) : { ok: true };
+    const corpo = caminho === '/ola' ? (s.semApp ? { ok: true } : { app: s.app, versao: 1, recursos: s.recursos }) : { ok: true };
     return { status: 200, json: async () => corpo };
   };
   return s;
@@ -207,6 +210,73 @@ const ds = () => { const m = new Map(); return { get: k => (m.has(k) ? JSON.pars
   const r2 = await indice.avisarAceite('/aceite/plugin', { metodo: 'POST', corpo: { evento: 'nao-aceitar', desligadoNestaVez: true } });
   caso('(e) "não aceitar" durante o recuo (complemento visto nesta sessão) vai na hora', coach.estadoPonte().procurando && r2.status === 200
     && srv.chamadas.filter(c => c.caminho === '/aceite/plugin').length === 2);
+  coach.iniciarPonte({ coletor: { ligado: false } }, { ds: ds(), log: () => {} });   // devolve a ponte desligada para a parte 2
+}
+
+// ---------- (f) a sessão vale o último aperto de mão bom (revisão adversarial de 19/10) ----------
+// antes: a sessão só crescia, e o "não aceitar"/diagnóstico por evento ia a outro programa na porta, a um complemento que
+// voltou sem a reserva, ou saía depois de desligar e religar a ponte antes de qualquer aperto de mão novo
+{
+  const indice = await import('../pengu/index.js');
+  const aceitePosts = srv => srv.chamadas.filter(c => c.caminho === '/aceite/plugin').length;
+  const montar = recursos => {
+    const rel = relogio(0);
+    const srv = complemento(rel, { recursos });
+    const cfg = { coletor: { ligado: true }, coach: {}, aceite: { ligado: true, atrasoS: 10, limiteS: 12 } };
+    coach.iniciarPonte(cfg, { f: srv.fetch, agendar: rel.agendar, cancelar: rel.cancelar, agora: () => rel.agora, ds: ds(), log: () => {} });
+    return { rel, srv, cfg };
+  };
+  const ready = async rel => { for (const fase of ['Lobby', 'Matchmaking', 'ReadyCheck']) { coach.aoFasePonte(fase); await flush(6); } await rel.avancar(1000); };
+  const aviso = () => indice.avisarAceite('/aceite/plugin', { metodo: 'POST', corpo: { evento: 'nao-aceitar', desligadoNestaVez: true }, prazoMs: 1500 });
+
+  // (f1) aperto de mão bom, depois outro programa pega a porta (200 sem app)
+  {
+    const { rel, srv } = montar(['coach', 'aceite-reserva']);
+    await rel.avancar(1000);
+    const r0 = await aviso();
+    srv.semApp = true;
+    await ready(rel);
+    const n = aceitePosts(srv);
+    const r1 = await aviso(), r2 = await aviso();
+    caso('(f1) aperto de mão bom e depois outro programa na porta: zero POST /aceite/plugin no ReadyCheck',
+      r0.status === 200 && n === 1 && [r1, r2].every(r => r.status === 0) && aceitePosts(srv) === 1 && !coach.naSessao('aceite-reserva')
+      && coach.estadoPonte().erro === 'outro programa na porta', JSON.stringify({ r0: r0.status, n, depois: aceitePosts(srv), sessao: coach.estadoPonte().sessao }));
+  }
+  // (f2) o complemento volta sem a reserva (porta ocupada ou erro no _sinal_aceite tira /aceite/ do /ola)
+  {
+    const { rel, srv } = montar(['coach', 'aceite-reserva']);
+    await rel.avancar(1000);
+    srv.recursos = ['coach'];
+    await ready(rel);
+    const r = await aviso();
+    caso('(f2) aperto de mão bom sem aceite-reserva: a sessão é a do último aperto de mão, nenhum POST /aceite/plugin',
+      coach.estadoPonte().visto && r.status === 0 && aceitePosts(srv) === 0 && JSON.stringify(coach.estadoPonte().sessao) === JSON.stringify(['coach']),
+      JSON.stringify({ r: r.status, n: aceitePosts(srv), sessao: coach.estadoPonte().sessao }));
+  }
+  // (f3) desligar e religar a ponte com a porta fechada: nada por evento antes de um aperto de mão bom novo
+  {
+    const { rel, srv, cfg } = montar(['coach', 'aceite-reserva']);
+    await rel.avancar(1000);
+    cfg.coletor.ligado = false; coach.sincronizarConfig(cfg); await flush(4);
+    const desligado = await aviso();
+    srv.no = false;
+    cfg.coletor.ligado = true; coach.sincronizarConfig(cfg); await flush(6);
+    const religado = await aviso();
+    caso('(f3) ponte desligada e religada sem aperto de mão bom: o "não aceitar" não sai (nem com a chave desligada)',
+      desligado.status === 0 && religado.status === 0 && aceitePosts(srv) === 0 && coach.estadoPonte().procurando,
+      JSON.stringify({ desligado: desligado.status, religado: religado.status, n: aceitePosts(srv) }));
+  }
+  // (f4) o que fica: porta fechada (status 0) mantém a sessão, e o "não aceitar" segue indo quando ela volta
+  {
+    const { rel, srv } = montar(['coach', 'aceite-reserva']);
+    await rel.avancar(1000);
+    srv.no = false;
+    await coach.coletor('/config', { metodo: 'POST', corpo: {} });
+    srv.no = true;
+    const r = await aviso();
+    caso('(f4) complemento reiniciando (porta fechada, status 0): sessão mantida, o "não aceitar" vai',
+      coach.estadoPonte().procurando && coach.naSessao('aceite-reserva') && r.status === 200 && aceitePosts(srv) === 1);
+  }
   coach.iniciarPonte({ coletor: { ligado: false } }, { ds: ds(), log: () => {} });   // devolve a ponte desligada para a parte 2
 }
 
