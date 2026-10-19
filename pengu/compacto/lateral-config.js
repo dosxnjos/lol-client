@@ -120,6 +120,8 @@ export const CSS_CONFIG = `
 #lc-compacto .lc-lt-topo .lc-versao-titulo { margin:0 0 6px; color:var(--lc-ouro2); font-size:12.5px; }
 #lc-compacto .lc-lt-topo .lc-versao-acoes { display:flex; flex-wrap:wrap; gap:6px; }
 #lc-compacto .lc-lt-topo .lc-explica { margin:4px 0 0; font-size:11px; color:var(--lc-mudo); line-height:1.35; user-select:text; }
+#lc-compacto .lc-lt-topo .lc-versao-link { word-break:break-all; color:var(--lc-ouro2); }
+#lc-compacto .lc-lt-topo .lc-versao-link + .lc-versao-acoes { margin-top:6px; }
 #lc-compacto .lc-lt-topo .lc-versao-notas { margin-top:6px; max-height:140px; overflow:auto; white-space:pre-wrap; user-select:text; font-size:11px; color:var(--lc-mudo); }
 #lc-compacto .lc-lt-rod { flex:none; padding:8px 10px 10px; border-top:1px solid var(--lc-linha2); display:flex; flex-direction:column; gap:4px; }
 #lc-compacto .lc-lt-rod small { font-size:10.5px; color:var(--lc-mudo); }
