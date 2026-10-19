@@ -32,7 +32,7 @@ import { criarGeometria, lerTelaRiot, quadroDaPagina, esperarTamanhoDaPagina } f
 import { criarLateral, CSS_LATERAL, lateralLigada } from './lateral.js';
 import { criarFundo } from './fundo.js';
 import { criarRegistroExpansoes, descreverCamada, textoSeguro, enviarAoColetor } from './expansoes.js';
-import { coletor as coletorPadrao } from '../coach.js';
+import { coletor as coletorPadrao, recursoDe, destinoDe } from '../coach.js';
 
 export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'Reconnect',
   'FailedToLaunch', 'TerminatedInError', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
@@ -1062,9 +1062,12 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   // da camada que a Riot faz no boot). Liga no ligarDom; a chave compacto.fundoPerfil vale na hora (sincronizar)
   const fundo = criarFundo({ cfg, lcu: lcuPadrao, doc, log: (...a) => console.log('[lol-client] compacto:', ...a) });
   // passo 15: registro das expansões. Janela em px CSS (inner*) e a posição/monitor da geometria (px físicos, ScreenData);
-  // envio ao coletor (POST /compacto/expansoes) com fila em memória: coletor fora ou sem a rota guarda e reenvia
+  // envio ao coletor (POST /compacto/expansoes) com fila em memória: coletor fora ou sem a rota guarda e reenvia. Só com o
+  // complemento coach anunciando "expansoes"; com o aperto de mão pendente guarda, sem a chave ou sem o recurso descarta
+  // (coach.js destinoRecurso; Fase 1 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
+  const colExp = servicos.coletor || coletorPadrao;
   const registro = criarRegistroExpansoes({
-    enviar: enviarAoColetor(servicos.coletor || coletorPadrao),
+    enviar: enviarAoColetor(colExp, () => destinoDe(colExp, 'expansoes')),
     medir: () => {
       const t = geometria.tela?.();
       return { larg: window.innerWidth, alt: window.innerHeight, x: Number(window.screenX), y: Number(window.screenY),
@@ -1249,14 +1252,19 @@ export const CHAT_REAVISO_MS = 60000;
 // (senão a conversa abriria em dobro). O corpo leva {compacto, lateral}: o coletor lê `lateral` (a2ab349) e cala a abertura
 // automática; `compacto` diz a verdade. Coletor anterior ao a2ab349 abriria em dobro: atualizar os dois juntos.
 // chave = o que foi avisado (muda = avisa de novo).
+// Fase 1 de roadmap/2026-10-17-plugin-pengu-primeiro.md: o POST /chat/plugin só sai com o complemento coach anunciando
+// "chat-janelas" (sem as janelas do Edge não há conversa em dobro a evitar); sem o recurso, nada (o reaviso periódico manda
+// quando ele aparecer)
 export function criarAvisoChat({ cfg, coletor, repetir = setInterval, intervaloMs = CHAT_REAVISO_MS }) {
   let ultimo = null;
-  const valor = () => { const ligado = !!cfg.compacto?.ligado, lat = lateralLigada(cfg); return { compacto: ligado, lateral: lat }; };
+  const col = () => coletor || coletorPadrao;
+  const valor = () => { const ligado = !!cfg.compacto?.ligado, lat = lateralLigada(cfg, recursoDe(col(), 'chat-janelas')); return { compacto: ligado, lateral: lat }; };
   const chave = () => JSON.stringify(valor());
   const avisar = () => {
     const v = valor();
     ultimo = chave();
-    try { return Promise.resolve(coletor ? avisarModo(v.compacto, coletor, { lateral: v.lateral }) : avisarModo(v.compacto, undefined, { lateral: v.lateral })).catch(() => false); }
+    if (!recursoDe(col(), 'chat-janelas')) return Promise.resolve(false);
+    try { return Promise.resolve(avisarModo(v.compacto, col(), { lateral: v.lateral })).catch(() => false); }
     catch { return Promise.resolve(false); }
   };
   const id = repetir(() => { if (cfg.compacto?.ligado) avisar(); }, intervaloMs);

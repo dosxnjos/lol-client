@@ -672,6 +672,28 @@ const J = x => JSON.stringify(x);
   caso('expansão nova sem a volta da anterior: a anterior fecha como "nova expansão sem volta registrada"',
     col.recebidos.some(e => e.tipo === 'fim' && e.como === 'nova expansão sem volta registrada'), J(col.recebidos.map(e => [e.tipo, e.como])));
 
+  // Fase 1 (ponte com o complemento coach, 19/10/2026): destino 'guardar' (aperto de mão pendente) segura a fila sem chamar
+  // o complemento; 'descartar' (chave desligada ou complemento sem o recurso) esvazia a fila, sem log de falha; 'enviar' entrega
+  {
+    let destino = 'guardar';
+    const colD = coletorFalso([200, 200, 200]);
+    const relD = relogio();
+    const logsD = [];
+    const rD = criarRegistroExpansoes({ enviar: enviarAoColetor(colD.f, () => destino), agendar: relD.agendar, limpar: relD.limpar, agora: relD.agoraMs,
+      depoisMs: 0, log: m => logsD.push(m) });
+    rD.abrir({ origem: 'modal', motivo: 'carga' }); relD.avancar(1); await tick();
+    const guardou = rD.estado().fila, chamou = colD.recebidos.length;
+    destino = 'enviar';
+    relD.avancar(REENVIO_MS); await tick();
+    const entregou = colD.recebidos.length;
+    destino = 'descartar';
+    rD.abrir({ origem: 'modal', motivo: 'depois' }); relD.avancar(1); await tick();
+    caso('ponte: aperto de mão pendente guarda (nenhuma chamada), aperto bom com o recurso entrega o que a carga guardou',
+      guardou >= 1 && chamou === 0 && entregou >= 1 && entregou === guardou, J([guardou, chamou, entregou]));
+    caso('ponte: chave desligada ou sem o recurso descarta a fila, sem chamar o complemento e sem log de "recusou"',
+      rD.estado().fila === 0 && colD.recebidos.length === entregou && !logsD.some(l => /recusou/.test(l)), J([rD.estado(), logsD]));
+  }
+
   // revisão adversarial 15/10: o servidor do coletor lê só 64 KiB de corpo (o resto corta: JSON torto, 400). Fila cheia com
   // camadas (coletor velho sem a rota até o reinício) não pode virar um lote que volta 400 para sempre
   const camadaGorda = i => ({ tag: 'div', id: '', classes: 'modal lol-uikit-dialog-frame x'.repeat(4).slice(0, 120), expande: i ? null : '.modal',

@@ -98,8 +98,16 @@ export const ROTA = '/compacto/expansoes';
 const _enc = typeof TextEncoder !== 'undefined' ? new TextEncoder() : null;
 export const bytesDe = x => { const s = JSON.stringify(x); return _enc ? _enc.encode(s).length : s.length * 3; };
 
-// envio ao COLETOR (127.0.0.1:8765, nunca a LCU): coletor = fetch do coach.js (caminho, {metodo, corpo, prazoMs}) -> {status}
-export const enviarAoColetor = coletor => corpo => coletor(ROTA, { metodo: 'POST', corpo, prazoMs: 3000 });
+// envio ao COLETOR (127.0.0.1:8765, nunca a LCU): coletor = fetch do coach.js (caminho, {metodo, corpo, prazoMs}) -> {status}.
+// destino() -> 'enviar' | 'guardar' | 'descartar' (coach.js destinoRecurso('expansoes')): com a chave da ponte ligada e o aperto de
+// mão ainda pendente a fila em memória guarda como antes (as saídas da abertura do client acontecem antes do complemento subir);
+// descarta só com a chave desligada ou com aperto de mão bom sem o recurso. Sem destino (teste antigo): envia sempre
+export const enviarAoColetor = (coletor, destino = null) => corpo => {
+  const d = typeof destino === 'function' ? destino() : 'enviar';
+  if (d === 'descartar') return { status: 0, descartar: true };
+  if (d === 'guardar') return { status: 0 };
+  return coletor(ROTA, { metodo: 'POST', corpo, prazoMs: 3000 });
+};
 
 // registro: abrir(dados) na saída do compacto, trocou(dados) a cada motivo novo enquanto expandido, fechar(dados) na volta.
 // enviar({eventos, descartados}) -> Promise<{status}> (status 0 = coletor fora); medir() -> janela {larg, alt, x, y, ...}
@@ -149,6 +157,9 @@ export function criarRegistroExpansoes({ enviar, medir = () => null, agendar = s
     enviando = true;
     let ok = false;
     Promise.resolve().then(() => enviar({ eventos: lote, descartados: desc })).then(r => {
+      // a ponte diz que o registro não vai a lugar nenhum (chave do complemento desligada, ou complemento visto sem o recurso
+      // "expansoes"): a fila em memória se esvazia, sem log de falha (Fase 1 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
+      if (r?.descartar) { descartados += fila.length; fila = []; envios.ultimo = { status: 0, em: carimbo(), n: 0, descartado: true }; return; }
       const status = Number(r?.status) || 0;
       envios.ultimo = { status, em: carimbo(), n: lote.length };
       ok = status >= 200 && status < 300;
@@ -169,7 +180,7 @@ export function criarRegistroExpansoes({ enviar, medir = () => null, agendar = s
         if (!falhasVistas.has(chave)) {
           falhasVistas.add(chave);
           log(status === 404 ? 'expansões: o coletor de pé não tem a rota /compacto/expansoes (reiniciar o coletor); guardando'
-            : status === 0 ? 'expansões: coletor fora do ar; guardando e reenviando' : `expansões: o coletor respondeu ${status}; guardando`);
+            : status === 0 ? 'expansões: coletor fora do ar ou aperto de mão pendente; guardando e reenviando' : `expansões: o coletor respondeu ${status}; guardando`);
         }
       }
     }, () => { envios.falhas++; envios.ultimo = { status: 0, em: carimbo(), n: lote.length }; })
