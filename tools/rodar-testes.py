@@ -62,6 +62,8 @@ TESTES = [
     [PY, "tools/teste-varrer-publico.py"],   # varredura da foto pública: gameId, nome em literal, credencial (19/10/2026)
     [PY, "tools/teste-publicar.py"],         # foto pública, zips e --publicar com remote e gh falsos (P1, 19/10/2026); ~3 min (git)
     [PY, "tools/teste-atualizar.py"],        # atualizar do complemento e atualizar.cmd: release falso em 8831-8840, hash, origem, troca com volta, junção/.git (P3, 19/10/2026)
+    [PY, "tools/teste-instalacao.py"],       # edição pública x completa, pasta do LoL, monitor do painel, calibração do chat por resolução (P4, 19/10/2026)
+    [PY, "tools/teste-instalar.py"],         # instalar/desinstalar.cmd no temp (pip sem rede), relançador e ensaio-coach --publico em 8833/8834 (P4; ~4 min)
     [PY, "tools/teste-minimapa.py"],
     [PY, "tools/teste-jungler.py"],
     [PY, "tools/teste-alcance.py"],

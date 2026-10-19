@@ -97,7 +97,10 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
   agora" (fora de None/Lobby: "Recarregue na tela inicial ou no lobby."); recusas e erros em frase de fato + saída ("Instalação
   de desenvolvimento (…): o botão não troca estes arquivos.", "Os arquivos da versão 0.2.0 não conferem com o release: nada foi
   trocado."); sem o complemento, o caminho do `atualizar.cmd` e o endereço com "copiar link". O `publico/atualizar.cmd` segue o
-  mesmo tom nas mensagens dele.
+  mesmo tom nas mensagens dele, e o `instalar.cmd` e o `desinstalar.cmd` (P4) também: fato + saída, impessoal ou "você"
+  ("Python 3.12 ou mais novo (64 bits) não encontrado.", "Baixe em … e rode o instalar.cmd de novo.", "Plugin não copiado: …
+  e os dois carregariam juntos."). Nenhuma guarda automática lê os `.cmd`: revisar à mão (o `teste-instalar.py` confere as
+  frases que as provas esperam).
 - Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
   "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026). O que mostra a amostra dele (Fase 5 do plano plugin Pengu
   primeiro: nota do pós-jogo, freios, dica do lobby, selo, Configurações) segue este guia: diz "partidas guardadas neste

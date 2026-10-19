@@ -29,8 +29,37 @@ junto (o `coletor.py` importa sem `try`); o vigia não. Dado pessoal nesses arqu
 credencial, caminho): `python -I tools/varrer-publico.py` reprova; prova `tools/teste-varrer-publico.py`. O zip do complemento
 (`tools/publicar.py`, P1) leva esses arquivos com os mesmos caminhos do repo, numa pasta `lol-ultra-client-complemento/`
 (o código lê `RAIZ/docs/...` e `RAIZ/pengu/posjogo/licoes.md`), o plugin inteiro em `pengu/` (o `instalar.cmd` o copia para
-a pasta de plugins do Pengu), mais `LICENSE`, `TERCEIROS.md`, `LEIA-ME.md`, `instalar.cmd` e `atualizar.cmd`; conteúdo
-sempre do commit, nunca da pasta de trabalho.
+a pasta de plugins do Pengu), mais `LICENSE`, `TERCEIROS.md`, `LEIA-ME.md`, `instalar.cmd`, `desinstalar.cmd`,
+`atualizar.cmd` e o `EDICAO`; conteúdo sempre do commit, nunca da pasta de trabalho.
+
+### Complemento público: edição, instalação e relançador (P4 da publicação, 19/10/2026)
+
+- **Edição** (`coletor/instalacao.py`): `EDICAO` na raiz do complemento = **pública** (o `publicar.py` põe `publico/EDICAO`
+  lá); sem ele, **completa** (esta pasta de trabalho: nada muda na instalação do mantenedor). A pública não anuncia nem liga
+  `mentor`, `carregamento` (Riot API), `draft`, `resumos` e `expansoes` (`instalacao.SO_COMPLETA`: tirados do `/ola`;
+  `/resumos` dá 404; `carregamento` e `mentor` presos em `false` no `ler_config`/`salvar_config`, mesmo com o plugin mandando
+  `true`), nem tenta mentor, draft, vitrine, medidor de travadas e registro das expansões (módulos fora do zip). O `/ola`
+  traz também `edicao` e `pacote` (a `VERSAO` do `pengu/versao.js`); `versao` segue a da ponte.
+- **Nada fixo da máquina do mantenedor:** pasta do LoL por `instalacao.pastas_lol()` (a do lockfile achado, as do
+  `RiotClientInstalls.json` da Riot, a padrão `C:\Riot Games\League of Legends`), usada no lockfile, no `game.cfg`
+  (`minimapa.game_cfg`) e no `input.ini` (`teclas.config_lol`); a busca do lockfile pela linha de comando só com o
+  `LeagueClientUx.exe` aberto. Monitor do painel: o secundário de menor número ou `monitorPainel` na config (nome do
+  dispositivo; antes, `DISPLAY1` fixo, o mesmo com 2 monitores). Calibração do chat por resolução: `feiticos.faixas_calibrar`
+  e as medidas da caixa escalam pela altura da tela (referência 2560×1080, igual à de antes nela), escala do OCR abaixo de 2600 px.
+- **`publico/instalar.cmd`** (sem admin): Python 3.12+ de 64 bits (`py -3.14/-3.13/-3.12`, depois o `python.exe` do PATH; sem
+  ele, diz onde baixar), venv em `%LOCALAPPDATA%\lol-client\complemento\venv` (reaproveitado na mesma versão), `pip install
+  --only-binary=:all: -r requirements-complemento.txt`, complemento em `...\complemento\lol-ultra-client-complemento` (`dados\`
+  fica, `.atualizacao\` sai: é a saída de uma `troca-incompleta`), plugin em `plugins\lol-ultra-client` (pasta pela ativação
+  do Pengu ou perguntada; nunca junção, `.git` nem com um `plugins\lol-client` ao lado), atalho `lol-ultra-client.lnk` na pasta
+  Inicializar (`pythonw.exe` do venv + `coletor\relancador.py`) e sobe o relançador. Complemento desta instalação em execução
+  (pid das travas em `dados\`, só python com a pasta na linha de comando) é fechado antes do pip; partida aberta = recusa.
+- **`publico/desinstalar.cmd`**: fecha o complemento do mesmo jeito, apaga o atalho, `plugins\lol-ultra-client` (nunca a de
+  desenvolvimento) e `%LOCALAPPDATA%\lol-client\complemento`; `%LOCALAPPDATA%\lol-client` só se ficar vazia.
+- **`coletor/relancador.py`** (no lugar do gatilho 4688 e do vigia, que pedem admin ou tarefa agendada): sobe o `coletor.py`
+  com `--ocioso-min inf` pelo caminho absoluto e o sobe de novo quando sai, espera de 5 s dobrando até 5 min (rodou 60 s ou
+  mais: volta a 5 s); trava `dados\coletor.lock` de dono vivo (o sucessor da atualização) = espera ele sair; um relançador só
+  (`dados\relancador.lock`); log `dados\relancador.log`.
+- Os `.cmd` fazem tudo na 1ª linha (ARMADILHAS § Windows: página de código UTF-8).
 
 ## Vida, queda e vigia (15/10/2026)
 
@@ -92,6 +121,8 @@ deles + trava órfã = morte por fora. Armadilhas: [ARMADILHAS](ARMADILHAS.md) �
 | teste do retrato do champ select | `python tools\teste-champselect.py` |
 | todas as provas offline (+ ensaio a 20x no fim) | `python tools\rodar-testes.py [filtro]` |
 | ensaio ponta a ponta sem o client (§ Coach na partida) | `python tools\ensaio-coach.py [--velocidade 10] [--sem-prints]` |
+| ensaio contra o complemento público instalado (código só da pasta, bibliotecas só do venv) | `<venv>\Scripts\python.exe -I tools\ensaio-coach.py --publico <pasta do complemento> --porta 8833 --porta-sim 8834` |
+| provas da P4: edição, pasta do LoL, monitor, calibração por resolução · instalação limpa no temp (pip sem rede), relançador, reinstalar, desinstalar e o ensaio público | `python tools\teste-instalacao.py` · `python tools\teste-instalar.py` (~4 min) |
 | coletor contra o simulador (banco e porta de teste; nunca com o coletor real de pé na mesma trava) | `python coletor\coletor.py --liveclient http://127.0.0.1:2998 --db temp\x.db --porta-painel 8766` |
 | instalar / remover o gatilho | `powershell -NoProfile -ExecutionPolicy Bypass -File tools\instalar-gatilho.ps1` (ou `remover-gatilho.ps1`) |
 | parar o coletor agora (com o vigia instalado e o client aberto, ele sobe de novo em até 3 min: `vigia-coletor.py pausar` antes) | `schtasks /end /tn lol-client-coletor` |
@@ -349,7 +380,8 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   está pendurado (`ServidorLocal.recursos`): rotas (`/draft` → `draft`, `/revisao/` → `revisao`,
   `/aceite/` → `aceite-reserva`, `/compacto/` → `expansoes`), `ao_config` → `coach`, `estado` dado → `estado-partida`,
   Mentor → `mentor`, banco existente → `contexto` e `resumos`, e o que o dono declara (`coach_vivo`: `painel`, `voz`, `alertas`,
-  `minimapa`, `feiticos`, `carregamento`; `Coletor`: `aceite-flutuante`). O plugin só
+  `minimapa`, `feiticos`, `carregamento`; `Coletor`: `aceite-flutuante`), menos o que a edição pública não leva
+  (§ Complemento público). O plugin só
   fala com a 8765 com `cfg.coletor.ligado` e um `/ola` bom, e só chama a rota do recurso anunciado (`pengu/coach.js`
   `temRecurso`); porta que responde sem esse `app` = outro programa, tratado como ausente. Para o usuário o nome é
   "complemento coach" ([TEXTOS-DA-INTERFACE](TEXTOS-DA-INTERFACE.md)).

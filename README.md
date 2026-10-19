@@ -207,6 +207,11 @@ a linha no topo das Configurações e o ponto no ⚙ desenhados no CEF ([relató
 `teste-atualizador.mjs`); só o client prova o "copiar link" no CEF, o `location.reload()` da recarga e a troca com o Pengu e o
 Explorer abertos na pasta; nesta máquina, depois do próximo reinício do coletor, o botão responde "Instalação de desenvolvimento"
 ([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p3.md)).
+**Complemento público** (19/10/2026): instalado e ensaiado só no temp (`teste-instalar.py`, `ensaio-coach.py --publico`); só
+uma máquina de outra pessoa prova o `instalar.cmd` por duplo clique, o pip contra o PyPI, um Python 3.12/3.13 de verdade, o
+atalho da pasta Inicializar subindo no logon e o plugin copiado para o Pengu de verdade
+([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p4.md)). Nesta máquina nada muda: a pasta de
+trabalho não tem `EDICAO` na raiz (edição completa) e o monitor automático é o mesmo `DISPLAY1`.
 **Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
 antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 
@@ -223,6 +228,8 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | foto pública do `lol-ultra-client` (ensaio, padrão: monta do commit pela lista de inclusão, varre e mostra o que entraria; zips e `SHA256SUMS.txt` em `dist\v<versão>\` só se a varredura passar; `--publicar` só depois do portão do P6 do [plano da publicação](roadmap/2026-10-19-publicacao-e-complemento-publico.md)). Textos do público: `publico\LEIA-ME.md` (vira o `README.md` do repositório público), `LICENSE`, `TERCEIROS.md`; versão em `pengu\versao.js` | `python -I tools\publicar.py` (prova: `python -I tools\teste-publicar.py`) |
 | aviso de versão nova (1 consulta por dia, chave, fase, erros calados, notas como texto; servidor falso local na porta 0; ~6 s) | `node tools\teste-atualizacao.mjs` |
 | botão atualizar: complemento e `atualizar.cmd` contra um release falso em 8831–8840 (hash, digest nulo, queda, junção, `.git`, origem, troca com volta, fila que anda no download, troca incompleta, `!` no caminho; pastas no temp; ~60 s) e o lado do plugin (progresso, recarregar só em None/Lobby, copiar link) | `python tools\teste-atualizar.py` · `node tools\teste-atualizador.mjs` |
+| complemento público (P4 da publicação): edição pública x completa no `/ola` e na config, pasta do LoL sem caminho fixo, monitor do painel, calibração do chat por resolução (OCR do Windows nos prints gravados; ~1 min) | `python tools\teste-instalacao.py` (`--sem-ocr`: segundos) |
+| instalação limpa do complemento público do zip do HEAD (LOCALAPPDATA, plugins e Inicializar no temp; pip sem rede), relançador, reinstalar em `chcp 65001`, desinstalar e o `ensaio-coach.py --publico` com o python do venv (portas 8833/8834; ~4 min; só com o jogo fechado) | `python tools\teste-instalar.py` (`--sem-ensaio`) |
 | medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
 
 Pegadinhas medidas: [ARMADILHAS](docs/ARMADILHAS.md). Regras do pós-jogo: [INSIGHTS](docs/INSIGHTS.md).

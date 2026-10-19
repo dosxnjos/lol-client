@@ -1129,10 +1129,23 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   módulo do coach cai em `ModuleNotFoundError`, o coletor (sem `-I`) não. Versões: `requirements-complemento.txt`.
 - **Caminho da Riot fixo em `C:\Games\Riot Games`** (instalação desta máquina) → `coletor.LOCKFILE_PADRAO` tem reserva
   (pasta do `LeagueClientUx.exe`), mas `teclas.CONFIG_LOL` e `minimapa.GAME_CFG` não: na instalação padrão da Riot
-  (`C:\Riot Games`) não acham `game.cfg`/`input.ini` (P0-d do plano da publicação, 19/10/2026).
+  (`C:\Riot Games`) não acham `game.cfg`/`input.ini` (P0-d do plano da publicação, 19/10/2026). **Resolvido na P4:** a pasta
+  vem de `coletor/instalacao.py` (a do lockfile achado, as do `C:\ProgramData\Riot Games\RiotClientInstalls.json`,
+  `associated_client`, e a padrão da Riot); nenhum caminho fixo sobrou (prova `teste-instalacao.py` (d)).
 - **Coletor sem gatilho e sem vigia some depois de 10 min** → `--ocioso-min` padrão 10: sem client nesse tempo ele sai
   ("encerrado (ocioso 10 min sem client)") e só o gatilho 4688 e o vigia desta máquina o trazem de volta. Instalação sem
-  eles passa `--ocioso-min inf` (`0` sai na hora). Medido em 19/10/2026 (revisão do P0 da publicação).
+  eles passa `--ocioso-min inf` (`0` sai na hora). Medido em 19/10/2026 (revisão do P0 da publicação). No complemento
+  público quem faz isso é o `coletor/relancador.py` do atalho da pasta Inicializar (P4). Com `inf`, o client fechado o dia
+  inteiro subia um PowerShell por minuto (busca do lockfile pela linha de comando): desde a P4 ele só sobe com o
+  `LeagueClientUx.exe` aberto (`instalacao.processo_existe`, Toolhelp32).
+- **Complemento recém-instalado sem `dados\cache\catalogo.json` não sabe o id dos campeões** → o minimapa não detecta ninguém
+  (0 campeões vistos) até o `ao_vivo` baixar itens e campeões da LCU no começo da 1ª partida (em paralelo; segundos). O ensaio
+  da instalação do mantenedor nunca viu isso porque lê o cache do repositório; o `ensaio-coach.py --publico` faz a LCU falsa
+  servir os dois (medido 19/10/2026: 0 campeões antes, 10 depois). Na partida real, a LCU de verdade serve.
+- **`pip install` de teste sem rede** → o `teste-instalar.py` remonta `.whl` das bibliotecas instaladas nesta máquina (arquivos
+  do `RECORD` + o `WHEEL` original) em `temp\rodas-complemento\` e passa `LUC_PIP_RODAS` (`--no-index --find-links`) ao
+  `instalar.cmd`: as versões fixas de verdade, sem PyPI. Biblioteca atualizada aqui fora do requirements = a prova reprova
+  na 1ª conferência ("biblioteca instalada nesta máquina = versão fixa").
 - **gameId em comentário entrega a conta** → um número de partida (`partida 3293…`) basta para a match-v5 da Riot devolver
   os participantes, e o único comum a várias é o dono. Arquivo que vai para o público passa por
   `python -I tools/varrer-publico.py` (19/10/2026); a palavra `puuid` e o nome em comentário passam, o valor não.
@@ -1143,15 +1156,28 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   `tools/publicar.py` monta a foto do blob cru, e `cmd.exe` com LF quebra rótulo e `goto`. `.gitattributes` tem
   `*.cmd -text` (P1 da publicação, 19/10/2026; medido: `i/crlf` com o atributo, `i/lf` sem).
 - **`.cmd` que se troca relê o próprio arquivo** → o `cmd.exe` lê o lote linha a linha pelo deslocamento e relê o arquivo depois
-  de cada comando; o `atualizar.cmd` troca a pasta onde ele mesmo está. Ele roda o PowerShell e sai **na mesma linha**
-  (`powershell ... & exit /b !errorlevel!`), sem rótulo nem `goto` (funciona com LF, sem depender do CRLF), e faz `cd /d
-  "%TEMP%"` antes (duplo clique abre o cmd com a pasta atual dentro da pasta trocada: o rename falharia).
+  de cada comando; o `atualizar.cmd` troca a pasta onde ele mesmo está. Os `.cmd` do pacote (`atualizar`, `instalar`,
+  `desinstalar`) fazem **tudo na 1ª linha** e saem nela (`@echo off & setlocal & set "LUC_CMD=%~f0" & cd /d "%TEMP%" &
+  powershell ... & call exit /b %%errorlevel%%`), sem rótulo nem `goto` (funciona com LF), com `cd /d "%TEMP%"` antes (duplo
+  clique abre o cmd com a pasta atual dentro da pasta trocada: o rename falharia).
+- **`.cmd` com acento quebra com o console na página de código UTF-8** (P4, medido 19/10/2026: `chcp 65001` antes do
+  `atualizar.cmd` da P3 = rc 255 e "'leDelayedExpansion' não é reconhecido", pedaços do PowerShell rodando como lote; a opção
+  "UTF-8 para suporte de idioma mundial" do Windows ou um terminal em 65001 fazem o mesmo) → nessa página o cmd erra o
+  deslocamento da linha seguinte num arquivo com caractere de vários bytes, mesmo com as primeiras linhas só ASCII. Por isso
+  tudo na 1ª linha: o cmd nunca precisa ler a 2ª. Prova: `teste-atualizar.py` (h) e `teste-instalar.py` (e) em `chcp 65001`.
+- **`[Console]::OutputEncoding = UTF8` num PowerShell filho muda a página do console inteiro** → o console é dividido: o
+  processo que chamou e os `.cmd` seguintes herdam a 65001 (foi assim que o defeito acima apareceu, no `teste-instalar.py`).
+  Prova que precisa de outra página roda `chcp` dentro do `cmd /c` e devolve a de antes no fim.
 - **`exit /b` sem número depois de `&` devolve 0** (medido 19/10/2026: o PowerShell saiu com 1, o `cmd /c` deu 0) → o código
-  de saída se perde; `setlocal EnableDelayedExpansion` e `exit /b !errorlevel!` (o `%errorlevel%` expande antes do comando).
+  de saída se perde, e o `%errorlevel%` da mesma linha expande antes do PowerShell rodar. Desde a P4: `call exit /b
+  %%errorlevel%%` (o `call` expande de novo, depois do PowerShell), sem `EnableDelayedExpansion`.
 - **`!` no caminho some com `EnableDelayedExpansion` ligado** (revisão adversarial da P3, medido 19/10/2026: pasta `luc!-…` virou
-  `luc-…` no `LUC_CMD` e o PowerShell não achou o arquivo) → a expansão atrasada roda depois do `%…%` e come o `!` do valor. O
-  `atualizar.cmd` faz `set "LUC_CMD=%~f0"` e `cd /d "%TEMP%"` **antes** do `setlocal EnableDelayedExpansion`; só a linha do
-  `!errorlevel!` vem depois. Prova: `teste-atualizar.py` (h) e (i).
+  `luc-…` no `LUC_CMD` e o PowerShell não achou o arquivo) → a expansão atrasada come o `!` do valor. Desde a P4 os `.cmd` não
+  ligam a expansão atrasada. Prova: `teste-atualizar.py` (i) e `teste-instalar.py` (pacote extraído em `Meus Downloads!`).
+- **`.cmd` que apaga a própria pasta sai com rc 1 e "O sistema não pode encontrar o caminho especificado"** (P4, 19/10/2026) →
+  ao sair o cmd ainda abre o próprio arquivo, e o `endlocal` implícito do `setlocal` volta para a pasta atual de antes. O
+  `desinstalar.cmd` não usa `setlocal` e, rodando de dentro da pasta que apaga, deixa só ele e um `cmd` solto apaga o resto
+  2 s depois (`teste-instalar.py` (g)).
 - **`shutil.move` que falha no rename copia e apaga pela metade** → com um arquivo preso no item, o `os.rename` falha e o
   `shutil.move` cai em `copytree` + `rmtree`, que apaga o que consegue da origem antes de esbarrar no preso. Troca com volta usa
   só `os.rename` (`[IO.Directory]::Move` no PowerShell) no mesmo volume (por isso o estágio mora dentro da pasta). Medido 19/10:

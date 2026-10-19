@@ -35,6 +35,13 @@ None/Lobby; sem complemento, `atualizar.cmd` e "copiar link" ([relatório](2026-
 Revisão adversarial da P3 (19/10, `a60a7c0`, `4b34912`, `163bc67`, `0d6183f`; 11 achados, todos reais e corrigidos, tabela no
 relatório): fase conferida de novo antes de trocar e reinício logo depois do "pronto", junção vista sem `resolve()`, `.git` até a
 pasta do usuário, marca de troca incompleta, POST sem Origin = 403, `!` no `.cmd`; `teste-atualizar.py` 101/101 (84/101 antes).
+**P4 feita em 19/10** (`cd4a7d7` a `bbbae08` + docs; `teste-instalacao.py` 40/40, `teste-instalar.py` 31/31 com o `ensaio-coach.py
+--publico --porta 8833 --porta-sim 8834` 38/38 no python do venv com `-I`, `teste-atualizar.py` 102/102, `teste-publicar.py` 53/53,
+`publicar.py` ensaio **APROVADO** com 0 achados): edição pública pelo arquivo `EDICAO` (a instalação dele segue completa), pasta
+do LoL e monitor sem fixo, calibração do chat por resolução, `instalar.cmd`/`desinstalar.cmd`, `coletor/relancador.py`; os `.cmd`
+fazem tudo na 1ª linha (na página UTF-8 o cmd rodava pedaços do PowerShell como lote, o `atualizar.cmd` da P3 inclusive). `dados\`
+fica dentro da pasta do complemento (desvio do P0 achado 1). Python 3.12/3.13 não provados (só há 3.14 e 3.11 aqui)
+([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p4.md)).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 

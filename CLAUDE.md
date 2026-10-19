@@ -32,7 +32,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - A 8765 é do coletor: nunca matar dono de porta sem `GET /estado`; derrubar o coletor de propósito = `python
   tools/vigia-coletor.py pausar` antes, senão o vigia sobe de novo ([COLETOR](docs/COLETOR.md) § Vida, queda e vigia).
 - Coach ao vivo (`coletor/coach_vivo.py`): provar com `python tools/ensaio-coach.py` (sem client, banco e
-  portas de teste); nunca rodar o `coletor.py` de teste contra `dados/` com o coletor real de pé.
+  portas de teste); nunca rodar o `coletor.py` de teste contra `dados/` com o coletor real de pé. Complemento público (edição pelo `EDICAO` na raiz, `instalar.cmd`, relançador): `python tools/teste-instalar.py` (`ensaio-coach.py --publico`); `.cmd` do pacote fazem tudo na 1ª linha ([COLETOR](docs/COLETOR.md) § Complemento público).
 - Print do overlay/moldura só pelo modo vitrine (`tools/vitrine.py`); nunca desligar `WDA_EXCLUDEFROMCAPTURE` nem
   trazer o jogo para a frente. Provas que abrem janela só com o jogo fechado (`rodar-testes.py` e `ensaio-coach.py` recusam).
 - Pacote de voz: a tarefa `lol-client-voz` completa e converge sozinha (`python tools/voz-agendada.py estado`); gerador
