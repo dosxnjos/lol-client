@@ -1184,6 +1184,18 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   pasta com um arquivo aberto dentro não renomeia (`WinError 5`), e a troca devolve tudo (`teste-atualizar.py` (c)).
 - **Saída do PowerShell redirecionada vem na página OEM** (cp850) → quem lê a saída do `atualizar.cmd` por pipe decodifica com
   `cp850` (o `á` chega como `0xA0`); no console aparece certo.
+- **Caminho que o Python imprime chega trocado no PowerShell** (revisão da P4, medido 19/10/2026: `ã` 227 → `Ò` 210) → o
+  Python escreve no pipe na página ANSI (cp1252) e o PowerShell 5.1 lê na OEM (cp850); com acento na pasta do usuário o
+  `instalar.cmd` criava o venv com um caminho que não existe. Rodar o candidato como foi chamado; mostrar por hex do UTF-8
+  (`teste-instalar.py` (h2)). Nunca `[Console]::OutputEncoding` (item acima).
+- **venv com `python.exe` e sem pip** (janela fechada durante "Criando o ambiente", ou `-m venv` que falha no meio) → reaproveitar
+  pela versão prendia a instalação para sempre com "confira a conexão". O `instalar.cmd` só reaproveita com `-m pip --version`
+  rodando (`teste-instalar.py` (h3)).
+- **`.cmd` do pacote rodado de dentro da pasta instalada** → recopiaria a pasta sobre ela mesma e apagaria o `.atualizacao\`
+  (depois de uma `troca-incompleta`, o `anterior\` é a única cópia). O `instalar.cmd` recusa (`teste-instalar.py` (h1)).
+- **`config.json` editado à mão com `"\\.\DISPLAY3"`** → `\.` é escape inválido no JSON: o `ler_config` valia o padrão inteiro
+  calado e o próximo POST `/config` regravava o arquivo. Agora avisa no log, guarda o texto em `config.invalido.json` e o
+  `monitorPainel` aceita `"DISPLAY3"` (`teste-instalacao.py` (e)).
 - **Commit público com o e-mail desta máquina** → o `user.name`/`user.email` do Git aqui é o nome completo e o e-mail
   pessoal; o `publicar.py` commita e marca a tag com `dosxnjos <dosxnjos@users.noreply.github.com>` por variável de
   ambiente, nunca com a config (prova em `teste-publicar.py`).

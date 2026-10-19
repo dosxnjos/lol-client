@@ -48,12 +48,15 @@ a pasta de plugins do Pengu), mais `LICENSE`, `TERCEIROS.md`, `LEIA-ME.md`, `ins
   vale o padrão com aviso no log, e o próximo `salvar_config` guarda o texto em `config.invalido.json` antes de regravar. Calibração do chat por resolução: `feiticos.faixas_calibrar`
   e as medidas da caixa escalam pela altura da tela (referência 2560×1080, igual à de antes nela), escala do OCR abaixo de 2600 px.
 - **`publico/instalar.cmd`** (sem admin): Python 3.12+ de 64 bits (`py -3.14/-3.13/-3.12`, depois o `python.exe` do PATH; sem
-  ele, diz onde baixar), venv em `%LOCALAPPDATA%\lol-client\complemento\venv` (reaproveitado na mesma versão), `pip install
+  ele, diz onde baixar; o venv nasce do candidato como foi chamado, nunca do `sys.executable` lido pelo pipe), venv em
+  `%LOCALAPPDATA%\lol-client\complemento\venv` (reaproveitado na mesma versão e com o pip rodando; senão o de antes fica em
+  `venv.anterior` até o pip e a cópia darem certo e volta na falha, com o complemento fechado subindo de novo), `pip install
   --only-binary=:all: -r requirements-complemento.txt`, complemento em `...\complemento\lol-ultra-client-complemento` (`dados\`
   fica, `.atualizacao\` sai: é a saída de uma `troca-incompleta`), plugin em `plugins\lol-ultra-client` (pasta pela ativação
   do Pengu ou perguntada; nunca junção, `.git` nem com um `plugins\lol-client` ao lado), atalho `lol-ultra-client.lnk` na pasta
   Inicializar (`pythonw.exe` do venv + `coletor\relancador.py`) e sobe o relançador. Complemento desta instalação em execução
-  (pid das travas em `dados\`, só python com a pasta na linha de comando) é fechado antes do pip; partida aberta = recusa.
+  (pid das travas em `dados\`, só python com a pasta na linha de comando) é fechado antes do pip; partida aberta = recusa;
+  rodar da própria pasta instalada = recusa (`pacote`: só do zip extraído, que traz a árvore inteira).
 - **`publico/desinstalar.cmd`**: fecha o complemento do mesmo jeito, apaga o atalho, `plugins\lol-ultra-client` (nunca a de
   desenvolvimento) e `%LOCALAPPDATA%\lol-client\complemento`; `%LOCALAPPDATA%\lol-client` só se ficar vazia.
 - **`coletor/relancador.py`** (no lugar do gatilho 4688 e do vigia, que pedem admin ou tarefa agendada): sobe o `coletor.py`

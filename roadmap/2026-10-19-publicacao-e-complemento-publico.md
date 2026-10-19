@@ -42,6 +42,9 @@ do LoL e monitor sem fixo, calibração do chat por resolução, `instalar.cmd`/
 fazem tudo na 1ª linha (na página UTF-8 o cmd rodava pedaços do PowerShell como lote, o `atualizar.cmd` da P3 inclusive). `dados\`
 fica dentro da pasta do complemento (desvio do P0 achado 1). Python 3.12/3.13 não provados (só há 3.14 e 3.11 aqui)
 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p4.md)).
+Revisão adversarial da P4 (19/10, `257d60b`, `124686b`, `e613a49`; 5 achados, todos reais e corrigidos, tabela no relatório):
+`monitorPainel` do LEIA-ME era JSON inválido, `instalar.cmd` de dentro da pasta instalada, acento no caminho do Python, venv sem
+pip, complemento parado e venv apagado na falha; `teste-instalacao.py` 47/47 (41 antes), `teste-instalar.py` 35/35 (30/34 antes).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
