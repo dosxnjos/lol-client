@@ -44,6 +44,15 @@ Ele sai sozinho 10 min depois do client fechar. Se ele cair com o client aberto,
 3. Plugin: Pengu Loader 1.1.6 em `C:\Program Files\Pengu Loader` + junção
    `cmd /c mklink /J "C:\Program Files\Pengu Loader\plugins\lol-client" "C:\Dev\lol-client\pengu"`;
    recarregar a interface só em `None`/`Lobby`.
+   **Semente desta conta** (19/10/2026, Fase 3 do [plano plugin Pengu primeiro](roadmap/2026-10-17-plugin-pengu-primeiro.md)):
+   o padrão do plugin não traz regra de runa nem favorito e traz o client para a frente no ready check. Esta máquina tem os
+   valores salvos no DataStore (`lol-client.config`) e a mescla mantém; só numa reinstalação com o DataStore vazio, refazer
+   as regras em Configurações › Runas e, para o resto, no console do CDP (client em `None`/`Lobby`):
+   `const c = DataStore.get('lol-client.config'); c.compacto.favoritos = [58, 154]; c.aceite.trazerClient = false; DataStore.set('lol-client.config', c)`
+   e recarregar. Regras (ids de `GET /lol-perks/v1/pages`, medidos em 13/10/2026; conferir se as páginas ainda existem):
+   `{championId: 58, posicao: '*', paginas: [1409260191, 2147419287]}` (Renekton) e
+   `{championId: 154, posicao: '*', paginas: [1540029809]}` (Zac); favoritos 58 e 154; `aceite.trazerClient: false`
+   (minimiza o client que pulou na frente no ready check).
 4. MCP (opcional, fora desde 15/10/2026): `claude mcp add --scope user lol-client -- python C:\Dev\lol-client\mcp\servidor.py`.
    Só nesta pasta, sem pesar nas outras sessões: `--scope local` rodando de dentro de `C:\Dev\lol-client`.
 5. Riot API (só tela de carregamento e `dados\meta.db`): `LOL_RIOT_API_KEY` no Doppler pessoal; o coletor
@@ -68,7 +77,7 @@ coluna da direita diz quem precisa dele: chave do coach = só com o complemento;
 | --- | --- | --- |
 | falar com o complemento coach (aperto de mão, recuo 30 s → 2 min → 5 min sem achar; a linha de estado diz desligado / procurando / encontrado e a versão) | Complemento coach (e Ctrl+K) | (plugin: `coletor.ligado`; padrão desligado em instalação nova) |
 | aceite, fila rápida, enxugamentos, runas, selo do champ select | blocos do plugin e Ctrl+K | (só o plugin) |
-| trazer o client para a frente ao achar partida (desligado = o client pisca e volta para trás; só com o aceite automático) | Aceitar partida | (plugin: `aceite.trazerClient`) |
+| trazer o client para a frente ao achar partida (desligado = o client pisca e volta para trás; só com o aceite automático). Padrão ligado desde 19/10/2026; a config salva desta máquina segue desligada, e "restaurar padrão" liga | Aceitar partida | (plugin: `aceite.trazerClient`) |
 | esconder o popup de partida encontrada (só com o aceite automático; volta se o aceite não vier) | Aceitar partida | (plugin: `aceite.esconderPopup`) |
 | silenciar o som em loop depois de aceitar (padrão: ligado; o aviso de partida encontrada continua) | Aceitar partida | (plugin: `aceite.silenciarSom`) |
 | janelinha aceitar/recusar fora do client, por cima de tudo e sem roubar a tela (só aparece com o recurso `aceite-flutuante`) | Aceitar partida | `aceiteFlutuante` (+ `aceiteAtrasoS`, que o plugin manda sozinho) |
@@ -76,7 +85,7 @@ coluna da direita diz quem precisa dele: chave do coach = só com o complemento;
 | freio de tilt: pedir 2º clique depois de N derrotas seguidas na sessão (padrão: 2; 0 = nunca), na fila rápida e no jogar de novo | Fila rápida | (plugin: `filaRapida.freioTilt`) |
 | freio de madrugada: pedir 2º clique ao buscar entre 01:00 e 05:59, hora do PC (padrão: ligado), nos mesmos dois botões | Fila rápida | (plugin: `filaRapida.freioMadrugada`) |
 | coletar recompensas sozinho / incluir o passe do TFT | Recompensas | (plugin: `recompensas.ligado`, `recompensas.tft`) |
-| client compacto (desligado = client normal, sem botão nem atalho) / abrir cada fase no compacto (desligado = começa no normal e o botão "modo compacto" leva ao compacto) | Client compacto (e Ctrl+K) | (plugin: `compacto.ligado`, `compacto.inicioCompacto`; `favoritos`, `larg`, `alt` só no DataStore) |
+| client compacto (desligado = client normal, sem botão nem atalho) / abrir cada fase no compacto (desligado = começa no normal e o botão "modo compacto" leva ao compacto) | Client compacto (e Ctrl+K) | (plugin: `compacto.ligado`, `compacto.inicioCompacto`; `favoritos` (padrão vazio, "restaurar padrão" mantém), `larg`, `alt` só no DataStore) |
 | fundo do perfil como fundo da janela compacta (desligado = o fundo escuro de sempre; o chat e os amigos ao lado não têm chave: sempre com o compacto, desde 19/10/2026) | Client compacto (e Ctrl+K) | (plugin: `compacto.fundoPerfil`) |
 | abrir a faixa da sala do time quando outro jogador manda mensagem, na seleção de campeões, na honra e no pós-jogo (padrão: ligado; só a altura da faixa, sem foco nem "lida"; na seleção, quem fala aparece só como campeão e posição; desligado = só o contador sobe) | Client compacto (e Ctrl+K) | (plugin: `compacto.chatSalaCresce`) |
 | som do client nas configurações do compacto (seção Som, só no compacto: áudio do client, volume geral, efeitos, volume dos efeitos, ambiente, falas de escolha e banimento, música, volume da música e as 4 músicas, as mesmas da página Som da Riot e gravadas onde ela grava, só por clique ou ao soltar o volume; abrir não grava nada; vale só para o client, o som da partida fica no menu do jogo) junto das chaves de som do plugin (silenciar depois de aceitar e, com o recurso `voz` do complemento, voz do coach, tom, não repetir, avisos com voz). No compacto o bloco Voz mora dentro da Som | Som (configurações do compacto) | (client: `/lol-settings/v1/local/lol-audio`, [ARMADILHAS](docs/ARMADILHAS.md) § LCU; plugin: `aceite.silenciarSom`, `coach.voz`, `coach.tomVoz`, `coach.cortarFalaRepetida`, `coach.avisosDesligados.voz`) |

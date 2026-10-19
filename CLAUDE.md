@@ -24,7 +24,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
   Tela que cede à Riot sozinha usa `ctx.ceder(motivo)`, nunca `ctx.expandir()` (é do clique dele); espectador só por `isSpectating` da sessão da seleção, nunca `localPlayerCellId -1` ([plano](roadmap/2026-10-17-telas-que-expandem.md)); seleção vinda de None/Lobby espera esse sinal (`ESPERA_SELECAO_MS`), a do ReadyCheck nunca.
 - Partida assistida (espectador) não liga coach, voz, painel, medidor nem grava nada (`Coletor.assistindo`; reserva: Live Client sem jogador ativo, nunca em partida sabida dele: `propria=True`); provar com `tools/teste-assistida.py` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 - Texto de interface (`pengu/**`, `painel/**`): tom de produto, impessoal ou "você", nunca "tu"/gíria/1ª pessoa do app;
-  régua em [TEXTOS-DA-INTERFACE](docs/TEXTOS-DA-INTERFACE.md), guarda em `node tools/teste-textos.mjs`. Ícone só de `pengu/icones.js` (Lucide embutido), nunca emoji; guarda em `teste-icones.mjs`.
+  régua em [TEXTOS-DA-INTERFACE](docs/TEXTOS-DA-INTERFACE.md), guarda em `node tools/teste-textos.mjs`. Ícone só de `pengu/icones.js` (Lucide embutido), nunca emoji; guarda em `teste-icones.mjs`. Texto visível e `PADRAO` (`pengu/config.js`) sem nome nem dado do mantenedor (ids de runa, favoritos): a semente dele mora no README § Instalar; guarda em `teste-config.mjs`.
 - Resposta falsa (avisos calados) só GET das `ROTAS` de `pengu/sem-popups.js`; nunca a sessão do champ select
   (o coletor lê `isAutofilled`). Plano: [chat, avisos e som](roadmap/2026-10-13-chat-popups-som.md).
 - Teste em personalizada: sair só por `POST /lol-lobby-team-builder/champ-select/v1/session/quit`,

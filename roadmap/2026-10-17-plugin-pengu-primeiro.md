@@ -40,6 +40,10 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
 - **Revisão adversarial da Fase 2 (19/10/2026):** 2 achados, os 2 reais, só doc (ARMADILHAS): o chat ao lado não abre
   conversa sozinho (frase velha das janelas virou história) e **`5971068` só reverte junto com `2d523bf`** (o revert
   sozinho aplica limpo e derruba o plugin inteiro pelo import do `chat-ponte.js` apagado); tabela no relatório.
+- **Fase 3 feita em 19/10/2026** (`5bac52a`: `PADRAO` sem regras de runa nem favoritos e com `trazerClient` true, decisão
+  do Gabriel; `restaurar()` mantém os favoritos; config salva dele igual, conferida no DataStore; `teste-config.mjs` 72/72,
+  `teste-runas.mjs` 6/6 + 22 extras, bateria node 28/28; passo 3 segue na Fase 5): falta recarregar o plugin:
+  [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-3.md).
 
 ## Decisões do Gabriel (19/10/2026)
 

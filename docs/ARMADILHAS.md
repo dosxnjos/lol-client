@@ -354,6 +354,13 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **DataStore é um namespace comum e legível** (fonte do 1.1.6: `v8_datastore.cc`, só XOR de chave fixa) → qualquer plugin e
   o "Dump DataStore" do Pengu leem e apagam `lol-client.*`; um JSON só, lido inteiro na carga e regravado inteiro a cada `set`.
   Nada de nome, Riot ID ou puuid de outro jogador ali; `set` de 300 KB custou 5,5–9,9 ms (medição C, 19/10/2026).
+- **Instalação nova sem favoritos, sem regra de runa e com o client vindo para a frente no ready check** (19/10/2026, Fase 3
+  do plano plugin Pengu primeiro) → é o `PADRAO` público (`pengu/config.js`): `compacto.favoritos []`, `runas.regras []`,
+  `aceite.trazerClient true`. Não é bug: o que esta máquina tem (favoritos 58 e 154, as 2 regras, `trazerClient false`) vive
+  só na config salva, e a mescla mantém lista salva inteira e valor salvo do mesmo tipo. Perder o DataStore = voltar ao padrão;
+  a semente está no README § Instalar. "Restaurar padrão" mantém favoritos, regras e a ponte, mas liga o `trazerClient`.
+  Chave nova com padrão diferente do que esta máquina usa só fica do jeito dela se o valor já estiver salvo (confirmado no
+  DataStore em 19/10 para as três); sem o valor salvo, a mescla dá o padrão novo calada.
 - **Regex com aspas confunde o varredor do `teste-textos.mjs`** (19/10/2026) → ele não entende regex: `/[&<>"]/` abria uma
   "string" que engolia o resto do arquivo (comentários viraram literais e a regra nova acusou). Aspas dentro de regex vão
   como `\x22` / `\x27`.

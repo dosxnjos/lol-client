@@ -16,6 +16,9 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
   "fora do ar" nem botão cinza) e, onde o usuário procuraria, uma linha diz que precisa do complemento coach. Falha com ele
   instalado: "complemento coach sem resposta". Guarda em `node tools/teste-textos.mjs` (valores internos como
   `coletor.ligado` ficam na lista `INTERNOS` de lá).
+- **Sem o nome do mantenedor** (19/10/2026, Fase 3 do plano plugin Pengu primeiro): texto visível e valor padrão nunca citam
+  quem mantém o plugin nem os dados da conta dele (comentário no código pode). Guarda em `node tools/teste-textos.mjs` (literal)
+  e `teste-config.mjs` (`PADRAO`).
 - **Motivo de botão cinza = fato + saída**: "o client está atualizando", "líder do grupo desconhecido: busque pelo client
   normal". O porquê só entra quando muda a decisão dele, depois de dois-pontos, nunca entre "(porque…)".
 
