@@ -31,9 +31,10 @@ from pathlib import Path
 
 RAIZ = Path(__file__).resolve().parent.parent
 
-# lista de inclusão do complemento (P0-d): 21 módulos de coletor/ + painel/ + os arquivos que eles leem
+# lista de inclusão do complemento (P0-d): 21 módulos de coletor/ + painel/ + os arquivos que eles leem; + atualizar (P3: o
+# coletor.py pendura o POST /atualizar, import com try)
 MODULOS = ("coletor banco vida servidor_local coach_vivo ao_vivo avisos analise sugestoes voz moldura janela_painel "
-           "minimapa overlay_minimapa alcance jungler selva feiticos teclas aviso_partida coach").split()
+           "minimapa overlay_minimapa alcance jungler selva feiticos teclas aviso_partida coach atualizar").split()
 COMPLEMENTO = ([f"coletor/{m}.py" for m in MODULOS]
                + ["painel/index.html", "painel/painel.css", "painel/painel.js", "pengu/posjogo/licoes.md",
                   "docs/LICOES.md", "docs/ITENS.md", "docs/MOBILIDADE.md", "requirements-complemento.txt"])
