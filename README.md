@@ -36,8 +36,8 @@ Ele sai sozinho 10 min depois do client fechar. Se ele cair com o client aberto,
 
 ## Instalar (uma vez)
 
-1. Python 3.14 e as bibliotecas: `python -m pip install --user websockets mss opencv-python numpy scipy pillow mcp`
-   (Node só para os testes do plugin).
+1. Python 3.14 e as bibliotecas: `python -m pip install --user -r requirements-complemento.txt mcp` (versões fixas do
+   coach; `opencv-python-headless`, não `opencv-python`; o `mcp` é só desta instalação). Node só para os testes do plugin.
 2. Gatilho: `powershell -NoProfile -ExecutionPolicy Bypass -File tools\instalar-gatilho.ps1` (PowerShell elevado).
    Vigia (sobe o coletor que caiu com o client aberto; sem admin): `python tools\vigia-coletor.py instalar`
    (conferir: `... estado`).

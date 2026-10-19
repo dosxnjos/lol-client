@@ -482,6 +482,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **POST ao coletor com mais de 64 KiB volta 400 e, reenviado igual, trava a fila** (15/10/2026) → o `servidor_local.do_POST`
   lê no máximo 65536 bytes e corta o resto (JSON torto). Lote do plugin ao coletor vai por tamanho (`expansoes.LOTE_BYTES`),
   nunca só por contagem, e 400/413 tira o lote da fila em vez de repetir.
+- **`digest` do asset na API do GitHub vem `null`** (medido de dentro do client em 19/10/2026, P0-b do
+  [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.md)) → o GitHub só calcula o `sha256:` de
+  asset enviado depois que a função existiu: `null` no Pengu `v1.1.6` (2024), preenchido em 22/22 de um release de 09/2026.
+  O campo existe sempre; em release nosso, `null` é falha, não "sem digest". A `api.github.com` responde CORS ao client.
 
 ## LCU API
 
@@ -1076,7 +1080,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   sem isso `TryCreateFromLanguage` recebe null (13/10/2026, `temp/medicao/ocr_windows.ps1`).
 - **Análise de imagem em Python** → `python -I` não enxerga o `cv2` (instalado no site de
   usuário); o PIL não aceita caminho `/c/...` do Git Bash; saída com "≈" quebra no cp1252
-  (`PYTHONIOENCODING=utf-8`); o hook `guarda-comando` bloqueia `sed -i` (13/10/2026).
+  (`PYTHONIOENCODING=utf-8`); o hook `guarda-comando` bloqueia `sed -i` (13/10/2026). Vale também para `scipy`, `mss` e
+  `websockets` (site do usuário; `numpy` e `Pillow` estão no global, conferido 19/10): script com `-I` que importa
+  módulo do coach cai em `ModuleNotFoundError`, o coletor (sem `-I`) não. Versões: `requirements-complemento.txt`.
+- **Caminho da Riot fixo em `C:\Games\Riot Games`** (instalação desta máquina) → `coletor.LOCKFILE_PADRAO` tem reserva
+  (pasta do `LeagueClientUx.exe`), mas `teclas.CONFIG_LOL` e `minimapa.GAME_CFG` não: na instalação padrão da Riot
+  (`C:\Riot Games`) não acham `game.cfg`/`input.ini` (P0-d do plano da publicação, 19/10/2026).
 - **Tarefa com `pythonw` abre janela de console para cada filho** (`doppler`, `ffmpeg`, `py`, `tasklist`): processo sem
   console que lança programa de console dá a ele um console novo, visível. O `tools\voz-agendada.py` lança o gerador
   com `CREATE_NO_WINDOW` (console oculto) e os netos herdam esse console: medido em 13/10/2026, `GetConsoleWindow()` = 0

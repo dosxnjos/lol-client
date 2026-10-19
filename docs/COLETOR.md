@@ -21,6 +21,10 @@ Visão de uso (o que o coach faz, ligar e desligar, instalar e desinstalar): [RE
 Log: `dados\coletor.log` (1 MB × 3), com "iniciado", "conectado ao client", "fase …",
 "backfill: …", "encerrado (motivo)" e "coletor saindo (motivo; vivo há N min)". Morte e vigia: § Vida, queda e vigia.
 
+Bibliotecas com versão fixa: `requirements-complemento.txt`. O que o complemento coach público leva (21 dos 28 módulos;
+fora `mentor`, `riotapi`, `carregamento`, `draft`, `vitrine`, `travadas`, `expansoes`) e os pontos de corte: relatório
+[P0 da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md) § P0-d.
+
 ## Vida, queda e vigia (15/10/2026)
 
 O coletor morreu calado às 02:37:27 de 15/10/2026 no meio de uma partida (sem "encerrado", sem Traceback, sem evento
