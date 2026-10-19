@@ -77,18 +77,25 @@ def _numero(m):
     return (int(fim.group(1)) if fim else 1 << 30, nome.lower())
 
 
+def _nome_monitor(v):
+    """"\\\\.\\DISPLAY3", "DISPLAY3", "display3" e "3" -> "display3" (a config é escrita à mão num JSON, onde a barra
+    invertida tem de ir dobrada: o LEIA-ME mostra a forma sem barra, e a com barra segue valendo)"""
+    s = re.sub(r"^[\\/.\s]+", "", str(v or "").strip()).lower()
+    return f"display{s}" if s.isdigit() else s
+
+
 def monitor_do_painel(lista=None, preferido=None):
     """um monitor secundário, nunca o principal (o painel não abre por cima do jogo); None com um monitor só.
-    preferido (config monitorPainel, ex.: "\\\\.\\DISPLAY3") vale se for um secundário ligado agora; senão (e com ""), o
-    secundário de menor número. Antes era \\\\.\\DISPLAY1 fixo (medido em 13/10/2026 nesta máquina: 1920×1200 físicos
-    em (2560, 595)), o que com 2 monitores é o mesmo que o de menor número (P4 da publicação)"""
+    preferido (config monitorPainel: "DISPLAY3", "3" ou "\\\\.\\DISPLAY3") vale se for um secundário ligado agora; senão
+    (e com ""), o secundário de menor número. Antes era \\\\.\\DISPLAY1 fixo (medido em 13/10/2026 nesta máquina: 1920×1200
+    físicos em (2560, 595)), o que com 2 monitores é o mesmo que o de menor número (P4 da publicação)"""
     lista = monitores() if lista is None else lista
     sec = [m for m in lista if not m["primario"]]
     if not sec:
         return None
     if isinstance(preferido, str) and preferido.strip():
-        alvo = preferido.strip().lower()
-        achado = next((m for m in sec if str(m.get("dispositivo") or "").lower() == alvo), None)
+        alvo = _nome_monitor(preferido)
+        achado = next((m for m in sec if _nome_monitor(m.get("dispositivo")) == alvo), None)
         if achado is not None:
             return achado
     return min(sec, key=_numero)

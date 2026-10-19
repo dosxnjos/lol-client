@@ -16,6 +16,8 @@
 import importlib.util
 import json
 import logging
+import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -41,6 +43,14 @@ def caso(nome, cond, detalhe=""):
         n_ok[0] += 1
     else:
         falhas.append(nome)
+
+
+def _json_ok(texto):
+    try:
+        json.loads(texto)
+        return True
+    except ValueError:
+        return False
 
 
 def http(porta, caminho, metodo="GET", corpo=None, origem="https://plugins"):
@@ -295,6 +305,11 @@ def parte_e():
         ("monitorPainel escolhe outro secundário", J.monitor_do_painel(tres, "\\\\.\\display3"), "\\\\.\\DISPLAY3"),
         ("monitorPainel no principal: ignorado", J.monitor_do_painel(tres, "\\\\.\\DISPLAY1"), "\\\\.\\DISPLAY2"),
         ("monitorPainel desligado agora: o automático", J.monitor_do_painel(tres, "\\\\.\\DISPLAY9"), "\\\\.\\DISPLAY2"),
+        # revisão da P4: o LEIA-ME mostra a forma sem barra (no JSON a barra invertida tem de ir dobrada)
+        ("monitorPainel \"DISPLAY3\" (sem a barra)", J.monitor_do_painel(tres, "DISPLAY3"), "\\\\.\\DISPLAY3"),
+        ("monitorPainel \"3\" (só o número)", J.monitor_do_painel(tres, "3"), "\\\\.\\DISPLAY3"),
+        ("monitorPainel \"12\" pega o DISPLAY12, não o DISPLAY1 nem o 2", J.monitor_do_painel(doze, "12"),
+         "\\\\.\\DISPLAY12"),
     ]
     for nome, r, esp in casos:
         caso(f"(e) {nome}", r and r["dispositivo"] == esp, str(r and r["dispositivo"]))
@@ -305,6 +320,40 @@ def parte_e():
     import servidor_local
     caso("(e) monitorPainel nasce vazio (automático) na config", servidor_local.ler_config("C:/nao/existe.json")
          ["monitorPainel"] == "", "")
+    # revisão da P4: o exemplo de antes do LEIA-ME ("\\.\DISPLAY3" escrito ao pé da letra) é JSON inválido; o padrão inteiro
+    # valia calado e o próximo POST /config regravava o arquivo, perdendo o que foi escrito à mão
+    pasta = Path(tempfile.mkdtemp(prefix="teste-instalacao-cfg-"))
+    cfgp = pasta / "config.json"
+    cfgp.write_text('{"monitorPainel": "\\\\.\\DISPLAY3", "voz": false}', encoding="utf-8")
+    avisos = []
+
+    class Pega(logging.Handler):
+        def emit(self, r):
+            avisos.append(r.getMessage())
+    lg = logging.getLogger("coletor.servidor")
+    h = Pega(level=logging.WARNING)
+    lg.addHandler(h)
+    try:
+        lido1 = servidor_local.ler_config(cfgp)
+        servidor_local.ler_config(cfgp)
+        caso("(e) config.json inválido: o padrão vale e o log avisa 1 vez (2 leituras)",
+             lido1["voz"] is True and sum("não é JSON válido" in a for a in avisos) == 1, avisos)
+        servidor_local.salvar_config({"tomVoz": "serio"}, cfgp)
+        guardado = pasta / "config.invalido.json"
+        caso("(e) salvar por cima de config inválido: o texto escrito à mão fica em config.invalido.json",
+             guardado.exists() and "DISPLAY3" in guardado.read_text(encoding="utf-8")
+             and json.loads(cfgp.read_text(encoding="utf-8"))["tomVoz"] == "serio", sorted(p.name for p in pasta.iterdir()))
+        cfgp.write_text('{"monitorPainel": "DISPLAY3", "voz": false}', encoding="utf-8")
+        lido = servidor_local.ler_config(cfgp)
+        caso("(e) a forma do LEIA-ME (\"DISPLAY3\") é JSON válido e chega à config", lido["monitorPainel"] == "DISPLAY3"
+             and lido["voz"] is False, str(lido["monitorPainel"]))
+    finally:
+        lg.removeHandler(h)
+        shutil.rmtree(pasta, ignore_errors=True)
+    leia = (RAIZ / "publico" / "LEIA-ME.md").read_text(encoding="utf-8")
+    exemplos = re.findall(r'"monitorPainel":\s*"[^"]*"', leia)
+    caso("(e) o exemplo de monitorPainel do LEIA-ME é JSON válido",
+         bool(exemplos) and all(_json_ok("{" + e + "}") for e in exemplos), exemplos)
 
 
 # ---------- (f) calibração do chat por resolução ----------

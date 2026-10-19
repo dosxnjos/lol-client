@@ -93,8 +93,10 @@ no 3.14), o reconhecimento de texto do Windows com o idioma português (Brasil) 
    (cerca de 42 MB).
 
 O coach fica calado em partida assistida (modo espectador). O painel abre no monitor secundário de menor número; para usar
-outro, escreva o nome dele (por exemplo `\\.\DISPLAY3`) em `"monitorPainel"` no arquivo `dados\config.json` da pasta do
-complemento. A pasta do League of Legends é achada sozinha (a registrada pelo Riot Client ou a do client aberto).
+outro, escreva o número dele na chave `"monitorPainel": "DISPLAY3"` do arquivo `dados\config.json` da pasta do complemento
+(com o client fechado, mantendo as aspas e as vírgulas do arquivo). Se o arquivo ficar inválido, o complemento usa as
+configurações padrão e, ao salvar as configurações de novo, guarda o texto escrito em `dados\config.invalido.json`. A pasta do League of Legends é achada sozinha
+(a registrada pelo Riot Client ou a do client aberto).
 
 ## Atualizar
 

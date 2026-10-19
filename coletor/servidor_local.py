@@ -100,12 +100,35 @@ log = logging.getLogger("coletor.servidor")
 _trava_cfg = threading.Lock()
 
 
+_avisados = set()   # (caminho, mtime, tamanho) de config.json inválido já avisado no log (ler_config roda a cada consulta)
+
+
+def _ler_salvo(caminho):
+    """(conteúdo, inválido): arquivo ausente = ({}, False); existe mas não é JSON (ex.: editado à mão com "\\." sem dobrar a
+    barra) = ({}, True), com um aviso no log por versão do arquivo (antes: o padrão inteiro, calado)"""
+    p = Path(caminho)
+    try:
+        texto = p.read_text(encoding="utf-8")
+    except OSError:
+        return {}, False
+    try:
+        return json.loads(texto), False
+    except ValueError as e:
+        try:
+            st = p.stat()
+            chave = (str(p), st.st_mtime_ns, st.st_size)
+        except OSError:
+            chave = (str(p), None, None)
+        if chave not in _avisados:
+            _avisados.add(chave)
+            log.warning("config %s não é JSON válido (%s): valendo o padrão; ao salvar, o arquivo vai para %s", p, e,
+                        p.with_name(p.stem + ".invalido.json").name)
+        return {}, True
+
+
 def ler_config(caminho=CONFIG):
     """config do coach: o padrão mesclado com o salvo (chave desconhecida ou de tipo errado some)"""
-    try:
-        salvo = json.loads(Path(caminho).read_text(encoding="utf-8"))
-    except (OSError, ValueError):
-        salvo = {}
+    salvo = _ler_salvo(caminho)[0]
     cfg = {k: (salvo[k] if isinstance(salvo, dict) and type(salvo.get(k)) is type(v) else v)
            for k, v in CONFIG_PADRAO.items()}
     d = salvo.get("avisosDesligados") if isinstance(salvo, dict) else None
@@ -171,6 +194,11 @@ def salvar_config(parcial, caminho=CONFIG):
         _edicao(cfg)
         caminho = Path(caminho)
         caminho.parent.mkdir(parents=True, exist_ok=True)
+        if _ler_salvo(caminho)[1]:   # editado à mão e inválido: guarda o texto dele antes de regravar a partir do padrão
+            try:
+                caminho.replace(caminho.with_name(caminho.stem + ".invalido.json"))
+            except OSError as e:
+                log.warning("config inválida não guardada à parte: %s", e)
         tmp = caminho.with_suffix(".tmp")
         tmp.write_text(json.dumps(cfg, ensure_ascii=False, indent=1), encoding="utf-8")
         tmp.replace(caminho)

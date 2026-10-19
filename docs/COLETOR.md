@@ -43,8 +43,9 @@ a pasta de plugins do Pengu), mais `LICENSE`, `TERCEIROS.md`, `LEIA-ME.md`, `ins
 - **Nada fixo da máquina do mantenedor:** pasta do LoL por `instalacao.pastas_lol()` (a do lockfile achado, as do
   `RiotClientInstalls.json` da Riot, a padrão `C:\Riot Games\League of Legends`), usada no lockfile, no `game.cfg`
   (`minimapa.game_cfg`) e no `input.ini` (`teclas.config_lol`); a busca do lockfile pela linha de comando só com o
-  `LeagueClientUx.exe` aberto. Monitor do painel: o secundário de menor número ou `monitorPainel` na config (nome do
-  dispositivo; antes, `DISPLAY1` fixo, o mesmo com 2 monitores). Calibração do chat por resolução: `feiticos.faixas_calibrar`
+  `LeagueClientUx.exe` aberto. Monitor do painel: o secundário de menor número ou `monitorPainel` na config (`"DISPLAY3"`,
+  `"3"` ou `"\\\\.\\DISPLAY3"`; antes, `DISPLAY1` fixo, o mesmo com 2 monitores). `config.json` que não é JSON (editado à mão)
+  vale o padrão com aviso no log, e o próximo `salvar_config` guarda o texto em `config.invalido.json` antes de regravar. Calibração do chat por resolução: `feiticos.faixas_calibrar`
   e as medidas da caixa escalam pela altura da tela (referência 2560×1080, igual à de antes nela), escala do OCR abaixo de 2600 px.
 - **`publico/instalar.cmd`** (sem admin): Python 3.12+ de 64 bits (`py -3.14/-3.13/-3.12`, depois o `python.exe` do PATH; sem
   ele, diz onde baixar), venv em `%LOCALAPPDATA%\lol-client\complemento\venv` (reaproveitado na mesma versão), `pip install
