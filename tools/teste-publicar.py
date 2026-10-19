@@ -119,10 +119,16 @@ esperado_p = {f"lol-ultra-client/{r[len('pengu/'):]}" for r in PLUGIN} | {
     f"lol-ultra-client/{n}" for n in ("LICENSE", "TERCEIROS.md", "LEIA-ME.md", "atualizar.cmd")}
 caso("zip do plugin: exatamente pengu/ do commit + LICENSE, TERCEIROS, LEIA-ME e atualizar.cmd",
      nomes_p == esperado_p, sorted(nomes_p ^ esperado_p))
-esperado_c = {f"lol-ultra-client-complemento/{r}" for r in V.COMPLEMENTO} | {
+esperado_c = {f"lol-ultra-client-complemento/{r}" for r in list(V.COMPLEMENTO) + list(PLUGIN)} | {
     f"lol-ultra-client-complemento/{n}" for n in ("LICENSE", "TERCEIROS.md", "LEIA-ME.md", "atualizar.cmd", "instalar.cmd")}
-caso("zip do complemento: a lista de inclusão com os caminhos do repo + os 5 do público", nomes_c == esperado_c,
-     sorted(nomes_c ^ esperado_c))
+caso("zip do complemento: a lista de inclusão e o plugin inteiro em pengu/ (o instalar.cmd copia), com os caminhos do "
+     "repo, + os 5 do público", nomes_c == esperado_c, sorted(nomes_c ^ esperado_c))
+with zipfile.ZipFile(zc) as z:
+    plugin_no_c = {n[len("lol-ultra-client-complemento/"):]: z.read(n) for n in z.namelist()
+                   if n.startswith("lol-ultra-client-complemento/pengu/")}
+caso("complemento reaberto: o plugin dentro dele é o mesmo do zip do plugin e todo import resolve",
+     P.imports_quebrados(plugin_no_c) == [] and {k[len("pengu/"):]: v for k, v in plugin_no_c.items()}
+     == {k: v for k, v in dados_p.items() if k not in ("LICENSE", "TERCEIROS.md", "LEIA-ME.md", "atualizar.cmd")})
 todos = {n.split("/", 1)[1] for n in nomes_p | nomes_c} | set(P.montar(repo, "HEAD", tmp / "d2")["foto"])
 caso("nada de fora da lista entra (mentor, riotapi, tools, roadmap, mcp, README e CLAUDE do privado, dados, não commitado)",
      not ({"coletor/mentor.py", "coletor/riotapi.py", "tools/coletar-meta.py", "roadmap/plano.md", "mcp/servidor.py",
@@ -160,6 +166,29 @@ plantar("publico/LEIA-ME.md", "# lol-ultra-client\n\ncoach do Gabriel\n", "nome_
 plantar("pengu/index.js", "import { z } from './falta.js';\n", "import", "import quebrado no plugin")
 plantar("pengu/compacto/index.js", "export const TELAS = { x: './tela-sumiu.js' };\n", "import", "tela do mapa que falta")
 plantar("pengu/a.js", b"\xff\xfe\x00bin", "tipo", "arquivo binário com extensão de texto")
+plantar("coletor/sugestoes.py", "# replay em temp/gravacao/partida_3293149183/\n", "partida", "gameId colado em _")
+plantar("coletor/ao_vivo.py", "# inclusive a 3293149183.\n", "partida", "gameId no fim da frase")
+
+# revisão do P1: o CAMINHO vai para a árvore pública e para os zips; arquivo novo em pengu/ entra sozinho na lista
+escrever(repo, "pengu/posjogo/xerekton-3293149183.md", "limpo\n")
+commitar(repo, "planta nome")
+rc, out = calado(P.main, ARGS)
+r = P.montar(repo, "HEAD", tmp / "d3", None)
+caso("arquivo limpo com gameId e Xerek no nome reprova (rc 1, sem zip)", rc == 1 and not zp.exists()
+     and {"partida (nome)", "xerek (nome)"} <= {c for c, _ in r["achados"].get("pengu/posjogo/xerekton-3293149183.md", [])},
+     r["achados"])
+(repo / "pengu/posjogo/xerekton-3293149183.md").unlink()
+commitar(repo, "tira nome")
+
+# revisão do P1: o texto do release (--notas) vai a público; varrido como a foto, no ensaio e no --publicar
+notas_ruins = tmp / "notas-ruins.md"
+notas_ruins.write_text("corrigido o bug da partida 3293149183 (C:\\Users\\fulano\\x)\n", encoding="utf-8")
+notas_boas = tmp / "notas-boas.md"
+notas_boas.write_text("Primeira versão pública.\n", encoding="utf-8")
+rc, out = calado(P.main, ARGS + ["--notas", str(notas_ruins)])
+r = P.montar(repo, "HEAD", tmp / "d3", None, notas_ruins)
+caso("notas do release com gameId e caminho reprovam o ensaio (rc 1, sem zip)", rc == 1 and not zp.exists()
+     and {c for c, _ in r["achados"].get("NOTAS.md (release)", [])} == {"partida", "caminho"}, r["achados"])
 
 # link simbólico guardado no git (modo 120000) nunca entra, mesmo sem link no disco
 blob = subprocess.run(["git", "hash-object", "-w", "--stdin"], cwd=repo, input="a.js", capture_output=True,
@@ -185,11 +214,23 @@ caso("árvore de volta limpa", not r["achados"], r["achados"])
 bare = tmp / "remote.git"
 sh(tmp, "init", "-q", "--bare", "-b", "main", str(bare))
 chamadas = []
+releases = {}          # tag -> texto das notas, como o GitHub guardaria
 
 
 def gh_falso(args):
     chamadas.append(list(args))
+    if args[:2] == ["release", "view"] and args[2] not in releases:
+        raise RuntimeError("gh release view: release not found")
+    if args[:2] == ["release", "create"]:
+        releases[args[2]] = Path(args[args.index("--notes-file") + 1]).read_text(encoding="utf-8")
     return "dosxnjos\n" if args[:2] == ["api", "user"] else ""
+
+
+def gh_cai_no_release(args):
+    """o push sai e o upload do release cai (rede, 422, token sem escopo)"""
+    if args[:2] == ["release", "create"]:
+        raise RuntimeError("gh release create: HTTP 422: upload falhou")
+    return gh_falso(args)
 
 
 PUB = ARGS + ["--publicar", "--remote", str(bare)]
@@ -231,8 +272,21 @@ caso("--publicar recusa foto reprovada (rc 1 do ensaio vira recusa, remote intoc
 escrever(repo, "coletor/selva.py", "# limpo\n")
 commitar(repo, "tira")
 
-# publica v0.1.0
-rc, out = calado(P.main, PUB, rodar_gh=gh_falso)
+# notas ruins: o --publicar recusa antes de qualquer rede
+rc, out = calado(P.main, PUB + ["--notas", str(notas_ruins)], rodar_gh=gh_falso)
+caso("--publicar com notas reprovadas: recusa, remote intocado, nenhum gh", rc == 2 and "reprovou" in out
+     and sh(bare, "for-each-ref").strip() == "" and not chamadas, out[-200:])
+
+# publica v0.1.0, e o release cai depois do push: rc 3, a tag fica no remote sem release
+rc, out = calado(P.main, PUB + ["--notas", str(notas_boas)], rodar_gh=gh_cai_no_release)
+caso("release cai depois do push: rc 3, diz como retomar, tag no remote, nenhum release",
+     rc == 3 and "FALHOU" in out and "mesmo comando" in out and "v0.1.0" in sh(bare, "tag").split() and not releases,
+     out[-400:])
+# rodar de novo: retoma só o release (nenhum commit, tag nem push novos)
+rc, out = calado(P.main, PUB + ["--notas", str(notas_boas)], rodar_gh=gh_falso)
+caso("rodar de novo retoma só o release: rc 0, 1 commit no remote, release com as notas varridas",
+     rc == 0 and "retomado" in out and sh(bare, "rev-list", "--count", "main").strip() == "1"
+     and releases.get("v0.1.0") == "Primeira versão pública.\n", out[-400:])
 caso("--publicar com remote falso: rc 0", rc == 0, out[-400:])
 arquivos_remote = set(sh(bare, "ls-tree", "-r", "--name-only", "main").split())
 foto = set(P.montar(repo, "HEAD", tmp / "d7", None)["foto"])
@@ -253,11 +307,17 @@ caso("gh release create v0.1.0 no REPO com os 2 zips e o SHA256SUMS", len(rel_) 
      and [Path(x).name for x in rel_[0][-3:]] == ["lol-ultra-client-complemento-0.1.0.zip",
                                                  "lol-ultra-client-plugin-0.1.0.zip", "SHA256SUMS.txt"], rel_)
 
-# a mesma versão de novo: recusa, nenhum release a mais
-n = len(chamadas)
+# a mesma versão de novo: recusa (tag e release já existem), nenhum release a mais
+n = len([c for c in chamadas if c[:2] == ["release", "create"]])
 rc, out = calado(P.main, PUB, rodar_gh=gh_falso)
-caso("mesma versão de novo: recusa (tag já existe), nenhum gh", rc == 2 and "já existe" in out and len(chamadas) == n,
-     out[-200:])
+caso("mesma versão de novo: recusa (já publicado), nenhum release a mais", rc == 2 and "já publicado" in out
+     and len([c for c in chamadas if c[:2] == ["release", "create"]]) == n, out[-200:])
+# a mesma versão com a foto mudada: recusa (a tag aponta outra foto), remote intocado
+escrever(repo, "pengu/b.js", "export const b = 3;\n")
+commitar(repo, "muda sem subir versão")
+rc, out = calado(P.main, PUB, rodar_gh=gh_falso)
+caso("mesma versão com outra foto: recusa (suba VERSAO), 1 commit no remote", rc == 2 and "outra foto" in out
+     and sh(bare, "rev-list", "--count", "main").strip() == "1", out[-200:])
 
 # versão nova com um arquivo a menos: o remote perde o arquivo
 (repo / "pengu/b.js").unlink()
