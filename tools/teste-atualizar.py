@@ -12,9 +12,13 @@
 #   (f) rotas num ServidorLocal de verdade em porta de teste: /ola anuncia "atualizar", Origin de site = 403, Origin do Pengu e
 #       do client = aceita, preflight, GET /atualizar/estado;
 #   (g) coletor.py: comando do sucessor, esperar_pid com um processo filho de mentira, pedir_saida faz o rodar() devolver;
-#   (h) publico/atualizar.cmd por cmd /c com a pasta atual dentro da pasta dele (como no duplo clique): as mesmas regras.
+#   (h) publico/atualizar.cmd por cmd /c com a pasta atual dentro da pasta dele (como no duplo clique): as mesmas regras;
+#   (i) revisão adversarial da P3: fila que anda durante o download, extração que falha no meio, troca que não volta inteira,
+#       complemento numa junção importado pelo link, .git na pasta do usuário (dotfiles), complemento que sobe durante o
+#       download do .cmd, '!' no caminho do .cmd.
 # uso: python tools/teste-atualizar.py
 import hashlib
+import importlib.util
 import io
 import json
 import os
@@ -55,6 +59,8 @@ class _H(BaseHTTPRequestHandler):
     def do_GET(self):
         g = self.server.g
         g.hits.append(self.path)
+        if g.gancho:   # o caso mexe no mundo no meio do pedido (fase muda, complemento sobe)
+            g.gancho(self.path)
         if g.atraso:
             time.sleep(g.atraso)
         p = self.path.split("?")[0]
@@ -113,6 +119,7 @@ class Falso:
         self.latest = None
         self.redir = None
         self.atraso = 0
+        self.gancho = None
         for p in PORTAS:
             if p in ocupadas:
                 continue
@@ -131,7 +138,7 @@ class Falso:
 
     def limpar(self):
         self.rels, self.blobs, self.hits, self.cortar = {}, {}, [], set()
-        self.latest, self.redir, self.atraso = None, None, 0
+        self.latest, self.redir, self.atraso, self.gancho = None, None, 0, None
 
     def parar(self):
         self.srv.shutdown()
@@ -233,7 +240,7 @@ ANTES_PLUGIN, ANTES_COMP = esperado(PLUGIN_VELHO), esperado({**COMP_VELHO, **DAD
 
 def novo_at(inst, g, fase=lambda: "None", reiniciar=None, **kw):
     return A.Atualizador(raiz=inst.comp, plugins=inst.plugins, fase=fase, reiniciar=reiniciar, api=g.base, download=g.base,
-                         origens=(g.base,), segurar_s=0.2, espera_fase_s=0.1, **kw)
+                         origens=(g.base,), segurar_s=0.2, **kw)
 
 
 def rodar(at, versao="0.2.0", limite=30):
@@ -262,6 +269,7 @@ def principal():
         parte_f(base, g)
         parte_g(base)
         parte_h(base, g, fora)
+        parte_i(base, g)
     finally:
         g.parar()
         fora.parar()
@@ -304,7 +312,8 @@ def parte_a(base, g):
     st2, est2 = at.pedir("0.2.0")
     caso("(a) 2º POST depois do pronto: 409 com o estado 'pronto' (nada roda de novo)", st2 == 409 and est2["estado"] == "pronto")
 
-    # reinício só em None/Lobby: a partida começou depois do clique
+    # a fila andou nos SEGURAR_S do 'pronto' (troca já feita): reinicia logo assim mesmo. Esperar o lobby deixaria o processo
+    # velho rodando a partida inteira em cima dos arquivos novos (import tardio mistura versões; revisão adversarial da P3)
     g.limpar()
     publicar(g)
     inst = Instalacao(base)
@@ -312,14 +321,11 @@ def parte_a(base, g):
     fase = {"v": "Lobby"}
     at = novo_at(inst, g, fase=lambda: fase["v"], reiniciar=lambda: reinicios.append(fase["v"]))
     st, est = at.pedir("0.2.0")
-    fase["v"] = "ChampSelect"     # a fila andou com a troca em curso
     at.thread.join(30)
+    fase["v"] = "ChampSelect"     # entrou na fila (personalizada) logo depois do 'pronto'
     time.sleep(0.8)
-    sem = list(reinicios)
-    fase["v"] = "Lobby"
-    time.sleep(0.5)
-    caso("(a) troca pronta em ChampSelect: nenhum reinício até voltar ao Lobby, aí 1", at.estado()["estado"] == "pronto" and sem == []
-         and reinicios == ["Lobby"], (sem, reinicios))
+    caso("(a) fila andou durante o 'pronto' segurado: reinicia logo depois dele, sem esperar o lobby",
+         at.estado()["estado"] == "pronto" and reinicios == ["ChampSelect"], reinicios)
 
     # 2º POST com a troca em curso: 409 com o estado de agora
     g.limpar()
@@ -524,6 +530,11 @@ def parte_f(base, g):
         for origem in ("https://evil.example", f"http://127.0.0.1:{porta}", "http://localhost:3000", "null"):
             st, d = _req(f"{url}/atualizar", {"versao": "0.2.0"}, origem)
             caso(f"(f) POST /atualizar com Origin {origem}: 403, nada começa", st == 403 and at.estado()["estado"] == "parado", (st, d))
+        st, d = _req(f"{url}/atualizar", {"versao": "0.2.0"})
+        caso("(f) POST /atualizar sem Origin (curl, outro processo): 403, nada começa, 0 pedido de rede",
+             st == 403 and at.estado()["estado"] == "parado" and g.hits == [], (st, d, g.hits))
+        st, d = _req(f"{url}/atualizar/estado")
+        caso("(f) GET /atualizar/estado sem Origin (diagnóstico por curl): 200", st == 200 and d.get("estado") == "parado", (st, d))
         st, h = _req(f"{url}/atualizar", None, "https://plugins", metodo="OPTIONS")
         caso("(f) preflight do Pengu: 204", st == 204, st)
         st, d = _req(f"{url}/atualizar", "não é json", "https://plugins")
@@ -580,6 +591,18 @@ def parte_g(base):
     caso("(g) comando do sucessor: mesmos argumentos, sem o --esperar-pid antigo, com o desta instância",
          cmd[0] == "pythonw.exe" and cmd[1].endswith("coletor.py") and cmd[2:] == ["--ocioso-min", "inf", "--porta-painel", "8831",
                                                                                    "--esperar-pid", "4242"], cmd)
+    # argv[0] relativo e a pasta atual mudada depois da partida (a troca sai das pastas: _sair_das_pastas faz chdir)
+    pasta_atual = os.getcwd()
+    outra = Path(tempfile.mkdtemp(prefix="luc-cwd-", dir=base))
+    Instalacao.criadas.append(outra)
+    os.chdir(outra)
+    try:
+        cmd_rel = C.comando_sucessor(["coletor.py", "--ocioso-min", "inf"], 7)
+    finally:
+        os.chdir(pasta_atual)
+    caso("(g) argv[0] relativo ('coletor.py') e a pasta atual mudada: o sucessor aponta para o coletor.py que existe",
+         Path(cmd_rel[1]).is_file() and Path(cmd_rel[1]).name == "coletor.py" and cmd_rel[2:] == ["--ocioso-min", "inf",
+                                                                                                 "--esperar-pid", "7"], cmd_rel)
     filho = subprocess.Popen([sys.executable, "-c", "import time; time.sleep(1.5)"], creationflags=0x08000000)
     t0 = time.monotonic()
     saiu = C.esperar_pid(filho.pid, limite_s=10, passo_s=0.05)
@@ -753,6 +776,166 @@ def parte_h(base, g, fora):
     caso("(h) cabeçalho do .cmd só ASCII, sem rótulo nem goto, e o PowerShell sai na mesma linha (& exit /b)",
          cab.isascii() and ":" not in "".join(l[:1] for l in cab.splitlines()) and "goto" not in cab.lower()
          and any("powershell" in l and l.rstrip().endswith("& exit /b !errorlevel!") for l in cab.splitlines()), cab)
+    linhas = [l.strip().lower() for l in cab.splitlines()]
+    pos = lambda f: next((i for i, l in enumerate(linhas) if f(l)), -1)   # noqa: E731
+    atrasada = pos(lambda l: l.startswith("setlocal enabledelayedexpansion"))
+    caso("(h) LUC_CMD e o cd para o TEMP antes do EnableDelayedExpansion ('!' no caminho sobrevive)",
+         0 <= pos(lambda l: l.startswith('set "luc_cmd=')) < atrasada and 0 <= pos(lambda l: l.startswith("cd /d")) < atrasada, linhas)
+
+
+# ---------- (i) revisão adversarial da P3 (19/10/2026) ----------
+
+def sem_nova(inst):
+    return not (inst.plug / ".atualizacao" / "nova").exists() and not (inst.comp / ".atualizacao" / "nova").exists()
+
+
+def parte_i(base, g):
+    # achados 1 e 5: a fila andou durante o download -> nada troca (o processo velho não roda a partida em cima de arquivo novo)
+    g.limpar()
+    publicar(g)
+    inst = Instalacao(base)
+    fase = {"v": "Lobby"}
+    reinicios = []
+    g.gancho = lambda p: fase.update(v="ChampSelect") if "/releases/download/" in p else None
+    at = novo_at(inst, g, fase=lambda: fase["v"], reiniciar=lambda: reinicios.append(1))
+    st, est = rodar(at)
+    time.sleep(0.4)
+    caso("(i) fila andou durante o download (Lobby -> ChampSelect): erro 'partida', 0 item trocado, nova/ apagada, 0 reinício",
+         st == 202 and est["estado"] == "erro" and est["motivo"] == "partida" and intacta(inst) and sem_nova(inst)
+         and reinicios == [], (st, est, reinicios))
+
+    # achado 7: extração que falha no meio (o plugin já extraído, o complemento esbarra num arquivo e numa pasta de mesmo nome)
+    g.limpar()
+    publicar(g, comp={**COMP_NOVO, "sub": b"arquivo", "sub/a.py": b"pasta com o mesmo nome"})
+    inst = Instalacao(base)
+    st, est = rodar(novo_at(inst, g))
+    caso("(i) extração que falha no meio do complemento: erro 'pacote', nada trocado, nenhuma .atualizacao/nova sobrando",
+         est["estado"] == "erro" and est["motivo"] == "pacote" and intacta(inst) and sem_nova(inst), est)
+
+    # achado 8: troca que não volta inteira -> a marca fica e a 2ª tentativa recusa antes de apagar a única cópia velha
+    g.limpar()
+    publicar(g)
+    inst = Instalacao(base)
+    ant_plug = inst.plug / ".atualizacao" / "anterior"
+
+    def mover_ruim(de, para):
+        d = Path(de)
+        if d == inst.comp / "coletor":
+            raise OSError("preso (teste)")
+        if d.parent == ant_plug and d.name == "index.js":
+            raise OSError("não volta (teste)")
+        os.rename(de, para)
+    at = novo_at(inst, g)
+    at.mover = mover_ruim
+    st, est = rodar(at)
+    marca = inst.plug / ".atualizacao" / "troca-em-curso"
+    caso("(i) troca que não volta inteira: erro 'troca-incompleta', a marca troca-em-curso fica",
+         est["motivo"] == "troca-incompleta" and marca.exists(), (est, marca.exists()))
+    g.hits.clear()
+    st2, est2 = rodar(novo_at(inst, g))
+    caso("(i) 2ª tentativa depois da troca incompleta: 409 'troca-incompleta' antes da rede, anterior/ (a única cópia) intacta",
+         st2 == 409 and est2["motivo"] == "troca-incompleta" and g.hits == []
+         and (ant_plug / "index.js").exists() and (ant_plug / "index.js").read_bytes() == b"// velho", (st2, est2, g.hits))
+
+    # achado 2: complemento que é junção, com o atualizar.py importado pelo caminho do link (o caminho de produção)
+    inst = Instalacao(base)
+    alvo = inst.base / "fora-do-git" / "complemento"
+    shutil.copytree(inst.comp, alvo)
+    shutil.copy2(RAIZ / "coletor" / "atualizar.py", alvo / "coletor" / "atualizar.py")
+    shutil.rmtree(inst.comp)
+    r = subprocess.run(["cmd", "/c", "mklink", "/J", str(inst.comp), str(alvo)], capture_output=True)
+    if r.returncode == 0 and A.reparse(inst.comp):
+        spec = importlib.util.spec_from_file_location("atualizar_pelo_link", inst.comp / "coletor" / "atualizar.py")
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        antes = arvore(alvo)   # depois do import (o __pycache__ dele entra no alvo)
+        g.limpar()
+        publicar(g)
+        at = mod.Atualizador(plugins=inst.plugins, fase=lambda: "None", api=g.base, download=g.base, origens=(g.base,),
+                             segurar_s=0.2)
+        st, est = at.pedir("0.2.0")
+        if st == 202:
+            at.thread.join(30)
+        caso("(i) complemento numa junção, importado pelo link: RAIZ = o link, 409 'desenvolvimento', 0 pedido, alvo intacto",
+             mod.RAIZ == inst.comp and st == 409 and est["motivo"] == "desenvolvimento" and g.hits == [] and arvore(alvo) == antes,
+             (str(mod.RAIZ), st, est, g.hits))
+        os.rmdir(inst.comp)   # só o link
+    else:
+        caso("(i) junção do complemento criada no temp", False, r.stdout + r.stderr)
+
+    # achado 4: .git na pasta do usuário (repositório de dotfiles) não faz da instalação comum uma de desenvolvimento
+    casa = os.environ.get("USERPROFILE")
+    try:
+        inst = Instalacao(base)
+        os.environ["USERPROFILE"] = str(inst.base)
+        (inst.base / ".git").mkdir()
+        g.limpar()
+        publicar(g)
+        st, est = rodar(novo_at(inst, g))
+        caso("(i) .git na pasta do usuário (dotfiles): não é desenvolvimento, atualiza", est["estado"] == "pronto", est)
+        inst = Instalacao(base)
+        os.environ["USERPROFILE"] = str(inst.base)
+        (inst.local / ".git").mkdir()
+        g.limpar()
+        publicar(g)
+        st, est = rodar(novo_at(inst, g))
+        caso("(i) .git entre a pasta do usuário e o complemento: segue 'desenvolvimento'", st == 409
+             and est["motivo"] == "desenvolvimento" and g.hits == [], est)
+        caso("(i) a pasta de trabalho do mantenedor (fora da pasta do usuário, com .git) segue 'desenvolvimento'",
+             A.desenvolvimento(RAIZ))
+        inst = Instalacao(base)
+        (inst.base / ".git").mkdir()
+        g.limpar()
+        publicar(g)
+        rc, out = rodar_cmd(inst.plug, inst, g, {"USERPROFILE": str(inst.base)})
+        caso("(i) cmd com .git na pasta do usuário: rc 0, os 2 trocados", rc == 0
+             and inst.fotos() == (esperado(PLUGIN_NOVO), esperado({**COMP_NOVO, **DADOS})), (rc, out))
+    finally:
+        if casa is None:
+            os.environ.pop("USERPROFILE", None)
+        else:
+            os.environ["USERPROFILE"] = casa
+
+    # achado 10: o complemento sobe durante o download do .cmd -> recusa antes de trocar
+    g.limpar()
+    publicar(g)
+    inst = Instalacao(base)
+    trava = inst.comp / "dados" / "coletor.lock"
+    g.gancho = lambda p: trava.write_text(str(os.getpid())) if "/releases/download/" in p and not trava.exists() else None
+    rc, out = rodar_cmd(inst.plug, inst, g)
+    subiu = trava.exists()
+    trava.unlink(missing_ok=True)
+    caso("(i) cmd: complemento subiu durante o download: rc 2 'em execução', nada trocado, nenhuma nova/ sobrando",
+         subiu and rc == 2 and "em execução" in out and intacta(inst) and sem_nova(inst), (rc, out))
+
+    # achado 7 no .cmd: extração que falha no meio
+    g.limpar()
+    publicar(g, comp={**COMP_NOVO, "sub": b"arquivo", "sub/a.py": b"pasta com o mesmo nome"})
+    inst = Instalacao(base)
+    rc, out = rodar_cmd(inst.plug, inst, g)
+    caso("(i) cmd: extração que falha no meio: rc 1, nada trocado, nenhuma nova/ sobrando", rc == 1 and intacta(inst)
+         and sem_nova(inst), (rc, out))
+
+    # achado 8 no .cmd: a marca de troca incompleta (do botão ou do .cmd) recusa antes da rede
+    g.limpar()
+    publicar(g)
+    inst = Instalacao(base)
+    (inst.comp / ".atualizacao").mkdir()
+    (inst.comp / ".atualizacao" / "troca-em-curso").write_text("x")
+    rc, out = rodar_cmd(inst.plug, inst, g)
+    caso("(i) cmd com a marca de troca incompleta no complemento: rc 1 'parou no meio', 0 pedido, nada trocado",
+         rc == 1 and "parou no meio" in out and g.hits == [] and intacta(inst), (rc, out, g.hits))
+
+    # achado 11: '!' no caminho (EnableDelayedExpansion comeria o '!' do LUC_CMD)
+    exclamacao = Path(tempfile.mkdtemp(prefix="luc!-", dir=base))
+    Instalacao.criadas.append(exclamacao)
+    g.limpar()
+    publicar(g)
+    inst = Instalacao(exclamacao)
+    rc, out = rodar_cmd(inst.plug, inst, g)
+    caso("(i) cmd numa pasta com '!' no caminho: rc 0, os 2 trocados", rc == 0
+         and inst.fotos() == (esperado(PLUGIN_NOVO), esperado({**COMP_NOVO, **DADOS})), (rc, out))
+    g.gancho = None
 
 
 if __name__ == "__main__":
