@@ -24,7 +24,6 @@ log = logging.getLogger("coletor.teclas")   # cai no dados\coletor.log (handler 
 VK = {"F7": 0x76, "F8": 0x77, "F9": 0x78, "F10": 0x79, "F11": 0x7A, "F12": 0x7B,
       **{f"Num {i}": 0x60 + i for i in range(10)}}
 NOME = {v: k for k, v in VK.items()}
-CONFIG_LOL = Path(r"C:\Games\Riot Games\League of Legends\Config")   # ao lado do game.cfg (minimapa.GAME_CFG)
 INTERVALO_S = 0.025   # aperto de tecla dura ~80–150 ms: 25 ms não perde nenhum e custa ~0 de CPU
 
 
@@ -107,9 +106,22 @@ def em_thread(obs, nome):
     return parar, t
 
 
-def _ligacoes(pasta=CONFIG_LOL):
+def config_lol():
+    """<pasta do LoL>\\Config (instalacao.arquivo_lol: a do client aberto, a do Riot Client, a padrão da Riot; ao lado do
+    game.cfg), ou None. Antes era C:\\Games\\Riot Games fixo (P4 da publicação)"""
+    try:
+        import instalacao
+        return instalacao.arquivo_lol("Config")
+    except Exception:
+        return None
+
+
+def _ligacoes(pasta=None):
     """[(evento, valor)] das teclas do LoL: input.ini (o que o Gabriel mudou) e PersistedSettings.json (tudo)"""
     out = []
+    pasta = pasta or config_lol()
+    if pasta is None:
+        return out
     try:
         for ln in (Path(pasta) / "input.ini").read_text(encoding="utf-8", errors="replace").splitlines():
             m = re.match(r"\s*(ev\w+)\s*=\s*(.+)$", ln)
@@ -135,7 +147,7 @@ def _ligacoes(pasta=CONFIG_LOL):
     return out
 
 
-def conflitos_no_lol(nomes, pasta=CONFIG_LOL):
+def conflitos_no_lol(nomes, pasta=None):
     """{nome: [eventos do LoL ligados a essa tecla SOZINHA]} ("[Ctrl][F10]" não conflita com F10). Sem a pasta = {}"""
     out = {}
     for evento, valor in _ligacoes(pasta):

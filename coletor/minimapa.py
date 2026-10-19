@@ -24,7 +24,6 @@ log = logging.getLogger("coletor")
 
 RAIZ = Path(__file__).resolve().parent.parent
 PASTA_ICONES = RAIZ / "dados" / "icones"
-GAME_CFG = Path(r"C:\Games\Riot Games\League of Legends\Config\game.cfg")
 TITULO_JOGO = "League of Legends (TM) Client"
 
 FAIXA_BGR = (27, 28, 16)        # RGB (16, 28, 27): faixa entre o mapa e a moldura dourada
@@ -361,10 +360,23 @@ class Detector:
 
 # ---------- captura ao vivo ----------
 
-def ler_game_cfg(caminho=GAME_CFG):
-    out, sec = {}, None
+def game_cfg():
+    """<pasta do LoL>\\Config\\game.cfg (instalacao.arquivo_lol: a do client aberto, a do Riot Client, a padrão da Riot), ou
+    None. Antes era C:\\Games\\Riot Games fixo: na instalação padrão da Riot o game.cfg nunca era achado (P4 da publicação)"""
     try:
-        for ln in caminho.read_text(encoding="utf-8", errors="replace").splitlines():
+        import instalacao
+        return instalacao.arquivo_lol("Config", "game.cfg")
+    except Exception:
+        return None
+
+
+def ler_game_cfg(caminho=None):
+    out, sec = {}, None
+    caminho = caminho or game_cfg()
+    if caminho is None:
+        return out
+    try:
+        for ln in Path(caminho).read_text(encoding="utf-8", errors="replace").splitlines():
             ln = ln.strip()
             if ln.startswith("[") and ln.endswith("]"):
                 sec = out.setdefault(ln[1:-1], {})

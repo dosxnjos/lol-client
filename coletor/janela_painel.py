@@ -9,6 +9,7 @@ import ctypes.wintypes as wt
 import json
 import logging
 import os
+import re
 import subprocess
 import sys
 import time
@@ -22,8 +23,6 @@ EDGES = (Path(os.environ.get("ProgramFiles(x86)", r"C:\Program Files (x86)")) / 
 PERFIL = banco.RAIZ / "dados" / "edge-painel"
 PIDFILE = banco.RAIZ / "dados" / "edge-painel.pid"
 URL = "http://127.0.0.1:8765/"
-# medido em 13/10/2026: DISPLAY1 1920×1200 físicos em (2560, 595) (lógico 1536×960 em 2048, 476)
-MONITOR_PREFERIDO = r"\\.\DISPLAY1"
 FASES_ABRE = ("InProgress", "Reconnect")
 FASES_MANTEM = ("GameStart", "InProgress", "Reconnect", "WaitingForStats", "PreEndOfGame")
 NAO_JANELA = 0x08000000  # CREATE_NO_WINDOW (taskkill/tasklist sem console piscando)
@@ -71,12 +70,28 @@ def monitores():
     return out
 
 
-def monitor_do_painel(lista=None):
-    """o DISPLAY1 se não for o principal; senão o 1º secundário; None com um monitor só
-    (o painel não abre por cima do jogo)"""
+def _numero(m):
+    """\\\\.\\DISPLAY12 -> (12, nome): DISPLAY2 vem antes de DISPLAY12 (ordem de texto poria o 12 antes)"""
+    nome = str(m.get("dispositivo") or "")
+    fim = re.search(r"(\d+)$", nome)
+    return (int(fim.group(1)) if fim else 1 << 30, nome.lower())
+
+
+def monitor_do_painel(lista=None, preferido=None):
+    """um monitor secundário, nunca o principal (o painel não abre por cima do jogo); None com um monitor só.
+    preferido (config monitorPainel, ex.: "\\\\.\\DISPLAY3") vale se for um secundário ligado agora; senão (e com ""), o
+    secundário de menor número. Antes era \\\\.\\DISPLAY1 fixo (medido em 13/10/2026 nesta máquina: 1920×1200 físicos
+    em (2560, 595)), o que com 2 monitores é o mesmo que o de menor número (P4 da publicação)"""
     lista = monitores() if lista is None else lista
     sec = [m for m in lista if not m["primario"]]
-    return next((m for m in sec if m["dispositivo"] == MONITOR_PREFERIDO), sec[0] if sec else None)
+    if not sec:
+        return None
+    if isinstance(preferido, str) and preferido.strip():
+        alvo = preferido.strip().lower()
+        achado = next((m for m in sec if str(m.get("dispositivo") or "").lower() == alvo), None)
+        if achado is not None:
+            return achado
+    return min(sec, key=_numero)
 
 
 def _hwnds_do_pid(pid):
@@ -146,11 +161,13 @@ def achar_edge():
 
 class JanelaPainel:
     """abrir()/fechar() e fase(fase) para o coletor chamar a cada mudança do gameflow.
-    ligado: f() -> bool (padrão: config painelAoVivo do servidor_local)."""
+    ligado: f() -> bool (padrão: config painelAoVivo do servidor_local). monitor: f() -> nome do dispositivo preferido
+    ou "" (config monitorPainel; o coach_vivo troca pela leitura da config dele)."""
 
-    def __init__(self, url=URL, perfil=PERFIL, pidfile=PIDFILE, ligado=None):
+    def __init__(self, url=URL, perfil=PERFIL, pidfile=PIDFILE, ligado=None, monitor=None):
         self.url, self.perfil, self.pidfile = url, Path(perfil), Path(pidfile)
         self.ligado = ligado or _ligado_pela_config
+        self.monitor = monitor or _monitor_pela_config
         self.desde = None  # epoch s em que o pid foi guardado
         self.pid = self._pid_salvo()
 
@@ -175,7 +192,11 @@ class JanelaPainel:
             log.info("painel ao vivo desligado na config")
             return None
         edge = achar_edge()
-        mon = monitor_do_painel()
+        try:
+            preferido = self.monitor()
+        except Exception:
+            preferido = ""
+        mon = monitor_do_painel(preferido=preferido)
         if not edge:
             log.warning("painel: msedge.exe não encontrado")
             return None
@@ -233,6 +254,14 @@ def _ligado_pela_config():
         return servidor_local.ler_config().get("painelAoVivo", True)
     except Exception:
         return True
+
+
+def _monitor_pela_config():
+    try:
+        import servidor_local
+        return servidor_local.ler_config().get("monitorPainel", "")
+    except Exception:
+        return ""
 
 
 def _teste():
