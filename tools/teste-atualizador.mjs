@@ -218,6 +218,18 @@ async function executar({ fase = 'None', post, estados, passos = 40 } = {}) {
     && inc.linha.querySelector('.lc-versao-link')?.textContent === `https://github.com/${REPO}/releases/tag/v0.2.0`, inc.txt);
   const outra = await executar({ post: { status: 409, dados: { estado: 'conferindo', versao: '0.2.0' } }, estados: [st('trocando'), st('pronto')] });
   caso('(d) 409 com outra troca em curso: acompanha até "Atualizado"', outra.txt.includes('Atualizado para a versão 0.2.0.'), outra.txt);
+  // revisão adversarial da P3: o 'pronto' segurado passou sem ser lido (timer do CEF atrasado) e a instância nova responde
+  // 'parado' com a versão nova instalada: é sucesso, não falha
+  const sucessora = await executar({ estados: [st('trocando'), { status: 0, dados: null }, { status: 0, dados: null },
+    st('parado', { versao: null, instalada: '0.2.0' })] });
+  caso('(d) "pronto" perdido e a instância nova "parado" com a 0.2.0 instalada: "Atualizado para a versão 0.2.0." com "recarregar agora"',
+    sucessora.txt.includes('Atualizado para a versão 0.2.0.') && !!porTexto(sucessora.linha, 'recarregar agora'), sucessora.txt);
+  const jaNova = await executar({ post: { status: 409, dados: { estado: 'recusado', motivo: 'versao', instalada: '0.2.0' } } });
+  caso('(d) clique de novo com a 0.2.0 já instalada (recusa "versao"): "Atualizado para a versão 0.2.0." com "recarregar agora"',
+    jaNova.txt.includes('Atualizado para a versão 0.2.0.') && !!porTexto(jaNova.linha, 'recarregar agora'), jaNova.txt);
+  const parada = await executar({ estados: [st('trocando'), st('parado', { versao: null })] });
+  caso('(d) "parado" com a versão velha instalada segue sendo falha', parada.txt.includes('Não foi possível atualizar agora')
+    && !porTexto(parada.linha, 'recarregar agora'), parada.txt);
   const mudo = await executar({ post: { status: 0, dados: null } });
   caso('(d) POST sem resposta: "Complemento coach sem resposta: tente de novo mais tarde."', mudo.txt.includes('Complemento coach sem resposta'), mudo.txt);
   const caiu = await executar({ estados: [{ status: 0, dados: null }] });

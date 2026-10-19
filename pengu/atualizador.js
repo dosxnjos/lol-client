@@ -55,10 +55,15 @@ export const semComplemento = ({ versao, tag, repo }, pasta = PASTA_PLUGIN) => (
   link: linkDaVersao(repo, tag),
 });
 
-// estado do complemento -> resultado final da linha, ou null (ainda trabalhando)
+// estado do complemento -> resultado final da linha, ou null (ainda trabalhando). A instância nova (depois do reinício)
+// responde 'parado', e um clique de novo responde 'recusado'/'versao': com a versão pedida já instalada, os dois são sucesso
+// (o 'pronto' segurado pode passar sem ser lido, com o timer do CEF atrasado; revisão adversarial da P3)
 export function traduzir(d, versao, link) {
   const e = d?.estado;
   if (e === 'pronto') return { texto: `Atualizado para a versão ${typeof d.versao === 'string' ? d.versao : versao}.`, recarregar: true };
+  if ((e === 'parado' || (e === 'recusado' && d.motivo === 'versao')) && d.instalada === versao) {
+    return { texto: `Atualizado para a versão ${versao}.`, recarregar: true };
+  }
   if (e === 'recusado' || e === 'erro') {
     const f = TEXTOS[d.motivo];
     const texto = f ? f(versao) : TEXTO_FALHA;
