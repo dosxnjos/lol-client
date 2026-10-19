@@ -118,6 +118,16 @@ const INTERNOS = [
   caso('texto de interface sem "coletor", "8765" nem "MCP" (o nome para o usuário é "complemento coach")', achados.length === 0, '\n  ' + achados.join('\n  '));
 }
 {
+  // Fase 3 do plano plugin Pengu primeiro (19/10/2026): texto visível e valor padrão não citam o mantenedor. Comentário pode
+  // (decisão "nome nos comentários": publicar como está); literal, não. O valor padrão (PADRAO) é provado no teste-config.mjs
+  const achados = [];
+  for (const f of arquivos) {
+    const rel = relative(RAIZ, f).replaceAll(BARRA, '/');
+    for (const [l, s] of literais(f)) if (/Gabriel/i.test(s)) achados.push(`${rel}:${l}: ${s.replace(/\s+/g, ' ').slice(0, 120)}`);
+  }
+  caso('texto de interface sem o nome do mantenedor ("Gabriel" só em comentário)', achados.length === 0, '\n  ' + achados.join('\n  '));
+}
+{
   // o varredor enxerga template dentro de ${…} (as abas do pós-jogo) e pula comentário e console
   const dir = mkdtempSync(join(tmpdir(), 'lc-textos-'));
   const f = join(dir, 'x.js');

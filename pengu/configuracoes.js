@@ -113,7 +113,7 @@ function montar(painel, cfg, definir, restaurar) {
     caixa('aceite.ligado', 'Aceitar partida automaticamente', 'Mostra a contagem quando a partida aparece e aceita sozinho; "não aceitar" cancela daquela vez.'),
     ui.linha(ui.lista('aceite.atrasoS', 'Aceitar depois de', ATRASOS.map(s => [s, s + ' s']), cfg.aceite.atrasoS, v => definir('aceite.atrasoS', v))),
     ui.explica(`Conta pelo relógio do servidor; ${cfg.aceite.limiteS - 2} s é o máximo seguro (a janela da Riot é de ~${cfg.aceite.limiteS} s).`),
-    caixa('aceite.trazerClient', 'Trazer o client para a frente ao achar partida', 'Desligado (padrão), com o aceite automático: se outra janela estava na frente, o client pisca e some de novo (o Windows devolve a janela de antes); no champ select ele volta sozinho.'),
+    caixa('aceite.trazerClient', 'Trazer o client para a frente ao achar partida', 'Ligado (padrão): o client vem para a frente quando a partida aparece. Desligado, com o aceite automático: se outra janela estava na frente, o client pisca e some de novo (o Windows devolve a janela de antes); no champ select ele volta sozinho.'),
     caixa('aceite.esconderPopup', 'Esconder o popup de partida encontrada', 'Some a janela de aceitar do client; a contagem do lol-client continua. Só vale com o aceite automático ligado.'),
     caixa('aceite.silenciarSom', ...TEXTO_SILENCIAR),
     // janelinha do complemento coach (aviso_partida.py): só com o recurso anunciado

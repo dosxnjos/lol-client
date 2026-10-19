@@ -30,10 +30,12 @@ export const PADRAO = {
   esconderTft: true,
   colunaLarga: true,
   // trazerClient false = devolver o foco (minimiza o client que pulou na frente no ReadyCheck; volta no
-  // ChampSelect); esconderPopup só vale com o aceite ligado (CSS em html.lc-aceite.lc-esconder-popup);
+  // ChampSelect). Padrão true desde 19/10/2026 (instalação nova não minimiza; decisão do Gabriel, Fase 3 de
+  // roadmap/2026-10-17-plugin-pengu-primeiro.md): o false salvo antes fica pela mescla, sem VERSAO nova.
+  // esconderPopup só vale com o aceite ligado (CSS em html.lc-aceite.lc-esconder-popup);
   // silenciarSom corta o loop que toca depois do aceite (roadmap/2026-10-13-voz-pregravada-e-foco.md, 2–2c); ligado
   // por padrão desde a decisão do Gabriel de 13/10/2026 (roadmap/2026-10-13-chat-popups-som.md)
-  aceite: { ligado: true, atrasoS: 10, limiteS: 12, trazerClient: false, esconderPopup: false, silenciarSom: true },
+  aceite: { ligado: true, atrasoS: 10, limiteS: 12, trazerClient: true, esconderPopup: false, silenciarSom: true },
   // jogarDeNovo: botão no pós-jogo; freioTilt: derrotas seguidas que pedem confirmação (0 = desligado);
   // freioMadrugada: pedir confirmação ao buscar entre 01:00 e 05:59. Os dois freios valem para a fila rápida e o
   // jogar de novo (freios.js; roadmap/2026-10-13-jogar-de-novo.md)
@@ -71,7 +73,8 @@ export const PADRAO = {
   },
   // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): ligado = botão "modo compacto", atalho
   // Ctrl+Shift+M e roteador por fase; inicioCompacto = o padrão de cada fase é a tela compacta (pedido do Gabriel,
-  // 13/10/2026); favoritos = championId fixos no topo da busca (58 Renekton, 154 Zac); larg/alt = janela em px CSS.
+  // 13/10/2026); favoritos = championId fixos no topo da busca, vazio no padrão (dado de quem usa, só no DataStore;
+  // a semente do mantenedor está no README § Instalar; Fase 3 de roadmap/2026-10-17-plugin-pengu-primeiro.md); larg/alt = janela em px CSS.
   // alt 680 desde 14/10/2026 (a tela 3 passava 26 px de 640 e mostrava barra de rolagem; carregar() leva o 640 salvo).
   // Classes: lc-compacto (ligado) e lc-inicio-compacto; a camada à vista é html.lc-modo-compacto (compacto/index.js)
   // passo 13 (aprovado em 14/10/2026 ~20:00): chat (💬) e amigos (👥) ao lado da coluna. A chave que escolhia entre o chat ao
@@ -81,15 +84,10 @@ export const PADRAO = {
   // fundoPerfil (etapa 3 do mesmo plano, 16/10/2026): o fundo do perfil dele como fundo da coluna compacta (compacto/fundo.js).
   // chatSalaCresce (etapa A de roadmap/2026-10-16-chat-da-sala-som-icones.md): a faixa da sala do time (seleção, honra, pós-jogo)
   // cresce sozinha com mensagem de outro jogador (compacto/chat-sala.js). Entra pela mescla, sem VERSAO nova.
-  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true },
-  // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
-  runas: {
-    ligado: true,
-    regras: [
-      { championId: 58, posicao: '*', paginas: [1409260191, 2147419287] }, // Renekton: ☝️🐊 e Nova Página de Runas 9
-      { championId: 154, posicao: '*', paginas: [1540029809] }, // Zac: 🤢
-    ],
-  },
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true },
+  // regras de runa (runas.js): {championId, posicao ('*' ou TOP…UTILITY), paginas: [ids de /lol-perks/v1/pages]}. Vazio
+  // no padrão: os ids de página são por conta (sem regra, nada acontece). A semente do mantenedor está no README § Instalar
+  runas: { ligado: true, regras: [] },
 };
 
 const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
@@ -167,12 +165,14 @@ export function salvar() {
 
 export const aoMudar = fn => (ouvintes.add(fn), () => ouvintes.delete(fn));
 
-// as regras de runa ficam: são dado do Gabriel, não preferência (plano v1, passo 7d). A ponte com o complemento coach
+// as regras de runa ficam: são dado de quem usa, não preferência (plano v1, passo 7d). Os favoritos do compacto também
+// (desde 19/10/2026 o padrão é vazio e não há tela para refazer a lista). A ponte com o complemento coach
 // (coletor.ligado) também: é instalação; sem isto o "restaurar padrão" desligaria a ponte calado
 export function restaurar() {
-  const regras = cfg.runas?.regras, ponte = cfg.coletor?.ligado;
+  const regras = cfg.runas?.regras, favoritos = cfg.compacto?.favoritos, ponte = cfg.coletor?.ligado;
   Object.assign(cfg, clonar(PADRAO));
   if (Array.isArray(regras)) cfg.runas.regras = clonar(regras);
+  if (Array.isArray(favoritos)) cfg.compacto.favoritos = clonar(favoritos);
   if (typeof ponte === 'boolean') cfg.coletor.ligado = ponte;
   salvar();
 }

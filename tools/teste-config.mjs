@@ -30,13 +30,14 @@ const casos = [
     && cfg.coach.avisosDesligados !== PADRAO.coach.avisosDesligados],
   ['migrar(null) não quebra', migrar(null), r => r === null],
   // chaves novas de 13/10/2026 (contrato plugin <-> coach): config salva antes delas ganha os padrões
-  ['config antiga ganha as chaves novas com os padrões', carregarCom({ aceite: { ligado: true, atrasoS: 7 }, filaRapida: { fila: 440 }, coach: { voz: false } }),
-    c => c.aceite.atrasoS === 7 && c.aceite.trazerClient === false && c.aceite.esconderPopup === false && c.aceite.silenciarSom === true
+  // trazerClient: padrão true desde 19/10/2026 (Fase 3); config salva sem a chave ganha o padrão novo
+  ['config antiga ganha as chaves novas com os padrões (trazerClient true)', carregarCom({ aceite: { ligado: true, atrasoS: 7 }, filaRapida: { fila: 440 }, coach: { voz: false } }),
+    c => c.aceite.atrasoS === 7 && c.aceite.trazerClient === true && c.aceite.esconderPopup === false && c.aceite.silenciarSom === true
       && c.filaRapida.fila === 440 && c.filaRapida.jogarDeNovo === true && c.filaRapida.freioTilt === 2 && c.filaRapida.freioMadrugada === true
       && c.recompensas.ligado === true && c.recompensas.tft === false && c.coach.aceiteFlutuante === true && c.coach.voz === false],
-  ['valores salvos das chaves novas ficam', carregarCom({ aceite: { trazerClient: true, esconderPopup: true, silenciarSom: true },
+  ['valores salvos das chaves novas ficam', carregarCom({ aceite: { trazerClient: false, esconderPopup: true, silenciarSom: true },
     filaRapida: { jogarDeNovo: false, freioTilt: 3 }, recompensas: { ligado: false, tft: true }, coach: { aceiteFlutuante: false } }),
-    c => c.aceite.trazerClient && c.aceite.esconderPopup && c.aceite.silenciarSom && !c.filaRapida.jogarDeNovo
+    c => c.aceite.trazerClient === false && c.aceite.esconderPopup && c.aceite.silenciarSom && !c.filaRapida.jogarDeNovo
       && c.filaRapida.freioTilt === 3 && !c.recompensas.ligado && c.recompensas.tft && c.coach.aceiteFlutuante === false],
   ['tipo errado salvo volta ao padrão (freioTilt "3" -> 2)', carregarCom({ filaRapida: { freioTilt: '3' } }), c => c.filaRapida.freioTilt === 2],
   // freios (decisão do Gabriel, 13/10/2026): padrão tilt 2 + madrugada; 0 salvo antes da marca vira 2 uma vez só
@@ -147,6 +148,83 @@ const casos = [
     l => new Set(l.map(([k]) => k)).size === l.length
       && ['lc-gank-outra-rota', 'lc-mid-sumiu-filtro', 'lc-cortar-fala-repetida', 'lc-overlay-suave'].every(n => l.some(([k]) => k === n))],
 ];
+
+// ---- Fase 3 de roadmap/2026-10-17-plugin-pengu-primeiro.md (19/10/2026): o que é pessoal vira configuração ----
+// PADRAO público: runas.regras [], compacto.favoritos [], aceite.trazerClient true (decisão do Gabriel: minimizar no ready check
+// desligado para instalação nova). A config salva do Gabriel não muda: GABRIEL tem a forma da config dele lida do DataStore em
+// 19/10/2026 (versao 3, trazerClient false explícito, favoritos e regras salvos; só os subtrees que esta fase toca)
+const GABRIEL = {
+  versao: 3,
+  aceite: { ligado: true, atrasoS: 8, limiteS: 12, trazerClient: false, esconderPopup: false, silenciarSom: true },
+  filaRapida: { ligado: true, fila: 420, pos1: 'TOP', pos2: 'JUNGLE', jogarDeNovo: true, freioTilt: 2, freioMadrugada: true },
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true },
+  runas: { ligado: true, regras: [
+    { championId: 58, posicao: '*', paginas: [1409260191, 2147419287] },
+    { championId: 154, posicao: '*', paginas: [1540029809] },
+  ] },
+  recompensas: { ligado: true, tft: false },
+  semPopups: { ligado: true, runasAutomaticas: true, smiteAutomatico: true },
+};
+const copia = o => JSON.parse(JSON.stringify(o));
+// os subtrees que a Fase 3 toca (e os que ficam ligados por decisão dele): iguais ao salvo
+const mesmos = (c, ref = GABRIEL) => ['aceite', 'filaRapida', 'compacto', 'runas', 'recompensas', 'semPopups'].every(k => igual(c[k], ref[k]));
+{
+  gravacoes = 0;
+  const nova = carregarCom(null);
+  casos.push(['Fase 3: instalação nova = trazerClient true, sem regras de runa nem favoritos; aceite, recompensas e avisos calados ligados; nada gravado',
+    { nova, gravacoes, marca },
+    ({ nova: c, gravacoes: g, marca: m }) => c.aceite.trazerClient === true && igual(c.runas.regras, []) && c.runas.ligado === true
+      && igual(c.compacto.favoritos, []) && c.aceite.ligado === true && c.recompensas.ligado === true && c.semPopups.ligado === true
+      && g === 0 && m === null]);
+  casos.push(['Fase 3: o PADRAO não carrega dado pessoal (nenhum id de página de runa, favorito nem nome)', JSON.stringify(PADRAO),
+    s => igual(PADRAO.runas.regras, []) && igual(PADRAO.compacto.favoritos, []) && !/Gabriel|Renekton|1409260191|2147419287|1540029809/.test(s)]);
+
+  // a config dele (v3, marca 3, como está no DataStore): a migração v4 grava uma vez (ponte), os subtrees ficam iguais no cfg e no salvo
+  gravacoes = 0;
+  const g1 = carregarCom(copia(GABRIEL), 3);
+  const salvo1 = copia(salvo), grav1 = gravacoes;
+  gravacoes = 0;
+  const g2 = recarregar();
+  casos.push(['Fase 3: config salva do Gabriel (v3) igual antes e depois, inclusive trazerClient false, favoritos [58,154] e as 2 regras (cfg e DataStore)',
+    { g1, salvo1, grav1 }, ({ g1: c, salvo1: s, grav1: n }) => mesmos(c) && mesmos(s) && c.aceite.trazerClient === false && s.aceite.trazerClient === false
+      && n === 1 && s.versao === 4 && c.coletor.ligado === true]);
+  casos.push(['Fase 3: ... e recarregar não grava nem muda nada', { g2, gravacoes }, ({ g2: c, gravacoes: n }) => mesmos(c) && n === 0]);
+  // o estado dele depois de o orquestrador recarregar o plugin da Fase 1 (v4, marca 4, ponte ligada): zero gravação, nada muda
+  gravacoes = 0;
+  const g4 = carregarCom({ ...copia(GABRIEL), versao: 4, coletor: { ligado: true } }, 4);
+  casos.push(['Fase 3: config dele já na v4 (depois da Fase 1): nada gravado, subtrees iguais, trazerClient false',
+    { g4, gravacoes }, ({ g4: c, gravacoes: n }) => mesmos(c) && c.aceite.trazerClient === false && n === 0]);
+  // restaurar(): favoritos ficam como as regras (não há tela para refazer a lista); trazerClient é preferência com caixa: volta ao padrão
+  restaurar();
+  const r = recarregar();
+  casos.push(['Fase 3: restaurar() mantém favoritos, regras e a ponte; trazerClient volta ao padrão (true)', r,
+    c => igual(c.compacto.favoritos, [58, 154]) && igual(c.runas.regras, GABRIEL.runas.regras) && c.coletor.ligado === true
+      && c.aceite.trazerClient === true && c.aceite.atrasoS === 10]);
+  casos.push(['Fase 3: restaurar() numa instalação nova continua sem favoritos nem regras', (() => { carregarCom(null); restaurar(); return recarregar(); })(),
+    c => igual(c.compacto.favoritos, []) && igual(c.runas.regras, []) && c.coletor.ligado === false]);
+}
+
+// ponta a ponta do foco no ready check (aceite.js criarFoco) com a config carregada: outra janela na frente, ReadyCheck, o client
+// rouba o foco 60 ms depois. Instalação nova não minimiza; a config dele (trazerClient false) segue minimizando
+{
+  const { criarFoco } = await import('../pengu/aceite.js');
+  const roteiro = c => {
+    let t = 0;
+    const pend = [], chamadas = [];
+    const f = criarFoco({ cfg: c, lcu: (m, u) => { chamadas.push(`${m} ${u}`); return Promise.resolve({ ok: true }); },
+      agora: () => t, agendar: fn => { pend.push(fn); return pend.length; } });
+    for (const [ms, ev] of [[0, 'blur'], [30000, 'ReadyCheck'], [30060, 'foco']]) {
+      t = ms;
+      if (ev === 'foco') f.aoFoco(); else if (ev === 'blur') f.aoBlur(); else f.aoFase(ev);
+      while (pend.length) pend.shift()();
+    }
+    return chamadas;
+  };
+  const nova = roteiro(carregarCom(null));
+  const dele = roteiro(carregarCom({ ...copia(GABRIEL), versao: 4, coletor: { ligado: true } }, 4));
+  casos.push(['Fase 3: ready check com o client atrás: instalação nova não minimiza; a config dele minimiza (ux-minimize)', { nova, dele },
+    v => v.nova.length === 0 && igual(v.dele, ['POST /riotclient/ux-minimize'])]);
+}
 
 // Configurações › LOL-CLIENT: os blocos Voz, Alertas e Minimapa montam um controle para cada chave nova (DOM mínimo)
 const elFalso = tag => ({ tag, filhos: [], className: '', textContent: '', append(...f) { this.filhos.push(...f); }, replaceChildren(...f) { this.filhos = f; } });

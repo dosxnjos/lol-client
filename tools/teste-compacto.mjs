@@ -171,8 +171,9 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   // chat do complemento (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md): o chat é sempre ao lado
   // fundoPerfil (etapa 3 de 2026-10-16): o fundo do perfil na coluna, ligado por padrão
   // chatSalaCresce (etapa A de 2026-10-16-chat-da-sala-som-icones): a faixa da sala do time cresce com mensagem de outro jogador
-  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, fundoPerfil, chatSalaCresce} (sem conversaSozinha nem a chave do chat ao lado)',
-    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true }), JSON.stringify(c1.compacto));
+  // favoritos vazio no padrão desde 19/10/2026 (Fase 3 de roadmap/2026-10-17-plugin-pengu-primeiro.md: dado de quem usa)
+  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [], 420×680, fundoPerfil, chatSalaCresce} (sem conversaSozinha nem a chave do chat ao lado)',
+    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true }), JSON.stringify(c1.compacto));
   // (versao 4 = a atual desde 19/10/2026, VERSAO da ponte com o complemento coach: estes casos provam chave nova sem VERSAO nova)
   // o nome da chave aposentada vai montado para o grep de prova da Fase 2 (nenhum uso no código) seguir vazio
   const CHAVE_CHAT_VELHA = 'chat' + 'Lateral';
@@ -193,14 +194,17 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   salvo = { versao: 4, filaRapida: { fila: 440 } };
   const c2 = JSON.parse(JSON.stringify(carregar()));
   caso('config: salva antes da chave ganha o padrão do compacto e segue na versao 4', c2.compacto.ligado && c2.compacto.inicioCompacto && c2.versao === 4 && c2.filaRapida.fila === 440);
-  salvo = { versao: 3, compacto: { inicioCompacto: false, favoritos: [] , larg: 'x' } };
+  salvo = { versao: 3, compacto: { inicioCompacto: false, favoritos: [103], larg: 'x' } };
   const c3 = JSON.parse(JSON.stringify(carregar()));
-  caso('config: escolha salva fica (inicioCompacto false, favoritos vazio); tipo torto volta ao padrão',
-    c3.compacto.inicioCompacto === false && igual(c3.compacto.favoritos, []) && c3.compacto.larg === 420 && c3.compacto.ligado === true);
+  salvo = { versao: 3, compacto: { favoritos: [] } };
+  const c3b = JSON.parse(JSON.stringify(carregar()));
+  caso('config: escolha salva fica (inicioCompacto false, favoritos [103] sobre o padrão vazio, e vazio salvo fica vazio); tipo torto volta ao padrão',
+    c3.compacto.inicioCompacto === false && igual(c3.compacto.favoritos, [103]) && c3.compacto.larg === 420 && c3.compacto.ligado === true
+    && igual(c3b.compacto.favoritos, []));
   const cl = classes();
   caso('config: classes lc-compacto e lc-inicio-compacto, sem lc-modo-compacto (é do roteador)',
     cl.some(([k]) => k === 'lc-compacto') && cl.some(([k]) => k === 'lc-inicio-compacto') && !cl.some(([k]) => k === CLASSE) && new Set(cl.map(([k]) => k)).size === cl.length);
-  caso('config: PADRAO.compacto.favoritos é Renekton e Zac', igual(PADRAO.compacto.favoritos, [58, 154]));
+  caso('config: PADRAO.compacto.favoritos vazio (a semente do mantenedor fica no README § Instalar)', igual(PADRAO.compacto.favoritos, []));
 }
 
 // ---------- 2. destino de cada fase ----------

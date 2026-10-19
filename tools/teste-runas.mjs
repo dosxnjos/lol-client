@@ -2,7 +2,12 @@
 import { escolherRunas, donoDaPagina, consultarRunas } from '../pengu/runas.js';
 import { PADRAO } from '../pengu/config.js';
 
-const regras = PADRAO.runas.regras; // a semente do plano
+// semente do mantenedor (medida em 13/10/2026; README § Instalar). Desde 19/10/2026 o PADRAO não traz regra nenhuma (Fase 3 de
+// roadmap/2026-10-17-plugin-pengu-primeiro.md: ids de página são por conta), então a semente mora aqui
+const regras = [
+  { championId: 58, posicao: '*', paginas: [1409260191, 2147419287] }, // Renekton
+  { championId: 154, posicao: '*', paginas: [1540029809] }, // Zac
+];
 // páginas como GET /lol-perks/v1/pages devolve (medidas em 13/10/2026; só o que a função usa)
 const paginas = [1409260191, 1378841228, 1333256548, 1540029809, 1517184216, 2133672737, 1417788555, 1696192448, 2147419287].map(id => ({ id }));
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -12,6 +17,9 @@ const casos = [
   ['Zac/JUNGLE -> [1540029809]', escolherRunas(regras, 154, 'JUNGLE', paginas), r => igual(r, [1540029809])],
   ['Ahri -> []', escolherRunas(regras, 103, 'MIDDLE', paginas), r => igual(r, [])],
   ['id inexistente filtrado', escolherRunas([{ championId: 58, posicao: '*', paginas: [1409260191, 999] }], 58, 'TOP', paginas), r => igual(r, [1409260191])],
+  // instalação nova (Fase 3, 19/10/2026): PADRAO sem regra; runas ligadas e nada acontece
+  ['PADRAO: runas ligadas e sem regra', PADRAO.runas, r => r.ligado === true && igual(r.regras, [])],
+  ['regras do PADRAO: Renekton/TOP -> [] (sem regra, nenhuma página)', consultarRunas(PADRAO.runas.regras, 58, 'TOP', paginas), r => igual(r, { candidatas: [], apagadas: [] })],
 ];
 // extras: posição específica vence a '*', posição minúscula da LCU, champ select sem posição, dono da página
 const pos = [...regras, { championId: 58, posicao: 'JUNGLE', paginas: [1696192448] }];
@@ -45,10 +53,16 @@ const extras = [
     return { ok: true, status: 200, text: async () => JSON.stringify(corpo) };
   };
   const r = await iniciarRunas({ socket: { observe() {} } }, { runas: { ligado: true, regras } }).aoTravar(58, 'TOP');
-  Object.assign(globalThis, antes);
   extras.push(['compacto à vista: 2 páginas sem popup, sem ux-show/ux-flash, sem escrita',
     { r, escritas: chamadas.filter(c => !c.startsWith('GET')), criados: criados.length },
     x => x.r.acao === 'compacto' && igual(x.r.ids, [1409260191, 2147419287]) && x.escritas.length === 0 && x.criados === 0]);
+  // instalação nova (Fase 3, 19/10/2026): config do PADRAO, travar qualquer campeão = nada (sem escrita, popup nem aviso)
+  chamadas.length = 0; criados.length = 0;
+  const rNova = await iniciarRunas({ socket: { observe() {} } }, JSON.parse(JSON.stringify(PADRAO))).aoTravar(58, 'TOP');
+  Object.assign(globalThis, antes);
+  extras.push(['instalação nova (PADRAO): travar o Renekton não escreve, não abre popup nem avisa',
+    { r: rNova, escritas: chamadas.filter(c => !c.startsWith('GET')), criados: criados.length },
+    x => x.r.acao === 'nada' && x.escritas.length === 0 && x.criados === 0]);
 }
 
 // ---- paridade com o expandido (plano do compacto, passo 11 b3 e b4): DOM falso com a camada e o popup ----
