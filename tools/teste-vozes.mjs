@@ -243,6 +243,9 @@ for (const [motivo, texto] of Object.entries(VZ.TEXTOS)) {
   const p3 = m3.v.baixar();
   await correr(m3, r3);
   caso('(d) mais de 15 min baixando: "O download das vozes ainda não terminou…"', await p3 === VZ.TEXTO_DEMORA);
+  caso('(d) troca que falha na 1ª instalação (troca-nova): diz que a voz segue a do Windows, sem citar pacote anterior',
+    VZ.traduzir(D({ estado: 'erro', motivo: 'troca-nova' })) === 'Não foi possível instalar as vozes: os avisos seguem na voz Maria do Windows.',
+    VZ.traduzir(D({ estado: 'erro', motivo: 'troca-nova' })));
   caso('(d) "parado" com a versão do código instalada do release = sucesso (o pronto passou sem ser lido)',
     VZ.traduzir(D({ estado: 'parado', instalada: INST })).startsWith('Vozes instaladas') && VZ.traduzir(D({ estado: 'parado' })) === VZ.TEXTO_FALHA);
 }

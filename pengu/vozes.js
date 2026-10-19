@@ -34,6 +34,7 @@ export const TEXTOS = {
   release: 'Pacote de vozes desta versão não encontrado no GitHub: tente de novo mais tarde.',
   rede: 'Não foi possível baixar as vozes: tente de novo mais tarde.',
   troca: 'Não foi possível trocar as vozes: o pacote anterior continua instalado.',
+  'troca-nova': 'Não foi possível instalar as vozes: os avisos seguem na voz Maria do Windows.',
   'troca-incompleta': 'A troca das vozes parou no meio: o pacote anterior volta quando o complemento coach reiniciar.',
 };
 export const TEXTO_FALHA = 'Não foi possível baixar as vozes agora: tente de novo mais tarde.';
