@@ -54,6 +54,10 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   `teste-aviso-partida.py` 125/125, bateria node 29/29; `/resumos` no banco desta máquina: 191 partidas, 1,06 s, 25,6 KB):
   falta recarregar o plugin e reiniciar o coletor (importação), e as provas do client real:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-4.md).
+- **Revisão adversarial da Fase 4 (19/10/2026):** 4 achados (2 iguais), os 3 problemas reais e corrigidos: `/resumos` só
+  com as partidas da conta do meta (`21697bf`, `teste-resumos.py` 21/21), backfill confere o pós-jogo e a lista antes de cada
+  GET e grava o lote incompleto na saída do lobby e no `beforeunload` (`35b57a7`, `teste-historico.mjs` 82/82); bateria node
+  29/29; tabela no relatório.
 
 ## Decisões do Gabriel (19/10/2026)
 
