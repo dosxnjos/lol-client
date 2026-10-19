@@ -20,7 +20,7 @@ TEMPOS = {"azul": (55, 300), "vermelho": (55, 300), "gromp": (67, 135), "lobos":
           "aves": (67, 135), "krugs": (67, 135)}
 CARANGUEJO = {"top": (4400, 9600), "bot": (10500, 5170)}
 CARANGUEJO_NASCE, CARANGUEJO_RENASCE = 175, 150
-# objetivos: posição medida na timeline da partida 3292746609 (ELITE_MONSTER_KILL) e nascimento
+# objetivos: posição medida na timeline da partida de 13/10/2026 07:18 (ELITE_MONSTER_KILL) e nascimento
 OBJETIVOS = {"DragonKill": ("dragão", (9866, 4414)), "HordeKill": ("vastilarvas", (5007, 10471)),
              "HeraldKill": ("arauto", (5007, 10471)), "BaronKill": ("barão", (5007, 10471)),
              "AtakhanKill": ("atakhan", (5007, 10471))}

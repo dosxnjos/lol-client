@@ -29,7 +29,7 @@ CORES = {"vermelho": (235, 45, 45), "amarelo": (245, 200, 40), "azul": (60, 145,
 TIPOS = {
     "gank":              dict(prio=100, validade=6, repetir=60, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
     "intruso_grupo":     dict(prio=95, validade=6, repetir=15, urgente=True, destinos="vpm", cor="vermelho", icone="perigo"),
-    # intruso repetir 15 -> 30 (partida 3293420970, 15/10/2026: o jungler entrou no top, sumiu na moita e "chegou" de
+    # intruso repetir 15 -> 30 (partida de 15/10/2026: o jungler entrou no top, sumiu na moita e "chegou" de
     # novo 17 s depois: 2 falas "o jungler chegando no top" do mesmo mergulho; a volta de verdade depois de recuar
     # passa de 30 s)
     "intruso":           dict(prio=85, validade=6, repetir=30, urgente=False, destinos="vpm", cor="amarelo", icone="perigo"),
@@ -44,7 +44,7 @@ TIPOS = {
     "mortes_cedo":       dict(prio=45, validade=30, repetir=900, urgente=False, destinos="vp", cor="amarelo", icone="caveira"),
     # pulsos=1: a borda pisca uma vez só e some (Moldura.UM_PULSO_S), em vez dos ~2 s pulsando; sem voz por padrão
     # (servidor_local.CONFIG_PADRAO avisosDesligados.voz; a caixa da voz nas Configurações liga de novo). Pedido do
-    # Gabriel, partida 3293420970 (15/10/2026): "pode ser uma pulsada única. E aí não precisa nem de aviso de voz"
+    # Gabriel, partida de 15/10/2026: "pode ser uma pulsada única. E aí não precisa nem de aviso de voz"
     "adversario_voltou": dict(prio=40, validade=6, repetir=30, urgente=False, destinos="vpm", cor="azul", icone="olho",
                               pulsos=1),
     "inimigo_fed":       dict(prio=35, validade=20, repetir=120, urgente=False, destinos="vp", cor="amarelo", icone="espada"),
@@ -106,7 +106,7 @@ TEXTOS = {
     "adversario_voltou": {"serio": ("o {rota} voltou pra rota", "{campeao} voltou"),
                           "descontraido": ("o {rota} voltou, cuidado", "{campeao} voltou")},
     # o adversário da minha rota (champ select) reaparece em OUTRA rota (tipo adversario_voltou, molde por evento):
-    # "o top apareceu no mid" (pedido do Gabriel depois da partida 3293149183: "tem que avisar se voltou e em qual lane")
+    # "o top apareceu no mid" (pedido do Gabriel depois da partida de 14/10/2026 15:48: "tem que avisar se voltou e em qual lane")
     "adversario_outra_rota": {"serio": ("o {rota} apareceu {zona}", "{campeao} {zt}"),
                               "descontraido": ("o {rota} apareceu {zona}, avisa o time", "{campeao} {zt}")},
     "inimigo_fed": {"serio": ("o {rota} tá forte, evita o um contra um", "evita 1x1"),
@@ -378,7 +378,7 @@ class MotorAvisos:
     # FURA_S. Revisão 13/10/2026: o Flash da Tristana calou "jungler rio top", que venceu na fila.
     PRIO_INFO, PRIO_FURA, FURA_S = 50, 70, 5.0
     GAP_MOLDURA = 2.5        # retorno de atalho: sai depois disto sem alerta na moldura (a borda dura 2 s)
-    INTERVALO_MOLDURA = 10.0  # entre duas bordas de alerta de cor diferente (partida 3293149183; regra em _distribuir)
+    INTERVALO_MOLDURA = 10.0  # entre duas bordas de alerta de cor diferente (partida de 14/10/2026 15:48; regra em _distribuir)
     # a cor da borda só sobe dentro do INTERVALO_MOLDURA (azul < verde < amarelo < vermelho)
     GRAVIDADE_COR = {"azul": 0, "verde": 1, "amarelo": 2, "vermelho": 3}
     # alerta de posição esperando a vez na borda: mais velho que isto não vai à tela (posição antiga engana)
@@ -511,7 +511,7 @@ class MotorAvisos:
         #    a mais importante vence, a cor só sobe (azul -> amarela -> vermelha), nunca vermelha -> amarela;
         #  - o alerta da MESMA cor, passado GAP_MOLDURA (a borda anterior já acabou): o 2º gank, o "2 inimigos no
         #    top" depois do "gank top", sai vermelho de novo sem trocar de cor.
-        # O resto espera e cai (validade ou IDADE_MOLDURA). Partida 3293149183: com 2,5 s e todo urgente furando,
+        # O resto espera e cai (validade ou IDADE_MOLDURA). Partida de 14/10/2026 15:48: com 2,5 s e todo urgente furando,
         # 7 bordas em 52 s e amarela -> vermelha em 1 s ("as bordas começaram a piscar em diferentes cores"); a 1ª
         # correção (só URGENTE furava) calava o intruso amarelo atrás de um "voltou" azul e o 2º gank (revisão).
         alertas = [a for a in self._fila_moldura if not self._e_retorno(a)]
@@ -683,7 +683,7 @@ def perto_da_rota(rota, x, y, margem=MARGEM_ROTA, com_base=False):
         return False
     # a faixa do meio é só do mid: com a margem, as rotas laterais (x < 3800, y > 11180) engoliam a frente das
     # bases no meio (torre do inibidor do mid, a ~5300 do canto, fora do R_BASE): 3 inimigos defendendo o mid
-    # deles viravam "4 inimigos no top" (partida 3293137136, 14/10/2026). Fora com_base: o nexo (as 3 faixas)
+    # deles viravam "4 inimigos no top" (partida de 14/10/2026 14:46). Fora com_base: o nexo (as 3 faixas)
     # segue sem rota em onde_estou (D14)
     if not com_base and rota != "rota_meio" and abs(y - x) <= a.M_MEIO:
         return False
@@ -730,7 +730,7 @@ def jogadores_do_live(dados):
 # --------------------------------------------------------------------------------------------
 # gatilhos da Live Client (passo 12)
 
-# Conferir a cada patch. Medido em 13/10/2026 (partida 3292746609): dragões abatidos a 508, 845,
+# Conferir a cada patch. Medido em 13/10/2026 (partida das 07:18): dragões abatidos a 508, 845,
 # 1181, 1545 e 1871 s (renascer de ~300 s confere: 337/336/364/326 entre abates); vastilarvas a
 # 530 s, arauto 1041 s, barão 1425 s: os primeiros nascimentos de vastilarvas/arauto/barão são só
 # limite superior (valores do patch, não medidos). Dragão ancião (depois da alma) não modelado.
@@ -872,7 +872,7 @@ def chave_zona(x, y, meu_time):
 
 
 # estruturas pelo nome da Live Client (ARMADILHAS § Live Client: a torre é do time que PERDEU). Medido nas
-# partidas 3292746609 e 3293092537: Turret_T{Order|Chaos}_L{0 bot, 1 mid, 2 top}_P{3 externa, 2 interna,
+# partidas de 13/10/2026 07:18 e 14/10/2026 11:30: Turret_T{Order|Chaos}_L{0 bot, 1 mid, 2 top}_P{3 externa, 2 interna,
 # 1 inibidor, 4/5 nexo}_…; Inhib_T{Order|Chaos}_L{n}_P1_…
 def estruturas(eventos, meu_time):
     """{'mid_externa': torre externa do mid (de qualquer time) caiu, 'cerco': torre de inibidor, de nexo ou
@@ -920,7 +920,7 @@ class AlertasPosicao:
     # sem ícone fresco, mas a última pista diz "fui para a base" (morri e renasci, o ícone sumiu com o anel grosso
     # de "voltando à base", ou foi visto por último na minha base): estou na base por até isto (a fonte fica no
     # canto do minimapa e o ícone lá mal passa no LIMIAR_ANEL: 0,301 contra 0,30). Antes valia a rota do champ
-    # select e o gank dela saía urgente comigo na base (Gabriel, partida 3293137136, 14/10/2026). Da fonte à
+    # select e o gank dela saía urgente comigo na base (Gabriel, partida de 14/10/2026 14:46). Da fonte à
     # torre externa do top são ~25 s a pé: passado isto sem ícone, volta a valer a reserva
     BASE_PRESUMIDA_S = 45.0
     RAIO_PERTO = 4000  # jungler a até isto de mim importa onde quer que eu esteja (~11 s a 345 de velocidade)
@@ -1069,7 +1069,7 @@ class AlertasPosicao:
 
     def _adversario_voltou(self, n, estava_fora, fora_s, perto_todas, chegou, mid_tinha_sumido, agora, x=None, y=None):
         """o adversário da minha rota (champ select: `rivais`) reapareceu perto de uma rota depois de ≥ VOLTOU_S
-        sumido -> Aviso ou None. Pedido do Gabriel depois da partida 3293149183 ("eu morto e sendo avisado que o
+        sumido -> Aviso ou None. Pedido do Gabriel depois da partida de 14/10/2026 15:48 ("eu morto e sendo avisado que o
         malphite voltou pra lane"; "se eu estiver na base ou morto, não faz sentido avisar [...] tem que avisar se
         voltou e em qual lane voltou"; vale para todas as rotas): calado comigo morto ou na base (inclusive a
         presumida, D20); na rota dele = "o top voltou pra rota"; noutra = "o top apareceu no mid" (molde

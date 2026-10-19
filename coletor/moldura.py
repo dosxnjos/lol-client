@@ -3,7 +3,7 @@
 # ctypes). Desenha só uma borda colorida pulsando + um rótulo de até 3 palavras no canto, por ~2 s.
 # Não toca no processo do jogo, não rouba o foco e só desenha com o jogo em primeiro plano (print
 # do monitor com outra janela na frente seria alerta sobre nada: ARMADILHAS § Tela).
-# Desde 14/10/2026 (partida 3293149183, pedido do Gabriel: "um fade transparente em direção ao centro da tela [...]
+# Desde 14/10/2026 (partida das 15:48, pedido do Gabriel: "um fade transparente em direção ao centro da tela [...]
 # e cores levemente mais escurecidas") a janela é UpdateLayeredWindow com alfa POR PIXEL, como o overlay do minimapa:
 # a beirada de ESPESSURA px fica na cor cheia (alfa 255: a lição do overlay, desfoque que deixava o desenho
 # invisível) e de lá um degradê vai a transparente em direção ao centro (FADE). Antes: GDI com cor-chave magenta
@@ -30,7 +30,7 @@ FADE_INICIO = 0.6                             # alfa logo depois da beirada chei
 # (revisão 14/10/2026; a lição do efe9087: degradê/pulso não podem sumir com a borda)
 PULSO_MIN = 0.6
 # um piscar só (mostrar(pulsos=1)): recado azul que não pede ação ("Malphite voltou"). Pedido do Gabriel, partida
-# 3293420970 (15/10/2026): "não precisa ficar tanto tempo, pode ser uma pulsada única". Cheio por UM_PULSO_CHEIO
+# de 15/10/2026: "não precisa ficar tanto tempo, pode ser uma pulsada única". Cheio por UM_PULSO_CHEIO
 # (dá para ler o rótulo) e some suave até UM_PULSO_S
 UM_PULSO_S = 1.0
 UM_PULSO_CHEIO = 0.45

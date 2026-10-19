@@ -55,7 +55,7 @@ FAIXA_CALIBRAR = (1000, 620, 2150, 1080)   # onde procurar o chat (fora do minim
 # Windows.Media.Ocr (OcrEngine.MaxImageDimension)
 FAIXAS_CALIBRAR = (FAIXA_CALIBRAR, (0, 620, 1150, 1080))
 # recorte sem nenhuma linha "mm:ss" por este número de prints seguidos com o jogo na tela (~60 s a 3 s por print) =
-# chat fora do recorte: recalibra. Partida 3293420970 (15/10/2026): o recorte de 13/10 era usado para sempre e, de
+# chat fora do recorte: recalibra. Partida de 15/10/2026: o recorte de 13/10 era usado para sempre e, de
 # 14/10 ~19h em diante, 9 ranqueadas seguidas sem um único ping lido e nada no log que dissesse por quê
 RECALIBRAR_PRINTS = 20
 RECALIBRAR_MAX = 160    # entre tentativas que não acharam outro recorte, a espera dobra até isto (~8 min)
@@ -474,7 +474,7 @@ class Feiticos:
     def processar_linhas(self, textos, gt=None):
         """linhas do OCR de um print do chat -> só os usos NOVOS (a linha fica na tela 2 min ou mais e é relida a
         cada print: devolver também os confirmados fazia o coach logar "N gasto(s)" a cada 3 s pelo mesmo ping e
-        não deixava saber quando um gasto entrou, partida 3293149183). O resumo do print fica em `ultima_leitura`:
+        não deixava saber quando um gasto entrou, partida de 14/10/2026 15:48). O resumo do print fica em `ultima_leitura`:
         novos, confirmados (repetição) e os pings sem "usou" vistos pela 1ª vez (não ligam cronômetro, mas vão ao
         log: é o candidato a "marquei e não funcionou" que ainda não tem prova)."""
         gt = self.gt if gt is None else gt
@@ -780,8 +780,8 @@ class LeitorChat:
 
 
 # ---------- atalho F7 (só OBSERVA o teclado: coletor/teclas.py) ----------
-# Até 14/10/2026 era F9 + 1..5 por RegisterHotKey, que nunca disparou com o jogo na frente (partidas 3292803384 e
-# 3293149183): o F9 ia para o jogo (no LoL dele é evtToggleMouseClip, a "borda vermelha fina") e 1, 2, 3 e 5 são
+# Até 14/10/2026 era F9 + 1..5 por RegisterHotKey, que nunca disparou com o jogo na frente (partidas de 13/10/2026
+# 14:00 e 14/10/2026 15:48): o F9 ia para o jogo (no LoL dele é evtToggleMouseClip, a "borda vermelha fina") e 1, 2, 3 e 5 são
 # teclas de item. Observar não come tecla: número de cima dispararia o item junto. Depois, F7 + numérico; o note do
 # Gabriel não tem numérico (14/10 ~20:30), então o atalho é só o F7 (D34 do plano de calibração):
 #   1 batida  = seleciona o adversário da minha rota (rótulo "flash: top?" na moldura);

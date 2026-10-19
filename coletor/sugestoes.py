@@ -21,7 +21,7 @@ except ImportError:  # pragma: no cover
 from avisos import rota_fala  # noqa: E402  (a fala dos picos diz a rota, não o campeão: pacote de voz)
 
 # horários de objetivo (s de jogo): dono é o coletor/ao_vivo.py (medidos no banco, 202 partidas);
-# a partida 3292746609 confere (dragão a cada 326–364 s; vastilarvas 8:50, arauto 17:20, barão 23:45)
+# a partida de 13/10/2026 07:18 confere (dragão a cada 326–364 s; vastilarvas 8:50, arauto 17:20, barão 23:45)
 try:
     from ao_vivo import (ANCIAO_RENASCE, ARAUTO_1, BARAO_1, BARAO_RENASCE, DRAGAO_1,  # noqa: E402
                          DRAGAO_RENASCE, VASTILARVAS_1)

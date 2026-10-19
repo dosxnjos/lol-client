@@ -36,8 +36,9 @@ ROTA_CURTA = {"TOP": "top", "MIDDLE": "mid", "BOTTOM": "bot", "UTILITY": "bot"}
 # partida assistida (D2 de 17/10/2026): o sinal principal é o isSpectating da sessão da seleção (Coletor.assistindo ->
 # fase(..., assistida=True)). Reserva para quando a seleção não foi vista (coletor religado no meio da partida assistida):
 # na Live Client, nenhum jogador de allPlayers é o activePlayer (ao_vivo: est["eu"] None) por SEM_EU_LEITURAS leituras seguidas
-# com a partida já em jogo. Medido em dados/lol.db: as 2 partidas assistidas (3292972402 e 3293888206, 51 amostras) nunca têm
-# "eu"; as 18 dele têm exatamente 1 "eu" em toda amostra, inclusive a 3293149183 (coletor religado aos 80 s de jogo).
+# com a partida já em jogo. Medido em dados/lol.db: as 2 partidas assistidas (13/10/2026 22:06 e 16/10/2026 20:50, 51 amostras)
+# nunca têm "eu"; as 18 dele têm exatamente 1 "eu" em toda amostra, inclusive a de 14/10/2026 15:48 (coletor religado aos 80 s
+# de jogo).
 # No carregamento ("carregando") não vale: lá não foi medido. Nunca vale em partida sabida dele (propria=True: o coletor viu a
 # seleção dele com isSpectating false, passou por busca/ready check ou já conhece o gameId): uma mudança de formato do activePlayer
 # num patch calaria toda ranqueada (revisão adversarial de 17/10/2026)
@@ -441,7 +442,7 @@ class _Partida:
                 self._resumo_chat(leitor)
 
     def _resumo_chat(self, leitor, fim=False):
-        """uma linha de contagens do OCR do chat (partida 3293420970: 9 ranqueadas sem um ping lido e o log não dizia
+        """uma linha de contagens do OCR do chat (partida de 15/10/2026: 9 ranqueadas sem um ping lido e o log não dizia
         se o OCR rodava, se o recorte via o chat ou se ninguém pingou). Nunca o texto lido: tem nome de jogador"""
         self._resumo_chat_em = time.monotonic()
         c = dict(getattr(leitor, "contagem", None) or {})
@@ -460,7 +461,7 @@ class _Partida:
         """gasto NOVO lido no chat (o processar_linhas já tira a repetição da linha que segue na tela): log com o
         ping interpretado (campeão inimigo e feitiço, nunca a linha crua: tem nome de jogador) e retorno na moldura,
         como o do F7 ("top sem flash", verde, só no tempo ocioso). Antes só havia "N gasto(s)" a cada 3 s pelo mesmo
-        ping e nada na tela: o Gabriel não tinha como saber se o coach pegou (partida 3293149183)."""
+        ping e nada na tela: o Gabriel não tinha como saber se o coach pegou (partida de 14/10/2026 15:48)."""
         from feiticos import mmss
         with self.trava_f:
             leitura = dict(getattr(self.f, "ultima_leitura", None) or {})

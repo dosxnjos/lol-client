@@ -1,4 +1,4 @@
-# atalhos do coach por OBSERVAÇÃO do teclado (partida 3293149183, 14/10/2026): o RegisterHotKey nunca dispara com o
+# atalhos do coach por OBSERVAÇÃO do teclado (partida de 14/10/2026 15:48): o RegisterHotKey nunca dispara com o
 # LoL em primeiro plano. Certo: nenhum "F9 recebido" nem "overlay ... (F8)" em duas partidas, e o F8 não tem tecla no
 # LoL do Gabriel, então o F9 ligado no jogo (evtToggleMouseClip, a "borda vermelha fina" do cursor travado) não explica
 # o silêncio. Hipótese: o jogo registra raw input com RIDEV_NOHOTKEYS, que desliga hotkey de aplicativo com ele na

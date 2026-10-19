@@ -31,7 +31,7 @@ ALPHA_MIN = 0.12           # opacidade na borda da área (pouca chance)
 LIMIAR = 0.05              # calor abaixo disto não pinta (a borda é uma rampa em volta dele, não um corte)
 SUAVE_PX = 2.0             # desfoque gaussiano (σ em px) da opacidade: borda sem serrilhado (corte da fog incluso)
 MANCHA_MIN_PX = 3          # raio (px) que a opacidade alarga antes do desfoque: ponto de 1 px vira mancha visível
-#                            (partida 3293137136, 14/10/2026: o desfoque sozinho levava o ponto a 2% de alfa)
+#                            (partida de 14/10/2026 14:46: o desfoque sozinho levava o ponto a 2% de alfa)
 TAU_S = 0.35               # transição: a imagem mostrada anda para a nova com esta constante de tempo
 QUADRO_MS = 100            # 10 quadros/s só enquanto anima; parado (convergiu) não redesenha. Medido 14/10/2026:
 #                            ~2,6 ms por quadro com o UpdateLayeredWindow; a 15/s o processo ia a ~3,5% de um núcleo
@@ -102,7 +102,7 @@ def alfa_alvo(calor, lado, estilo=None):
     a = borda * (e.alpha_min + (e.alpha - e.alpha_min) * c)
     if SUAVE_PX <= 0:
         return a
-    # o desfoque dilui mancha pequena até sumir (partida 3293137136, 14/10/2026: jungler recém-visto = calor de 1–2 px
+    # o desfoque dilui mancha pequena até sumir (partida de 14/10/2026 14:46: jungler recém-visto = calor de 1–2 px
     # saía a 2–8% de alfa, 4 de 7 quadros invisíveis, o "overlay não funcionou mais"). Pedaço pequeno (área abaixo
     # de π·(2·MANCHA_MIN_PX)²) alarga MANCHA_MIN_PX antes do desfoque; zona grande fica com a borda de antes. Depois o
     # pico volta ao de antes do desfoque (nunca acima dele): o ponto sai no ALPHA, a borda segue suave
@@ -616,7 +616,7 @@ class OverlayMinimapa:
 
     def _escutar_atalho(self):
         # F8 por OBSERVAÇÃO do teclado (teclas.py, GetAsyncKeyState): o RegisterHotKey do F8 nunca disparou com o jogo
-        # na frente (partidas 3292803384 e 3293149183, nenhum "(F8)" no log). Só com o jogo em primeiro plano (F8 em
+        # na frente (partidas de 13/10/2026 14:00 e 14/10/2026 15:48, nenhum "(F8)" no log). Só com o jogo em primeiro plano (F8 em
         # outro programa é de outro programa); a tecla segue para o jogo (no LoL do Gabriel o F8 não faz nada)
         import teclas
         try:

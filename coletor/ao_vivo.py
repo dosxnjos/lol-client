@@ -61,7 +61,7 @@ def mesclar_vistos(est, vistos):
     """o minimapa como pista de "visto" (coach_vivo, a cada passo). Sem ele, "visto" era só a assinatura da Live
     Client (nível, itens ou farm mudou), e o farm dela anda de 10 em 10: o adversário à vista no minimapa, andando
     ou sem fechar 10 de farm, ficava "visto há 34 s: dados dele parados" no painel até chegar na minha tela
-    (Gabriel, partida 3293137136, 14/10/2026: 34 de 142 amostras dele vivo). vistos = {championName: gameTime da
+    (Gabriel, partida de 14/10/2026 14:46: 34 de 142 amostras dele vivo). vistos = {championName: gameTime da
     última detecção}. Muda no lugar vistoGt/vistoHaS/atual dos inimigos e refaz est["rota"] e est["ameaca"]; devolve est."""
     if not vistos or not isinstance(est, dict) or not est.get("jogadores"):
         return est
@@ -326,7 +326,7 @@ class EstadoPartida:
             if i in vistos_ev:
                 visto_gt = max(visto_gt or 0, vistos_ev[i])
             # morto: sabemos onde ele está e que nível/farm não andam até renascer; não é "dado parado" (Gabriel,
-            # partida 3293420970: "o inimigo está morto e está constando que ele não foi visto há tanto tempo"). O
+            # partida de 15/10/2026: "o inimigo está morto e está constando que ele não foi visto há tanto tempo"). O
             # "visto há" volta a contar quando ele renasce na fonte
             if aliado or p.get("isDead"):
                 visto_gt = gt
