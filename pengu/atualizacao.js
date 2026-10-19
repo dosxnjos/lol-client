@@ -9,8 +9,10 @@
 // em CORPO_MAX (o DataStore é um JSON só, regravado inteiro a cada set). O corpo é sempre texto (textContent), nunca HTML.
 // Versão nova: a linha "Versão x.y.z disponível" no topo das Configurações (o client normal e a ⚙ do compacto, pelo usarTopo
 // do configuracoes.js) com "atualizar" e "o que mudou", e a classe lc-versao-nova no <html> (o ponto no ⚙ do compacto,
-// compacto/chat-botao.js). Nada abre sozinho. O "atualizar" chama o atualizador registrado (registrarAtualizador; P3: complemento
-// coach ou atualizar.cmd); sem ele, diz onde baixar.
+// compacto/chat-botao.js). Nada abre sozinho. O "atualizar" chama o atualizador registrado (registrarAtualizador; P3,
+// pengu/atualizador.js: complemento coach ou atualizar.cmd); sem ele, diz onde baixar. O atualizador recebe ({versao, tag, repo},
+// {fase, progresso}) e devolve texto ou {texto, link, recarregar}: link = endereço da página da versão com "copiar link" (nada de
+// window.open até a medição P0-a), recarregar = "recarregar agora", que só recarrega em None/Lobby e por clique.
 import { VERSAO, REPO } from './versao.js';
 
 export const CHAVE_ATUALIZACAO = 'lol-client.atualizacao';
@@ -55,16 +57,33 @@ const dsPadrao = {
 const lerFasePadrao = async () => {
   try { const r = await fetch('/lol-gameflow/v1/gameflow-phase'); return r.ok ? await r.json() : null; } catch { return null; }
 };
+// recarrega a interface do client (o plugin novo só vale depois disso); quem chama confere a fase antes
+const recarregarPadrao = () => { try { globalThis.location?.reload(); } catch { /* sem página */ } };
+// área de transferência: a API nova e, se o CEF negar, o execCommand de um textarea escondido
+const copiarPadrao = async texto => {
+  try { await navigator.clipboard.writeText(texto); return true; } catch { /* sem permissão no CEF: recuo abaixo */ }
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = texto; ta.setAttribute('readonly', ''); ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    const ok = document.execCommand('copy');
+    ta.remove();
+    return !!ok;
+  } catch { return false; }
+};
+export const TEXTO_RECARREGAR_FORA = 'Recarregue na tela inicial ou no lobby.';
 
-// cfg: objeto vivo do config.js. Tudo injetável (tools/teste-atualizacao.mjs): f = fetch, agendar/cancelar, agora, ds, lerFase
+// cfg: objeto vivo do config.js. Tudo injetável (tools/teste-atualizacao.mjs): f = fetch, agendar/cancelar, agora, ds, lerFase,
+// recarregarPagina, copiar
 export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f = (...a) => fetch(...a), agendar = (fn, ms) => setTimeout(fn, ms),
   cancelar = t => clearTimeout(t), agora = () => Date.now(), ds = dsPadrao, lerFase = lerFasePadrao, ouvintes = new Set(),
-  log = m => console.log('[lol-client]', m) } = {}) {
+  log = m => console.log('[lol-client]', m), recarregarPagina = recarregarPadrao, copiar = copiarPadrao } = {}) {
   // ultimaEm: a hora da última tentativa também em memória (DataStore ausente ou que não grava não vira 1 GET por virada de fase)
   let cfgVivo = cfg, fase = null, emVoo = null, laco = null, ligadoAntes = null, ultimaEm = 0;
   // só da sessão: o resultado do último "procurar agora" e o que a linha mostra (sobrevive à remontagem do painel); a mensagem do
-  // "atualizar" vale só para a versão em mensagemDe (versão mais nova vista depois apaga a mensagem velha)
-  const tela = { resultado: '', notas: false, mensagem: '', mensagemDe: '' };
+  // "atualizar" vale só para a versão em mensagemDe (versão mais nova vista depois apaga a mensagem velha). P3: atualizando = o
+  // atualizador em curso (o botão some), acao = {link, recarregar} da resposta dele, copiado = 'ok' | 'falhou' do "copiar link"
+  const tela = { resultado: '', notas: false, mensagem: '', mensagemDe: '', atualizando: false, acao: null, copiado: '' };
   let atualizador = null;
 
   const ligado = () => !!cfgVivo?.atualizacao?.verificar;
@@ -86,9 +105,12 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
   };
   const podeAuto = () => ligado() && repoValido(repo) && FASES_CONSULTA.includes(fase) && vencida();
 
-  const mensagem = () => (tela.mensagem && tela.mensagemDe === (nova()?.versao || '') ? tela.mensagem : '');
+  const daVersao = () => tela.mensagemDe === (nova()?.versao || '');
+  const mensagem = () => (tela.mensagem && daVersao() ? tela.mensagem : '');
+  const acao = () => (tela.acao && daVersao() ? { ...tela.acao } : null);
   const estado = () => ({ ligado: ligado(), versao, repo, fase, verificando: !!emVoo, salvo: salvo(), nova: nova(), aviso: aviso(),
-    resultado: tela.resultado, notas: tela.notas, mensagem: mensagem(), atualizador: typeof atualizador === 'function' });
+    resultado: tela.resultado, notas: tela.notas, mensagem: mensagem(), atualizador: typeof atualizador === 'function',
+    atualizando: tela.atualizando, acao: acao(), copiado: acao()?.link ? tela.copiado : '' });
   const avisar = () => { const e = estado(); for (const fn of ouvintes) try { fn(e); } catch (err) { console.error('[lol-client] atualização', err); } };
 
   // GET com prazo -> {status, dados}; status 0 = sem resposta (rede, prazo, CORS)
@@ -182,20 +204,62 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
     return tentar('carga');
   }
 
-  // "atualizar": o atualizador da P3 (complemento coach ou atualizar.cmd) -> texto opcional para a linha; sem ele, onde baixar
+  // resposta do atualizador: texto, ou {texto, link, recarregar}
+  function aplicar(r) {
+    tela.copiado = '';
+    if (r && typeof r === 'object') {
+      tela.mensagem = typeof r.texto === 'string' ? r.texto : '';
+      const link = typeof r.link === 'string' && /^https:\/\/github\.com\//.test(r.link) ? r.link : '';
+      tela.acao = link || r.recarregar === true ? { link, recarregar: r.recarregar === true } : null;
+    } else { tela.mensagem = typeof r === 'string' ? r : ''; tela.acao = null; }
+  }
+
+  // "atualizar": o atualizador da P3 (pengu/atualizador.js: complemento coach ou atualizar.cmd) -> texto ou {texto, link,
+  // recarregar} para a linha; sem ele, onde baixar. Um por vez: o botão some enquanto ele trabalha
   async function atualizar() {
     const n = nova();
-    if (!n) return '';
+    if (!n || tela.atualizando) return '';
     tela.mensagemDe = n.versao;
+    tela.acao = null;
+    tela.copiado = '';
     if (typeof atualizador === 'function') {
-      try { const t = await atualizador({ versao: n.versao, tag: n.tag, repo }); tela.mensagem = typeof t === 'string' ? t : ''; }
-      catch (e) { tela.mensagem = 'Não foi possível atualizar agora: tente de novo mais tarde.'; console.error('[lol-client] atualizar', e); }
-    } else tela.mensagem = `Para atualizar, baixe a versão ${n.versao} em ${enderecoReleases(repo)}.`;
+      tela.atualizando = true;
+      // progresso: o texto da etapa ("Baixando…") repinta a linha enquanto o atualizador trabalha
+      const progresso = t => { if (typeof t === 'string' && t && tela.atualizando) { tela.mensagem = t; tela.mensagemDe = n.versao; avisar(); } };
+      avisar();
+      try { aplicar(await atualizador({ versao: n.versao, tag: n.tag, repo }, { fase, progresso })); }
+      catch (e) { aplicar('Não foi possível atualizar agora: tente de novo mais tarde.'); console.error('[lol-client] atualizar', e); }
+      finally { tela.atualizando = false; tela.mensagemDe = n.versao; }
+    } else aplicar(`Para atualizar, baixe a versão ${n.versao} em ${enderecoReleases(repo)}.`);
     avisar();
     return tela.mensagem;
   }
 
-  return { estado, consultar, procurar: () => consultar('procurar agora', true), aoFase, sincronizar, iniciar, atualizar,
+  // "recarregar agora" (depois de atualizado): só por clique e só em None/Lobby (CLAUDE.md); fase desconhecida = lê agora (GET)
+  async function recarregar() {
+    let f = fase;
+    try { const lida = await lerFase(); if (typeof lida === 'string') f = lida; } catch { /* fica a do socket */ }
+    if (!FASES_CONSULTA.includes(f)) {
+      tela.mensagem = TEXTO_RECARREGAR_FORA;
+      avisar();
+      return false;
+    }
+    recarregarPagina();
+    return true;
+  }
+
+  // "copiar link": o endereço da página da versão na área de transferência
+  async function copiarLink() {
+    const link = acao()?.link;
+    if (!link) return false;
+    let ok = false;
+    try { ok = !!(await copiar(link)); } catch { ok = false; }
+    tela.copiado = ok ? 'ok' : 'falhou';
+    avisar();
+    return ok;
+  }
+
+  return { estado, consultar, procurar: () => consultar('procurar agora', true), aoFase, sincronizar, iniciar, atualizar, recarregar, copiarLink,
     alternarNotas: () => { tela.notas = !tela.notas; avisar(); return tela.notas; },
     registrarAtualizador: fn => { atualizador = typeof fn === 'function' ? fn : null; avisar(); },
     parar: () => { cancelar(laco); laco = null; },
@@ -237,12 +301,24 @@ export function linhaVersaoNova(ui, v = verificador) {
   linha.dataset.a = 'versao-nova';
   linha.append(el('p', 'lc-versao-titulo', `Versão ${e.aviso.versao} disponível (instalada: ${e.versao}).`));
   const acoes = el('div', 'lc-versao-acoes');
-  acoes.append(botao('atualizar', 'lc-versao-atualizar', () => { v.atualizar(); }),
-    botao(e.notas ? 'esconder o que mudou' : 'o que mudou', 'lc-versao-notas-bt', () => { v.alternarNotas(); }));
+  // "atualizar" some enquanto o atualizador trabalha e depois de atualizado (aí fica "recarregar agora")
+  if (e.acao?.recarregar) acoes.append(botao('recarregar agora', 'lc-versao-recarregar', () => { v.recarregar(); }));
+  else if (!e.atualizando) acoes.append(botao('atualizar', 'lc-versao-atualizar', () => { v.atualizar(); }));
+  acoes.append(botao(e.notas ? 'esconder o que mudou' : 'o que mudou', 'lc-versao-notas-bt', () => { v.alternarNotas(); }));
   linha.append(acoes);
   // corpo do release: só texto (textContent); nunca innerHTML
   if (e.notas) linha.append(el('div', 'lc-versao-notas', e.aviso.corpo.trim() || 'Sem notas nesta versão.'));
-  if (e.mensagem) linha.append(ui?.explica ? ui.explica(e.mensagem) : el('p', 'lc-explica', e.mensagem));
+  const explica = t => (ui?.explica ? ui.explica(t) : el('p', 'lc-explica', t));
+  if (e.mensagem) linha.append(explica(e.mensagem));
+  // sem o complemento: o endereço da página da versão como texto selecionável e "copiar link" (nada abre: P0-a pendente)
+  if (e.acao?.link) {
+    const end = explica(e.acao.link);
+    end.classList?.add('lc-versao-link');
+    const copiar = el('div', 'lc-versao-acoes');
+    copiar.append(botao('copiar link', 'lc-versao-copiar', () => { v.copiarLink(); }));
+    linha.append(end, copiar);
+    if (e.copiado) linha.append(explica(e.copiado === 'ok' ? 'Link copiado.' : 'Não foi possível copiar: selecione o endereço acima.'));
+  }
   return linha;
 }
 

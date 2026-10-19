@@ -4,7 +4,8 @@ import './estilo.css';
 import { cfg, carregar, registrarAcoes, registrarAcoesCoach, definir, aoMudar, classes, restaurar } from './config.js';
 import { iniciarConfiguracoes, registrarBloco, usarRecursos, redesenharConfiguracoes, usarTopo } from './configuracoes.js';
 import { iniciarAtualizacao, aoFaseAtualizacao, sincronizarAtualizacao, aoMudarAtualizacao, linhaVersaoNova, blocoAtualizacao,
-  estadoAtualizacao, procurarAtualizacao } from './atualizacao.js';
+  estadoAtualizacao, procurarAtualizacao, registrarAtualizador } from './atualizacao.js';
+import { criarAtualizador } from './atualizador.js';
 import { iniciarAceite, mostrarOverlay, esconderOverlay } from './aceite.js';
 import { iniciarFilaRapida } from './fila-rapida.js';
 import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel, ocupado as posjogoOcupado } from './posjogo/index.js';
@@ -38,6 +39,9 @@ export function init(context) {
   // aviso de versão nova (atualizacao.js, P2 do plano da publicação): 1 consulta por dia à api.github.com, só em None/Lobby, com a
   // chave atualizacao.verificar; a fase de partida vem da LCU na carga (só GET) e do socket nas viradas
   seguro('atualização', () => iniciarAtualizacao(cfg));
+  // botão "atualizar" (atualizador.js, P3): com o complemento anunciando "atualizar", ele baixa, confere e troca; sem ele, o
+  // caminho do atualizar.cmd e a página da versão (nada abre sozinho)
+  seguro('atualizador', () => registrarAtualizador(criarAtualizador({ coletor, temRecurso })));
   seguro('atualização: fases', () => context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => { seguro('atualização: fase', () => aoFaseAtualizacao(msg?.data)); }));
   // antes de tudo: os plugins do client começam a pedir logo depois deste init (só GET das rotas exatas; sem-popups.js)
   const semPopups = seguro('sem popups', () => iniciarSemPopups(cfg));
@@ -152,7 +156,8 @@ export function init(context) {
     chatPosjogo: chat, // estado() e atualizar()
     semPopups, // rotaFalsa(metodo, url): o que seria respondido por nós agora (só consulta)
     compacto, // estado(), alternar(), compactar(), expandir(), reavaliar()
-    atualizacao: { estado: estadoAtualizacao, procurar: procurarAtualizacao }, // aviso de versão nova (procurar = 1 GET na api.github.com)
+    // aviso de versão nova (procurar = 1 GET na api.github.com); o "atualizar" fica só no clique da linha (troca arquivos)
+    atualizacao: { estado: estadoAtualizacao, procurar: procurarAtualizacao },
   };
   document.documentElement.dataset.lolClient = 'ok';
   console.log('[lol-client] ok');
