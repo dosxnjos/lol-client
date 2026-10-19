@@ -68,7 +68,12 @@ export function criarConfigView(amb) {
     catch (e) { corpo.replaceChildren(h('div', { doc, class: 'lc-lt-vazio' }, `não foi possível montar as configurações (${e?.message || e})`)); return; }
     // o bloco do compacto vem primeiro (é o que ele mexe daqui; protótipo B1), a seção Som logo depois
     const ordem = t => (t === BLOCO_INICIAL ? 0 : t === BLOCO_SOM ? 1 : 2);
-    const grupos = [...agrupar([...(cru.children || cru.childNodes || [])]).filter(g => !SOME_NO_COMPACTO.includes(g.titulo)), grupoSom()]
+    const filhos = [...(cru.children || cru.childNodes || [])];
+    // o que vem antes da 1ª seção (a linha "Versão x.y.z disponível", atualizacao.js) fica acima dos blocos, sempre à vista: o ponto
+    // no ⚙ trouxe ele até aqui, e dentro de um bloco recolhido ninguém acharia
+    const iTit = filhos.findIndex(n => n?.classList?.contains?.('lol-settings-general-section-title'));
+    const soltos = iTit < 0 ? [] : filhos.slice(0, iTit);
+    const grupos = [...agrupar(filhos).filter(g => !SOME_NO_COMPACTO.includes(g.titulo)), grupoSom()]
       .map((g, i) => ({ g, i })).sort((a, b) => ordem(a.g.titulo) - ordem(b.g.titulo) || a.i - b.i).map(x => x.g);
     const blocos = [];
     let somAVista = false;
@@ -86,7 +91,8 @@ export function criarConfigView(amb) {
       if (abre && vistos.includes(som.el)) somAVista = true;
       blocos.push(h('div', { doc, class: 'lc-lt-bloco' }, cab, corpoB));
     }
-    corpo.replaceChildren(...(blocos.length ? blocos : [h('div', { doc, class: 'lc-lt-vazio' }, 'nada com esse texto')]));
+    const cima = soltos.length ? [h('div', { doc, class: 'lc-lt-topo', dataset: { a: 'cfg-topo' } }, ...soltos)] : [];
+    corpo.replaceChildren(...cima, ...(blocos.length ? blocos : [h('div', { doc, class: 'lc-lt-vazio' }, 'nada com esse texto')]));
     try { corpo.scrollTop = topo; } catch { /* sem layout */ }
     // só GET: abrir a ⚙ ou a seção nunca grava nada
     if (somAVista && som.precisaLer()) som.ler();
@@ -109,6 +115,12 @@ export const CSS_CONFIG = `
 #lc-compacto .lc-lt-bcorpo lol-uikit-flat-checkbox { display:flex; gap:6px; align-items:center; color:var(--lc-ouro2); }
 #lc-compacto .lc-lt-bcorpo .lc-campos { display:flex; flex-wrap:wrap; gap:8px; }
 #lc-compacto .lc-lt-bcorpo .lol-settings-window-size-text { font-size:11px; color:var(--lc-mudo); margin-bottom:3px; }
+#lc-compacto .lc-lt-topo { padding:6px 12px 8px; border-bottom:1px solid rgba(60,60,65,.6); font-size:12px; color:var(--lc-txt); }
+#lc-compacto .lc-lt-topo .lc-versao-linha { margin:0; }
+#lc-compacto .lc-lt-topo .lc-versao-titulo { margin:0 0 6px; color:var(--lc-ouro2); font-size:12.5px; }
+#lc-compacto .lc-lt-topo .lc-versao-acoes { display:flex; flex-wrap:wrap; gap:6px; }
+#lc-compacto .lc-lt-topo .lc-explica { margin:4px 0 0; font-size:11px; color:var(--lc-mudo); line-height:1.35; user-select:text; }
+#lc-compacto .lc-lt-topo .lc-versao-notas { margin-top:6px; max-height:140px; overflow:auto; white-space:pre-wrap; user-select:text; font-size:11px; color:var(--lc-mudo); }
 #lc-compacto .lc-lt-rod { flex:none; padding:8px 10px 10px; border-top:1px solid var(--lc-linha2); display:flex; flex-direction:column; gap:4px; }
 #lc-compacto .lc-lt-rod small { font-size:10.5px; color:var(--lc-mudo); }
 #lc-compacto .lc-lt-riot { width:100%; }

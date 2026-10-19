@@ -90,13 +90,21 @@ export function botaoAmigos(ctx, { depoisDe = null } = {}) {
   return bt;
 }
 
-// ⚙ configurações do lol-client no painel da esquerda (passo 13 B1). Sem lateral (teste antigo, quebra no init): nada
+// ⚙ configurações do lol-client no painel da esquerda (passo 13 B1). Sem lateral (teste antigo, quebra no init): nada.
+// Ponto discreto no canto com versão nova do pacote (P2 de roadmap/2026-10-19-publicacao-e-complemento-publico.md): só CSS, pela
+// classe lc-versao-nova que pengu/atualizacao.js põe no <html>; nada abre sozinho, a linha da versão fica no topo da ⚙
+export const CSS_PONTO = `
+#lc-compacto .lc-cp-ponto { display:none; position:absolute; top:3px; right:3px; width:7px; height:7px; border-radius:50%; background:var(--lc-ouro2, #c8aa6e);
+  box-shadow:0 0 0 2px #010a13; pointer-events:none; }
+html.lc-versao-nova #lc-compacto [data-a="config"] > .lc-cp-ponto { display:block; }
+`;
 export function botaoConfig(ctx) {
   const lat = ctx.servicos?.lateral;
   if (typeof lat?.alternarConfig !== 'function') return null;
   const doc = ctx.extras?.ownerDocument || ctx.extras?.doc;
+  estilo('lc-cp-ponto-estilo', CSS_PONTO, doc || globalThis.document);
   const bt = h('button', { doc, class: 'lc-cp-ic', title: 'configurações do lol-client (abrem à esquerda)', 'aria-label': 'configurações', dataset: { a: 'config' },
-    on: { click: ctx.seguro(() => lat.alternarConfig()) } }, icone('configuracoes', { doc }));
+    on: { click: ctx.seguro(() => lat.alternarConfig()) } }, icone('configuracoes', { doc }), h('i', { doc, class: 'lc-cp-ponto', 'aria-hidden': 'true' }));
   ctx.extras.append(bt);
   return bt;
 }
