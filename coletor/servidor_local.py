@@ -15,6 +15,8 @@
 #                          fora do client saíram em 19/10/2026 (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
 #   POST /aceite/plugin    sinal e diagnóstico do aceite do plugin (aviso_partida.rota_aceite; coletor.py pendura)
 #   POST /compacto/expansoes registro das saídas do client compacto (expansoes.rota_expansoes; coletor.py pendura)
+#   POST /atualizar        {versao}: baixa da origem fixa, confere hash e troca plugin e complemento (atualizar.Atualizador;
+#                          coletor.py pendura, junto com GET /atualizar/estado); recurso "atualizar" no /ola
 #   GET  /ola              aperto de mão do plugin (pengu/coach.js): {app, versao, recursos}; recursos calculados na hora
 #                          do que está pendurado (rotas e o que o dono declarou), nunca lista fixa. Com Origin do client ou
 #                          do Pengu conta como contato do plugin (reserva do aceite, coletor.py _sinal_aceite)
@@ -244,7 +246,8 @@ def origem_ok(origem):
 # coletor (http://127.0.0.1:<esta porta>) e qualquer outra página local em http não escrevem aqui.
 # /compacto/*: registro das expansões do client compacto (expansoes.rota_expansoes, passo 15 do plano do compacto): a
 # mesma regra (só quem roda dentro do client escreve no registro).
-ROTAS_SO_PLUGIN = ("/aceite/", "/compacto/")
+# /atualizar (P3 da publicação, 19/10/2026): a mesma regra; um site no navegador nunca dispara a troca dos arquivos.
+ROTAS_SO_PLUGIN = ("/aceite/", "/compacto/", "/atualizar")
 
 
 def origem_aceite_ok(rota, origem):
@@ -471,7 +474,7 @@ class ServidorLocal:
             r.add("resumos")
         pendurados = [*self.rotas_get, *self.rotas_post]
         for prefixo, nome in (("/draft", "draft"), ("/revisao/", "revisao"),
-                              ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes")):
+                              ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes"), ("/atualizar", "atualizar")):
             if any(p.startswith(prefixo) for p in pendurados):
                 r.add(nome)
         return sorted(r)

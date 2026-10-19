@@ -507,6 +507,65 @@ def _registro_expansoes(coach):
         return False
 
 
+def _atualizador(coach, col):
+    """POST /atualizar e GET /atualizar/estado (atualizar.py, P3 do plano da publicação) pendurados no servidor do coach: o
+    botão "atualizar" do plugin troca plugin e complemento e o complemento reinicia (col.pedir_saida com reiniciar). Sem
+    servidor, nada (o plugin mostra o atualizar.cmd). Falha aqui nunca derruba o coletor."""
+    srv = getattr(coach, "srv", None)
+    if srv is None:
+        return None
+    try:
+        import atualizar
+        at = atualizar.Atualizador(fase=lambda: col.fase_atual,
+                                   reiniciar=lambda: col.pedir_saida("atualizado: reiniciando", reiniciar=True))
+        srv.rotas_post["/atualizar"] = at.rota_post
+        srv.rotas_get["/atualizar/estado"] = at.rota_get
+        return at
+    except Exception as e:
+        log.warning("atualização pelo plugin fora: %s: %s", type(e).__name__, e)
+        return None
+
+
+def comando_sucessor(argv, pid, executavel=None):
+    """linha de comando da instância que sobe depois desta (reinício da atualização): os mesmos argumentos, sem um
+    --esperar-pid antigo, mais --esperar-pid <este pid> (a trava recusaria a 2ª instância com esta ainda viva)"""
+    resto, pular = [], False
+    for a in argv[1:]:
+        if pular:
+            pular = False
+            continue
+        if a == "--esperar-pid":
+            pular = True
+            continue
+        if a.startswith("--esperar-pid="):
+            continue
+        resto.append(a)
+    return [executavel or sys.executable, str(Path(argv[0]).resolve()), *resto, "--esperar-pid", str(pid)]
+
+
+def lancar_sucessor(cmd):
+    """sobe a próxima instância solta desta: sem janela (CREATE_NO_WINDOW, ARMADILHAS § Windows), grupo próprio e, se o
+    job deixar, fora do job desta (tarefa agendada fecha o job e levaria o filho junto)"""
+    base = 0x08000000 | 0x00000200   # CREATE_NO_WINDOW | CREATE_NEW_PROCESS_GROUP
+    for flags in (base | 0x01000000, base):   # CREATE_BREAKAWAY_FROM_JOB; sem permissão do job: sem ele
+        try:
+            return subprocess.Popen(cmd, creationflags=flags, close_fds=True, cwd=str(banco.RAIZ),
+                                    stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        except OSError:
+            continue
+    return None
+
+
+def esperar_pid(pid, limite_s=120, passo_s=0.25):
+    """espera o processo pid sair (a instância anterior encerrando limpo); True se saiu dentro do limite"""
+    fim = time.monotonic() + limite_s
+    while time.monotonic() < fim:
+        if not pid_vivo(pid):
+            return True
+        time.sleep(passo_s)
+    return not pid_vivo(pid)
+
+
 class Coletor:
     def __init__(self, args, coach=None, fab_aviso=None):
         self.args = args
@@ -521,6 +580,11 @@ class Coletor:
         declarados = getattr(getattr(coach, "srv", None), "recursos_declarados", None)
         if isinstance(declarados, set):
             declarados.add("aceite-flutuante")
+        # saída pedida de outra thread (reinício depois da atualização): pedir_saida cancela a tarefa do rodar()
+        self.saida = None
+        self.reiniciar = False
+        self.loop = self.tarefa = None
+        self.atualizador = _atualizador(coach, self)   # POST /atualizar (botão "atualizar" do plugin)
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)
@@ -542,7 +606,27 @@ class Coletor:
     def ocioso(self):
         return time.monotonic() - self.ultimo_ok >= self.ocioso_s
 
+    def pedir_saida(self, motivo, reiniciar=False):
+        """de qualquer thread: o rodar() devolve `motivo` (encerramento limpo pelo principal); reiniciar = o principal sobe a
+        próxima instância antes de sair (atualização)"""
+        self.saida, self.reiniciar = motivo, bool(reiniciar)
+        if self.loop is not None and self.tarefa is not None:
+            self.loop.call_soon_threadsafe(self.tarefa.cancel)
+
     async def rodar(self):
+        self.loop, self.tarefa = asyncio.get_running_loop(), asyncio.current_task()
+        try:
+            if self.saida:
+                return self.saida
+            return await self._rodar()
+        except asyncio.CancelledError:
+            if self.saida:
+                if hasattr(self.tarefa, "uncancel"):
+                    self.tarefa.uncancel()   # o cancelamento foi nosso (pedir_saida): a tarefa segue e devolve o motivo
+                return self.saida
+            raise
+
+    async def _rodar(self):
         while True:
             lcu = await asyncio.to_thread(conectar, self.args.lockfile)
             if not lcu:
@@ -796,6 +880,8 @@ def principal():
     ap.add_argument("--porta-painel", type=int, default=8765, help="porta do servidor local (painel, /config, /mentor)")
     ap.add_argument("--config", default=None, help="config do coach (padrão dados/config.json)")
     ap.add_argument("--sem-coach", action="store_true", help="só o coletor de partidas (sem ao vivo nem servidor)")
+    ap.add_argument("--esperar-pid", type=int, default=None,
+                    help="espera este processo sair antes da trava (reinício depois da atualização; até 120 s)")
     args = ap.parse_args()
     configurar_log(console=bool(sys.stderr) and not sys.executable.lower().endswith("pythonw.exe"))
 
@@ -811,6 +897,8 @@ def principal():
             print(json.dumps(r, ensure_ascii=False))
         return 0
 
+    if args.esperar_pid and not esperar_pid(args.esperar_pid):
+        log.info("reinício: a instância anterior (pid %d) não saiu em 120 s; seguindo (a trava decide)", args.esperar_pid)
     import vida
     anterior, bat_anterior = vida.ultimo_registro(LOG)   # antes de esta instância escrever no log
     if not travar():
@@ -849,6 +937,9 @@ def principal():
                 log.exception("coach não encerrou limpo")
         log.info("encerrado (%s)", motivo)
         destravar()
+        if col is not None and col.reiniciar:   # atualização: a próxima instância (código novo) espera esta sair
+            p = lancar_sucessor(comando_sucessor(sys.argv, os.getpid()))
+            log.info("reinício: %s", f"próxima instância pid {p.pid}" if p else "não lançou (o vigia ou o atalho sobe)")
     return 0
 
 
