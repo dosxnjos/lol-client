@@ -25,6 +25,9 @@ complemento leva `pengu/`, release que cai depois do push se retoma; `teste-varr
 **P2 feita em 19/10** (`64f87aa`, `a0ff36f`, `6b15d98`; `teste-atualizacao.mjs` 79/79, 31 `.mjs` verdes): `pengu/atualizacao.js`
 (1 GET por dia só em None/Lobby, 5 s, erro calado), linha no topo da ⚙, ponto no ⚙ do compacto, bloco Atualizações; o
 "atualizar" chama `registrarAtualizador` (P3) ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p2.md)).
+Revisão adversarial da P2 (19/10, `ef59f7a`; 6 achados, todos reais e corrigidos, tabela no relatório): limite diário também em
+memória, "procurar agora" some só durante o clique, resultado velho do clique e mensagem de versão antiga apagados, desligar a
+chave tira a linha; `teste-atualizacao.mjs` 87/87 (81/87 no código de antes).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 

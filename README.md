@@ -94,7 +94,7 @@ ligada por padrão, também no Ctrl+K), o plugin faz 1 `GET https://api.github.c
 5 s; erro, 404 (o repositório público ainda não existe até o P6) e resposta torta ficam calados. Versão mais nova → linha
 "Versão x.y.z disponível" no topo das Configurações (client normal e ⚙ do compacto, acima dos blocos) com **atualizar** e
 **o que mudou** (notas do release só como texto) e um ponto no ⚙ do compacto (classe `lc-versao-nova` no `<html>`). Nada
-abre nem baixa sozinho; "procurar agora" (bloco Atualizações) consulta na hora. O **atualizar** chama o atualizador da P3
+abre nem baixa sozinho; "procurar agora" (bloco Atualizações) consulta na hora; desligar a chave tira a linha e o ponto. O **atualizar** chama o atualizador da P3
 (`registrarAtualizador` em `atualizacao.js`); até lá diz onde baixar. Estado no DataStore `lol-client.atualizacao` (hora,
 versão vista, notas cortadas em 4.000 caracteres; nada pessoal). Conferir: `__lolClient.atualizacao.estado()` no CDP;
 consultar já: `__lolClient.atualizacao.procurar()` (1 GET); esquecer o dia: `DataStore.remove('lol-client.atualizacao')`.

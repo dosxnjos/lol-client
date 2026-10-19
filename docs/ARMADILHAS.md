@@ -496,6 +496,12 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   bloco fechado ninguém acharia). Prova: `teste-atualizacao.mjs` (h).
 - **Falha da consulta de versão anota a hora** → a hora vai ao DataStore antes do fetch: 404, rede ou prazo não repetem a
   consulta a cada virada de fase no mesmo dia (60 por hora sem login é o limite da API). Ver de novo na hora: "procurar agora".
+  A hora também fica em memória (`ultimaEm`): sem DataStore, ou com `set` que falha, o limite de 1 por dia segue valendo.
+- **Estado de sessão do aviso de versão envelhece** (revisão da P2, 19/10/2026) → botão escondido por um estado em voo que
+  termina sem repaint não volta; resultado de um clique e mensagem do "atualizar" ficam valendo depois que a consulta automática
+  muda a versão (bloco dizendo "Nenhuma versão nova." com a linha dizendo 0.2.0). Em `atualizacao.js` o botão some só com
+  `resultado === 'procurando'`, a automática que responde apaga o resultado do clique, a mensagem guarda a versão que citou e
+  desligar a chave apaga o "nova" do clique. Prova: `teste-atualizacao.mjs` (r).
 
 ## LCU API
 
