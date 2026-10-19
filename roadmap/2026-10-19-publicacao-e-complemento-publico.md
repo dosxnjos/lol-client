@@ -35,9 +35,10 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 - MIT; só pt-BR; nome nos comentários fica.
 - Complemento público **com** o pacote de voz Aoede (gerado pelo Gemini; termos do Google: decisão dele, 19/10).
 - Aviso de versão nova pela `api.github.com`, 1 vez por dia, com chave para desligar (ligada por padrão).
-- **Nome: `lol-minimal-client`** (Gabriel, 19/10: "lol minimal client, algo assim"). Conta: `dosxnjos`, a pessoal, a mesma
+- **Nome: `lol-ultra-client`** (Gabriel, 19/10: "lol minimal client, algo assim", e logo depois "pode ser na verdade lol
+  ultra client"). Conta: `dosxnjos`, a pessoal, a mesma
   do privado; ele respondeu o nome e não contestou a conta recomendada, e o Grupo Nomura não tem relação com o projeto
-  (confirmar em 1 linha no P6, antes do `gh repo create`). `REPO = 'dosxnjos/lol-minimal-client'` em `pengu/versao.js`;
+  (confirmar em 1 linha no P6, antes do `gh repo create`). `REPO = 'dosxnjos/lol-ultra-client'` em `pengu/versao.js`;
   enquanto o repositório não existe, a consulta dá 404 e fica calada (P2).
 
 ## Decisões técnicas (agente; confiança e o que reverteria)
@@ -48,7 +49,7 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
    `.gitignore` do privado). Confiança alta. Reverte: publicar a história filtrada (`git filter-repo`), que expõe mais.
 2. **Versão = `pengu/versao.js`** (`VERSAO = 'x.y.z'`, `REPO`), uma constante lida pelo plugin, pelo complemento (`/ola`
    devolve a mesma) e pelo `publicar.py` (tag `vx.y.z`). Plugin e complemento saem sempre juntos na mesma versão.
-3. **Assets do release:** `lol-minimal-client-plugin-x.y.z.zip`, `lol-minimal-client-complemento-x.y.z.zip`,
+3. **Assets do release:** `lol-ultra-client-plugin-x.y.z.zip`, `lol-ultra-client-complemento-x.y.z.zip`,
    `voz-aoede-<versao_catalogo>.zip` (só quando o catálogo muda; ~42 MB de `.wav`) e `SHA256SUMS.txt`. Quem baixa confere o
    hash do `SHA256SUMS.txt` **e** o `digest` que a API do GitHub devolve por asset; os dois têm de bater. Confiança média
    (o `digest` por asset é recente na API: medir no P0-b; sem ele, só o `SHA256SUMS.txt`).
@@ -138,7 +139,7 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 
 ### P6 — publicar (portão)
 
-Só com: (1) nome respondido (`lol-minimal-client`, 19/10) e a conta `dosxnjos` confirmada por ele em 1 linha; (2) as provas no client real do plano das telas e uma partida dele
+Só com: (1) nome respondido (`lol-ultra-client`, 19/10) e a conta `dosxnjos` confirmada por ele em 1 linha; (2) as provas no client real do plano das telas e uma partida dele
 com a edição nova; (3) `publicar.py` em ensaio sem reprovação. Sequência da regra de contas
 (`C:\Dev\cerebro\temas\harness\git-contas-e-repos.md`): `gh auth switch --user <conta>` → `gh repo create <conta>/<nome>
 --public` → remote em SSH → `publicar.py --publicar` → `gh auth switch` de volta para a conta que estava ativa, no mesmo
