@@ -111,7 +111,8 @@ async function lcuPadrao(url, signal) {
 // (ponte, coach.js), Abort (AbortController)
 export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, ms) => setTimeout(fn, ms), cancelar = t => clearTimeout(t),
   partidas = () => null, ocupado = () => false, coletor = null, temRecurso = () => false,
-  Abort = typeof AbortController === 'function' ? AbortController : null, log = m => console.log('[lol-client]', m) } = {}) {
+  Abort = typeof AbortController === 'function' ? AbortController : null, log = m => console.log('[lol-client]', m),
+  aoSalvar = () => {} } = {}) {
   const porId = new Map();   // gameId -> linha
   let dono = null, imp = 0, inerte = false, carregado = false;
   let pendentes = 0, sets = 0, eu = null, outraConta = false;
@@ -174,6 +175,8 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
       ds.set(CHAVE, { v: VERSAO, dono, imp, campos: CAMPOS, linhas });
       sets++;
       pendentes = 0;
+      // quem depende da amostra (chave "Mostrar traumas", Ctrl+K; Fase 5): erro nele não desfaz a gravação
+      try { aoSalvar(porId.size); } catch (e) { log(`histórico: aoSalvar (${e?.message || e})`); }
       return true;
     } catch (e) { log(`histórico: DataStore.set falhou (${e?.message || e})`); return false; }
   }
@@ -314,8 +317,9 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
   const estado = () => ({ linhas: porId.size, dono: !!dono, imp, inerte, outraConta, fase, feitos, tentados: tentados.size,
     pendentes, sets, importado, fim, rodando: !!timer || emPasso });
   // as linhas como objetos, mais recentes primeiro (Fase 5: contexto do pós-jogo e da seleção). puuid = a conta de quem
-  // pede: de outra conta que não a dona, nada (sem puuid, vale o que a sessão já sabe: outraConta só depois do 1º passo)
-  const linhas = (puuid = null) => (outraConta || (puuid && dono && puuid !== dono) ? []
+  // pede: de outra conta que não a dona, nada. Sem puuid, vale a conta que esta sessão já leu (pós-jogo ou backfill: eu);
+  // antes de ler nenhuma, as linhas da dona (outraConta só depois do 1º passo)
+  const linhas = (puuid = eu) => (outraConta || (puuid && dono && puuid !== dono) ? []
     : [...porId.values()].sort((a, b) => b[IDX.criacao] - a[IDX.criacao]).map(comoObjeto));
 
   return { carregar, registrar, aoFase, cutucar, passo, importar, estado, linhas, parar, gravarPendentes };
@@ -339,3 +343,6 @@ export function iniciarHistorico(context, opcoes = {}) {
 
 export const registrarPartida = (partida, linhaTempo, puuid, r) => (inst ? inst.registrar(partida, linhaTempo, puuid, r) : false);
 export const estadoHistorico = () => inst?.estado() ?? null;
+// linhas do acumulador como objetos, mais recentes primeiro (contexto.js: pós-jogo, selo e freios; Fase 5). Antes do
+// iniciarHistorico (ou sem ele, nos testes de outros módulos): nenhuma
+export const linhasHistorico = (...a) => (inst ? inst.linhas(...a) : []);

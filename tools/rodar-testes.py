@@ -26,6 +26,8 @@ TESTES = [
     ["node", "tools/teste-config.mjs"],
     ["node", "tools/teste-ponte.mjs"],    # ponte com o complemento coach: chave, aperto de mão, recuo, recursos (19/10/2026)
     ["node", "tools/teste-historico.mjs"],   # acumulador do histórico no DataStore: formato, teto, backfill, importação, privacidade (19/10/2026)
+    [PY, "tools/teste-contexto.py"],      # contexto do pós-jogo do coletor sobre a fixture do acumulador = contexto-esperado.json (19/10/2026)
+    ["node", "tools/teste-contexto.mjs"],   # pengu/posjogo/contexto.js = Python ao vivo e = esperado; freios e selo locais (19/10/2026)
     ["node", "tools/teste-sem-popups.mjs"],
     ["node", "tools/teste-chat-posjogo.mjs"],
     ["node", "tools/teste-recompensas.mjs"],

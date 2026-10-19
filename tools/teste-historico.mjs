@@ -448,6 +448,20 @@ function complemento({ dono = EU, linhas, campos = CAMPOS, status = 200 } = {}) 
     && !conta({ mapId: 11, gameDuration: 900, queueId: 3140 }));
 }
 
+// ---------- 9b. Fase 5: aoSalvar (chave "Mostrar traumas" e Ctrl+K reagem à amostra) e linhas() da conta da sessão ----------
+{
+  const ds = dsFalso(null);
+  const avisos = [];
+  const h = criarHistorico({ ds, log: () => {}, aoSalvar: n => avisos.push(n) });
+  h.carregar();
+  h.registrar(GAME, LINHA, EU);
+  caso('9b aoSalvar recebe o tamanho do acumulador a cada set (1 set = 1 aviso)', ds.sets === 1 && JSON.stringify(avisos) === '[1]', avisos);
+  caso('9b linhas() sem puuid = as da conta que a sessão já leu', h.linhas().length === 1 && h.linhas(EU).length === 1 && h.linhas('outra').length === 0);
+  const h2 = criarHistorico({ ds: dsFalso(null), log: () => {}, aoSalvar: () => { throw new Error('quebrou'); } });
+  h2.carregar();
+  caso('9b aoSalvar que lança não desfaz a gravação', h2.registrar(GAME, LINHA, EU) === true && h2.estado().sets === 1);
+}
+
 // ---------- 10. ponta a ponta: o pós-jogo (posjogo/index.js analisarPartida) alimenta sem GET a mais ----------
 {
   const { registerHooks } = await import('node:module');
