@@ -870,14 +870,18 @@ janela da Riot fecha (etapa 6): `como` = "a janela da Riot fechou".
 P3 do [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.md); código em `coletor\atualizar.py`, o
 `coletor.py` pendura (`_atualizador`) e o `/ola` anuncia o recurso `atualizar` só com a rota no ar.
 
-- **Entrada:** `POST /atualizar {"versao": "x.y.z"}` com Origin do client ou do Pengu (a regra do `/aceite/plugin`:
-  `ROTAS_SO_PLUGIN`; site no navegador = 403). Só a versão: a URL o complemento acha sozinho. `GET /atualizar/estado` →
+- **Entrada:** `POST /atualizar {"versao": "x.y.z"}` só com Origin do client ou do Pengu (`ROTAS_SO_PLUGIN_ESTRITO`: site no
+  navegador = 403 e, diferente do `/aceite/`, pedido **sem** Origin também = 403; não é autenticação, um processo local forja o
+  cabeçalho, mas curl e ferramenta genérica não disparam a troca). Só a versão: a URL o complemento acha sozinho. `GET /atualizar/estado` →
   `{estado, versao, instalada, motivo, reiniciar}`; estados `parado`, `baixando`, `conferindo`, `trocando`, `pronto`, `erro`,
   `recusado`. Uma troca por vez (2º POST = 409 com o estado de agora).
 - **Recusa antes de qualquer rede** (409, `recusado`): `versao` (fora de `x.y.z` ou não mais nova que a de `pengu\versao.js`),
   `partida` (fase do gameflow fora de `None`/`Lobby`), `desenvolvimento` (pasta do complemento ou do plugin é junção ou está
-  num repositório git: **esta instalação**), `sem-plugin` (`plugins\lol-ultra-client` do Pengu, achado pelo `Debugger` do IFEO
-  do `LeagueClientUx.exe`, só leitura do registro).
+  num repositório git: **esta instalação**; o `.git` conta da pasta até a do usuário, exclusive, para um `~\.git` de dotfiles
+  não travar toda instalação, e a pasta do complemento vem de `__file__` sem `resolve()`, que seguiria a junção),
+  `sem-plugin` (`plugins\lol-ultra-client` do Pengu, achado pelo `Debugger` do IFEO do `LeagueClientUx.exe`, só leitura do
+  registro), `troca-incompleta` (`<pasta>\.atualizacao\troca-em-curso` de uma troca que não voltou inteira: o `anterior\` é a
+  única cópia da versão velha; o plugin mostra a página da versão para instalar à mão).
 - **Origem fixa:** `https://api.github.com/repos/<REPO>/releases/tags/v<versao>`; cada asset com `browser_download_url` igual a
   `https://github.com/<REPO>/releases/download/v<versao>/<nome>`; cada redirecionamento só em https e nos hosts de
   `ORIGENS_DOWNLOAD` (ARMADILHAS § Client e Pengu).
@@ -886,12 +890,18 @@ P3 do [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-pub
 - **Troca com volta:** extrai em `<pasta>\.atualizacao\nova`, confere arquivo a arquivo (lista e tamanho do zip) e troca **item a
   item** da raiz (o que estava vai para `<pasta>\.atualizacao\anterior`, guarda 1). Item a item porque o `dados\` mora dentro da
   pasta do complemento e fica aberto (log, trava, banco): `dados\` e `.atualizacao\` nunca saem do lugar, e zip que traz um
-  deles é recusado. Plugin primeiro, complemento depois; falha em qualquer um desfaz os dois (`erro`/`troca`).
-- **Reinício:** `pronto` fica segurado 5 s (o plugin lê "Atualizado"), depois o complemento espera `None`/`Lobby` e chama
-  `Coletor.pedir_saida(..., reiniciar=True)`: o `rodar()` devolve, o `principal` encerra limpo e sobe a próxima instância
-  (`--esperar-pid <este pid>`, sem janela, fora do job da tarefa se o job deixar), que espera esta sair antes da trava.
+  deles é recusado. Plugin primeiro, complemento depois; falha em qualquer um desfaz os dois (`erro`/`troca`). A fase é
+  conferida **de novo logo antes de trocar** (a fila pode andar durante o download: `erro`/`partida`, nada troca); extração que
+  falha, fase fora e troca desfeita apagam o `nova\` (nada fica ocupando o disco). A marca `troca-em-curso` entra antes do 1º
+  rename e sai no fim ou na volta completa; volta que não fecha (`troca-incompleta`) deixa a marca.
+- **Reinício:** `pronto` fica segurado 5 s (o plugin lê "Atualizado") e o complemento chama `Coletor.pedir_saida(...,
+  reiniciar=True)` **em qualquer fase** (a troca foi em `None`/`Lobby`; esperar o lobby deixaria o processo velho rodando a
+  partida em cima dos arquivos novos, com import tardio carregando módulo novo): o `rodar()` devolve, o `principal` encerra
+  limpo e sobe a próxima instância (`--esperar-pid <este pid>`, o `coletor.py` pelo caminho lido na carga, `SCRIPT`, nunca o
+  `argv[0]` relativo à pasta atual de agora; sem janela, fora do job da tarefa se o job deixar), que espera esta sair antes da
+  trava. O plugin também aceita como sucesso a instância nova (`parado`, ou recusa `versao`, com `instalada` = a versão pedida).
 - **Sem o complemento:** o `atualizar.cmd` do pacote faz o mesmo (PowerShell sem admin) e recusa também o complemento em
-  execução (trava com pid vivo de python).
+  execução (trava com pid vivo de python), antes da rede e de novo logo antes de trocar.
 
 | o quê | comando |
 | --- | --- |

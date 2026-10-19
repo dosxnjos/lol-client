@@ -513,6 +513,19 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Atualizar a instalação de desenvolvimento apagaria o código** → `plugins\lol-client` é junção para `pengu\` e o complemento
   roda de `C:\Dev\lol-client` (com `.git`): o `/atualizar` e o `atualizar.cmd` recusam junção e pasta dentro de repositório git
   antes de qualquer rede ("Instalação de desenvolvimento"). Prova: `teste-atualizar.py` (d) e (h).
+- **`Path(__file__).resolve()` atravessa a junção** (revisão adversarial da P3, 19/10/2026) → com o complemento instalado como
+  junção, a pasta chegava resolvida no alvo e a recusa de junção nunca disparava. `coletor/atualizar.py` usa
+  `os.path.abspath(__file__)` (o caminho como foi carregado) para a conferência. Prova: `teste-atualizar.py` (i).
+- **`.git` buscado até a raiz do disco pega o dotfiles** → um `C:\Users\<x>\.git` (repositório da pasta do usuário) marcava
+  toda instalação em `%LOCALAPPDATA%` como de desenvolvimento, para sempre. A busca para **antes** da pasta do usuário (Python
+  `em_git`, `.cmd` `EmGit`); fora dela (pasta de trabalho, Program Files) segue até a raiz. Prova: `teste-atualizar.py` (i).
+- **Conferir a fase só no pedido deixa a partida rodar em cima de arquivo novo** → o download leva segundos; se a fila anda
+  nesse meio, trocar e adiar o reinício até o lobby deixa o processo velho carregando módulo novo nos imports tardios do coach.
+  A fase é conferida de novo logo antes de trocar, e o reinício vem logo depois do "pronto", em qualquer fase. Prova:
+  `teste-atualizar.py` (a) e (i).
+- **Troca nova apagava o `anterior\` de uma troca que não voltou inteira** → era a única cópia da versão velha. A marca
+  `<pasta>\.atualizacao\troca-em-curso` (entra antes do 1º rename, sai no fim ou na volta completa) faz o botão e o `.cmd`
+  recusarem com `troca-incompleta` antes da rede. Prova: `teste-atualizar.py` (i).
 
 ## LCU API
 
@@ -1135,6 +1148,10 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   "%TEMP%"` antes (duplo clique abre o cmd com a pasta atual dentro da pasta trocada: o rename falharia).
 - **`exit /b` sem número depois de `&` devolve 0** (medido 19/10/2026: o PowerShell saiu com 1, o `cmd /c` deu 0) → o código
   de saída se perde; `setlocal EnableDelayedExpansion` e `exit /b !errorlevel!` (o `%errorlevel%` expande antes do comando).
+- **`!` no caminho some com `EnableDelayedExpansion` ligado** (revisão adversarial da P3, medido 19/10/2026: pasta `luc!-…` virou
+  `luc-…` no `LUC_CMD` e o PowerShell não achou o arquivo) → a expansão atrasada roda depois do `%…%` e come o `!` do valor. O
+  `atualizar.cmd` faz `set "LUC_CMD=%~f0"` e `cd /d "%TEMP%"` **antes** do `setlocal EnableDelayedExpansion`; só a linha do
+  `!errorlevel!` vem depois. Prova: `teste-atualizar.py` (h) e (i).
 - **`shutil.move` que falha no rename copia e apaga pela metade** → com um arquivo preso no item, o `os.rename` falha e o
   `shutil.move` cai em `copytree` + `rmtree`, que apaga o que consegue da origem antes de esbarrar no preso. Troca com volta usa
   só `os.rename` (`[IO.Directory]::Move` no PowerShell) no mesmo volume (por isso o estágio mora dentro da pasta). Medido 19/10:

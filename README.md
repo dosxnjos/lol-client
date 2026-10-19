@@ -98,7 +98,8 @@ abre nem baixa sozinho; "procurar agora" (bloco Atualizações) consulta na hora
 **atualizar** (P3, `pengu/atualizador.js`): com o complemento coach anunciando `atualizar` no `/ola`, só em `None`/`Lobby`, o
 plugin manda `POST /atualizar {versao}` e o complemento (`coletor/atualizar.py`) baixa da origem fixa (`api.github.com` e
 `github.com` do `REPO`, cada redirecionamento conferido), confere sha256 = `SHA256SUMS.txt` = `digest` da API, troca plugin e
-complemento item a item com volta (`<pasta>\.atualizacao\anterior`; `dados\` fica) e reinicia em `None`/`Lobby`; a linha mostra
+complemento item a item com volta (`<pasta>\.atualizacao\anterior`; `dados\` fica) só em `None`/`Lobby` (conferido de novo logo
+antes de trocar) e reinicia logo depois; a linha mostra
 Baixando…, Conferindo…, Instalando… e "Atualizado para a versão x." com **recarregar agora** (só em `None`/`Lobby`, por clique).
 Junção ou pasta num repositório git (esta instalação) = "Instalação de desenvolvimento": nada troca. Sem o complemento: o caminho
 do `atualizar.cmd` (vem no pacote, na pasta do plugin; mesmas regras, PowerShell sem admin) e o endereço da página da versão com
@@ -221,7 +222,7 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | auditoria do pacote de voz (cada `.wav` pelo Whisper contra o catálogo inteiro; o que não bate vira suspeita, toca na Maria e a tarefa `lol-client-voz` refaz no modelo-alvo; só com o jogo fechado, retoma) | `python tools\auditar-pacote-voz.py` (`--so-indice`, `--relatorio`, `--refazer "frase"`) |
 | foto pública do `lol-ultra-client` (ensaio, padrão: monta do commit pela lista de inclusão, varre e mostra o que entraria; zips e `SHA256SUMS.txt` em `dist\v<versão>\` só se a varredura passar; `--publicar` só depois do portão do P6 do [plano da publicação](roadmap/2026-10-19-publicacao-e-complemento-publico.md)). Textos do público: `publico\LEIA-ME.md` (vira o `README.md` do repositório público), `LICENSE`, `TERCEIROS.md`; versão em `pengu\versao.js` | `python -I tools\publicar.py` (prova: `python -I tools\teste-publicar.py`) |
 | aviso de versão nova (1 consulta por dia, chave, fase, erros calados, notas como texto; servidor falso local na porta 0; ~6 s) | `node tools\teste-atualizacao.mjs` |
-| botão atualizar: complemento e `atualizar.cmd` contra um release falso em 8831–8840 (hash, digest nulo, queda, junção, `.git`, origem, troca com volta; pastas no temp; ~40 s) e o lado do plugin (progresso, recarregar só em None/Lobby, copiar link) | `python tools\teste-atualizar.py` · `node tools\teste-atualizador.mjs` |
+| botão atualizar: complemento e `atualizar.cmd` contra um release falso em 8831–8840 (hash, digest nulo, queda, junção, `.git`, origem, troca com volta, fila que anda no download, troca incompleta, `!` no caminho; pastas no temp; ~60 s) e o lado do plugin (progresso, recarregar só em None/Lobby, copiar link) | `python tools\teste-atualizar.py` · `node tools\teste-atualizador.mjs` |
 | medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
 
 Pegadinhas medidas: [ARMADILHAS](docs/ARMADILHAS.md). Regras do pós-jogo: [INSIGHTS](docs/INSIGHTS.md).

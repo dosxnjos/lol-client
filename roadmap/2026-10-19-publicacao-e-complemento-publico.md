@@ -32,6 +32,9 @@ chave tira a linha; `teste-atualizacao.mjs` 87/87 (81/87 no código de antes).
 46/46): `POST /atualizar` (`coletor/atualizar.py`) e `publico/atualizar.cmd` com origem fixa, sha256 = SHA256SUMS = digest, troca
 **item a item** em `<pasta>\.atualizacao` (o `dados\` fica; desvio da decisão 5), recusa de junção e `.git`; reinício só em
 None/Lobby; sem complemento, `atualizar.cmd` e "copiar link" ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p3.md)).
+Revisão adversarial da P3 (19/10, `a60a7c0`, `4b34912`, `163bc67`, `0d6183f`; 11 achados, todos reais e corrigidos, tabela no
+relatório): fase conferida de novo antes de trocar e reinício logo depois do "pronto", junção vista sem `resolve()`, `.git` até a
+pasta do usuário, marca de troca incompleta, POST sem Origin = 403, `!` no `.cmd`; `teste-atualizar.py` 101/101 (84/101 antes).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
