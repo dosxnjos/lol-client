@@ -8,6 +8,9 @@ a Fase 9 (complemento público). As Fases 1 a 7 e os passos 1, 2 e 4 da Fase 8 d
 
 Estado (19/10/2026): plano escrito; nada executado. Depende da Fase 1 do plano Pengu (aperto de mão `GET /ola` com
 `recursos`). Relatórios no sidecar `roadmap/2026-10-19-publicacao-e-complemento-publico.d/`.
+P0-b, c e d medidos em 19/10 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md)); P0-a pendente
+(orquestrador, com o Gabriel). Achados que mudam fases: `dados/` dentro da pasta trocada (P3/P4), `travadas` sem proteção,
+`/ola` sem chave de edição, `ddragon` fora da origem fixa.
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
@@ -71,12 +74,23 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
   Anotar se abriu o navegador padrão, uma janela do CEF ou nada. Decide o botão sem complemento.
 - **b. Release da API do GitHub de dentro do client:** `fetch('https://api.github.com/repos/<um repo público qualquer com
   release>/releases/latest')` em `None`: status, CORS, se cada asset traz `digest`. (CORS já medido ok em 17/10 para a raiz.)
+  **Medido 19/10:** 200 e `type: cors` (Pengu e `cli/cli`), 213–1066 ms, `x-ratelimit-*` legíveis (60/h sem login).
+  `digest` existe no esquema: `null` nos 2 assets do Pengu `v1.1.6` (2024), `sha256:` em 22/22 do `gh v2.102.0` (09/2026).
+  Release nosso é novo: `digest` nulo = falha, não recuo para só o `SHA256SUMS.txt`.
 - **c. Catálogo da voz sem nada pessoal:** varrer as frases do pacote Aoede (`indice.json`) por "Gabriel", "Xerek",
   nome de jogador, Riot ID. Frase pessoal sai do catálogo público (o pacote público pode ser um subconjunto).
+  **Medido 19/10:** 476 falas (~42 MB), 7.440 textos do índice e 476 falas + 104 moldes do repo, **0 achados**; a varredura
+  acha 6/6 plantados. Sem nome por construção (fala = molde × valores finitos). O pacote público é o pacote inteiro; o
+  `indice.json` público pode sair enxuto (o `voz.py` lê só `arquivo` e `suspeita` por fala).
 - **d. Dependências do coach ao vivo:** listar o que o caminho do coach importa (`coach_vivo.py`, `avisos.py`, `voz.py`,
   `janela_painel.py`, overlay, minimapa, OCR dos feitiços, `teclas.py`, aceite) e o que é só da instalação dele (mentor,
   MCP, `riotapi.py`, vitrine, travadas, medidores, expansões). Sai a lista de inclusão do complemento e o
   `requirements.txt` com versão fixa.
+  **Medido 19/10:** entrada é o `coletor.py`; inclui 21 módulos de `coletor/` + `painel/` + 4 `.md`; fora `mentor`,
+  `riotapi`, `carregamento`, `draft`, `vitrine`, `travadas`, `expansoes` (7 cortes tardios; `coletor.py:740` → `travadas`
+  sem `try` derruba o coach em `InProgress`). Versões em `requirements-complemento.txt` (6 libs, 6/6 = instaladas).
+  Fixo da máquina: `DISPLAY1`, `C:\Games\Riot Games` (sem reserva em `teclas.py:27` e `minimapa.py:27`), gatilho com
+  admin. Detalhe e tabela de cortes no relatório.
 
 ### P1 — `tools/publicar.py` e a varredura
 

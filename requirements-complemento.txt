@@ -1,0 +1,19 @@
+# Bibliotecas do complemento coach (coach ao vivo, voz, painel, minimapa, feitiços, aceite fora do client).
+# Versões fixas = as que rodam no coletor do mantenedor em 19/10/2026 (Python 3.14.4; pip show, só leitura).
+# Medição P0-d do plano roadmap/2026-10-19-publicacao-e-complemento-publico.md. Fora daqui (só a instalação
+# do mantenedor): mcp (servidor MCP), google-genai/psutil (gerador do pacote de voz, venv próprio).
+# O resto do complemento é biblioteca padrão do Python mais Windows: winsound, ctypes, OCR do Windows (pt-BR),
+# Microsoft Edge (janela do painel) e PowerShell.
+
+# coletor.py: websocket da LCU (eventos do client)
+websockets==16.0
+# alcance.py, jungler.py, minimapa.py, moldura.py, overlay_minimapa.py
+numpy==2.4.4
+# alcance.py (mapa de alcance do jungler); a mais pesada da lista
+scipy==1.17.1
+# minimapa.py, overlay_minimapa.py; headless basta (nenhum cv2.imshow no coletor)
+opencv-python-headless==4.13.0.92
+# feiticos.py, minimapa.py, overlay_minimapa.py: print da tela do jogo
+mss==10.2.0
+# feiticos.py, moldura.py, overlay_minimapa.py
+Pillow==12.2.0
