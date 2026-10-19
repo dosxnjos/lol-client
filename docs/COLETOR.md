@@ -334,6 +334,14 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   diagnóstico do plugin; `POST /compacto/expansoes`: § Registro das expansões do compacto). CORS só para origem local (`127.0.0.1`,
   `localhost`, `plugins`, `riot`; preflight responde `Access-Control-Allow-Private-Network`); `Host` de
   fora → 403. O plugin chama `http://127.0.0.1:8765` (por IP: loopback não é conteúdo misto).
+  **Aperto de mão `GET /ola`** (19/10/2026): `{app: "lol-client-coletor", versao, recursos}`. `recursos` sai na hora do que
+  está pendurado (`ServidorLocal.recursos`): rotas (`/draft` → `draft`, `/revisao/` → `revisao`, `/chat/` → `chat-janelas`,
+  `/aceite/` → `aceite-reserva`, `/compacto/` → `expansoes`), `ao_config` → `coach`, `estado` dado → `estado-partida`,
+  Mentor → `mentor`, banco existente → `contexto`, e o que o dono declara (`coach_vivo`: `painel`, `voz`, `alertas`,
+  `minimapa`, `feiticos`, `carregamento`; `Coletor`: `aceite-flutuante`). `resumos` ainda não existe (Fase 4). O plugin só
+  fala com a 8765 com `cfg.coletor.ligado` e um `/ola` bom, e só chama a rota do recurso anunciado (`pengu/coach.js`
+  `temRecurso`); porta que responde sem esse `app` = outro programa, tratado como ausente. Para o usuário o nome é
+  "complemento coach" ([TEXTOS-DA-INTERFACE](TEXTOS-DA-INTERFACE.md)).
 - **`painel\`**: HTML/CSS/JS sem build, 4 blocos fixos + faixa de 1 aviso, consulta `/estado` 1/s. O que
   as frentes acrescentaram entra **dentro** dos 4 blocos (via-negativa): carregamento → previsão em faixa
   no "Teu padrão" e tags do adversário na "Ameaça"; jogo → chip do jungler na "Ameaça", feitiços em
@@ -743,6 +751,16 @@ sinal do plugin há N s | nenhum sinal do plugin)` ou `reserva do aceite: não a
 - **Só arma com a rota do plugin no ar:** sem coach (`--sem-coach`) ou com o servidor local fora do ar (porta 8765
   ocupada), o "não aceitar" não teria por onde chegar, então `coletor._sinal_aceite` devolve `None`, o log diz
   `reserva do aceite desarmada: sem rota do plugin` e a janelinha (se ligada) abre só com os botões (`reserva=False`).
+- **Só age com o plugin visto nesta fila** (19/10/2026, Fase 1 do [plano plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md)):
+  a rota no ar não basta, porque o plugin pode estar com a ponte desligada (`coletor.ligado` false) e aí o "não aceitar"
+  dele nunca chegaria. Na hora de agir (depois da releitura, antes do POST), `SinalPlugin.visto_na_fila()` exige contato do
+  plugin **desde a última entrada em `Matchmaking`**: `GET /ola` (aperto de mão) ou `POST /aceite/plugin`, sempre **com
+  Origin** do client (`https://127.0.0.1:<porta da LCU>`) ou do Pengu (`https://plugins`, `riot`), a forma de
+  `servidor_local.origem_plugin`. Pedido sem Origin (curl, o painel) não conta. Sem contato: log `reserva do aceite
+  desarmada: o plugin não falou nesta fila (N s do ready check)` e nenhum POST. O plugin faz o aperto de mão ao entrar em
+  `Matchmaking` e em `ReadyCheck` (fora do recuo, `pengu/coach.js`) e manda o diagnóstico do aceite no início de cada ready
+  check, então com a ponte ligada o contato sempre chega. A linha do ready check diz `reserva do coletor armada (plugin
+  visto nesta fila)` ou `armada se o plugin falar nesta fila`. Prova: `teste-aviso-partida.py` H11–H18.
 - **Não age:** aceite automático desligado no espelho (`aceiteAtrasoS` `null`), "não aceitar" do overlay do plugin ou
   aceite desligado nele **neste** ready check (sinal recebido até 1 s antes do início dele, ancorado no `timer` da
   LCU; o coletor zera ao sair da fase; `ligado true` atrasado não destrava, só o `fim`), `Accepted`/`Declined`, ready

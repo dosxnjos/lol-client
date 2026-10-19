@@ -11,6 +11,11 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
 - **Produto, não conversa.** Claro, direto, neutro. Sem gíria ("pra", "dá para", "não deu"), sem piada, sem intimidade.
 - **Não justificar o óbvio.** O clique foi dele; o aviso diz o que acontece, não por quê: "baixando o replay".
 - **Não narrar como o código decide** ("a reserva do coletor", "o roteador", "o evento não veio"). Diga o fato e a saída.
+- **O Python é "complemento coach"** (19/10/2026, Fase 1 do plano plugin Pengu primeiro): um termo só para o usuário.
+  "coletor", a porta "8765" e "MCP" nunca aparecem em texto visível; sem o complemento, o que depende dele **some** (nada de
+  "fora do ar" nem botão cinza) e, onde o usuário procuraria, uma linha diz que precisa do complemento coach. Falha com ele
+  instalado: "complemento coach sem resposta". Guarda em `node tools/teste-textos.mjs` (valores internos como
+  `coletor.ligado` ficam na lista `INTERNOS` de lá).
 - **Motivo de botão cinza = fato + saída**: "o client está atualizando", "líder do grupo desconhecido: busque pelo client
   normal". O porquê só entra quando muda a decisão dele, depois de dois-pontos, nunca entre "(porque…)".
 
@@ -61,6 +66,9 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
 | espera as estatísticas chegarem | aguarde as estatísticas chegarem |
 | de madrugada teu winrate cai: 47% contra 58% de dia. buscar mesmo assim? | de madrugada o seu winrate cai: 47% contra 58% de dia. Buscar mesmo assim? |
 | ⛔ chat bloqueado pela Riot nesta conta: dá para ler, não dá para enviar | chat bloqueado pela Riot nesta conta: só leitura, sem envio (com o ícone bloqueado, desde 17/10) |
+| coletor fora do ar: as lições ficam na análise completa (19/10) | as lições ficam na análise completa (sem o complemento) / complemento coach sem resposta: … (com ele) |
+| coach: coletor fora do ar (sem matchup e draft) (19/10) | (some sem o complemento) / matchup e draft indisponíveis agora: nova tentativa em seguida |
+| indisponível: o coletor não está rodando (127.0.0.1:8765 não respondeu) (19/10) | indisponível: o complemento coach não respondeu (sem o recurso "mentor", a caixa some) |
 
 A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/2026-10-13-client-compacto.md).
 

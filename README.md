@@ -55,21 +55,31 @@ Ele sai sozinho 10 min depois do client fechar. Se ele cair com o client aberto,
 No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as chaves do coach ao coletor
 (`POST /config`), que guarda em `dados\config.json` e aplica na hora, até no meio da partida.
 
-| parte | bloco nas Configurações | chave do coach |
+**Ponte com o complemento coach** (19/10/2026, Fase 1 do [plano plugin Pengu primeiro](roadmap/2026-10-17-plugin-pengu-primeiro.md)):
+o coletor (Python) aparece para o usuário como "complemento coach". O plugin só fala com ele (`127.0.0.1:8765`) com a chave
+**Usar o complemento coach** (`coletor.ligado`, bloco "Complemento coach") ligada **e** um aperto de mão bom (`GET /ola`).
+Instalação nova nasce com a chave desligada (nenhuma chamada à 8765); a config salva antes da versão 4 (a desta máquina)
+ligou uma vez sozinha. "Restaurar padrão" não mexe nela. Cada bloco e chamada do coach só existe com o recurso que o
+complemento anuncia (`pengu/coach.js`); sem ele, os blocos somem e fica um bloco "Coach ao vivo" dizendo que precisa do
+complemento. Desligar a chave não desliga o coach ao vivo: o complemento segue com a última configuração recebida. A
+coluna da direita diz quem precisa dele: chave do coach = só com o complemento; "(plugin…)" = roda sem ele.
+
+| parte | bloco nas Configurações | chave do coach (precisa do complemento coach) |
 | --- | --- | --- |
+| falar com o complemento coach (aperto de mão, recuo 30 s → 2 min → 5 min sem achar; a linha de estado diz desligado / procurando / encontrado e a versão) | Complemento coach (e Ctrl+K) | (plugin: `coletor.ligado`; padrão desligado em instalação nova) |
 | aceite, fila rápida, enxugamentos, runas, selo do champ select | blocos do plugin e Ctrl+K | (só o plugin) |
 | trazer o client para a frente ao achar partida (desligado = o client pisca e volta para trás; só com o aceite automático) | Aceitar partida | (plugin: `aceite.trazerClient`) |
 | esconder o popup de partida encontrada (só com o aceite automático; volta se o aceite não vier) | Aceitar partida | (plugin: `aceite.esconderPopup`) |
 | silenciar o som em loop depois de aceitar (padrão: ligado; o aviso de partida encontrada continua) | Aceitar partida | (plugin: `aceite.silenciarSom`) |
-| janelinha aceitar/recusar fora do client, por cima de tudo e sem roubar a tela (precisa do coletor) | Aceitar partida | `aceiteFlutuante` (+ `aceiteAtrasoS`, que o plugin manda sozinho) |
+| janelinha aceitar/recusar fora do client, por cima de tudo e sem roubar a tela (só aparece com o recurso `aceite-flutuante`) | Aceitar partida | `aceiteFlutuante` (+ `aceiteAtrasoS`, que o plugin manda sozinho) |
 | botão "jogar de novo e buscar" no pós-jogo | Fila rápida | (plugin: `filaRapida.jogarDeNovo`) |
 | freio de tilt: pedir 2º clique depois de N derrotas seguidas na sessão (padrão: 2; 0 = nunca), na fila rápida e no jogar de novo | Fila rápida | (plugin: `filaRapida.freioTilt`) |
 | freio de madrugada: pedir 2º clique ao buscar entre 01:00 e 05:59, hora do PC (padrão: ligado), nos mesmos dois botões | Fila rápida | (plugin: `filaRapida.freioMadrugada`) |
 | coletar recompensas sozinho / incluir o passe do TFT | Recompensas | (plugin: `recompensas.ligado`, `recompensas.tft`) |
-| client compacto (desligado = client normal, sem botão nem atalho; o coletor deixa de abrir conversa nova sozinha) / abrir cada fase no compacto (desligado = começa no normal e o botão "modo compacto" leva ao compacto) | Client compacto (e Ctrl+K) | (plugin: `compacto.ligado`, `compacto.inicioCompacto`; `favoritos`, `larg`, `alt` só no DataStore) |
-| chat e amigos ao lado do compacto (botões de chat e de amigos; desligado = o botão de chat abre as janelas do chat do coletor) / fundo do perfil como fundo da janela compacta (desligado = o fundo escuro de sempre) | Client compacto (e Ctrl+K) | (plugin: `compacto.chatLateral`, `compacto.fundoPerfil`) |
+| client compacto (desligado = client normal, sem botão nem atalho) / abrir cada fase no compacto (desligado = começa no normal e o botão "modo compacto" leva ao compacto) | Client compacto (e Ctrl+K) | (plugin: `compacto.ligado`, `compacto.inicioCompacto`; `favoritos`, `larg`, `alt` só no DataStore) |
+| chat e amigos ao lado do compacto (botões de chat e de amigos; desligado = o botão de chat abre as janelas do chat do coletor; a chave só aparece com o recurso `chat-janelas`, sem ele o chat é sempre ao lado) / fundo do perfil como fundo da janela compacta (desligado = o fundo escuro de sempre) | Client compacto (e Ctrl+K) | (plugin: `compacto.chatLateral`, `compacto.fundoPerfil`) |
 | abrir a faixa da sala do time quando outro jogador manda mensagem, na seleção de campeões, na honra e no pós-jogo (padrão: ligado; só a altura da faixa, sem foco nem "lida"; na seleção, quem fala aparece só como campeão e posição; desligado = só o contador sobe) | Client compacto (e Ctrl+K) | (plugin: `compacto.chatSalaCresce`) |
-| som do client nas configurações do compacto (seção Som, só no compacto: áudio do client, volume geral, efeitos, volume dos efeitos, ambiente, falas de escolha e banimento, música, volume da música e as 4 músicas, as mesmas da página Som da Riot e gravadas onde ela grava, só por clique ou ao soltar o volume; abrir não grava nada; vale só para o client, o som da partida fica no menu do jogo) junto das chaves de som do plugin (silenciar depois de aceitar, voz do coach, tom, não repetir, avisos com voz). No compacto o bloco Voz mora dentro da Som | Som (configurações do compacto) | (client: `/lol-settings/v1/local/lol-audio`, [ARMADILHAS](docs/ARMADILHAS.md) § LCU; plugin: `aceite.silenciarSom`, `coach.voz`, `coach.tomVoz`, `coach.cortarFalaRepetida`, `coach.avisosDesligados.voz`) |
+| som do client nas configurações do compacto (seção Som, só no compacto: áudio do client, volume geral, efeitos, volume dos efeitos, ambiente, falas de escolha e banimento, música, volume da música e as 4 músicas, as mesmas da página Som da Riot e gravadas onde ela grava, só por clique ou ao soltar o volume; abrir não grava nada; vale só para o client, o som da partida fica no menu do jogo) junto das chaves de som do plugin (silenciar depois de aceitar e, com o recurso `voz` do complemento, voz do coach, tom, não repetir, avisos com voz). No compacto o bloco Voz mora dentro da Som | Som (configurações do compacto) | (client: `/lol-settings/v1/local/lol-audio`, [ARMADILHAS](docs/ARMADILHAS.md) § LCU; plugin: `aceite.silenciarSom`, `coach.voz`, `coach.tomVoz`, `coach.cortarFalaRepetida`, `coach.avisosDesligados.voz`) |
 | chat da tela de estatísticas: campeão junto do nome (ou no lugar), ícone do campeão (do próprio client), cor certa de aliado/inimigo, abre sozinho e fica aberto (o botão do chat recolhe; o Esc também, se o cursor estiver no chat), sem "entrou/deixou o saguão", quem saiu cinza no placar; com o painel do pós-jogo aberto o chat fica por baixo (clicar no client fora da caixa fecha o painel, e o chat volta a abrir sozinho); desligar no meio da tela devolve o chat como o client deixou | Chat do pós-jogo | (plugin: `chatPosjogo.ligado`, `.nomes` = ambos/campeao/jogador, `.iconeCampeao`, `.corTime`, `.abrirSozinho`, `.manterAberto`, `.esconderEntrouSaiu`, `.escurecerSaiu`) |
 | calar o aviso de runas mudadas pelo jogo e o de golpear colocado sozinho (resposta falsa só nessas 2 rotas; o "você foi preenchido" fica: sai da sessão do champ select). O de runas logo depois de um patch ainda não foi provado | Avisos do client | (plugin: `semPopups.ligado`, `.runasAutomaticas`, `.smiteAutomatico`) |
 | painel na 2ª tela / amostras de 10 s no banco | Painel ao vivo (2ª tela) | `painelAoVivo` / `amostrasAoVivo` |
@@ -85,7 +95,7 @@ No client: **Configurações › LOL-CLIENT** (e o Ctrl+K). O plugin manda as ch
 | Flash inimigo: OCR do chat e **F7** na partida = ele acabou de usar o flash. 1 batida = o adversário da tua rota; cada batida a mais passa para a próxima (top, jungler, mid, atirador, suporte, dando a volta), com a borda mostrando quem está escolhido ("flash: mid?"); parado ~1 s, marca e a voz diz "flash do mid marcado". **Segurar F7** 1 s desfaz a última marcação, até 1 min depois, e a borda diz qual ("desfeito: mid"); o que o chat já viu fica ("mid: chat confirmou"). Os números de cima nunca (são itens no LoL); o teclado numérico, para quem tiver, escolhe direto depois do F7 | Minimapa e jungler | `feiticos` |
 | os 10 na tela de carregamento (Riot API) | Tela de carregamento | `carregamento` |
 | mentor, modelo e esforço (padrão Sonnet + medium) | Mentor | `mentor`, `mentorModelo`, `mentorEffort` |
-| traumas no selo e na aba Tendência | Traumas | (só o plugin) |
+| traumas no selo e na aba Tendência (o bloco só aparece com uma fonte: o complemento com `draft` ou `contexto`) | Traumas | (plugin: `traumas.ligado`) |
 
 **Jogar de novo:** só busca quando tu clica, nunca sozinho. Volta à mesma fila da partida que acabou, com as tuas
 posições; em grupo só volta ao lobby (quem busca é o líder); com penalidade (dodge, leaver) diz o motivo e o prazo e

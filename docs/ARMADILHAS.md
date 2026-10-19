@@ -329,6 +329,24 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   - **404 passageiro no mesmo ready check** (14/10 11:27, logo depois do aceite do plugin, `timer` seguindo 9 → 10): a
     reserva tomava qualquer 404 como "outro ready check" e desistia; com o plugin morto, não aceitaria. Só o `timer`
     que volta marca outro ready check (`teste-aviso-partida.py` F24b).
+  - **"reserva do aceite desarmada: o plugin não falou nesta fila"** (19/10/2026) → a reserva só age com contato do plugin
+    (aperto de mão `GET /ola` ou `POST /aceite/plugin`, com Origin do client ou do Pengu) desde a última entrada em
+    `Matchmaking` ([COLETOR](COLETOR.md) § Quem aceita). Aparece com a ponte desligada (`coletor.ligado` false nas
+    Configurações), com o plugin velho que ainda não faz o aperto de mão e calado no ready check, ou com o coletor
+    reiniciado no meio da fila sem um aperto de mão depois. `curl`/painel sem Origin nunca arma.
+- **Ponte desligada ou complemento não visto = `coletor()` devolve status 0 sem fetch** (19/10/2026, `pengu/coach.js`) →
+  quem chama vê "fora do ar" mesmo com o coletor de pé. Conferir no CDP `__lolClient.coach.estado()` (`ligado`, `visto`,
+  `recursos`, `proximaEm`); `__lolClient.coach.apertar()` força o aperto de mão (só `GET /ola`). Rota nova no coletor só chega
+  ao plugin anunciada em `servidor_local.recursos()` **e** com o chamador conferindo `temRecurso`.
+- **Origem da página leva a porta da LCU: localStorage e IndexedDB morrem a cada abertura do client** (medido em
+  17/10/2026) → a página é `https://127.0.0.1:<porta>` e a porta muda a cada abertura; `Cache\IndexedDB` tinha 6 pastas
+  `https_127.0.0.1_<porta>.indexeddb.leveldb`. O que tem de sobreviver vai no DataStore do Pengu (`lol-client.*`).
+- **DataStore é um namespace comum e legível** (fonte do 1.1.6: `v8_datastore.cc`, só XOR de chave fixa) → qualquer plugin e
+  o "Dump DataStore" do Pengu leem e apagam `lol-client.*`; um JSON só, lido inteiro na carga e regravado inteiro a cada `set`.
+  Nada de nome, Riot ID ou puuid de outro jogador ali; `set` de 300 KB custou 5,5–9,9 ms (medição C, 19/10/2026).
+- **Regex com aspas confunde o varredor do `teste-textos.mjs`** (19/10/2026) → ele não entende regex: `/[&<>"]/` abria uma
+  "string" que engolia o resto do arquivo (comentários viraram literais e a regra nova acusou). Aspas dentro de regex vão
+  como `\x22` / `\x27`.
 - **Sons do ready-check** (rcp-fe-lol-navigation, patch 16.20): intro (`sfx-readycheck-lowspec-intro.ogg`, canal
   `sfx-notifications`), `ringmagic-countdown` e `ringmagic-accepted-loop` (`sfx-ui`, `isLoop`), criados uma vez no
   `init` do componente: calar no `play()`, não no `createSound` (`aceite.embrulharAudio`, 13/10/2026).
