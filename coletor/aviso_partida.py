@@ -486,7 +486,7 @@ class AvisoPartida:
         self.rc = atual
         d = decidir_reserva(atual, self._alvo(), decorrido, self._bloqueio(), folga_s=0)
         if d["acao"] != "aceitar" or self.clicado or self._parar.is_set():
-            self._reserva_fim(d.get("motivo") or ("clique do Gabriel em voo" if self.clicado else "aviso fechado"),
+            self._reserva_fim(d.get("motivo") or ("clique em voo" if self.clicado else "aviso fechado"),
                               decorrido)
             return None
         # conferido aqui, na hora de agir: contato durante ESTE ready check (o aperto de mão da fase ReadyCheck e o diagnóstico
