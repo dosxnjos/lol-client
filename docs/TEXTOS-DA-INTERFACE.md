@@ -89,6 +89,10 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
 - Texto que a Riot escreveu (trans.json copiado, ex.: o formulário de denúncia em `jogador-acoes.js`) e o
   `VOCABULARIO` do registro das expansões (`expansoes.js`): são exceções nomeadas em `tools/teste-textos.mjs`.
 - O texto do mentor (gerado pelo Claude no coletor) e nome de jogador ou campeão vindo da LCU (sempre por `esc()`).
+- As notas do release ("o que mudou", `pengu/atualizacao.js`, 19/10/2026): texto de quem publica, mostrado só por `textContent`.
+  Os textos do aviso em volta seguem este guia: "Versão 0.2.0 disponível (instalada: 0.1.0).", botões "atualizar", "o que
+  mudou" e "procurar agora", bloco "Atualizações"; falha da consulta automática não vira aviso (só o "procurar agora" diz
+  "Não foi possível consultar agora: tente mais tarde.").
 - Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
   "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026). O que mostra a amostra dele (Fase 5 do plano plugin Pengu
   primeiro: nota do pós-jogo, freios, dica do lobby, selo, Configurações) segue este guia: diz "partidas guardadas neste

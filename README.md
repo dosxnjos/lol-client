@@ -87,6 +87,18 @@ partidas ou mais, as lições, a Tendência e a Sessão do pós-jogo ganham matc
 farm passa a contar as partidas guardadas; os freios usam os números dele (acima). Conferir:
 `__lolClient.historico.estado()` no CDP. Apagar: `DataStore.remove('lol-client.historico')` (o contexto local volta a zero).
 
+**Aviso de versão nova** (19/10/2026, P2 do [plano da publicação](roadmap/2026-10-19-publicacao-e-complemento-publico.md);
+`pengu/atualizacao.js`): com a chave **Procurar versão nova uma vez por dia** (`atualizacao.verificar`, bloco "Atualizações",
+ligada por padrão, também no Ctrl+K), o plugin faz 1 `GET https://api.github.com/repos/<REPO>/releases/latest` por dia
+(`REPO` e `VERSAO` em `pengu\versao.js`), só em `None`/`Lobby` (na carga, na virada de fase e num laço de 1 h), com prazo de
+5 s; erro, 404 (o repositório público ainda não existe até o P6) e resposta torta ficam calados. Versão mais nova → linha
+"Versão x.y.z disponível" no topo das Configurações (client normal e ⚙ do compacto, acima dos blocos) com **atualizar** e
+**o que mudou** (notas do release só como texto) e um ponto no ⚙ do compacto (classe `lc-versao-nova` no `<html>`). Nada
+abre nem baixa sozinho; "procurar agora" (bloco Atualizações) consulta na hora. O **atualizar** chama o atualizador da P3
+(`registrarAtualizador` em `atualizacao.js`); até lá diz onde baixar. Estado no DataStore `lol-client.atualizacao` (hora,
+versão vista, notas cortadas em 4.000 caracteres; nada pessoal). Conferir: `__lolClient.atualizacao.estado()` no CDP;
+consultar já: `__lolClient.atualizacao.procurar()` (1 GET); esquecer o dia: `DataStore.remove('lol-client.atualizacao')`.
+
 | parte | bloco nas Configurações | chave do coach (precisa do complemento coach) |
 | --- | --- | --- |
 | falar com o complemento coach (aperto de mão, recuo 30 s → 2 min → 5 min sem achar; a linha de estado diz desligado / procurando / encontrado e a versão) | Complemento coach (e Ctrl+K) | (plugin: `coletor.ligado`; padrão desligado em instalação nova) |
@@ -180,6 +192,9 @@ A variação de PDL do bloco "hoje" conta desde a 1ª leitura do ranque no dia (
 **Histórico próprio no plugin** (19/10/2026): testado só com LCU, DataStore e complemento falsos (`teste-historico.mjs`,
 `teste-resumos.py`); só o client prova o `set` real com centenas de linhas, o ritmo do backfill na fila da LCU e se a
 LCU tem a linha do tempo das partidas antigas ([relatório](roadmap/2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-4.md)).
+**Aviso de versão nova** (19/10/2026): testado com fetch espião, relógio e DOM falsos e um servidor HTTP falso local
+(`teste-atualizacao.mjs`); só o client prova a consulta de verdade à `api.github.com` (404 calado até o repositório existir),
+a linha no topo das Configurações e o ponto no ⚙ desenhados no CEF ([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p2.md)).
 **Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
 antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 
@@ -194,6 +209,7 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | quais telas da Riot tiraram o compacto e por quanto tempo (cada saída automática ou pedida, gravada pelo coletor em `dados\expansoes-compacto.jsonl`; [COLETOR](docs/COLETOR.md) § Registro das expansões) | `python tools\relatorio-expansoes.py` |
 | auditoria do pacote de voz (cada `.wav` pelo Whisper contra o catálogo inteiro; o que não bate vira suspeita, toca na Maria e a tarefa `lol-client-voz` refaz no modelo-alvo; só com o jogo fechado, retoma) | `python tools\auditar-pacote-voz.py` (`--so-indice`, `--relatorio`, `--refazer "frase"`) |
 | foto pública do `lol-ultra-client` (ensaio, padrão: monta do commit pela lista de inclusão, varre e mostra o que entraria; zips e `SHA256SUMS.txt` em `dist\v<versão>\` só se a varredura passar; `--publicar` só depois do portão do P6 do [plano da publicação](roadmap/2026-10-19-publicacao-e-complemento-publico.md)). Textos do público: `publico\LEIA-ME.md` (vira o `README.md` do repositório público), `LICENSE`, `TERCEIROS.md`; versão em `pengu\versao.js` | `python -I tools\publicar.py` (prova: `python -I tools\teste-publicar.py`) |
+| aviso de versão nova (1 consulta por dia, chave, fase, erros calados, notas como texto; servidor falso local na porta 0; ~6 s) | `node tools\teste-atualizacao.mjs` |
 | medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
 
 Pegadinhas medidas: [ARMADILHAS](docs/ARMADILHAS.md). Regras do pós-jogo: [INSIGHTS](docs/INSIGHTS.md).

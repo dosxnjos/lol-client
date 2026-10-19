@@ -194,8 +194,9 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
   `typeof context.fs` existir.
 - Rota `[S]` sem medição nunca é premissa (`CLAUDE.md`). Contra o client real só GET; escrita na LCU só na
   `tools/lcu-falsa.mjs`. Credencial do lockfile nunca em arquivo.
-- Chave da Riot API nunca no plugin (vazaria). Rede externa nova no plugin só com [[DECISAO]] (hoje o plugin não faz
-  nenhuma: só LCU, `/lol-game-data` e a 8765).
+- Chave da Riot API nunca no plugin (vazaria). Rede externa nova no plugin só com [[DECISAO]] (hoje: LCU, `/lol-game-data`, a
+  8765 e, desde a P2 do [plano da publicação](2026-10-19-publicacao-e-complemento-publico.md) com a decisão "versão nova: sim"
+  do Gabriel, 1 `GET` por dia em `api.github.com/repos/<REPO>/releases/latest`, `pengu/atualizacao.js`).
 - Texto de interface no tom do guia (`node tools/teste-textos.mjs`); o nome do Python para o usuário é um termo só,
   **"complemento coach"**, registrado em `docs/TEXTOS-DA-INTERFACE.md` na Fase 1. "coletor", "8765" e "MCP" nunca aparecem
   na edição sem complemento.

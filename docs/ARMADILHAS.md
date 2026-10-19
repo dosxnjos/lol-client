@@ -486,6 +486,16 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.md)) → o GitHub só calcula o `sha256:` de
   asset enviado depois que a função existiu: `null` no Pengu `v1.1.6` (2024), preenchido em 22/22 de um release de 09/2026.
   O campo existe sempre; em release nosso, `null` é falha, não "sem digest". A `api.github.com` responde CORS ao client.
+- **O socket do gameflow só avisa na virada de fase** (P2 da publicação, 19/10/2026) → módulo que depende da fase e assina só
+  `/lol-gameflow/v1/gameflow-phase` nunca age com o plugin carregado já em `None` (recarga, client aberto e parado). O aviso de
+  versão lê `GET /lol-gameflow/v1/gameflow-phase` uma vez na carga (`atualizacao.js` `lerFase`) e tem um laço de 1 h para o dia
+  que vence com o client parado no lobby. Prova: `teste-atualizacao.mjs` (a) e (d).
+- **Nó antes da 1ª seção some na ⚙ do compacto** (P2 da publicação, 19/10/2026) → `lateral-config.js` `agrupar()` só guarda o que
+  vem depois de um título de seção; a linha "Versão x.y.z disponível" (`configuracoes.js` `usarTopo`) sumia calada. Hoje o
+  `pintar()` põe o que vem antes do 1º título num `.lc-lt-topo` acima dos blocos recolhíveis (sempre à vista; dentro de um
+  bloco fechado ninguém acharia). Prova: `teste-atualizacao.mjs` (h).
+- **Falha da consulta de versão anota a hora** → a hora vai ao DataStore antes do fetch: 404, rede ou prazo não repetem a
+  consulta a cada virada de fase no mesmo dia (60 por hora sem login é o limite da API). Ver de novo na hora: "procurar agora".
 
 ## LCU API
 

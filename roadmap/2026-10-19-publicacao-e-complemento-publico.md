@@ -22,6 +22,9 @@ lista (P4.5), `vida.py` vai junto; nome tirado do `docs/ITENS.md` e de 1 string 
 Revisão adversarial do P1 (19/10, `f419daf`, `fd33373`; 9 achados = 7 distintos, todos reais e corrigidos, tabela no
 relatório): gameId com fronteira de dígito, credencial e caminho mais largos, nome do arquivo e `--notas` varridos,
 complemento leva `pengu/`, release que cai depois do push se retoma; `teste-varrer-publico.py` 72/72, `teste-publicar.py` 52/52.
+**P2 feita em 19/10** (`64f87aa`, `a0ff36f`, `6b15d98`; `teste-atualizacao.mjs` 78/78, 31 `.mjs` verdes): `pengu/atualizacao.js`
+(1 GET por dia só em None/Lobby, 5 s, erro calado), linha no topo da ⚙, ponto no ⚙ do compacto, bloco Atualizações; o
+"atualizar" chama `registrarAtualizador` (P3) ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p2.md)).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
