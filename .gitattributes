@@ -1,0 +1,3 @@
+# .cmd guardado byte a byte (CRLF): o tools/publicar.py monta a foto pública do blob cru do commit, e o core.autocrlf=true
+# desta máquina converteria o CRLF em LF no git add (cmd.exe com LF quebra rótulo e goto). Plano da publicação, P1.
+*.cmd -text
