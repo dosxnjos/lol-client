@@ -124,7 +124,9 @@ async function montarTela({ fase = 'GameStart', rotas = {}, coletor = async () =
     if (!t.vivo) return undefined;
     try { const r = fn(...a); if (r && typeof r.then === 'function') r.catch(e => t.falhas.push(e)); return r; } catch (e) { t.falhas.push(e); return undefined; }
   };
-  const servicos = semColetor ? {} : { coletor: async (caminho, op) => { t.coletorPedidos.push([caminho, op?.metodo || 'GET']); return coletor(caminho, op); } };
+  // o espião herda o temRecurso do coletor dado (o da ponte, coach.js); coletor falso sem ele = complemento com todos os recursos
+  const servicos = semColetor ? {} : { coletor: Object.assign(async (caminho, op) => { t.coletorPedidos.push([caminho, op?.metodo || 'GET']); return coletor(caminho, op); },
+    typeof coletor.temRecurso === 'function' ? { temRecurso: coletor.temRecurso } : {}) };
   t.ctx = {
     cfg: {}, servicos, tela: 'jogo', get fase() { return t.fase; }, info: { lida: true },
     raiz, titulo, extras, lcu: (m, u, c) => lcuComum(m, u, c, f.fetch), vivo: () => t.vivo, seguro,
@@ -189,7 +191,7 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('InProgress: campeão (Renekton), fila (Ranqueada Solo/Duo), tempo de jogo do coletor, placar do time',
     t.texto('b.lc-cp-jg-camp') === 'Renekton' && t.raiz.textContent.includes('Ranqueada Solo/Duo') && t.texto('div[data-a="tempo"]') === '02:05'
     && t.texto('div[data-a="placar"]') === 'seu time 7 × 4 inimigos', visivel(t.raiz));
-  caso('InProgress: fonte "coletor (Live Client)" e "em andamento" no título', t.raiz.textContent.includes('tempo e placar: coletor (Live Client)') && /em andamento/.test(t.titulo.textContent));
+  caso('InProgress: fonte "complemento coach" e "em andamento" no título', t.raiz.textContent.includes('tempo e placar: complemento coach') && /em andamento/.test(t.titulo.textContent));
   const tudo = visivel(t.raiz) + visivel(t.titulo);
   caso('nada de terceiro na tela: sem nome de jogador, sem puuid, sem campeão inimigo, sem item/ouro/"visto"',
     !/AliadoSecreto|InimigoSecreto|Xerekton|p-eu|p-in1|Jax|Lee Sin|9999|visto/.test(tudo), tudo);
@@ -215,8 +217,19 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   caso('coletor fora: campeão pela sessão do gameflow (puuid do current-summoner)', u.texto('b.lc-cp-jg-camp') === 'Renekton', u.texto('b.lc-cp-jg-camp'));
   caso('coletor fora: relógio local desde o GameStart (01:30), rotulado "desde o carregamento", sem placar',
     u.texto('div[data-a="tempo"]') === '01:30' && /desde o carregamento/.test(u.raiz.textContent) && u.achar('div[data-a="placar"]').style.display === 'none', visivel(u.raiz));
-  caso('coletor fora: a fonte diz "coletor fora"', u.raiz.textContent.includes('coletor fora'));
+  caso('coletor fora: a fonte diz "complemento coach sem resposta" (nunca "coletor")',
+    u.raiz.textContent.includes('complemento coach sem resposta') && !u.raiz.textContent.includes('coletor'), visivel(u.raiz));
   u.desmontar();
+  // sem o complemento (coletor da ponte sem o recurso estado-partida): nenhuma chamada, nenhuma linha de fonte (Fase 1 do plano
+  // plugin Pengu primeiro)
+  agora += 60_000;
+  const semRec = [];
+  const colSem = Object.assign(async c => { semRec.push(c); return { status: 200, dados: {} }; }, { temRecurso: () => false });
+  const sr = await montarTela({ fase: 'InProgress', coletor: colSem });
+  await tick();
+  caso('sem o recurso estado-partida: nenhuma chamada ao complemento, relógio local, sem texto de fonte nem "coletor"',
+    semRec.length === 0 && sr.texto('div[data-a="tempo"]') !== '' && !/coletor|complemento|8765/.test(visivel(sr.raiz)), JSON.stringify(semRec) + ' ' + visivel(sr.raiz));
+  sr.desmontar();
   // GameStart da partida seguinte (outro gameId) zera o relógio
   agora += 30 * 60_000;
   const v = await montarTela({ fase: 'GameStart', coletor: async () => ({ status: 0, dados: null }),

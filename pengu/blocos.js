@@ -3,7 +3,7 @@
 // (campeões, páginas) e o rascunho da regra nova ficam aqui no módulo, não no DOM.
 import { campeoes, paginasEditaveis } from './runas.js';
 import { JUNGLER_LONGE, OVERLAY_CORES, OVERLAY_FORCAS } from './config.js';
-import { TEXTO_SILENCIAR } from './configuracoes.js';
+import { TEXTO_SILENCIAR, recursoVisivel } from './configuracoes.js';
 import { icone } from './icones.js';
 
 const POSICOES = [['*', 'Qualquer posição'], ['TOP', 'Topo'], ['JUNGLE', 'Selva'], ['MIDDLE', 'Meio'], ['BOTTOM', 'Atirador'], ['UTILITY', 'Suporte']];
@@ -17,7 +17,7 @@ const botao = (texto, classe, aoClicar) => {
 
 export function blocoChampSelect(champ) {
   return (corpo, { cfg, definir, ui }) => {
-    corpo.append(ui.caixa('champSelect.ligado', 'Winrate com o campeão', 'No champ select, mostra partidas, winrate e KDA com o campeão em hover ou escolhido, no geral e na posição da partida; com o coletor ligado, também o histórico contra o adversário de rota provável, o trauma e a força do draft em faixa. Só dados da sua conta.',
+    corpo.append(ui.caixa('champSelect.ligado', 'Winrate com o campeão', 'No champ select, mostra partidas, winrate e KDA com o campeão em hover ou escolhido, no geral e na posição da partida; com o complemento coach, também o histórico contra o adversário de rota provável, o trauma e a força do draft em faixa. Só dados da sua conta.',
       cfg.champSelect.ligado, v => definir('champSelect.ligado', v)));
     const e = champ?.estado?.();
     corpo.append(ui.explica(!e ? '' : e.carregando && !e.partidas ? 'Lendo o histórico do client (leva até 40 s)…'
@@ -138,8 +138,11 @@ export function blocoRunas(corpo, ctx) {
 }
 
 // ---- coach (plano v2: painel, voz, alertas, minimapa, mentor, carregamento, traumas) ----
-// As chaves moram em cfg.coach (mesmos nomes do servidor_local.CONFIG_PADRAO) e vão ao coletor em
-// POST 127.0.0.1:8765/config na carga e a cada mudança (coach.js). Traumas é só do plugin.
+// As chaves moram em cfg.coach (mesmos nomes do servidor_local.CONFIG_PADRAO) e vão ao complemento coach em
+// POST 127.0.0.1:8765/config no aperto de mão bom e a cada mudança (coach.js). Traumas é só do plugin. Cada bloco só aparece
+// com o recurso anunciado pelo complemento (index.js registrarBloco visivel; roadmap/2026-10-17-plugin-pengu-primeiro.md,
+// "Como o plugin se comporta sem o complemento"). Texto visível nunca diz "coletor", a porta nem "MCP": o nome para o
+// usuário é "complemento coach" (docs/TEXTOS-DA-INTERFACE.md).
 
 // avisos.TIPOS_LIGAVEIS do coletor: tipo -> rótulo. Duas caixas por tipo: voz e tela (painel + moldura)
 const AVISOS = [
@@ -158,13 +161,29 @@ const TONS = [['serio', 'Sério'], ['descontraido', 'Descontraído']];
 const caixaCoach = ({ cfg, definir, ui }, chave, rotulo, explicacao) =>
   ui.caixa('coach.' + chave, rotulo, explicacao, cfg.coach[chave], v => definir('coach.' + chave, v));
 
-// estado da ligação com o coletor, no topo do 1º bloco
-export const blocoConexao = estado => (corpo, { ui }) => {
+// estado da ponte (coach.js estadoPonte) -> linha de estado do bloco "Complemento coach" (desligado / procurando / encontrado)
+export function textoPonte(e, agora = Date.now()) {
+  if (!e?.ligado) return 'Desligado: o plugin não se comunica com o complemento coach.';
+  if (e.visto) return `Complemento coach encontrado${e.versao != null ? ` (versão ${e.versao})` : ''}${e.enviadoEm ? ': configuração aplicada' : ''}.`;
+  const s = e.proximaEm ? Math.max(1, Math.ceil((e.proximaEm - agora) / 1000)) : 0;
+  return `Procurando o complemento coach${s ? `: nova tentativa em ${s} s` : ''}. As opções abaixo ficam salvas e vão quando ele responder.`;
+}
+
+// bloco "Complemento coach": a chave da ponte (coletor.ligado) e a linha de estado. procurar() = aperto de mão agora (só GET)
+export const blocoConexao = (estado, procurar = null) => (corpo, { cfg, definir, ui }) => {
   const e = estado();
-  corpo.append(ui.explica(e.ok === null ? 'Coletor: ainda sem contato (a config vai quando ele responder).'
-    : e.ok ? `Coletor ligado em 127.0.0.1:8765${e.enviadoEm ? ': config aplicada' : ''}.`
-      : 'Coletor fora do ar agora: a config fica salva aqui e vai sozinha quando ele subir (nova tentativa a cada 30 s).'));
+  corpo.append(ui.caixa('coletor.ligado', 'Usar o complemento coach', 'Programa opcional que roda fora do client: voz, painel na 2ª tela e alertas durante a partida. Ligado, o plugin procura o complemento neste computador; desligado, não se comunica com ele.',
+    !!cfg.coletor?.ligado, v => definir('coletor.ligado', v)),
+  ui.explica(textoPonte(e)));
+  if (e?.ligado && !e.visto && typeof procurar === 'function') corpo.append(ui.linha(botao('procurar agora', 'lc-procurar', () => { procurar(); })));
+  // desligar a ponte não para o Python: ele segue com a última configuração que recebeu
+  if (e?.ligado || e?.salva) corpo.append(ui.explica('Desligar esta opção não desliga o coach ao vivo: o complemento segue com a última configuração recebida.'));
 };
+
+// sem o complemento: um bloco só, curto, no lugar dos blocos do coach (que somem sem o recurso anunciado)
+export const blocoCoachAusente = (corpo, { ui }) => corpo.append(
+  ui.explica('Voz com os avisos da partida, painel na 2ª tela e alertas no minimapa.'),
+  ui.explica('Precisa do complemento coach (bloco "Complemento coach").'));
 
 export const blocoPainel = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'painelAoVivo', 'Painel ao vivo na 2ª tela', 'Na partida, abre o painel no monitor secundário (sua rota, ameaça, seu padrão, time e objetivos) e fecha no fim.'),
@@ -187,6 +206,8 @@ export function trocarAviso(cfg, definir, destino, tipo, ligado) {
 export function blocoSomPlugin(corpo, ctx) {
   const { cfg, definir, ui } = ctx;
   corpo.append(ui.caixa('aceite.silenciarSom', ...TEXTO_SILENCIAR, cfg.aceite.silenciarSom, v => definir('aceite.silenciarSom', v)));
+  // a voz é do complemento coach: sem o recurso "voz", a seção Som fica só com o som do plugin (Fase 1 do plano plugin Pengu primeiro)
+  if (!recursoVisivel('voz')) return;
   blocoVoz(corpo, ctx);
   const titulo = document.createElement('div');
   titulo.className = 'lol-settings-window-size-text';
@@ -248,14 +269,17 @@ export const blocoTraumas = (corpo, { cfg, definir, ui }) => corpo.append(
     cfg.traumas.ligado, v => definir('traumas.ligado', v)));
 
 // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): vale na hora (index.js aoMudar -> sincronizar)
-export const blocoCompacto = (corpo, { cfg, definir, ui }) => corpo.append(
-  ui.caixa('compacto.ligado', 'Client compacto', 'Janela pequena só com a rotina (lobby, fila, seleção com as trocas, pós-jogo), o botão "modo compacto" no topo e o atalho Ctrl+Shift+M. Desligado: client normal, sem botão; o coletor deixa de abrir conversa nova sozinho.',
+export const blocoCompacto = (corpo, { cfg, definir, ui }) => corpo.append(...[
+  ui.caixa('compacto.ligado', 'Client compacto', 'Janela pequena só com a rotina (lobby, fila, seleção com as trocas, pós-jogo), o botão "modo compacto" no topo e o atalho Ctrl+Shift+M. Desligado: client normal, sem botão.',
     !!cfg.compacto?.ligado, v => definir('compacto.ligado', v)),
   ui.caixa('compacto.inicioCompacto', 'Abrir cada fase no compacto', 'Desligado: cada fase começa no client normal e o botão "modo compacto" leva ao compacto. ARAM, reconectar, celebrações e janelas próprias da Riot abrem o client normal de qualquer jeito.',
     !!cfg.compacto?.inicioCompacto, v => definir('compacto.inicioCompacto', v)),
-  ui.caixa('compacto.chatLateral', 'Chat e amigos ao lado do compacto', 'O botão de chat alarga o client para a direita com as conversas recentes e a última conversa aberta; o de amigos mostra a lista de amigos. Mensagem nova só aparece nos recentes e no contador: nada abre sozinho. Substitui as janelas do chat do coletor (elas deixam de abrir conversa sozinhas). Desligado: o botão de chat volta a abrir as janelas próprias.',
-    cfg.compacto?.chatLateral !== false, v => definir('compacto.chatLateral', v)),
+  // a escolha entre o chat ao lado e as janelas próprias só existe com as janelas do complemento coach (recurso chat-janelas);
+  // sem elas o chat é sempre ao lado (compacto/lateral.js lateralLigada)
+  recursoVisivel('chat-janelas') ? ui.caixa('compacto.chatLateral', 'Chat e amigos ao lado do compacto', 'O botão de chat alarga o client para a direita com as conversas recentes e a última conversa aberta; o de amigos mostra a lista de amigos. Mensagem nova só aparece nos recentes e no contador: nada abre sozinho. Substitui as janelas do chat do complemento coach (elas deixam de abrir conversa sozinhas). Desligado: o botão de chat volta a abrir as janelas próprias.',
+    cfg.compacto?.chatLateral !== false, v => definir('compacto.chatLateral', v)) : null,
   ui.caixa('compacto.fundoPerfil', 'Fundo do perfil no compacto', 'O fundo do seu perfil vira o fundo da janela compacta, centralizado e cortado nas laterais, com um véu escuro para o texto continuar legível. Só a imagem (o vídeo do fundo fica de fora). Desligado: o fundo escuro de sempre.',
     cfg.compacto?.fundoPerfil !== false, v => definir('compacto.fundoPerfil', v)),
   ui.caixa('compacto.chatSalaCresce', 'Abrir a sala do time com mensagem nova', 'Na seleção de campeões, na honra e no pós-jogo, a faixa do chat da sala abre sozinha quando outro jogador manda mensagem. Só a faixa cresce: o cursor continua onde estava e a mensagem não é marcada como lida. Desligado: a faixa só abre pelo clique, e a mensagem nova aparece no contador.',
-    cfg.compacto?.chatSalaCresce !== false, v => definir('compacto.chatSalaCresce', v)));
+    cfg.compacto?.chatSalaCresce !== false, v => definir('compacto.chatSalaCresce', v)),
+].filter(Boolean));

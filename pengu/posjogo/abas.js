@@ -12,7 +12,8 @@ const sy = y => ((ALT - y) / ALT * PX).toFixed(1);
 export const SESSAO_GAP_MS = 2 * 3600 * 1000; // mesma regra do licoes.js, do tilt no MCP e do freio (freios.js)
 const REMAKE_S = 300;
 
-export const esc = s => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+// \x22 = aspas duplas: escrito assim para o varredor de literais do tools/teste-textos.mjs (que não entende regex) não se perder
+export const esc = s => String(s ?? '').replace(/[&<>\x22]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const virgula = (v, casas = 1) => v.toFixed(casas).replace('.', ',').replace('-', '−');
 const mil = v => Math.round(v).toLocaleString('pt-BR');
 const sinal = v => (v > 0 ? `<span class="lc-pos">+${mil(v)}</span>` : v < 0 ? `<span class="lc-neg">−${mil(-v)}</span>` : '0');
@@ -144,13 +145,16 @@ export function htmlTopo(r, nome, opcoes = {}) {
   <nav class="lc-abas">${ABAS.map(([id, t]) => `<button class="lc-aba" data-aba="${id}">${t}</button>`).join('')}</nav>`;
 }
 
+// estado do contexto das lições. 'sem' = sem o complemento coach com o recurso "contexto" (Fase 1 de
+// roadmap/2026-10-17-plugin-pengu-primeiro.md): nota neutra, nada de "fora do ar"
 const ctxNota = estado => ({
-  coletor: 'lições do coletor: o histórico inteiro do banco, com matchup, traumas e taxa por horário',
-  ok: 'lições com matchup, traumas e histórico do coletor',
-  esperando: 'esperando o coletor gravar a partida (matchup, traumas e histórico entram quando ela chegar)',
-  fora: 'coletor fora do ar: lições sem matchup, traumas e histórico',
-  erro: 'coletor sem esta partida: lições sem matchup, traumas e histórico',
-}[estado] || 'perguntando ao coletor…');
+  coletor: 'lições do complemento coach: o histórico inteiro, com matchup, traumas e taxa por horário',
+  ok: 'lições com matchup, traumas e histórico do complemento coach',
+  esperando: 'esperando o complemento coach gravar a partida (matchup, traumas e histórico entram quando ela chegar)',
+  fora: 'complemento coach sem resposta: lições sem matchup, traumas e histórico',
+  erro: 'complemento coach sem esta partida: lições sem matchup, traumas e histórico',
+  sem: 'lições com o histórico do client',
+}[estado] || 'consultando o complemento coach…');
 
 // Resumo (docs/INSIGHTS.md § Pós-jogo v2, D7 do roadmap 2026-10-14): faixa do veredito do mentor no topo (vazia até
 // ele chegar: pintar('mentor') enche), placar e lições do motor à esquerda (recolhidas com o mentor ligado:
@@ -175,12 +179,12 @@ export function abaResumo(r, licoes, ctxEstado, opcoes = {}) {
         <div class="lc-licoes">${lic}</div></details>
       <div class="lc-nota" data-ctx-nota>${ctxNota(ctxEstado)}</div>
     </div>
-    <div class="lc-res-dir lc-mentor">
+    ${opcoes.mentor === false ? '' : `<div class="lc-res-dir lc-mentor">
       <h3>mentor</h3>
-      <div class="lc-mentor-corpo" data-mentor>perguntando ao coletor…</div>
+      <div class="lc-mentor-corpo" data-mentor>consultando o mentor…</div>
       <form class="lc-mentor-form" data-pergunta><input type="text" maxlength="1000" placeholder="pergunta ao mentor sobre esta partida…" autocomplete="off"><button type="submit">perguntar</button></form>
       <div class="lc-nota" data-mentor-aviso></div>
-    </div>
+    </div>`}
   </div>`;
 }
 
@@ -210,11 +214,11 @@ export function htmlVeredito(m) {
 }
 
 export function htmlMentor(m) {
-  if (!m || m.status === 'carregando') return 'perguntando ao coletor…';
-  if (m.status === 'fora') return '<span class="lc-nota">coletor fora do ar: o mentor roda nele (sobe junto com o client). Tento de novo em instantes.</span>';
-  if (m.status === 'indisponivel') return '<span class="lc-nota">mentor desligado no coletor (Configurações › LOL-CLIENT › Mentor).</span>';
+  if (!m || m.status === 'carregando') return 'consultando o mentor…';
+  if (m.status === 'fora') return '<span class="lc-nota">complemento coach sem resposta: o mentor roda nele. Nova tentativa em instantes.</span>';
+  if (m.status === 'indisponivel') return '<span class="lc-nota">mentor desligado no complemento coach (Configurações › LOL-CLIENT › Mentor).</span>';
   const partes = [];
-  if (m.status === 'nada') partes.push(`<div class="lc-nota">o coletor pede a análise sozinho quando a partida chega no banco (até ~3 min depois do fim).</div>
+  if (m.status === 'nada') partes.push(`<div class="lc-nota">o complemento coach pede a análise sozinho quando a partida chega no banco (até ~3 min depois do fim).</div>
     <button class="lc-botao" data-acao="mentor-gerar">pedir a análise agora</button>`);
   else if (m.status === 'pensando') partes.push('<div class="lc-pensando">mentor pensando<span>…</span></div>');
   else if (m.status === 'erro') {
@@ -387,15 +391,16 @@ export function abaTendencia(r, nome, ctx, ctxEstado, revisao, mostrarTraumas) {
       : '<div>nenhum campeão-trauma no time inimigo desta partida</div>') : `<div class="lc-nota">${ctxNota(ctxEstado)}</div>`}
       <div class="lc-nota">trauma: campeão inimigo com derrota acima da sua taxa geral (lift ≥ 1,2, n ≥ 3); com ~170 campeões comparados, 1 ou 2 podem ser acaso.</div></div>`;
   }
+  // revisao === false: sem o recurso "revisao" do complemento coach, o bloco da previsão do jungler some
   const rv = revisao?.revisao;
   const pct = p => (p === null || p === undefined ? '—' : `${Math.round(p * 100)}%`);
   const ac = revisao?.acumulada;
-  const jg = rv ? `<div class="lc-ind-num"><b>${rv.acertos}/${rv.n}</b> <span class="lc-nota">minutos com o jungler a ≤ ${rv.raio} unidades da previsão (${pct(rv.precisao)})</span></div>
+  const jg = revisao === false ? '' : rv ? `<div class="lc-ind-num"><b>${rv.acertos}/${rv.n}</b> <span class="lc-nota">minutos com o jungler a ≤ ${rv.raio} unidades da previsão (${pct(rv.precisao)})</span></div>
       ${ac ? `<div class="lc-nota">acumulado: ${ac.acertos}/${ac.n} (${pct(ac.precisao)}) em ${ac.partidas} ${ac.partidas === 1 ? 'partida' : 'partidas'}</div>` : ''}`
-    : `<div class="lc-nota">${revisao?.status === 0 ? 'coletor fora do ar' : 'sem previsão gravada nesta partida (o coach ao vivo não rodou nela)'}</div>`;
+    : `<div class="lc-nota">${revisao?.status === 0 ? 'complemento coach sem resposta' : 'sem previsão gravada nesta partida (o coach ao vivo não rodou nela)'}</div>`;
   return `<h3>esta partida contra as suas últimas ${r.tendencia[0]?.n ?? 0} (Rift, sem remake)</h3>
     <div class="lc-inds">${inds}</div>
-    <div class="lc-tend-baixo">${traumas}<div><h3>previsão do jungler inimigo</h3>${jg}</div></div>`;
+    <div class="lc-tend-baixo">${traumas}${jg ? `<div><h3>previsão do jungler inimigo</h3>${jg}</div>` : ''}</div>`;
 }
 
 export function abaSessao(r, nome, ses, ranked, ctx, ctxEstado, horaAgora) {
@@ -406,7 +411,8 @@ export function abaSessao(r, nome, ses, ranked, ctx, ctxEstado, horaAgora) {
     <td>${Math.floor(p.duracao / 60)} min</td><td>${p.esta ? '← esta' : ''}</td></tr>`).join('');
   const alertas = alertasSessao(ses, { vitoria: r.vitoria }, ctx?.historico, horaAgora);
   const alertaHtml = alertas.length ? alertas.map(a => `<div class="lc-alerta lc-alerta-${a.nivel}">${esc(a.texto)}</div>`).join('')
-    : `<div class="lc-alerta lc-alerta-ok">${ctx ? 'Sem alerta: nem sequência de derrotas nem faixa horária ruim agora.' : esc(ctxNota(ctxEstado))}</div>`;
+    : `<div class="lc-alerta lc-alerta-ok">${ctx ? 'Sem alerta: nem sequência de derrotas nem faixa horária ruim agora.'
+      : ctxEstado === 'sem' ? 'Sem alerta: nenhuma sequência de derrotas agora.' : esc(ctxNota(ctxEstado))}</div>`;
   return `<div class="lc-placar">
       <div><b>${ses.lista.length}</b><span>partidas na sessão</span></div>
       <div><b><span class="lc-pos">${ses.vitorias}V</span> <span class="lc-neg">${ses.lista.length - ses.vitorias}D</span></b><span>resultado</span></div>
@@ -417,5 +423,5 @@ export function abaSessao(r, nome, ses, ranked, ctx, ctxEstado, horaAgora) {
     <h3>partidas da sessão (pausa de 2 h ou mais abre outra)</h3>
     <table><tr><th></th><th>hora</th><th>campeão</th><th>resultado</th><th>KDA</th><th>duração</th><th></th></tr>${linhas}</table>
     <h3>ranque</h3><div>Solo/Duo agora: ${esc(elo)}</div>
-    <div class="lc-nota">variação de PDL por partida só no coletor (MCP sessao_hoje); o histórico do client guarda 20 ou 200 partidas.</div>`;
+    <div class="lc-nota">o histórico do client guarda 20 ou 200 partidas.</div>`;
 }

@@ -4,8 +4,8 @@
 // pengu/compacto/index.js. Fases: GameStart, InProgress e Reconnect (mesma tela; atualizar troca o miolo pela fase).
 // - mostra: campeão (foto + nome), fila, tempo de jogo e placar do time (abates por time, o mesmo número do HUD da Riot);
 //   nada de inimigo na fog, item, ouro ou "visto há": só o que a tela da Riot já mostra;
-// - fontes, nesta ordem: GET 127.0.0.1:8765/estado do coletor (ao_vivo.EstadoPartida, que lê a Live Client na 2999:
-//   fase "carregando", gt, jogadores[].aliado/k, euJogador.campeao); sem coletor, campeão pela sessão do gameflow
+// - fontes, nesta ordem: GET 127.0.0.1:8765/estado do complemento coach, só com o recurso "estado-partida" (ao_vivo.EstadoPartida,
+//   que lê a Live Client na 2999: fase "carregando", gt, jogadores[].aliado/k, euJogador.campeao); sem ele, campeão pela sessão do gameflow
 //   (playerChampionSelections/teamOne/teamTwo casado com o puuid do current-summoner [S]; o puuid nunca vai para a tela nem
 //   para o log) e relógio local desde o GameStart, rotulado "desde o carregamento" (inclui os ~99 s da tela de
 //   carregamento: ARMADILHAS § Live Client), nunca "tempo de jogo";
@@ -16,6 +16,7 @@
 // Importável no node (tools/teste-compacto-jogo.mjs).
 import { h, estilo, campeoes, fotoCampeao, comIcone } from './comum.js';
 import { infoDaPartida, nomeFila } from './tela-posjogo.js';
+import { recursoDe } from '../coach.js';
 
 export const ESTADO_CADA_MS = 2000; // GET /estado do coletor
 export const TIQUE_MS = 1000; // relógio local da tela (só o texto)
@@ -172,8 +173,9 @@ function aoSessao(s, sessao) {
 async function lerColetor(s) {
   const { ctx } = s;
   const coletor = ctx.servicos?.coletor;
-  // Reconnect: o jogo caiu, a Live Client não responde; GameStart dura ~50 ms. Só InProgress lê
-  if (typeof coletor !== 'function' || ctx.fase !== 'InProgress' || s.lendoColetor) return;
+  // Reconnect: o jogo caiu, a Live Client não responde; GameStart dura ~50 ms. Só InProgress lê. Só com o complemento coach
+  // anunciando "estado-partida" (coach.js temRecurso): sem ele, nenhuma chamada (relógio local, sem placar)
+  if (!recursoDe(coletor, 'estado-partida') || ctx.fase !== 'InProgress' || s.lendoColetor) return;
   s.lendoColetor = true;
   try {
     const r = await coletor('/estado', { prazoMs: 1500 });
@@ -261,8 +263,9 @@ function tique(s) {
   if (r.placar.textContent !== txtPlacar) r.placar.textContent = txtPlacar;
   r.placar.style.display = p ? '' : 'none';
   const fonte = s.ctx.fase === 'Reconnect' ? ''
-    : t.fonte === 'coletor' ? 'tempo e placar: coletor (Live Client)'
-      : s.coletorFora ? 'coletor fora: só o relógio do client' : typeof s.ctx.servicos?.coletor === 'function' ? 'esperando o coletor…' : '';
+    : t.fonte === 'coletor' ? 'tempo e placar: complemento coach'
+      : !recursoDe(s.ctx.servicos?.coletor, 'estado-partida') ? ''
+        : s.coletorFora ? 'complemento coach sem resposta: só o relógio do client' : 'esperando o complemento coach…';
   if (r.fonte.textContent !== fonte) r.fonte.textContent = fonte;
   if (s.reconectando && agora - s.reconectaEm >= RECONECTA_MS && r.reconectar.disabled) pintar(s);
 }

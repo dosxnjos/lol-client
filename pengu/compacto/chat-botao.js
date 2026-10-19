@@ -1,12 +1,13 @@
 // 💬 com o contador de não lidas no topo das telas compactas (protótipo aprovado: telas 1, 2, 3 e 4). Com o chat ao lado ligado
 // (compacto.chatLateral, compacto/lateral.js), o 💬 abre/fecha o painel de chat (recentes + a última conversa aberta) e o 👥 ao
-// lado dele abre/fecha a lista de amigos (etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md). Desligado, o 💬 abre a
-// janela própria do coletor (coletor/chat_janelas.py, POST /chat/abrir/amigos) e não há 👥; sem os dois, o chat é o da Riot no
-// client normal. Também aqui: ⚙ (configurações à esquerda, B1) e 📊 (coach da seleção, B2). Contador: GET
+// lado dele abre/fecha a lista de amigos (etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md). Desligado (a chave só
+// existe com o recurso "chat-janelas" do complemento coach), o 💬 abre a janela própria do coletor (coletor/chat_janelas.py,
+// POST /chat/abrir/amigos) e não há 👥; sem os dois, o chat é o da Riot no client normal. Também aqui: ⚙ (configurações à esquerda, B1) e 📊 (coach da seleção, B2). Contador: GET
 // /lol-chat/v1/conversations (só conversa 1:1; sala do lobby, da seleção e do pós-jogo não conta). Só lê a LCU; a credencial
 // fica com o coletor. Importável no node (sem DOM no topo).
 import { h, estilo, icone } from './comum.js';
 import { naoLidasDaLcu } from './chat-ponte.js';
+import { recursoDe } from '../coach.js';
 
 // não lidas das conversas diretas (type 'chat', fora das salas de grupo)
 export const naoLidas = conversas => naoLidasDaLcu(conversas);
@@ -21,8 +22,9 @@ export async function abrirChat(ctx, { alternar = false } = {}) {
     if (!lat.estado?.().lista) return lat.alternarLista() !== false;
     return true;
   }
+  // janela própria do chat: só com o complemento coach anunciando "chat-janelas" (coach.js temRecurso)
   const col = ctx.servicos?.coletor;
-  if (typeof col !== 'function') return false;
+  if (!recursoDe(col, 'chat-janelas')) return false;
   const r = await col(ROTA_CHAT, { metodo: 'POST', corpo: {}, prazoMs: 3000 });
   return r?.status >= 200 && r.status < 300 && r.dados?.ok !== false;
 }
@@ -52,9 +54,9 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
       if (lat?.ligada?.() && typeof lat.alternarChat === 'function') { if (lat.alternarChat() !== false) return; }
       else if (await abrirChat(ctx, { alternar: true })) return;
       if (!ctx.vivo()) return;
-      // sem o coletor (ou sem a rota do chat): o chat é o da Riot, no client normal (plano § Riscos)
+      // sem o complemento (ou sem a rota do chat): o chat é o da Riot, no client normal (plano § Riscos)
       ctx.expandir();
-      ctx.avisar('chat em janela própria indisponível (coletor fora do ar): abrindo o client normal', true);
+      ctx.avisar('chat em janela própria indisponível: abrindo o client normal', true);
     } finally { abrindo = false; }
   }) } }, icone('chat', { doc }), bolha);
   if (antesDe && antesDe.parentNode === ctx.extras && typeof ctx.extras.insertBefore === 'function') ctx.extras.insertBefore(bt, antesDe);

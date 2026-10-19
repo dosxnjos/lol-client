@@ -24,6 +24,7 @@ TESTES = [
     ["node", "tools/teste-matchup.mjs"],
     ["node", "tools/teste-aceite.mjs"],
     ["node", "tools/teste-config.mjs"],
+    ["node", "tools/teste-ponte.mjs"],    # ponte com o complemento coach: chave, aperto de mão, recuo, recursos (19/10/2026)
     ["node", "tools/teste-sem-popups.mjs"],
     ["node", "tools/teste-chat-posjogo.mjs"],
     ["node", "tools/teste-recompensas.mjs"],

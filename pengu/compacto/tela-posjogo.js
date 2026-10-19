@@ -25,6 +25,7 @@ import { botaoChat } from './chat-botao.js';
 import { criarSala } from './chat-sala.js';
 import { jogadoresDoEog, adversarioDireto, criarSocial, botoesJogador, abrirDenuncia, abrirJogador, CSS_JOGADORES } from './jogador-acoes.js';
 import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
+import { recursoDe } from '../coach.js';
 
 export const NOMES_FILA = { 420: 'Ranqueada Solo/Duo', 440: 'Ranqueada Flex', 400: 'Normal (escolha)', 430: 'Normal (às cegas)',
   450: 'ARAM', 490: 'Partida rápida' };
@@ -349,7 +350,8 @@ async function lerLicoes(ctx, est) {
   const mem = lembrar(est.gameId);
   if (mem.licoes) { est.licoes = { estado: 'ok', lista: mem.licoes }; pintar(ctx, est); return; }
   const col = ctx.servicos?.coletor;
-  if (typeof col !== 'function') { est.licoes = { estado: 'fora', lista: [] }; lerLicoesLocais(ctx, est); pintar(ctx, est); return; }
+  // só com o complemento coach anunciando "contexto" (coach.js temRecurso): sem ele, só as lições do motor local
+  if (!recursoDe(col, 'contexto')) { est.licoes = { estado: 'fora', lista: [] }; lerLicoesLocais(ctx, est); pintar(ctx, est); return; }
   est.licoesInicio ||= _relogio.agora();
   est.licoesEmVoo = true;
   let r;
@@ -369,12 +371,12 @@ async function lerLicoes(ctx, est) {
     est.licoes = { estado: 'esperando', lista: [] };
     espera = num(r.dados.tentarDeNovoS) * 1000;
   } else {
-    est.licoes = { estado: 'sem', lista: [], motivo: String(r.dados?.erro || `coletor respondeu ${r.status}`) };
+    est.licoes = { estado: 'sem', lista: [], motivo: String(r.dados?.erro || `o complemento coach respondeu ${r.status}`) };
   }
   if (espera) {
     if (_relogio.agora() - est.licoesInicio + espera > PRAZOS.licoesMs) {
       const fora = est.licoes.estado === 'fora';
-      est.licoes = { estado: 'sem', lista: [], motivo: fora ? 'coletor fora do ar' : 'o coach não leu a partida a tempo', fora };
+      est.licoes = { estado: 'sem', lista: [], motivo: fora ? 'complemento coach sem resposta' : 'o coach não leu a partida a tempo', fora };
     } else if (!est.licoesAgendada) {
       est.licoesAgendada = true;
       ctx.tempo(() => { est.licoesAgendada = false; return lerLicoes(ctx, est); }, espera);
@@ -413,7 +415,13 @@ export function licoesParaMostrar(licoes, locais) {
 async function lerMentor(ctx, est) {
   if (!ctx.vivo()) return;
   const col = ctx.servicos?.coletor;
-  if (typeof col !== 'function') { est.mentor = { status: 'fora' }; pintar(ctx, est); return; }
+  // sem o recurso "mentor" do complemento coach: a caixa do mentor some (status 'sem'), nenhuma chamada
+  // (relê só o estado local da ponte de tempos em tempos: o complemento que aparecer depois mostra o mentor)
+  if (!recursoDe(col, 'mentor')) {
+    if (est.mentor?.status !== 'sem') { est.mentor = { status: 'sem' }; pintar(ctx, est); }
+    ctx.tempo(() => lerMentor(ctx, est), PRAZOS.mentorForaMs);
+    return;
+  }
   let r;
   try { r = await col(`/mentor/${est.gameId}`, { prazoMs: 5000 }); } catch { r = { status: 0 }; }
   if (!ctx.vivo()) return;
@@ -429,7 +437,7 @@ async function perguntar(ctx, est, input, e) {
   if (e?.isTrusted === false || est.perguntando) return;
   const texto = String(input?.value ?? est.pergunta ?? '').trim();
   const col = ctx.servicos?.coletor;
-  if (!texto || !est.gameId || typeof col !== 'function') return;
+  if (!texto || !est.gameId || !recursoDe(col, 'mentor')) return;
   est.perguntando = true; pintar(ctx, est);
   let r;
   try { r = await col(`/mentor/${est.gameId}/pergunta`, { metodo: 'POST', corpo: { pergunta: texto }, prazoMs: 8000 }); } catch { r = { status: 0 }; }
@@ -440,7 +448,7 @@ async function perguntar(ctx, est, input, e) {
     const m = await col(`/mentor/${est.gameId}`).catch(() => null);
     if (ctx.vivo() && m?.status === 200 && m.dados?.status) est.mentor = m.dados;
   } else ctx.avisar(r?.status === 429 ? 'mentor ocupado com outra pergunta: tente de novo em alguns segundos'
-    : r?.status === 0 ? 'coletor fora do ar' : `o mentor não aceitou a pergunta (${r?.dados?.erro || r?.status})`, true);
+    : r?.status === 0 ? 'mentor sem resposta agora: tente de novo em alguns segundos' : `o mentor não aceitou a pergunta (${r?.dados?.erro || r?.status})`, true);
   pintar(ctx, est);
 }
 
@@ -656,8 +664,10 @@ function pintarCont(ctx, est) {
 function conteudoResumo(ctx, est) {
   const m = est.mentor || { status: 'carregando' };
   const caixa = [];
-  const comColetor = typeof ctx.servicos?.coletor === 'function';
-  if (m.status === 'pronto') {
+  // mentor e lições do complemento coach: só com os recursos anunciados (coach.js temRecurso); sem eles a caixa do mentor some
+  const temMentor = recursoDe(ctx.servicos?.coletor, 'mentor') && m.status !== 'sem';
+  const temContexto = recursoDe(ctx.servicos?.coletor, 'contexto');
+  if (!temMentor) { /* sem caixa do mentor */ } else if (m.status === 'pronto') {
     const sec = secoesMentor(m.texto);
     caixa.push(h('div', { class: 'lc-cp-mt-tt' }, h('span', { class: 'lc-cp-rot' }, sec.veredito ? 'mentor · veredito' : 'mentor')));
     if (sec.veredito) caixa.push(h('div', { class: 'lc-cp-mt-ver' }, sec.veredito));
@@ -667,46 +677,52 @@ function conteudoResumo(ctx, est) {
     if (sec.resto && !sec.veredito) caixa.push(h('div', { class: 'lc-cp-mt-ver' }, sec.resto));
   } else if (m.status === 'pensando' || m.status === 'nada' || m.status === 'carregando') {
     caixa.push(h('div', { class: 'lc-cp-mt-tt' }, h('span', { class: 'lc-cp-rot' }, 'mentor'), h('span', { class: 'lc-cp-nota' }, 'chega 1–2 min depois do fim')),
-      h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, m.status === 'carregando' ? 'perguntando ao coletor…' : comIcone('espera', 'analisando a partida…', { tam: 12 })),
-      h('div', { class: 'lc-cp-nota' }, 'pode jogar de novo sem esperar: a resposta fica guardada no coletor.'));
+      h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, m.status === 'carregando' ? 'consultando o mentor…' : comIcone('espera', 'analisando a partida…', { tam: 12 })),
+      h('div', { class: 'lc-cp-nota' }, 'pode jogar de novo sem esperar: a resposta fica guardada no complemento coach.'));
   } else if (m.status === 'erro') {
     const ult = [...(m.conversa || [])].reverse().find(c => c.uso === 'posjogo');
     caixa.push(h('div', { class: 'lc-cp-mt-tt' }, h('span', { class: 'lc-cp-rot' }, 'mentor')), h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, `o mentor falhou: ${ult?.erro || 'sem detalhe'}`));
   } else {
     caixa.push(h('div', { class: 'lc-cp-mt-tt' }, h('span', { class: 'lc-cp-rot' }, 'mentor')),
-      h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, m.status === 'indisponivel' ? 'mentor desligado no coletor' : 'indisponível: o coletor não está rodando (127.0.0.1:8765 não respondeu)'));
+      h('div', { class: 'lc-cp-mt-ver lc-cp-mudo' }, m.status === 'indisponivel' ? 'mentor desligado no complemento coach' : 'indisponível: o complemento coach não respondeu'));
   }
-  // conversa: a última pergunta e a resposta
-  const perg = (m.conversa || []).filter(c => c.uso === 'pergunta').at(-1);
-  if (perg) caixa.push(h('div', { class: 'lc-cp-mt-resp' }, h('i', {}, 'você: '), perg.pergunta || '', h('br'),
-    perg.status === 'pensando' ? h('i', {}, 'pensando…') : perg.status === 'erro' ? `falhou: ${perg.erro || ''}` : String(perg.resposta || '').replace(/\*\*/g, '')));
-  const podePerguntar = comColetor && m.status !== 'fora' && m.status !== 'indisponivel' && !!est.gameId;
-  const input = h('input', { dataset: { a: 'mentor-pergunta' }, maxlength: '500', placeholder: podePerguntar ? 'perguntar ao mentor sobre esta partida' : 'perguntar fica cinza sem o coletor' });
-  input.value = est.pergunta || '';
-  input.disabled = !podePerguntar || est.perguntando;
-  input.addEventListener('input', () => { est.pergunta = String(input.value || ''); });
-  input.addEventListener('keydown', ctx.seguro(e => { e.stopPropagation?.(); if (e.key === 'Enter') { e.preventDefault?.(); return perguntar(ctx, est, input, e); } }));
-  const bt = h('button', { class: 'lc-cp-btn', dataset: { a: 'mentor-perguntar' }, on: { click: ctx.seguro(e => perguntar(ctx, est, input, e)) } }, est.perguntando ? '…' : 'perguntar');
-  bt.disabled = !podePerguntar || est.perguntando;
-  caixa.push(h('div', { class: 'lc-cp-mt-perg' }, input, bt));
-  const mentor = h('div', { class: 'lc-cp-mentor' + (m.status === 'pronto' ? '' : m.status === 'fora' || m.status === 'indisponivel' ? ' lc-cp-fora' : ' lc-cp-esperando') }, ...caixa);
+  let mentor = null;
+  if (temMentor) {
+    // conversa: a última pergunta e a resposta
+    const perg = (m.conversa || []).filter(c => c.uso === 'pergunta').at(-1);
+    if (perg) caixa.push(h('div', { class: 'lc-cp-mt-resp' }, h('i', {}, 'você: '), perg.pergunta || '', h('br'),
+      perg.status === 'pensando' ? h('i', {}, 'pensando…') : perg.status === 'erro' ? `falhou: ${perg.erro || ''}` : String(perg.resposta || '').replace(/\*\*/g, '')));
+    const podePerguntar = m.status !== 'fora' && m.status !== 'indisponivel' && !!est.gameId;
+    const input = h('input', { dataset: { a: 'mentor-pergunta' }, maxlength: '500', placeholder: podePerguntar ? 'perguntar ao mentor sobre esta partida' : 'perguntar fica cinza sem resposta do mentor' });
+    input.value = est.pergunta || '';
+    input.disabled = !podePerguntar || est.perguntando;
+    input.addEventListener('input', () => { est.pergunta = String(input.value || ''); });
+    input.addEventListener('keydown', ctx.seguro(e => { e.stopPropagation?.(); if (e.key === 'Enter') { e.preventDefault?.(); return perguntar(ctx, est, input, e); } }));
+    const bt = h('button', { class: 'lc-cp-btn', dataset: { a: 'mentor-perguntar' }, on: { click: ctx.seguro(e => perguntar(ctx, est, input, e)) } }, est.perguntando ? '…' : 'perguntar');
+    bt.disabled = !podePerguntar || est.perguntando;
+    caixa.push(h('div', { class: 'lc-cp-mt-perg' }, input, bt));
+    mentor = h('div', { class: 'lc-cp-mentor' + (m.status === 'pronto' ? '' : m.status === 'fora' || m.status === 'indisponivel' ? ' lc-cp-fora' : ' lc-cp-esperando') }, ...caixa);
+  }
   // lições do coach: recolhidas quando o veredito chegou (D7 do painel); abrir/fechar na mão vale até a tela sair
   const lic = licoesParaMostrar(est.licoes, est.locais);
-  const temVeredito = m.status === 'pronto' && !!partesMentor(m.texto).veredito;
+  const temVeredito = temMentor && m.status === 'pronto' && !!partesMentor(m.texto).veredito;
   const n = lic.estado === 'ok' ? lic.lista.length : 3;
-  const rot = `${lic.estado === 'ok' ? n : 3} lições do coach${lic.local ? ' · sem o coletor' : ''}`;
+  // "motor do plugin" só faz sentido quando o complemento existe e as lições dele não chegaram; sem ele, é a única fonte
+  const marcarLocal = lic.local && temContexto;
+  const rot = `${lic.estado === 'ok' ? n : 3} lições do coach${marcarLocal ? ' · motor do plugin' : ''}`;
   let lista;
   if (lic.estado === 'ok') {
-    const titulo = l => (lic.local ? `${l.texto} (motor local: as do coletor não chegaram)` : l.texto);
+    const titulo = l => (marcarLocal ? `${l.texto} (motor do plugin: as do complemento coach não chegaram)` : l.texto);
     lista = h('ul', { class: 'lc-cp-lic' }, lic.lista.map(l => h('li', { class: l.positiva ? 'lc-cp-pos' : undefined, title: titulo(l) }, comIcone(l.positiva ? 'ok' : 'aviso', l.texto, { tam: 12 }))));
   } else if (lic.estado === 'fora' || lic.estado === 'sem') {
-    const texto = lic.estado === 'fora' ? 'coletor fora do ar: as lições ficam na análise completa' : `sem lições: ${lic.motivo || 'nada a mostrar'}`;
+    const texto = lic.estado === 'fora' ? (temContexto ? 'complemento coach sem resposta: as lições ficam na análise completa' : 'as lições ficam na análise completa')
+      : `sem lições: ${lic.motivo || 'nada a mostrar'}`;
     lista = h('ul', { class: 'lc-cp-lic' }, h('li', { class: 'lc-cp-mudo', title: texto }, texto));
   } else {
     const t = lic.estado === 'esperando' ? 'o coach está lendo a partida' : 'carregando as lições';
     lista = h('ul', { class: 'lc-cp-lic lc-cp-carregando', title: t }, h('li', {}, '…'), h('li', {}, '…'), h('li', {}, '…'));
   }
-  const det = h('details', { class: 'lc-cp-lics', title: lic.local ? 'as lições do coletor não chegaram: estas são do motor do painel, com o histórico do client' : undefined },
+  const det = h('details', { class: 'lc-cp-lics', title: marcarLocal ? 'as lições do complemento coach não chegaram: estas são do motor do plugin, com o histórico do client' : undefined },
     h('summary', {}, rot), lista);
   det.open = est.licoesAbertas ?? !temVeredito;
   det.addEventListener('toggle', () => { if (det.open !== !temVeredito || est.licoesAbertas !== null) est.licoesAbertas = det.open; });

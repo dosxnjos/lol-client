@@ -26,12 +26,20 @@ const blocos = new Map([
   ['runas', { titulo: 'Runas por campeão', vazio: 'Troca a página de runas ao travar o campeão: chega na próxima versão.' }],
 ]);
 let redesenhar = () => {};
+// recurso do complemento coach que a tela mostra (coach.js mostraRecurso: anunciado agora ou lembrado do último aperto de
+// mão bom). Sem o index.js (teste), nenhum: a caixa da janelinha fora do client só aparece com o recurso
+let mostra = () => false;
+export const usarRecursos = fn => { mostra = typeof fn === 'function' ? fn : () => false; };
+// o complemento apareceu, sumiu ou mudou de recursos (coach.js aoMudarPonte): remonta a seção aberta
+export const redesenharConfiguracoes = () => redesenhar();
+export const recursoVisivel = nome => { try { return !!mostra(nome); } catch { return false; } };
 
 // renderizar(el, ui): el é um <div> vazio dentro do bloco; ui traz cfg, definir e os construtores abaixo.
 // Nome reservado (champSelect, runas) substitui o aviso; nome novo vira bloco no fim, com o nome de título.
-export function registrarBloco(nome, renderizar, titulo) {
+// visivel() -> false: o bloco some inteiro, com o título (blocos do coach sem o recurso do complemento)
+export function registrarBloco(nome, renderizar, titulo, { visivel = null } = {}) {
   const b = blocos.get(nome) || { titulo: titulo || nome };
-  blocos.set(nome, { ...b, titulo: titulo || b.titulo, renderizar });
+  blocos.set(nome, { ...b, titulo: titulo || b.titulo, renderizar, visivel });
   redesenhar();
 }
 
@@ -83,7 +91,7 @@ export const ui = {
 function montar(painel, cfg, definir, restaurar) {
   const topo = painel.scrollTop;
   painel.replaceChildren();
-  const add = (...n) => painel.append(...n);
+  const add = (...n) => painel.append(...n.filter(Boolean)); // append(null) escreveria "null" (ARMADILHAS § Client)
   const caixa = (caminho, rotulo, explicacao) => {
     const valor = caminho.split('.').reduce((o, k) => o?.[k], cfg);
     return ui.caixa(caminho, rotulo, explicacao, valor, v => definir(caminho, v));
@@ -108,7 +116,8 @@ function montar(painel, cfg, definir, restaurar) {
     caixa('aceite.trazerClient', 'Trazer o client para a frente ao achar partida', 'Desligado (padrão), com o aceite automático: se outra janela estava na frente, o client pisca e some de novo (o Windows devolve a janela de antes); no champ select ele volta sozinho.'),
     caixa('aceite.esconderPopup', 'Esconder o popup de partida encontrada', 'Some a janela de aceitar do client; a contagem do lol-client continua. Só vale com o aceite automático ligado.'),
     caixa('aceite.silenciarSom', ...TEXTO_SILENCIAR),
-    caixa('coach.aceiteFlutuante', 'Aceitar ou recusar fora do client', 'Janelinha no canto da tela, por cima de tudo e sem roubar o foco, com a contagem e os botões "aceitar agora" e "recusar". Precisa do coletor ligado.'));
+    // janelinha do complemento coach (aviso_partida.py): só com o recurso anunciado
+    mostra('aceite-flutuante') ? caixa('coach.aceiteFlutuante', 'Aceitar ou recusar fora do client', 'Janelinha no canto da tela, por cima de tudo e sem roubar o foco, com a contagem e os botões "aceitar agora" e "recusar". Vem do complemento coach.') : null);
 
   add(ui.secao('Fila rápida'),
     caixa('filaRapida.ligado', 'Botão fila rápida', 'Botão ao lado do jogar: um clique monta o lobby com as suas posições e entra na fila.'),
@@ -128,6 +137,7 @@ function montar(painel, cfg, definir, restaurar) {
     caixa('posjogo.ligado', 'Painel pós-jogo', 'Ao fim da partida, abre a análise: mapa com o trajeto, mortes e diferença contra o adversário de rota.'));
 
   for (const [nome, b] of blocos) {
+    try { if (b.visivel && !b.visivel()) continue; } catch (e) { console.error('[lol-client] bloco', nome, e); continue; }
     const corpo = el('div', { class: 'lc-bloco', 'data-bloco': nome });
     add(ui.secao(b.titulo), corpo);
     if (!b.renderizar) { corpo.append(ui.explica(b.vazio || '')); continue; }

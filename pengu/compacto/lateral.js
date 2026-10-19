@@ -34,10 +34,13 @@ import { ordenarGrupos, podeReordenar, novaOrdem, corpoRecolher, validarNomePast
   TEXTOS_RIOT, ROTAS } from './amigos.js';
 import { criarMenu, criarDialogo, criarCampo, CSS_AMIGOS } from './amigos-menu.js';
 import { criarPerfilView, criarEditorView, CSS_PERFIL } from './perfil.js';
+import { recursoDe } from '../coach.js';
 
 export const LARG = { lista: 300, painel: 360, config: 360 };
 export const PASSO_MS = 1500;
-export const lateralLigada = cfg => !!cfg?.compacto?.ligado && cfg?.compacto?.chatLateral !== false;
+// janelas: o complemento coach anuncia "chat-janelas" (as janelas do chat fora do client). Sem elas o chat é sempre ao lado: a
+// chave chatLateral só vale com a alternativa à mão (Fase 1 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
+export const lateralLigada = (cfg, janelas = true) => !!cfg?.compacto?.ligado && (!janelas || cfg?.compacto?.chatLateral !== false);
 export const chaveConversa = pid => `c:${String(pid).toLowerCase()}`;
 
 // estado -> o que aparece e as larguras (px CSS). util = largura útil do monitor em CSS; col = coluna da config.
@@ -57,6 +60,8 @@ export function criarLateral({
   avisar = () => {}, log = () => {}, repetir = setInterval, pararRepetir = clearInterval, agora = () => Date.now(),
   campeoes = catalogoPadrao, abrirConfigRiot = () => {},
 }) {
+  // sem o serviço do complemento (teste antigo) vale a chave como antes; com ele, só com o recurso das janelas do chat
+  const janelas = () => (typeof servicos?.coletor === 'function' ? recursoDe(servicos.coletor, 'chat-janelas') : true);
   // painel: null | 'chat' | 'coach' | 'perfil'; anterior: o modo que o coach ou o perfil cobriu (pilha de 1); conversa: a escolhida no
   // chat (a "última conversa aberta" enquanto ele não fechar no ✕): null | {k, tipo:'conversa', pid, conv, nome, txt} | {k:'time',
   // tipo:'time'}; perfil: de quem é o perfil à vista ({pid?, puuid, summonerId, nome, eu?}); editor: o editor do meu perfil à esquerda
@@ -260,7 +265,7 @@ export function criarLateral({
   // ---------- ações (clique dele) ----------
   // 👥: abre/fecha a lista. Monitor estreito com a lista aberta mas escondida atrás do painel: o clique mostra a lista
   function alternarLista() {
-    if (!lateralLigada(cfg)) return false;
+    if (!lateralLigada(cfg, janelas())) return false;
     const lay = L();
     if (e.lista && lay.estreito && !lay.lista) { e.vistaEstreita = 'lista'; render(); return true; }
     e.lista = !e.lista;
@@ -272,7 +277,7 @@ export function criarLateral({
   }
   // 💬: abre/fecha o painel de chat (recentes + a última conversa que ele abriu). Com o 📊 à vista, o 💬 põe o chat no lugar
   function alternarChat() {
-    if (!lateralLigada(cfg)) return false;
+    if (!lateralLigada(cfg, janelas())) return false;
     const lay = L();
     if (e.painel === 'chat' && lay.estreito && !lay.painel) { e.vistaEstreita = 'painel'; render(); return true; }
     if (e.painel === 'chat') { fecharPainel(); return true; }
@@ -308,7 +313,7 @@ export function criarLateral({
   }
   // a conversa de um amigo (clique num recente, na lista de amigos): vira a escolhida e o chat abre com ela
   function abrirConversa(a, ev) {
-    if (!lateralLigada(cfg) || !a?.pid) return false;
+    if (!lateralLigada(cfg, janelas()) || !a?.pid) return false;
     const k = chaveConversa(a.pid);
     const conv = a.conv || st.conversas.find(c => c.type === 'chat' && String(c.pid).toLowerCase() === String(a.pid).toLowerCase())?.id || '';
     if (e.conversa?.k !== k) {
@@ -393,7 +398,7 @@ export function criarLateral({
     const s = (perfilCtx.chave === chaveAssistir(f) && perfilCtx.assistir) || { estado: 'verificando' };
     return {
       convidar: c.mostra ? { mostra: true, ok: !!c.ok, motivo: c.motivo || '' } : { mostra: false },
-      mensagem: { mostra: lateralLigada(cfg), ok: true, motivo: 'abrir a conversa no chat' },
+      mensagem: { mostra: lateralLigada(cfg, janelas()), ok: true, motivo: 'abrir a conversa no chat' },
       assistir: temChave && s.estado !== 'erro' ? { mostra: true, ok: s.estado === 'ok', motivo: s.estado === 'verificando' ? 'verificando se a partida pode ser assistida'
         : s.estado === 'ok' ? 'assistir a partida como espectador' : s.dica || 'a partida não pode ser assistida agora' } : { mostra: false },
     };
@@ -1012,7 +1017,9 @@ export function criarLateral({
     const est = meu && partidas && typeof champ?.estatisticas === 'function' ? champ.estatisticas(meu.championId, meu.posicao) : null;
     const falhou = !!champ?.estado?.()?.falhou;
     coachView?.pintar(modeloSelo({ sessao: sess, est, histN: partidas?.length || 0, histErro: falhou, coach: champ?.coach?.() || null, nome,
-      traumas: cfg.traumas?.ligado !== false, fila: roteador()?.estado?.().info?.fila ?? null, temColetor: typeof champ?.lerCoach === 'function' }));
+      traumas: cfg.traumas?.ligado !== false, fila: roteador()?.estado?.().info?.fila ?? null,
+      // matchup e draft só com o complemento coach anunciando "draft" (champselect.js temCoach; coach.js temRecurso)
+      temColetor: typeof champ?.temCoach === 'function' ? !!champ.temCoach() : typeof champ?.lerCoach === 'function' }));
   }
 
   // relógio da lateral: só com o compacto à vista. Mensagem nova só muda contador, ordem e selo dos recentes (decisão a): nada aqui
@@ -1076,7 +1083,7 @@ export function criarLateral({
       if (antes !== fase && st.amigosCrus) montarAmigos();
     },
     sincronizar() {
-      if (!lateralLigada(cfg)) {
+      if (!lateralLigada(cfg, janelas())) {
         // o perfil de um amigo nasce da lista (lateral): fecha junto; o meu histórico (atalho do editor) fica
         const amigo = e.painel === 'perfil' && !e.perfil?.eu;
         const tinha = e.lista || e.painel === 'chat' || e.anterior === 'chat' || amigo;
@@ -1091,7 +1098,7 @@ export function criarLateral({
       if (e.config && configView && st.partes) configView.pintar();
     },
     // botões das telas (💬, 👥, ⚙, 📊) e testes
-    ligada: () => lateralLigada(cfg),
+    ligada: () => lateralLigada(cfg, janelas()),
     alternarLista: seguro(alternarLista), alternarChat: seguro(alternarChat), abrirConversa: seguro(abrirConversa), fecharConversa: seguro(fecharConversa),
     fecharPainel: seguro(fecharPainel), alternarCoach: seguro(alternarCoach), abrirTime: seguro(abrirTime), alternarConfig: seguro(alternarConfig),
     // etapa 3: a foto do topo abre/fecha o editor do meu perfil; o perfil de um jogador no painel da direita (clique dele)

@@ -485,9 +485,12 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('chat: coletor recusou (ok false) = expande', s.efetivo() === 'expandido');
 }
 {
-  const s = cenario({ coletor: async c => (c === '/dica' ? { status: 200, dados: { texto: 'teu farm caiu 12% nas derrotas de hoje.' } } : { status: 404 }) });
+  // o GET /dica saiu em 19/10/2026 (o coletor nunca teve a rota; Fase 1 do plano plugin Pengu primeiro): só a dica local
+  const chamadas = [];
+  const s = cenario({ coletor: async c => { chamadas.push(c); return c === '/dica' ? { status: 200, dados: { texto: 'teu farm caiu 12% nas derrotas de hoje.' } } : { status: 404 }; } });
   await s.iniciar();
-  caso('dica: a do coletor vale quando ele tem a rota', s.q('.lc-cp-dica')?.textContent.includes('teu farm caiu 12%'));
+  caso('dica: nenhuma chamada /dica ao complemento; fica a dica local', !chamadas.includes('/dica') && !!s.q('.lc-cp-dica')?.textContent
+    && !s.q('.lc-cp-dica')?.textContent.includes('teu farm caiu 12%'), JSON.stringify(chamadas));
 }
 {
   // lobby personalizado: a tela da Riot é a dona -> expande

@@ -164,7 +164,7 @@ export function sequenciaHoje(lista) {
   return { tipo: ult ? 'V' : 'D', n };
 }
 
-// dica do coach em 1 linha, número primeiro, sem ordem (só quando o coletor não manda a dele). seq: derrotas seguidas
+// dica do coach em 1 linha, número primeiro, sem ordem (a única: o GET /dica saiu em 19/10/2026). seq: derrotas seguidas
 // (número, null ou ATUALIZANDO); hoje: resumoHoje; data: Date local.
 export function dicaLocal({ seq, hoje, data }) {
   const M = MEDICAO;
@@ -371,14 +371,9 @@ export function criarTelaLobby({ agora = Date.now, relogio = () => new Date(), d
     const lerDica = async () => {
       const hojeR = resumoHoje(s.hoje);
       const seq = await derrotasSeguidas(ctx, agora()).catch(() => null);
-      if (!s.dicaDoColetor) s.dica = dicaLocal({ seq, hoje: hojeR, data: relogio() });
+      // só a dica local: o GET /dica ao coletor saiu em 19/10/2026 (o coletor nunca teve a rota; Fase 1 do plano plugin Pengu primeiro)
+      s.dica = dicaLocal({ seq, hoje: hojeR, data: relogio() });
       pintarSeguro();
-      // a dica do coletor, se ele tiver a rota (GET /dica -> {texto}); fora do ar ou sem rota = fica a local
-      const col = ctx.servicos?.coletor;
-      if (typeof col !== 'function') return;
-      const r = await col('/dica', { prazoMs: 2000 });
-      const t = typeof r?.dados?.texto === 'string' ? r.dados.texto.trim() : '';
-      if (r?.status === 200 && t) { s.dica = t.slice(0, 220); s.dicaDoColetor = true; pintarSeguro(); }
     };
     const lerHistorico = () => { s.hoje = lerHoje(ctx, agora(), () => { s.hoje = lerHoje(ctx, agora()); lerDica().catch(() => {}); pintarSeguro(); }); };
     s.recarregar = () => { lerLobby().catch(() => {}); lerConvites().catch(() => {}); };

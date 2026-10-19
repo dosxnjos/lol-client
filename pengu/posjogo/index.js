@@ -1,7 +1,9 @@
 // Painel pós-jogo v2 (plano v2, passo 7): busca partida e linha do tempo na LCU, roda analise.js (spec:
 // docs/INSIGHTS.md), as lições (licoes.js sobre licoes.md, o mesmo arquivo do coletor) e desenha 6 abas
-// (abas.js). Do coletor (127.0.0.1:8765, opcional): contexto das lições, mentor e revisão do jungler.
+// (abas.js). Do complemento coach (127.0.0.1:8765, opcional; só com os recursos "contexto", "mentor" e "revisao" anunciados no
+// aperto de mão, coach.js): contexto das lições, mentor e revisão do jungler.
 import { analisar, trajeto, FORA_DAS_CONTAS } from './analise.js';
+import { recursoDe } from '../coach.js';
 import { licoes as calcularLicoes } from './licoes.js';
 import { ABAS, esc, htmlTopo, curvas, objetivosDaPartida, tendencia, sessaoDaPartida, htmlMentor, htmlVeredito, partesMentor,
   abaResumo, abaRota, abaMortes, abaObjetivos, abaTendencia, abaSessao } from './abas.js';
@@ -215,6 +217,9 @@ function vigiarInteracao(sim) {
 export const licoesAuto = p => !(p.mentor?.status === 'pronto' && partesMentor(p.mentor.texto).veredito);
 const licoesAbertas = p => (p.licoesAbertas === null ? licoesAuto(p) : p.licoesAbertas);
 
+// bloco "traumas" da Tendência: a chave e uma fonte (o complemento coach com "contexto"; o acumulador local vem na Fase 5)
+const mostrarTraumas = p => !!p.cfg.traumas?.ligado && p.tem?.contexto !== false;
+
 // estado do painel aberto; as partes que chegam do coletor repintam só o seu pedaço
 function pintar(p, partes) {
   const q = s => p.el.querySelector(s);
@@ -226,7 +231,7 @@ function pintar(p, partes) {
       p.licoes = p.licoesColetor || calcularLicoes(regrasMd, p.r, p.r.historico, p.r.criacao, ctx, nomes).licoes;
       const sec = q('[data-painel="resumo"] .lc-res-esq');
       const novo = document.createElement('div');
-      novo.innerHTML = abaResumo(p.r, p.licoes, p.licoesColetor ? 'coletor' : p.ctxEstado, { licoesAbertas: licoesAbertas(p) });
+      novo.innerHTML = abaResumo(p.r, p.licoes, p.licoesColetor ? 'coletor' : p.ctxEstado, { licoesAbertas: licoesAbertas(p), mentor: p.tem?.mentor !== false });
       sec?.replaceWith(novo.querySelector('.lc-res-esq'));
     } else if (parte === 'mentor') {
       // veredito do mentor na faixa do topo (D7); as lições do motor abrem sozinhas só quando não há mentor
@@ -251,7 +256,7 @@ function pintar(p, partes) {
       if (f) for (const c of f.elements) c.disabled = !pronto;
     } else if (parte === 'tendencia') {
       const sec = q('[data-painel="tendencia"]');
-      if (sec) sec.innerHTML = abaTendencia(p.r, nome, ctx, p.ctxEstado, p.revisao, !!p.cfg.traumas?.ligado);
+      if (sec) sec.innerHTML = abaTendencia(p.r, nome, ctx, p.ctxEstado, p.revisao, mostrarTraumas(p));
     } else if (parte === 'sessao') {
       const sec = q('[data-painel="sessao"]');
       if (sec) sec.innerHTML = abaSessao(p.r, nome, p.r.sessao, p.ranked, ctx, p.ctxEstado, new Date().getHours());
@@ -313,7 +318,7 @@ async function acaoMentor(p, caminho, corpo) {
   const aviso = p.el.querySelector('[data-mentor-aviso]');
   const r = await p.coletor(caminho, { metodo: 'POST', corpo, prazoMs: 8000 });
   if (aviso) aviso.textContent = r.status === 202 ? '' : r.status === 429 ? 'mentor ocupado com outra pergunta: tente de novo em alguns segundos.'
-    : r.status === 0 ? 'coletor fora do ar.' : `a pergunta não foi enviada: ${r.dados?.erro || r.status}`;
+    : r.status === 0 ? 'complemento coach sem resposta.' : `a pergunta não foi enviada: ${r.dados?.erro || r.status}`;
   if (r.status === 202) {
     const m = await p.coletor(`/mentor/${p.r.gameId}`);
     if (m.status === 200 && p.vivo()) { p.mentor = m.dados; pintar(p, ['mentor']); }
@@ -396,15 +401,18 @@ export const _montarReplay = montarReplay; // só teste (tools/teste-replay.mjs)
 
 // fimDePartida: painel aberto pelo EndOfGame (só ele tem o "jogar de novo": o do Ctrl+K pode ser de partida antiga)
 function montar(r, cfg, coletor, vivo, fimDePartida = false) {
-  const p = { r, cfg, coletor: coletor || (async () => ({ status: 0, dados: null })), temColetor: !!coletor, vivo, aba: 'resumo',
-    ctx: null, ctxEstado: coletor ? 'carregando' : 'fora', mentor: null, revisao: null, ranked: null, licoesAbertas: null };
+  // cada parte do complemento coach só com o recurso anunciado no aperto de mão (coach.js temRecurso; Fase 1 do
+  // roadmap/2026-10-17-plugin-pengu-primeiro.md): sem ele, nenhuma chamada e nenhum texto de "fora do ar"
+  const tem = { contexto: recursoDe(coletor, 'contexto'), mentor: recursoDe(coletor, 'mentor'), revisao: recursoDe(coletor, 'revisao') };
+  const p = { r, cfg, coletor: coletor || (async () => ({ status: 0, dados: null })), temColetor: !!coletor, tem, vivo, aba: 'resumo',
+    ctx: null, ctxEstado: tem.contexto ? 'carregando' : 'sem', mentor: null, revisao: tem.revisao ? null : false, ranked: null, licoesAbertas: null };
   p.licoes = calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes;
   const html = {
-    resumo: abaResumo(r, p.licoes, p.ctxEstado, { licoesAbertas: licoesAbertas(p) }),
+    resumo: abaResumo(r, p.licoes, p.ctxEstado, { licoesAbertas: licoesAbertas(p), mentor: tem.mentor }),
     rota: abaRota(r, nome),
     mortes: abaMortes(r, nome),
     objetivos: abaObjetivos(r),
-    tendencia: abaTendencia(r, nome, null, p.ctxEstado, null, !!cfg.traumas?.ligado),
+    tendencia: abaTendencia(r, nome, null, p.ctxEstado, p.revisao, mostrarTraumas(p)),
     sessao: abaSessao(r, nome, r.sessao, null, null, p.ctxEstado, new Date().getHours()),
   };
   p.el = moldura(`<div class="lc-caixa lc-v2">${htmlTopo(r, nome, { jogarDeNovo: fimDePartida && !!cfg.filaRapida?.jogarDeNovo })}
@@ -467,11 +475,11 @@ export async function abrirPainel(gameId, cfg = padrao.cfg, coletor = padrao.col
       r.sessao = sessaoDaPartida(h, r.esta);
       pintar(p, ['licoes', 'tendencia', 'sessao']);
     }).catch(() => {});
-    if (coletor) {
-      cicloContexto(p);
-      cicloMentor(p);
-      coletor(`/revisao/${gameId}`).then(rv => { p.revisao = rv.status === 200 ? rv.dados : { status: rv.status }; if (vivo()) pintar(p, ['tendencia']); });
-    } else pintar(p, ['licoes']);
+    // só o que o complemento coach anuncia (montar: p.tem); o resto fica com o motor local, sem chamada
+    if (p.tem.contexto) cicloContexto(p);
+    else pintar(p, ['licoes']);
+    if (p.tem.mentor) cicloMentor(p);
+    if (p.tem.revisao) coletor(`/revisao/${gameId}`).then(rv => { p.revisao = rv.status === 200 ? rv.dados : { status: rv.status }; if (vivo()) pintar(p, ['tendencia']); });
     return r;
   }
 }

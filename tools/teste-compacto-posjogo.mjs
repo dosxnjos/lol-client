@@ -122,7 +122,7 @@ const tick = async (n = 6) => { for (let i = 0; i < n; i++) await new Promise(r 
 // lcu: estado mutável do client falso. Rotas não listadas = 404.
 function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus, ranked = null, notificacao = null,
   licoes = [{ status: 404, dados: { erro: 'partida ainda fora do banco', tentarDeNovoS: 5 } }, { status: 200, dados: FX.licoes }],
-  derrotas = 0, lcuQuebrada = false, coletorFora = false, semColetor = false, licoesLocais, mentor = null, rotasExtras = {} } = {}) {
+  derrotas = 0, lcuQuebrada = false, coletorFora = false, semColetor = false, semRecursos = false, licoesLocais, mentor = null, rotasExtras = {} } = {}) {
   const rel = relogio();
   tela._relogio.agora = () => rel.agora;
   tela._relogio.data = () => new Date(2026, 9, 13, 15, 0, 0); // tarde: o freio de madrugada não entra por acaso
@@ -164,6 +164,8 @@ function cenario({ sessao = FX.sessao, eog = FX.eog, cfgFila = {}, playerStatus,
     if (coletorFora) return { status: 0, dados: null };
     return licoes.length > 1 ? licoes.shift() : licoes[0];
   };
+  // semRecursos: o coletor da ponte (coach.js) com o complemento visto sem nenhum recurso (temRecurso false)
+  if (semRecursos) coletor.temRecurso = () => false;
   const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 640 }, aceite: { ligado: true },
     filaRapida: { jogarDeNovo: true, pos1: 'TOP', pos2: 'JUNGLE', freioTilt: 2, freioMadrugada: true, ...cfgFila } };
   const camada = criarCamada({ doc, aoExpandir: () => s.rot.expandir(), aoMinimizar: () => {}, aoFechar: () => {} });
@@ -491,13 +493,13 @@ const rankEsm = lp => ({ queueMap: { RANKED_SOLO_5x5: { queueType: 'RANKED_SOLO_
   tela._esquecer();
   const s = cenario({ coletorFora: true });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
-  caso('coletor fora: "coletor fora do ar: as lições ficam na análise completa", números da partida seguem',
-    s.texto().includes('coletor fora do ar: as lições ficam na análise completa') && s.texto().includes('8/9/6'), s.texto());
+  caso('coletor fora: "complemento coach sem resposta: as lições ficam na análise completa", números da partida seguem, nunca "coletor"',
+    s.texto().includes('complemento coach sem resposta: as lições ficam na análise completa') && s.texto().includes('8/9/6') && !/coletor|8765/.test(s.texto()), s.texto());
   const n = s.coletorPedidos.length;
   await s.rel.avancar(15000);
   caso('coletor fora: tenta de novo a cada 15 s', s.coletorPedidos.length === n + 1, `${n} -> ${s.coletorPedidos.length}`);
   await s.rel.avancar(300000);
-  caso('coletor fora por 5 min: desiste das lições sem expandir', s.foto().efetivo === 'compacto' && s.texto().includes('sem lições: coletor fora do ar'), s.texto());
+  caso('coletor fora por 5 min: desiste das lições sem expandir', s.foto().efetivo === 'compacto' && s.texto().includes('sem lições: complemento coach sem resposta'), s.texto());
 }
 // paridade (passo 11 b5): sem o coletor, as 3 lições do motor local do painel (posjogo/index.js licoesLocais), como no
 // client normal; o coletor segue tentado e a resposta dele vence
@@ -510,9 +512,9 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
   let lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
   caso('b5: coletor fora → as 3 lições do motor local (aviso/aviso/ok), com a origem no title, pedidas pelo gameId da partida',
     lis.length === 3 && lis.map(l => l.querySelector('[data-icone]')?.dataset.icone).join('/') === 'aviso/aviso/ok' && lis[0].textContent.includes('Morreu 9 vezes')
-    && /motor local/.test(lis[0].getAttribute('title') || '') && igual(s.locaisPedidos, [GID]) && !s.texto().includes('coletor fora do ar: as lições'),
+    && /motor do plugin/.test(lis[0].getAttribute('title') || '') && igual(s.locaisPedidos, [GID]) && !s.texto().includes('sem resposta: as lições'),
     s.texto());
-  caso('b5: rótulo diz que é sem o coletor', /sem o coletor/.test(s.camada().querySelector('.lc-cp-lics summary')?.textContent || ''), s.camada().querySelector('.lc-cp-lics summary')?.textContent);
+  caso('b5: rótulo diz que é o motor do plugin (o complemento não respondeu)', /motor do plugin/.test(s.camada().querySelector('.lc-cp-lics summary')?.textContent || ''), s.camada().querySelector('.lc-cp-lics summary')?.textContent);
   await s.rel.avancar(300000);
   lis = s.camada().querySelectorAll('ul.lc-cp-lic li');
   caso('b5: coletor fora por 5 min: as lições locais ficam (sem "sem lições"), pedidas uma vez só',
@@ -552,23 +554,35 @@ const LOCAIS = [{ id: 'a', tipo: 'negativa', texto: 'Morreu 9 vezes' }, { id: 'b
   const s = cenario({ sessao: { ...FX.sessao, map: { id: 12 } }, coletorFora: true, licoesLocais: async () => ({ licoes: LOCAIS }) });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   await tick(12);
-  caso('b5: fora do Rift (ARAM) o motor local nem é pedido; segue "coletor fora do ar"',
-    s.locaisPedidos.length === 0 && s.texto().includes('coletor fora do ar'), JSON.stringify(s.locaisPedidos));
+  caso('b5: fora do Rift (ARAM) o motor local nem é pedido; segue "complemento coach sem resposta"',
+    s.locaisPedidos.length === 0 && s.texto().includes('complemento coach sem resposta'), JSON.stringify(s.locaisPedidos));
 }
 {
   tela._esquecer();
   const s = cenario({ semColetor: true, licoesLocais: async () => ({ licoes: LOCAIS }) });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   await tick(12);
-  caso('b5: sem o serviço do coletor (módulo fora): lições do motor local', s.camada().querySelectorAll('ul.lc-cp-lic li').length === 3 && s.texto().includes('Morreu 9 vezes'), s.texto());
+  caso('b5: sem o serviço do coletor (módulo fora): lições do motor local, sem caixa do mentor nem "coletor"/"complemento"',
+    s.camada().querySelectorAll('ul.lc-cp-lic li').length === 3 && s.texto().includes('Morreu 9 vezes') && !s.camada().querySelector('.lc-cp-mentor')
+    && !/coletor|complemento|8765|motor do plugin/.test(s.texto()), s.texto());
+}
+{
+  tela._esquecer();
+  // Fase 1 (ponte): coletor da ponte sem os recursos (temRecurso false): nenhuma chamada, sem mentor, lições locais sem marca
+  const s = cenario({ semRecursos: true, licoesLocais: async () => ({ licoes: LOCAIS }) });
+  await s.ir('WaitingForStats'); await s.ir('EndOfGame');
+  await s.rel.avancar(60000);
+  caso('ponte: complemento sem "contexto" e "mentor": nenhuma chamada a ele, sem caixa do mentor, as 3 lições locais',
+    s.coletorPedidos.length === 0 && !s.camada().querySelector('.lc-cp-mentor') && s.camada().querySelectorAll('ul.lc-cp-lic li').length === 3
+    && !/coletor|complemento|8765/.test(s.texto()), JSON.stringify(s.coletorPedidos) + ' ' + s.texto());
 }
 {
   tela._esquecer();
   const s = cenario({ coletorFora: true, licoesLocais: async () => null });
   await s.ir('WaitingForStats'); await s.ir('EndOfGame');
   await tick(12);
-  caso('b5: motor local sem resposta (análise falhou): segue "coletor fora do ar" como antes, sem erro de tela',
-    s.texto().includes('coletor fora do ar: as lições ficam na análise completa') && s.foto().efetivo === 'compacto' && s.avisos.every(([, e]) => !e), s.texto());
+  caso('b5: motor local sem resposta (análise falhou): segue "complemento coach sem resposta" como antes, sem erro de tela',
+    s.texto().includes('complemento coach sem resposta: as lições ficam na análise completa') && s.foto().efetivo === 'compacto' && s.avisos.every(([, e]) => !e), s.texto());
 }
 {
   tela._esquecer();

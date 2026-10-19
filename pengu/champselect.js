@@ -3,6 +3,7 @@
 // Fonte: histórico da LCU (20 ou 200 partidas conforme o cache do client, ARMADILHAS), somado por
 // gameId a cada leitura, então a amostra só cresce na sessão. Regra de amostra e posição: docs/INSIGHTS.md.
 // Importável no node (tools/teste-winrate.mjs): nada de window/document no topo do módulo.
+import { recursoDe } from './coach.js';
 
 // stats.roleBoundItem = item da missão de função (medido 13/10/2026 em items.json)
 const POSICAO_DO_ITEM = {
@@ -60,7 +61,7 @@ export function textoSelo(est, nome) {
   return { titulo: nome, linhas };
 }
 
-// ---- matchup, trauma e draft (dados do coletor, GET 127.0.0.1:8765/draft/<meu campeão>) ----
+// ---- matchup, trauma e draft (do complemento coach com o recurso "draft", GET 127.0.0.1:8765/draft/<meu campeão>) ----
 // O histórico do client só traz o meu participante, sem adversário nem linha do tempo: matchup (papel pela
 // timeline, ouro aos 10), traumas e a faixa do draft (meta.db) saem do coletor; aqui só escolhe e formata.
 // Spec: docs/INSIGHTS.md § Matchups e § Traumas; prova: tools/teste-matchup.mjs contra o analise.py.
@@ -113,8 +114,10 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
   let carregando = null, ultimaLeitura = 0, falhou = 0, nomes = null, ultimaSessao = null;
   // dados do coletor para o selo: relidos a cada 3 s na seleção (inimigo trava, draft muda)
   const coach = { dados: null, campeao: 0, em: 0, buscando: false, fora: false };
+  // só com o complemento coach anunciando o draft (coach.js temRecurso): sem ele nenhuma chamada e nenhuma linha do coach
+  const temDraft = () => recursoDe(coletor, 'draft');
   const lerCoach = async id => {
-    if (!coletor || coach.buscando) return;
+    if (!temDraft() || coach.buscando) return;
     coach.buscando = true;
     const r = await coletor(`/draft/${id}`, { prazoMs: 4000 });
     coach.buscando = false;
@@ -175,16 +178,16 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
     const t = ultimaLeitura ? textoSelo(estatisticasCampeao([...partidas.values()], alvo.championId, alvo.posicao), nome)
       : { titulo: nome, linhas: [falhou && !carregando ? 'histórico indisponível agora (nova tentativa em seguida)' : 'carregando histórico…'] };
     // matchup, trauma e draft: do coletor, só para o campeão em tela (dado de outro campeão não aparece)
-    if (coletor && (coach.campeao !== alvo.championId || Date.now() - coach.em > 3000)) lerCoach(alvo.championId);
+    if (temDraft() && (coach.campeao !== alvo.championId || Date.now() - coach.em > 3000)) lerCoach(alvo.championId);
     const extra = [];
-    const d = coach.campeao === alvo.championId ? coach.dados : null;
+    const d = temDraft() && coach.campeao === alvo.championId ? coach.dados : null;
     if (d) {
       const adv = adversarioDoDraft(d.draft, alvo.posicao);
       if (adv) extra.push(['lc-wr-coach', linhaMatchup(d.matchups, alvo.championId, adv.campeao, await nomeCampeao(adv.campeao), alvo.posicao)]);
       const tr = cfg.traumas?.ligado ? linhaTrauma(d.traumas, id => nomes?.[id] || `campeão ${id}`) : null;
       if (tr) extra.push(['lc-wr-trauma', tr]);
       linhasDraft(d.draft).forEach((l, i) => extra.push([i ? 'lc-wr-sub' : 'lc-wr-coach', l]));
-    } else if (coletor && coach.fora) extra.push(['lc-wr-sub', 'coach: coletor fora do ar (sem matchup e draft)']);
+    } // sem o complemento (ou fora do ar agora): a linha do coach some, sem texto de erro (plano, "Como o plugin se comporta")
     if (n !== pedido || !document.body) return;
     const div = (className, textContent) => Object.assign(document.createElement('div'), { className, textContent });
     const titulo = div('lc-wr-titulo', '');
@@ -203,12 +206,16 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
     if (msg?.eventType === 'Delete' || !msg?.data) { ultimaSessao = null; pararRelogio(); return remover(); }
     ultimaSessao = msg.data;
     // sem evento novo (todos pensando) o draft do coletor ainda muda: redesenha a cada 3 s
-    if (coletor && !relogio) relogio = setInterval(() => (ultimaSessao ? desenhar() : pararRelogio()), 3000);
+    if (temDraft() && !relogio) relogio = setInterval(() => (ultimaSessao ? desenhar() : pararRelogio()), 3000);
     if (!ultimaLeitura && !carregando && Date.now() - falhou > 15000) lerHistorico();
     desenhar();
   });
-  // partida nova no histórico: relê (o cache só cresce)
-  context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => { if (msg?.data === 'EndOfGame') setTimeout(lerHistorico, 60000); });
+  // partida nova no histórico: relê (o cache só cresce). Fase fora da seleção: o selo e a releitura de 3 s param mesmo sem o
+  // Delete da sessão no socket (sem isso a leitura do draft seguiria a partida inteira; prova: tools/teste-ponte.mjs (d))
+  context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => {
+    if (msg?.data === 'EndOfGame') setTimeout(lerHistorico, 60000);
+    if (msg?.data && msg.data !== 'ChampSelect' && ultimaSessao) { ultimaSessao = null; pararRelogio(); remover(); }
+  });
   // a leitura de 200 partidas leva até 40 s: começa já, para estar pronta no champ select
   setTimeout(lerHistorico, 5000);
 
@@ -221,7 +228,8 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
     estado: () => ({ partidas: partidas.size, carregando: !!carregando, ultimaLeitura, falhou, eventos, alvo: meu(ultimaSessao) }),
     estatisticas: (championId, posicao) => estatisticasCampeao([...partidas.values()], championId, posicao),
     // coach do coletor para o selo completo do compacto (passo 13 B2): roda mesmo com "Winrate com o campeão" desligado (o
-    // desenhar() volta cedo e nunca chamaria o lerCoach). Só GET /draft/<id>; sem coletor, nada
+    // desenhar() volta cedo e nunca chamaria o lerCoach). Só GET /draft/<id>; sem o recurso draft, nada
     lerCoach: id => (Number(id) > 0 ? lerCoach(Number(id)) : Promise.resolve()),
+    temCoach: temDraft, // o selo do compacto (lateral.js) mostra matchup e draft só com o recurso
   };
 }

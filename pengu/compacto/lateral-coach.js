@@ -1,7 +1,8 @@
 // Selo completo do champ select no painel da direita (roadmap/2026-10-13-client-compacto.md, passo 13, tela B2; paridade 11.d2).
 // 📊 no topo da seleção (compacto/tela-champselect.js) abre/fecha; o campeão é o MEU em hover ou travado. Mesmos textos do selo do
 // client normal (pengu/champselect.js: textoSelo, linhaMatchup, linhaTrauma, linhasDraft, adversarioDoDraft); nenhuma leitura
-// nova: histórico pelo cache do champselect.js (servicos.champ.estatisticas) e o coletor (/draft/<id>) pelo lerCoach exportado,
+// nova: histórico pelo cache do champselect.js (servicos.champ.estatisticas) e o complemento coach (/draft/<id>, só com o
+// recurso "draft") pelo lerCoach exportado,
 // que roda mesmo com "Winrate com o campeão" desligado (decisão técnica iv do passo 13). Só GET.
 // Inimigo: só campeão, e só com o pick dele travado (o coletor dá a rota provável; aqui ainda confere que o campeão está
 // travado no theirTeam da sessão). Nome de jogador nunca. Importável no node: nada de DOM no topo.
@@ -27,18 +28,21 @@ export function meuNaSessao(s) {
 export const inimigosTravados = s => new Set((s?.theirTeam || []).map(c => Number(c?.championId) || 0).filter(id => id > 0));
 
 // sessão + estatísticas + coach -> modelo do painel (puro). est = estatisticasCampeao(...) | null (histórico não lido);
-// coach = {dados, campeao, fora}; nome(id) -> nome do campeão; traumas: chave "Mostrar traumas"; fila = id da fila
+// coach = {dados, campeao, fora}; nome(id) -> nome do campeão; traumas: chave "Mostrar traumas"; fila = id da fila;
+// temColetor = o complemento coach anuncia "draft" (sem ele, a caixa "na sua rota" some: nada de texto de erro; Fase 1 do
+// roadmap/2026-10-17-plugin-pengu-primeiro.md). m.semCoach marca isso; m.fora = com o recurso, mas sem resposta agora
 export function modeloSelo({ sessao, est = null, histN = 0, histErro = false, coach = null, nome = id => `campeão ${id}`, traumas = true, fila = null, temColetor = true }) {
   const eu = meuNaSessao(sessao);
   if (!eu) return { vazio: 'passe o mouse num campeão (ou trave) para ver o selo' };
   const m = { campeao: { id: eu.championId, nome: nome(eu.championId) }, travado: eu.travado, posicao: eu.posicao,
-    sub: ['você', POS_PT[eu.posicao], FILA_PT[fila]].filter(Boolean).join(' · '), linhas: [], amostra: '', rota: null, trauma: null, draft: null, fora: false };
+    sub: ['você', POS_PT[eu.posicao], FILA_PT[fila]].filter(Boolean).join(' · '), linhas: [], amostra: '', rota: null, trauma: null, draft: null, fora: false,
+    semCoach: !temColetor };
   if (est) {
     const t = textoSelo(est, m.campeao.nome);
     m.linhas = t.linhas;
     m.amostra = histN ? `histórico: ${histN} partidas` : '';
   } else m.linhas = [histErro ? 'histórico indisponível agora (nova tentativa em seguida)' : 'carregando histórico…'];
-  const d = coach && coach.campeao === eu.championId ? coach.dados : null;
+  const d = temColetor && coach && coach.campeao === eu.championId ? coach.dados : null;
   if (d) {
     const adv = adversarioDoDraft(d.draft, eu.posicao);
     const travados = inimigosTravados(sessao);
@@ -50,7 +54,6 @@ export function modeloSelo({ sessao, est = null, histN = 0, histErro = false, co
     const dl = linhasDraft(d.draft);
     if (dl.length) m.draft = { faixa: dl[0], termos: dl[1] || '', p: Number.isFinite(Number(d.draft?.p)) ? Math.min(Math.max(Number(d.draft.p), 0), 1) : null };
   } else if (temColetor && coach?.fora) m.fora = true;
-  else if (!temColetor) m.fora = true;
   return m;
 }
 
@@ -69,10 +72,11 @@ export function criarCoachView({ doc }) {
         h('span', { doc, class: 'lc-lt-tag' + (m.travado ? ' lc-lt-trav' : '') }, m.travado ? 'travado' : 'hover')),
       ...m.linhas.map(l => h('div', { doc, class: 'lc-lt-sl' }, l)),
       m.amostra ? h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.amostra) : null);
-    const rota = h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'na sua rota'),
+    // sem o complemento coach (m.semCoach) a caixa "na sua rota" some: matchup e trauma vêm dele nesta versão
+    const rota = m.semCoach && !m.rota && !m.trauma ? null : h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'na sua rota'),
       m.rota ? h('div', { doc, class: 'lc-lt-mu' }, fotoCampeao(m.campeao.id, { tam: 28, doc }), h('span', { doc, class: 'lc-lt-mudo' }, '×'),
         fotoCampeao(m.rota.adv.id, { tam: 28, nome: m.rota.adv.nome, doc }), h('div', { doc }, h('div', { doc, class: 'lc-lt-az' }, m.rota.texto), h('small', { doc, class: 'lc-lt-mudo' }, m.rota.rota)))
-        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'coach: coletor fora do ar (sem matchup e draft)' : 'adversário da sua rota ainda não travou'),
+        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'matchup e draft indisponíveis agora: nova tentativa em seguida' : 'adversário da sua rota ainda não travou'),
       m.trauma ? h('div', { doc, class: 'lc-lt-sl lc-lt-trauma' }, m.trauma) : null);
     const draft = m.draft ? h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'draft'),
       h('div', { doc, class: 'lc-lt-sl lc-lt-az' }, m.draft.faixa),

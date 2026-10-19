@@ -581,29 +581,23 @@ def principal():
              cj.limpo({"a": [{_CAMPO_SENHA: 1, "b": {_CAMPO_JWT: 2, "ok": 3}}]}) == {"a": [{"b": {"ok": 3}}]})
 
         # ---- ponte do plugin (node) ----
+        # estadoChat e abrirAmigos saíram do chat-ponte.js em 19/10/2026 (chamadas mortas, Fase 1 do plano plugin Pengu primeiro):
+        # ficam avisarModo e naoLidasDaLcu
         ponte = (RAIZ / "pengu" / "compacto" / "chat-ponte.js").as_uri()
         script = f"""
-import {{ estadoChat, abrirAmigos, avisarModo, naoLidasDaLcu, _zerarModo }} from '{ponte}';
+import * as m from '{ponte}';
+const {{ avisarModo, naoLidasDaLcu, _zerarModo }} = m;
 const chamadas = [];
 const f = (st, dados) => async (c, o = {{}}) => {{ chamadas.push([c, o.metodo || 'GET', o.corpo ?? null]); return {{ status: st, dados }}; }};
 const r = {{}};
-r.estado = await estadoChat(f(200, {{ ok: true, naoLidas: 3, abertas: ['a', 'b'], lista: true }}));
-r.fora = await estadoChat(f(0, null));
-r.abrir = await abrirAmigos(f(202, {{ ok: true }}));
-r.abrirFora = await abrirAmigos(f(0, null));
 r.modo = await avisarModo(1, f(200, {{ ok: true }}));
 r.lcu = naoLidasDaLcu([{{ type: 'chat', id: 'a@br1.pvp.net', unreadMessageCount: 2 }},
   {{ type: 'championSelect', id: 's@champ-select.br1.pvp.net', unreadMessageCount: 9 }},
   {{ type: 'chat', id: 'x@champ-select.br1.pvp.net', unreadMessageCount: 5 }}, null, {{ type: 'chat', unreadMessageCount: -4 }}]);
 r.chamadas = chamadas.slice();
-const ch2 = [];
-const g = st => async (c, o = {{}}) => {{ ch2.push([c, o.metodo || 'GET', o.corpo ?? null]); return {{ status: st, dados: {{ ok: true, naoLidas: 0 }} }}; }};
 _zerarModo();
-r.modoFora = await avisarModo(true, g(0));
-await estadoChat(g(0));
-await estadoChat(g(200));
-await estadoChat(g(200));
-r.ch2 = ch2;
+r.modoFora = await avisarModo(true, f(0, null));
+r.mortas = ['estadoChat', 'abrirAmigos'].filter(n => n in m);
 console.log(JSON.stringify(r));
 """
         p = subprocess.run(["node", "--input-type=module", "-e", script], capture_output=True, text=True, encoding="utf-8")
@@ -611,19 +605,13 @@ console.log(JSON.stringify(r));
             r = json.loads(p.stdout.strip().splitlines()[-1])
         except (ValueError, IndexError):
             r = {}
-        caso("chat-ponte: 💬 com o contador e as janelas abertas", r.get("estado") == {
-            "ok": True, "naoLidas": 3, "abertas": 2, "lista": True, "motivo": ""}, (r.get("estado"), p.stderr[-300:]))
-        caso("chat-ponte: coletor fora = {ok:false, fora:true} (a tela expande e abre o chat nativo)",
-             r.get("fora", {}).get("fora") is True and r.get("abrirFora", {}).get("fora") is True and r.get("abrir", {}).get("ok"))
-        caso("chat-ponte: rotas e corpos certos", r.get("chamadas") == [
-            ["/chat/estado", "GET", None], ["/chat/estado", "GET", None], ["/chat/abrir/amigos", "POST", {}],
-            ["/chat/abrir/amigos", "POST", {}], ["/chat/plugin", "POST", {"compacto": True, "lateral": False}]] and r.get("modo") is True,
-             r.get("chamadas"))
+        caso("chat-ponte: aviso do modo com rota e corpo certos", r.get("chamadas") == [
+            ["/chat/plugin", "POST", {"compacto": True, "lateral": False}]] and r.get("modo") is True,
+             (r.get("chamadas"), p.stderr[-300:]))
         caso("chat-ponte: não lidas pela LCU só das conversas diretas", r.get("lcu") == 2, r.get("lcu"))
-        caso("chat-ponte: modo avisado com o coletor fora é reenviado pelo 💬 quando ele volta (uma vez)",
-             r.get("modoFora") is False and r.get("ch2") == [
-                 ["/chat/plugin", "POST", {"compacto": True, "lateral": False}], ["/chat/estado", "GET", None], ["/chat/estado", "GET", None],
-                 ["/chat/plugin", "POST", {"compacto": True, "lateral": False}], ["/chat/estado", "GET", None]], r.get("ch2"))
+        caso("chat-ponte: modo avisado com o coletor fora volta false (o reaviso periódico do compacto reenvia)",
+             r.get("modoFora") is False, r.get("modoFora"))
+        caso("chat-ponte: chamadas mortas estadoChat/abrirAmigos fora do módulo", r.get("mortas") == [], r.get("mortas"))
         p = subprocess.run(["node", "--check", str(RAIZ / "painel" / "chat" / "chat.js")], capture_output=True, text=True)
         caso("chat.js sem erro de sintaxe (node --check)", p.returncode == 0, p.stderr[-300:])
         # "marcar como lida" (PUT conversations/active [S]) só depois de interação de verdade na janela aberta sozinha

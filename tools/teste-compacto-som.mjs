@@ -12,9 +12,13 @@ import { relatar, lcuFalsa } from './lcu-falsa.mjs';
 import { lcu as lcuReal } from '../pengu/compacto/comum.js';
 import { OPCOES_SOM, ROTA_SOM, VERSAO_SOM, ESPERA_VOLUME_MS, lerSom, cinzaDe, corposSom, volumeDe, volumeValido } from '../pengu/compacto/som.js';
 import { criarConfigView, BLOCO_SOM, BLOCO_INICIAL } from '../pengu/compacto/lateral-config.js';
-import { registrarBloco } from '../pengu/configuracoes.js';
-import { blocoVoz, blocoAlertas, blocoCompacto } from '../pengu/blocos.js';
+import { registrarBloco, usarRecursos } from '../pengu/configuracoes.js';
+import { blocoVoz, blocoAlertas, blocoCompacto, blocoSomPlugin } from '../pengu/blocos.js';
 import { PADRAO } from '../pengu/config.js';
+
+// complemento coach com todos os recursos (voz, alertas...): a seção Som mostra as caixas da voz (Fase 1 do plano plugin Pengu
+// primeiro; o caso sem o complemento está no fim)
+usarRecursos(() => true);
 
 const copia = v => JSON.parse(JSON.stringify(v));
 const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -400,4 +404,15 @@ function cenario({ rotas = {}, semLcu = false } = {}) {
   caso('sem LCU: motivo "sem LCU" e as chaves do plugin', /sem LCU/.test(s0.corpo().textContent) && /Voz do coach/.test(s0.corpo().textContent));
 }
 
+{
+  // sem o complemento coach (nenhum recurso): a parte do plugin na Som é só o "silenciar o som depois de aceitar"
+  usarRecursos(() => false);
+  globalThis.document = novoDoc();
+  const ids = [];
+  const ui = { caixa: id => { ids.push(id); return document.createElement('div'); }, lista: id => { ids.push(id); return document.createElement('div'); },
+    linha: () => document.createElement('div'), explica: () => document.createElement('p') };
+  blocoSomPlugin(document.createElement('div'), { cfg: JSON.parse(JSON.stringify(PADRAO)), definir: () => {}, ui });
+  caso('sem o complemento: Som do plugin só com silenciar o som (nada de voz nem avisos com voz)', ids.length === 1 && ids[0] === 'aceite.silenciarSom', JSON.stringify(ids));
+  usarRecursos(() => true);
+}
 relatar(casos);
