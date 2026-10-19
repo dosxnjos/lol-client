@@ -47,13 +47,37 @@ ITEM_VELHO = 60       # item do inimigo sem mudança visível há > 60 s na hora
 # quando a última batida tinha caído num gasto do chat (revisão do passo 10, D37).
 DESFAZ_PRAZO_S = 60
 
-# chat em 2560x1080 nesta HUD (MEDICAO § 4): reserva quando a calibração ainda não achou linha
-CAIXA_RESERVA = (1400, 815, 1900, 985)
+# Medidas da HUD em 2560x1080 (MEDICAO § 4, a tela do mantenedor), a referência: em outra resolução tudo escala pela
+# ALTURA (a HUD do LoL cresce com a altura da tela) e as faixas saem de faixas_calibrar(largura, altura). Até 19/10/2026
+# eram coordenadas absolutas desta tela: em 2560x1440 ou 3840x2160 o chat padrão fica abaixo de y=1080 e a calibração
+# devolvia None para sempre (revisão do P0 da publicação; prova em tools/teste-instalacao.py). A antiga CAIXA_RESERVA
+# (1400, 815, 1900, 985) saiu: ninguém a lia.
+ALTURA_REF = 1080
 FAIXA_CALIBRAR = (1000, 620, 2150, 1080)   # onde procurar o chat (fora do minimapa, x >= 2179)
 # onde procurar, em ordem: a faixa da HUD dele (chat movido para a direita do meio) e o canto de baixo à esquerda (onde
-# o LoL põe o chat por padrão: HUD reiniciada). Cada faixa × 2 (escala do OCR) fica abaixo de 2600 px, o máximo do
-# Windows.Media.Ocr (OcrEngine.MaxImageDimension)
-FAIXAS_CALIBRAR = (FAIXA_CALIBRAR, (0, 620, 1150, 1080))
+# o LoL põe o chat por padrão: HUD reiniciada). Cada faixa × a escala do OCR fica abaixo de 2600 px, o máximo do
+# Windows.Media.Ocr (OcrEngine.MaxImageDimension): escala_ocr baixa a escala quando a faixa é maior
+FAIXAS_CALIBRAR = (FAIXA_CALIBRAR, (0, 620, 1150, 1080))   # = faixas_calibrar(2560, 1080)
+OCR_MAX_PX = 2600
+
+
+def faixas_calibrar(largura, altura):
+    """as FAIXAS_CALIBRAR desta tela: a direita do meio (HUD do mantenedor) e o canto de baixo à esquerda (padrão do
+    LoL), em px da tela. Em 2560x1080 dá exatamente as FAIXAS_CALIBRAR. A faixa da direita para antes do minimapa
+    (410 px de referência da borda direita)."""
+    k = altura / ALTURA_REF
+    meio = largura / 2
+    topo = altura - 460 * k
+    direita = (meio - 280 * k, topo, min(meio + 870 * k, largura - 410 * k), altura)
+    esquerda = (0, topo, min(1150 * k, largura), altura)
+    return tuple(tuple(int(round(v)) for v in f) for f in (direita, esquerda))
+
+
+def escala_ocr(caixa, base):
+    """a escala do OCR para um recorte: `base` (2 na calibração, 3 na leitura), menor quando recorte × base passaria de
+    OCR_MAX_PX (o Windows.Media.Ocr recusa imagem maior). Em 1080 de altura é sempre a base"""
+    lado = max(caixa[2] - caixa[0], caixa[3] - caixa[1], 1)
+    return base if lado * base < OCR_MAX_PX else (OCR_MAX_PX - 1) / lado
 # recorte sem nenhuma linha "mm:ss" por este número de prints seguidos com o jogo na tela (~60 s a 3 s por print) =
 # chat fora do recorte: recalibra. Partida de 15/10/2026: o recorte de 13/10 era usado para sempre e, de
 # 14/10 ~19h em diante, 9 ranqueadas seguidas sem um único ping lido e nada no log que dissesse por quê
@@ -225,16 +249,19 @@ def calibrar_chat(tela, ocr, faixa=None):
     """tela = print inteiro do monitor do jogo (PIL). Acha as linhas do chat pelo horário mm:ss no
     começo e devolve a caixa (x0, y0, x1, y1) em px da tela, ou None (sem linha de chat: jogo fora da
     tela, chat vazio). O chat cresce para cima a partir da base: a caixa vai da base até 170 px acima.
-    faixa None = FAIXAS_CALIBRAR em ordem (a 1ª que achar)."""
+    faixa None = faixas_calibrar(tamanho da tela) em ordem (a 1ª que achar). As medidas em px (margem da coluna, piso
+    de largura, altura da caixa) são de 1080 de altura e escalam pela altura da tela, como a HUD."""
     if faixa is None:
-        for f in FAIXAS_CALIBRAR:
+        for f in faixas_calibrar(tela.width, tela.height):
             c = calibrar_chat(tela, ocr, f)
             if c:
                 return c
         return None
+    k = tela.height / ALTURA_REF
+    px = lambda v: int(round(v * k))  # noqa: E731
     x0, y0, x1, y1 = faixa
     x1, y1 = min(x1, tela.width), min(y1, tela.height)
-    linhas = ocr.ler(tela.crop((x0, y0, x1, y1)), escala=2)
+    linhas = ocr.ler(tela.crop((x0, y0, x1, y1)), escala=escala_ocr((x0, y0, x1, y1), 2))
     caixas = []
     for ln in linhas:
         ps = ln["p"]
@@ -246,17 +273,17 @@ def calibrar_chat(tela, ocr, faixa=None):
         return None
     # o chat é uma coluna: fica com o grupo de linhas de mesma margem esquerda (±12 px)
     esq = sorted(c[0] for c in caixas)[len(caixas) // 2]
-    col = [c for c in caixas if abs(c[0] - esq) <= 12]
+    col = [c for c in caixas if abs(c[0] - esq) <= px(12)]
     if len(col) < 2:
         return None
     base = max(c[3] for c in col)
     esq = min(c[0] for c in col)
     # linha longa quebra na largura do chat; o print da calibração pode só ter linhas curtas: piso de 460 px
-    dir_ = max(max(c[2] for c in col) + 40, esq + 460)
-    cx0 = int(x0 + esq - 12)
-    cx1 = int(min(x0 + dir_, x0 + esq + 520, x1))
-    cy1 = int(min(y0 + base + 8, y1))
-    return (cx0, max(0, cy1 - 170), cx1, cy1)
+    dir_ = max(max(c[2] for c in col) + px(40), esq + px(460))
+    cx0 = int(x0 + esq - px(12))
+    cx1 = int(min(x0 + dir_, x0 + esq + px(520), x1))
+    cy1 = int(min(y0 + base + px(8), y1))
+    return (cx0, max(0, cy1 - px(170)), cx1, cy1)
 
 
 def ler_calibracao(caminho=CALIBRACAO_PADRAO, tamanho=None):
@@ -741,7 +768,7 @@ class LeitorChat:
                 gravar_calibracao(c, tela.size, self.calibracao)
                 log.info("chat: recorte %s calibrado agora (tela %dx%d)", c, *tela.size)
         im = self.captura(self.caixa)
-        textos = [ln["t"] for ln in self.ocr.ler(im, escala=3)]
+        textos = [ln["t"] for ln in self.ocr.ler(im, escala=escala_ocr(self.caixa, 3))]
         n = com_horario(textos)
         self.contagem["prints"] += 1
         self.contagem["linhas"] += len(textos)
