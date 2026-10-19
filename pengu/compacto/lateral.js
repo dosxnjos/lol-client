@@ -1013,10 +1013,14 @@ export function criarLateral({
     const partidas = typeof champ?.partidas === 'function' ? champ.partidas() : null;
     const est = meu && partidas && typeof champ?.estatisticas === 'function' ? champ.estatisticas(meu.championId, meu.posicao) : null;
     const falhou = !!champ?.estado?.()?.falhou;
-    coachView?.pintar(modeloSelo({ sessao: sess, est, histN: partidas?.length || 0, histErro: falhou, coach: champ?.coach?.() || null, nome,
-      traumas: cfg.traumas?.ligado !== false, fila: roteador()?.estado?.().info?.fila ?? null,
-      // matchup e draft só com o complemento coach anunciando "draft" (champselect.js temCoach; coach.js temRecurso)
-      temColetor: typeof champ?.temCoach === 'function' ? !!champ.temCoach() : typeof champ?.lerCoach === 'function' }));
+    // matchup e draft com o complemento coach anunciando "draft" (champselect.js temCoach; coach.js temRecurso); sem ele, matchup e
+    // trauma do acumulador (champselect.js coachLocal, Fase 5 do plano plugin Pengu primeiro), sem faixa do draft
+    const temColetor = typeof champ?.temCoach === 'function' ? !!champ.temCoach() : typeof champ?.lerCoach === 'function';
+    let local = null;
+    try { local = !temColetor && meu && typeof champ?.coachLocal === 'function' ? champ.coachLocal(meu.championId, sess) : null; } catch { local = null; }
+    coachView?.pintar(modeloSelo({ sessao: sess, est, histN: partidas?.length || 0, histErro: falhou, nome,
+      coach: temColetor ? champ?.coach?.() || null : local ? { dados: local, campeao: meu.championId } : null,
+      traumas: cfg.traumas?.ligado !== false, fila: roteador()?.estado?.().info?.fila ?? null, temColetor: temColetor || !!local }));
   }
 
   // relógio da lateral: só com o compacto à vista. Mensagem nova só muda contador, ordem e selo dos recentes (decisão a): nada aqui

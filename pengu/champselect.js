@@ -4,6 +4,8 @@
 // gameId a cada leitura, então a amostra só cresce na sessão. Regra de amostra e posição: docs/INSIGHTS.md.
 // Importável no node (tools/teste-winrate.mjs): nada de window/document no topo do módulo.
 import { recursoDe } from './coach.js';
+import { linhasHistorico } from './historico.js';
+import { seloLocal, AMOSTRA_LOCAL } from './posjogo/contexto.js';
 
 // stats.roleBoundItem = item da missão de função (medido 13/10/2026 em items.json)
 const POSICAO_DO_ITEM = {
@@ -64,6 +66,8 @@ export function textoSelo(est, nome) {
 // ---- matchup, trauma e draft (do complemento coach com o recurso "draft", GET 127.0.0.1:8765/draft/<meu campeão>) ----
 // O histórico do client só traz o meu participante, sem adversário nem linha do tempo: matchup (papel pela
 // timeline, ouro aos 10), traumas e a faixa do draft (meta.db) saem do coletor; aqui só escolhe e formata.
+// Sem o complemento (Fase 5 do plano plugin Pengu primeiro): matchup e trauma do acumulador (historico.js) pelo
+// posjogo/contexto.js seloLocal, no mesmo formato; sem a faixa do draft (Fase 6 fora) e com o adversário de rota pelo histórico.
 // Spec: docs/INSIGHTS.md § Matchups e § Traumas; prova: tools/teste-matchup.mjs contra o analise.py.
 
 export const MIN_MATCHUP = 3; // analise.MIN_MATCHUP: abaixo disso só o n
@@ -90,6 +94,20 @@ export function linhaMatchup(matchups, meu, inimigo, nome = `campeão ${inimigo}
 export function linhaTrauma(traumas, nome = id => `campeão ${id}`) {
   const t = (traumas || []).filter(x => x.trauma).sort((a, b) => (b.lift - a.lift) || (a.campeao - b.campeao))[0];
   return t ? `${nome(t.campeao)} é trauma: ${t.vitorias}V/${t.derrotas}D` : null;
+}
+
+// inimigos travados na sessão (theirTeam com championId > 0: a Riot só mostra depois do pick)
+export const inimigosDaSessao = s => new Set((s?.theirTeam || []).map(c => Number(c?.championId) || 0).filter(id => id > 0));
+
+// selo sem o complemento: {local: true, draft, matchups, traumas} (contexto.js seloLocal) do acumulador desta conta, ou null
+// (complemento com "draft" anunciado, acumulador abaixo de AMOSTRA_LOCAL ou sem campeão). linhas injetável no teste
+export function seloDoAcumulador(championId, sessao, linhas = null) {
+  if (!(Number(championId) > 0)) return null;
+  let ls = linhas;
+  try { ls ??= linhasHistorico(); } catch { return null; }
+  if (!Array.isArray(ls) || ls.length < AMOSTRA_LOCAL) return null;
+  const eu = sessao?.myTeam?.find(c => c.cellId === sessao.localPlayerCellId);
+  return seloLocal(ls, Number(championId), normalizarPosicao(eu?.assignedPosition), inimigosDaSessao(sessao));
 }
 
 // adversário de rota = o inimigo travado cuja rota provável (C2 do draft.py) é a minha
@@ -177,10 +195,11 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
     }
     const t = ultimaLeitura ? textoSelo(estatisticasCampeao([...partidas.values()], alvo.championId, alvo.posicao), nome)
       : { titulo: nome, linhas: [falhou && !carregando ? 'histórico indisponível agora (nova tentativa em seguida)' : 'carregando histórico…'] };
-    // matchup, trauma e draft: do coletor, só para o campeão em tela (dado de outro campeão não aparece)
+    // matchup, trauma e draft: do coletor, só para o campeão em tela (dado de outro campeão não aparece); sem ele, do
+    // acumulador (matchup e trauma, sem faixa do draft)
     if (temDraft() && (coach.campeao !== alvo.championId || Date.now() - coach.em > 3000)) lerCoach(alvo.championId);
     const extra = [];
-    const d = temDraft() && coach.campeao === alvo.championId ? coach.dados : null;
+    const d = temDraft() ? (coach.campeao === alvo.championId ? coach.dados : null) : seloDoAcumulador(alvo.championId, s);
     if (d) {
       const adv = adversarioDoDraft(d.draft, alvo.posicao);
       if (adv) extra.push(['lc-wr-coach', linhaMatchup(d.matchups, alvo.championId, adv.campeao, await nomeCampeao(adv.campeao), alvo.posicao)]);
@@ -231,5 +250,7 @@ export function iniciarChampSelect(context, cfg, coletor = null) {
     // desenhar() volta cedo e nunca chamaria o lerCoach). Só GET /draft/<id>; sem o recurso draft, nada
     lerCoach: id => (Number(id) > 0 ? lerCoach(Number(id)) : Promise.resolve()),
     temCoach: temDraft, // o selo do compacto (lateral.js) mostra matchup e draft só com o recurso
+    // sem o recurso: matchup e trauma do acumulador para o selo do compacto (lateral.js), null com o recurso ou sem amostra
+    coachLocal: (id, sessao = ultimaSessao) => (temDraft() ? null : seloDoAcumulador(id, sessao)),
   };
 }

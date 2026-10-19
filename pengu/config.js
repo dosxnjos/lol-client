@@ -250,7 +250,8 @@ const ALTERNAVEIS = [
 // (qualquer um dos recursos basta). O CommandBar não tira ação registrada: entram uma vez, quando o recurso aparece
 export const ALTERNAVEIS_COACH = [
   ['coach.aceiteFlutuante', 'aceitar/recusar fora do client', ['aceite-flutuante']],
-  ['traumas.ligado', 'traumas no selo e no pós-jogo', ['draft', 'contexto']],
+  // "historico": a fonte local (acumulador com amostra, contexto.js; Fase 5), que o index.js responde junto com os recursos
+  ['traumas.ligado', 'traumas no selo e no pós-jogo', ['draft', 'contexto', 'historico']],
   ['coach.painelAoVivo', 'painel ao vivo na 2ª tela', ['painel']],
   ['coach.voz', 'voz do coach', ['voz']],
   ['coach.alertasTela', 'moldura de alertas na tela', ['alertas']],

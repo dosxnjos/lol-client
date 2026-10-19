@@ -265,7 +265,7 @@ export const blocoCarregamento = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'carregamento', 'Os 10 na tela de carregamento', 'Elo, winrate e tags com número dos 10 jogadores (sequência, fora da rota, OTP, primeira vez, experiência, KDA, morre cedo, domina a rota) no painel da 2ª tela, pela Riot API. Identidade dos outros só em memória.'));
 
 export const blocoTraumas = (corpo, { cfg, definir, ui }) => corpo.append(
-  ui.caixa('traumas.ligado', 'Mostrar traumas', 'Campeão inimigo que mais aparece nas suas derrotas (lift ≥ 1,2 com n ≥ 3, sempre com V/D ao lado): linha no selo do champ select e bloco na aba Tendência do pós-jogo.',
+  ui.caixa('traumas.ligado', 'Mostrar traumas', 'Campeão inimigo que mais aparece nas suas derrotas (lift ≥ 1,2 com n ≥ 3, sempre com V/D ao lado): linha no selo do champ select e bloco na aba Tendência do pós-jogo. Vem das partidas guardadas neste computador ou do complemento coach.',
     cfg.traumas.ligado, v => definir('traumas.ligado', v)));
 
 // client compacto (pengu/compacto/, roadmap/2026-10-13-client-compacto.md): vale na hora (index.js aoMudar -> sincronizar)

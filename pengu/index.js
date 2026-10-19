@@ -7,6 +7,7 @@ import { iniciarAceite, mostrarOverlay, esconderOverlay } from './aceite.js';
 import { iniciarFilaRapida } from './fila-rapida.js';
 import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel, ocupado as posjogoOcupado } from './posjogo/index.js';
 import { iniciarHistorico } from './historico.js';
+import { AMOSTRA_LOCAL } from './posjogo/contexto.js';
 import { iniciarChampSelect } from './champselect.js';
 import { iniciarRunas } from './runas.js';
 import { iniciarRecompensas, levantar, criarLcu } from './recompensas.js';
@@ -43,10 +44,23 @@ export function init(context) {
   // acumulador do histórico próprio no DataStore (historico.js, Fase 4 do plano plugin Pengu primeiro): a partida que acaba
   // entra pelo pós-jogo; o backfill (só None/Lobby) usa a lista que o selo já leu e espera o pós-jogo e a lista em voo;
   // com "resumos" anunciado, importa do complemento uma vez por abertura
+  // fonte local de matchup e traumas (contexto.js, Fase 5): o acumulador desta conta com amostra. A chave "Mostrar traumas" e o
+  // atalho dela no Ctrl+K aparecem com ela ou com o complemento ("draft"/"contexto"); "historico" é o nome dessa fonte em
+  // ALTERNAVEIS_COACH (config.js), não um recurso do aperto de mão
+  const temAmostraLocal = () => { const e = acumulador?.estado(); return !!e && !e.outraConta && e.linhas >= AMOSTRA_LOCAL; };
+  const mostraComLocal = nome => mostraRecurso(nome) || (nome === 'historico' && temAmostraLocal());
+  let amostraVista = false;
   const acumulador = seguro('histórico', () => iniciarHistorico(context, {
     partidas: () => champ?.partidas() ?? null,
     ocupado: () => !!(posjogoOcupado() || champ?.estado().carregando),
     coletor, temRecurso,
+    // a amostra chegou ao mínimo (pós-jogo, backfill ou importação): a chave e o atalho dos traumas aparecem sem recarregar
+    aoSalvar: n => {
+      if (amostraVista || n < AMOSTRA_LOCAL) return;
+      amostraVista = true;
+      seguro('configurações', () => redesenharConfiguracoes());
+      seguro('ações do coach', () => registrarAcoesCoach(mostraComLocal));
+    },
   }));
   const chat = seguro('chat do pós-jogo', () => iniciarChatPosjogo(context, cfg));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
@@ -70,7 +84,7 @@ export function init(context) {
     registrarBloco('minimapa', blocoMinimapa, 'Minimapa e jungler', com('minimapa', 'feiticos'));
     registrarBloco('mentor', blocoMentor, 'Mentor', com('mentor'));
     registrarBloco('carregamento', blocoCarregamento, 'Tela de carregamento', com('carregamento'));
-    registrarBloco('traumas', blocoTraumas, 'Traumas', com('draft', 'contexto'));
+    registrarBloco('traumas', blocoTraumas, 'Traumas', { visivel: () => ['draft', 'contexto', 'historico'].some(mostraComLocal) });
     registrarBloco('chatPosjogo', blocoChatPosjogo, 'Chat do pós-jogo');
     registrarBloco('semPopups', blocoSemPopups, 'Avisos do client');
     registrarBloco('compacto', blocoCompacto, 'Client compacto');
@@ -92,7 +106,7 @@ export function init(context) {
     seguro('configurações', () => redesenharConfiguracoes());
     seguro('compacto', () => compacto?.sincronizar());
     seguro('champ select', () => champ?.desenhar());
-    seguro('ações do coach', () => registrarAcoesCoach(mostraRecurso));
+    seguro('ações do coach', () => registrarAcoesCoach(mostraComLocal));
     seguro('histórico', () => acumulador?.cutucar()); // complemento com "resumos" achado: a importação sai no próximo passo
   });
   // com a camada compacta à vista, expande antes de abrir o painel (compacto/index.js expandirAntes, passo 11 b2)
@@ -100,7 +114,7 @@ export function init(context) {
     { name: 'lol-client: analisar última partida', tags: ['lol-client', 'pós-jogo'], perform: () => expandirAntes({ compacto, abrir: () => (posjogo?.analisarAgora ?? analisarUltima)() }) },
   ]));
   // atalhos coach.* do Ctrl+K: só os do recurso anunciado (ou lembrado); os que aparecerem depois entram no aperto de mão
-  seguro('ações do coach', () => registrarAcoesCoach(mostraRecurso));
+  seguro('ações do coach', () => registrarAcoesCoach(mostraComLocal));
 
   // ponto de acesso para depuração e testes (cdp.mjs eval); prepararLobby não busca partida
   window.__lolClient = {

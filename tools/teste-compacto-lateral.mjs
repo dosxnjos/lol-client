@@ -19,6 +19,7 @@ import { criarLateral, layout, lateralLigada } from '../pengu/compacto/lateral.j
 import { verAmigos, statusAmigo, lerSalaTime, elencoTime, acharSalaTime, lobbyParaConvite, pedidosRecebidos, lerConversa, limparConversas, verRecentes,
   quandoCurto } from '../pengu/compacto/lateral-chat.js';
 import { modeloSelo, meuNaSessao } from '../pengu/compacto/lateral-coach.js';
+import { seloDoAcumulador } from '../pengu/champselect.js';
 import { linhaUltima } from '../pengu/compacto/tela-lobby.js';
 import { botaoCoach, botaoConfig, botaoChat, botaoAmigos } from '../pengu/compacto/chat-botao.js';
 import { PADRAO } from '../pengu/config.js';
@@ -951,6 +952,20 @@ async function nadaSozinho() {
   const m3 = modeloSelo({ sessao: sessaoCS(58), est: null, coach: { campeao: 58, fora: true, dados: null }, nome });
   caso('coletor fora / histórico ainda não lido: "carregando histórico…" e a marca de coletor fora', m3.fora && /carregando/.test(m3.linhas[0]), JSON.stringify(m3));
   caso('sem campeão em hover nem travado: o painel pede para passar o mouse', !!modeloSelo({ sessao: { localPlayerCellId: 2, myTeam: [{ cellId: 2 }], actions: [] } }).vazio && meuNaSessao(null) === null);
+  // Fase 5 (plano plugin Pengu primeiro): sem o complemento, matchup e trauma do acumulador (champselect.js seloDoAcumulador)
+  const linhasAc = [1, 2, 3, 4].map(i => ({ gameId: i, criacao: i * 1e7, duracao: 1800, fila: 420, campeao: 58, papel: 'TOP', adversario: 24, incerto: 0,
+    vitoria: i === 1 ? 1 : 0, ouro10: -100 * i, xp10: 0, farm10: 0, ouro15: null, xp15: null, farm15: null, mortes10: 1, solo10: 1, gank10: 0, cs: 200, inimigos: [24, 64, 1, 2, 3] }))
+    .concat([5, 6, 7, 8, 9, 10].map(i => ({ gameId: i, criacao: i * 1e7, duracao: 1800, fila: 420, campeao: 58, papel: 'TOP', adversario: 86, incerto: 0,
+      vitoria: 1, ouro10: 50, xp10: 0, farm10: 0, ouro15: null, xp15: null, farm15: null, mortes10: 0, solo10: 0, gank10: 0, cs: 200, inimigos: [86, 64, 1, 2, 3] })));
+  const local = seloDoAcumulador(58, sessaoCS(58, 58, 24), linhasAc);
+  const m4 = modeloSelo({ sessao: sessaoCS(58, 58, 24), est, coach: { campeao: 58, dados: local }, nome, temColetor: true });
+  caso('selo local (sem o complemento): matchup contra o travado que já foi adversário de rota, trauma, sem draft, rota "no seu histórico"',
+    local?.local === true && /contra Jax: 1V\/3D · ouro10 −250/.test(m4.rota?.texto) && /Jax é trauma: 1V\/3D/.test(m4.trauma || '') && !m4.draft
+      && /no seu histórico/.test(m4.rota?.rota) && m4.local === true, JSON.stringify(m4));
+  const m5 = modeloSelo({ sessao: sessaoCS(58, 58, 0), est, coach: { campeao: 58, dados: seloDoAcumulador(58, sessaoCS(58, 58, 0), linhasAc) }, nome, temColetor: true });
+  caso('selo local sem inimigo travado: sem matchup, marca local (texto próprio na caixa)', !m5.rota && m5.local === true, JSON.stringify(m5));
+  caso('selo local: acumulador abaixo de 3 partidas ou sem campeão = nada', seloDoAcumulador(58, sessaoCS(58, 58, 24), linhasAc.slice(0, 2)) === null
+    && seloDoAcumulador(0, sessaoCS(58, 58, 24), linhasAc) === null);
   caso('última partida: pronta / analisando / falhou / nunca / descartada (o ícone coach mora na tela, não no título)',
     linhaUltima({ gameId: 1, pronta: true, resumo: { vitoria: false, campeao: 58, k: 8, d: 9, a: 5, fila: 400, criacao: 0 } }, nome).titulo === 'última partida: derrota · Renekton 8/9/5'
       && linhaUltima({ gameId: 1, pronta: true }).botao.rotulo === 'reabrir' && linhaUltima({ gameId: 1, pronta: true }).botao.icone === 'expandir'

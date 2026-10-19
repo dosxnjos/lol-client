@@ -406,7 +406,7 @@ const HIST = ler('historico.json');
 const PARTIDA = ler(`game-${GID}.json`), TIMELINE = ler(`timeline-${GID}.json`);
 
 // o plugin inteiro de pé com o complemento falso `srv` e a config salva `salvo`; roteiro de 30 min passando por todas as fases
-async function plugin({ salvo = null, srv }) {
+async function plugin({ salvo = null, srv, historico = null }) {
   instalarRelogio();
   const inicio = T.agora;
   const doc = novoDoc();
@@ -446,6 +446,7 @@ async function plugin({ salvo = null, srv }) {
   globalThis.CommandBar = { addAction() {} };
   globalThis.MutationObserver = class { observe() {} disconnect() {} };
   const dsMem = new Map(salvo ? [['lol-client.config', salvo]] : []);
+  if (historico) dsMem.set('lol-client.historico', historico);   // acumulador já com partidas (Fase 5: contexto local)
   globalThis.DataStore = { get: k => (dsMem.has(k) ? JSON.parse(JSON.stringify(dsMem.get(k))) : undefined), set: (k, v) => { dsMem.set(k, JSON.parse(JSON.stringify(v))); }, has: k => dsMem.has(k), remove: k => dsMem.delete(k) };
   const obs = new Map();
   const context = { socket: { observe: (uri, cb) => { (obs.get(uri) || obs.set(uri, []).get(uri)).push(cb); } },
@@ -476,6 +477,9 @@ async function plugin({ salvo = null, srv }) {
     await fase('EndOfGame', 20000);
     try { window.__lolClient?.abrirPainel?.(GID); } catch (e) { errosInit.push('abrirPainel: ' + e); }
     await avancar(150000);
+    // o pós-jogo grande aberto (innerHTML como texto neste DOM): para a Fase 5 conferir matchup, traumas e a nota da fonte
+    const posjogo = { estado: window.__lolClient?.posjogo?.estado?.() ?? null,
+      html: [...doc.documentElement.desc()].map(n => n.innerHTML || '').join('\n') };
     await fase('Lobby', 60000);
     const total = (T.agora - inicio) / 60000;
     // Configurações (as mesmas da ⚙ do compacto): títulos dos blocos e todo o texto, com o estado da ponte no fim do roteiro
@@ -484,7 +488,7 @@ async function plugin({ salvo = null, srv }) {
     montarPainel(painel, { cfg: window.__lolClient.cfg, definir: () => {} });
     const titulos = painel.querySelectorAll('.lol-settings-general-section-title').map(n => n.textContent);
     const ids = painel.querySelectorAll('input').map(n => n.getAttribute('name'));
-    return { a8765, errosInit, total, lc: window.__lolClient, dsMem, pedidosRiot, lf, config: { titulos, ids, texto: painel.textContent } };
+    return { a8765, errosInit, total, lc: window.__lolClient, dsMem, pedidosRiot, lf, posjogo, config: { titulos, ids, texto: painel.textContent } };
   } finally {
     console.error = erroOriginal; console.log = logOriginal;
   }
@@ -509,6 +513,40 @@ async function plugin({ salvo = null, srv }) {
   caso('(a) Configurações sem o complemento: sem a janelinha fora do client; com a chave da ponte',
     !r.config.ids.includes('coach.aceiteFlutuante') && r.config.ids.includes('coletor.ligado'), JSON.stringify(r.config.ids));
   caso('(a) Configurações sem o complemento: nenhum texto com "coletor", "8765" ou "MCP"', !/coletor|8765|\bMCP\b/i.test(r.config.texto), r.config.texto.match(/.{0,60}(coletor|8765|MCP).{0,60}/i)?.[0]);
+}
+
+// ---------- (g) Fase 5: instalação nova (ponte desligada) com o acumulador já com partidas: o pós-jogo mostra matchup e trauma do
+// contexto local (posjogo/contexto.js), a ⚙ mostra a chave "Mostrar traumas", e nada fala com a 8765 ----------
+{
+  const { CAMPOS } = await import('../pengu/historico.js');
+  const T0 = PARTIDA.gameCreation - 40 * 86400000;
+  const linha = (i, o) => { const b = { gameId: 3290000000 + i, criacao: T0 + i * 3 * 3600000, duracao: 1800, fila: 420, campeao: 58, papel: 'TOP', adversario: 24,
+    incerto: 0, vitoria: 1, ouro10: 0, xp10: 0, farm10: 0, ouro15: 0, xp15: 0, farm15: 0, mortes10: 0, solo10: 0, gank10: 0, cs: 190, inimigos: [24, 64, 1, 2, 3], ...o };
+    return CAMPOS.map(c => b[c]); };
+  const linhas = [
+    ...[0, 1].map(i => linha(i, { adversario: 83, inimigos: [83, 64, 1, 2, 3], vitoria: i, ouro10: -200 })),   // 58 TOP x 83: 2 antes desta (n 3 com ela)
+    ...[2, 3, 4, 5, 6, 7].map(i => linha(i, { vitoria: 0, inimigos: [24, 245, 1, 2, 3] })),                   // 245 (inimigo desta partida) nas 6 derrotas
+    ...[8, 9, 10, 11, 12, 13].map(i => linha(i, { vitoria: 1 })),
+  ];
+  const r = await plugin({ historico: { v: 1, dono: SUMMONER.puuid, imp: 0, campos: CAMPOS, linhas },
+    srv: async () => ({ status: 200, json: async () => ({ app: APP, versao: 1, recursos: ['coach', 'contexto', 'draft'] }) }) });
+  caso(`(g) acumulador cheio e ponte desligada: zero fetch à 8765 em ${Math.round(r.total)} min`, r.lc?.cfg?.coletor?.ligado === false && r.a8765.length === 0,
+    JSON.stringify(r.a8765.slice(0, 5)));
+  caso('(g) pós-jogo com o contexto local: ctxEstado "local" e a nota das partidas guardadas', r.posjogo.estado?.ctxEstado === 'local'
+    && /lições com matchup, traumas e histórico das \d+ partidas guardadas neste computador/.test(r.posjogo.html), JSON.stringify(r.posjogo.estado));
+  caso('(g) pós-jogo: trauma da partida (245 nas derrotas) na aba Tendência', /campeão 245<\/b> é trauma: 0V\/6D/.test(r.posjogo.html),
+    r.posjogo.html.match(/.{0,80}é trauma.{0,80}/)?.[0] || r.posjogo.html.match(/traumas nesta partida.{0,200}/s)?.[0]);
+  const { contextoLocal } = await import('../pengu/posjogo/index.js');
+  const { analisar } = await import('../pengu/posjogo/analise.js');
+  const { comoObjeto } = await import('../pengu/historico.js');
+  const rr = analisar(PARTIDA, TIMELINE, SUMMONER.puuid, []);
+  const loc = contextoLocal(PARTIDA, TIMELINE, SUMMONER.puuid, rr, linhas.map(comoObjeto));
+  caso('(g) contexto local da partida: matchup 58 x 83 com n 3 (2V/1D, esta incluída) e trauma 245', loc?.ctx?.matchup?.n === 3 && loc.ctx.matchup.vitorias === 2
+    && loc.ctx.traumas.some(t => t.campeao === 245) && loc.n === 15, JSON.stringify(loc));
+  caso('(g) Configurações sem o complemento e com o acumulador: "Traumas" aparece (fonte local); nenhum outro bloco do coach',
+    r.config.titulos.includes('Traumas') && !['Painel ao vivo (2ª tela)', 'Voz', 'Mentor'].some(x => r.config.titulos.includes(x)), JSON.stringify(r.config.titulos));
+  caso('(g) nenhum texto com "coletor", "8765" ou "MCP" no pós-jogo nem nas Configurações', !/coletor|8765|\bMCP\b/i.test(r.config.texto)
+    && !/coletor|8765|\bMCP\b/i.test(r.posjogo.html.replace(/<[^>]+>/g, ' ')), (r.posjogo.html.replace(/<[^>]+>/g, ' ').match(/.{0,60}(coletor|8765|MCP).{0,60}/i) || [])[0]);
 }
 
 // ---------- (d) config do Gabriel (v3 salva) com o complemento anunciando só coach + draft ----------

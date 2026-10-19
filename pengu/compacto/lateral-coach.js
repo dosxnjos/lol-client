@@ -29,8 +29,9 @@ export const inimigosTravados = s => new Set((s?.theirTeam || []).map(c => Numbe
 
 // sessão + estatísticas + coach -> modelo do painel (puro). est = estatisticasCampeao(...) | null (histórico não lido);
 // coach = {dados, campeao, fora}; nome(id) -> nome do campeão; traumas: chave "Mostrar traumas"; fila = id da fila;
-// temColetor = o complemento coach anuncia "draft" (sem ele, a caixa "na sua rota" some: nada de texto de erro; Fase 1 do
-// roadmap/2026-10-17-plugin-pengu-primeiro.md). m.semCoach marca isso; m.fora = com o recurso, mas sem resposta agora
+// temColetor = há fonte de matchup: o complemento coach anuncia "draft", ou o acumulador local (coach.dados.local, Fase 5)
+// (sem nenhuma, a caixa "na sua rota" some: nada de texto de erro; Fase 1 do roadmap/2026-10-17-plugin-pengu-primeiro.md).
+// m.semCoach marca isso; m.fora = com o recurso, mas sem resposta agora; m.local = matchup e trauma do acumulador
 export function modeloSelo({ sessao, est = null, histN = 0, histErro = false, coach = null, nome = id => `campeão ${id}`, traumas = true, fila = null, temColetor = true }) {
   const eu = meuNaSessao(sessao);
   if (!eu) return { vazio: 'passe o mouse num campeão (ou trave) para ver o selo' };
@@ -46,10 +47,13 @@ export function modeloSelo({ sessao, est = null, histN = 0, histErro = false, co
   if (d) {
     const adv = adversarioDoDraft(d.draft, eu.posicao);
     const travados = inimigosTravados(sessao);
+    const pos = String(POS_PT[eu.posicao] || eu.posicao || '?').toLowerCase();
     if (adv && travados.has(Number(adv.campeao))) {
       m.rota = { adv: { id: Number(adv.campeao), nome: nome(Number(adv.campeao)) }, texto: linhaMatchup(d.matchups, eu.championId, Number(adv.campeao), nome(Number(adv.campeao)), eu.posicao),
-        rota: `rota provável pelo draft: ${String(POS_PT[eu.posicao] || eu.posicao || '?').toLowerCase()}` };
+        // sem o complemento (d.local, champselect.js seloDoAcumulador): o adversário de rota sai do seu histórico, não do draft
+        rota: d.local ? `adversário no seu histórico com este campeão (${pos})` : `rota provável pelo draft: ${pos}` };
     }
+    m.local = !!d.local;
     m.trauma = traumas ? linhaTrauma(d.traumas, nome) : null;
     const dl = linhasDraft(d.draft);
     if (dl.length) m.draft = { faixa: dl[0], termos: dl[1] || '', p: Number.isFinite(Number(d.draft?.p)) ? Math.min(Math.max(Number(d.draft.p), 0), 1) : null };
@@ -76,7 +80,8 @@ export function criarCoachView({ doc }) {
     const rota = m.semCoach && !m.rota && !m.trauma ? null : h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'na sua rota'),
       m.rota ? h('div', { doc, class: 'lc-lt-mu' }, fotoCampeao(m.campeao.id, { tam: 28, doc }), h('span', { doc, class: 'lc-lt-mudo' }, '×'),
         fotoCampeao(m.rota.adv.id, { tam: 28, nome: m.rota.adv.nome, doc }), h('div', { doc }, h('div', { doc, class: 'lc-lt-az' }, m.rota.texto), h('small', { doc, class: 'lc-lt-mudo' }, m.rota.rota)))
-        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'matchup e draft indisponíveis agora: nova tentativa em seguida' : 'adversário da sua rota ainda não travou'),
+        : h('div', { doc, class: 'lc-lt-sl lc-lt-mudo' }, m.fora ? 'matchup e draft indisponíveis agora: nova tentativa em seguida'
+          : m.local ? 'nenhum inimigo travado no seu histórico desta rota' : 'adversário da sua rota ainda não travou'),
       m.trauma ? h('div', { doc, class: 'lc-lt-sl lc-lt-trauma' }, m.trauma) : null);
     const draft = m.draft ? h('div', { doc, class: 'lc-lt-cx' }, h('div', { doc, class: 'lc-cp-rot' }, 'draft'),
       h('div', { doc, class: 'lc-lt-sl lc-lt-az' }, m.draft.faixa),
