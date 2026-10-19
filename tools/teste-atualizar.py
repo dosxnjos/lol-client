@@ -594,6 +594,11 @@ def parte_g(base):
         filho2.terminate()   # o próprio filho deste teste, pelo handle (nunca pela porta)
         filho2.wait(10)
 
+    # lancar_sucessor de verdade (flags do Windows aceitas: CREATE_NO_WINDOW, grupo próprio, fora do job se ele deixar)
+    p = C.lancar_sucessor([sys.executable, "-c", "pass"])
+    caso("(g) lancar_sucessor: sobe o processo solto (Popen) e ele termina com 0", p is not None and p.wait(30) == 0,
+         getattr(p, "returncode", None))
+
     # pedir_saida: o rodar() devolve o motivo e marca reiniciar
     pasta = Path(tempfile.mkdtemp(prefix="luc-col-", dir=base))
     Instalacao.criadas.append(pasta)
