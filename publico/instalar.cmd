@@ -1,15 +1,11 @@
-@echo off
+@echo off & setlocal & set "LUC_CMD=%~f0" & cd /d "%TEMP%" & powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & call exit /b %%errorlevel%%
 rem lol-ultra-client: instala o complemento coach sem administrador. Python 3.12 ou mais novo (64 bits), ambiente Python
 rem proprio em LOCALAPPDATA\lol-client\complemento\venv, bibliotecas com versao fixa, o plugin na pasta do Pengu Loader e um
 rem atalho na pasta Inicializar do Windows que espera o client abrir. Nada de tarefa agendada. O resto e PowerShell.
-setlocal
-set "LUC_CMD=%~f0"
-cd /d "%TEMP%"
-setlocal EnableDelayedExpansion
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & exit /b !errorlevel!
+rem Tudo roda na 1a linha e sai nela: o cmd nunca le a 2a (ARMADILHAS, Windows: pagina de codigo UTF-8).
 #PS-INICIO#
-# A linha acima do marcador roda tudo e sai na mesma linha (o mesmo molde do atualizar.cmd: sem rótulo nem goto, funciona com
-# LF; cd para o TEMP antes, a pasta do pacote pode ser trocada). P4.3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md.
+# A 1ª linha roda tudo e sai nela mesma (o mesmo molde do atualizar.cmd: sem rótulo nem goto, funciona com LF, nada depende da
+# página de código do console; cd para o TEMP antes). P4.3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md.
 #   origem    a pasta onde este arquivo está (a extraída do zip lol-ultra-client-complemento-<versão>.zip)
 #   destino   %LOCALAPPDATA%\lol-client\complemento\lol-ultra-client-complemento (onde o atualizar.cmd e o botão atualizar
 #             procuram); o dados\ de uma instalação anterior fica (banco, config, calibração), o .atualizacao\ sai (é a saída

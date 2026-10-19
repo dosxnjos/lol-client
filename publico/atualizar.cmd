@@ -1,14 +1,13 @@
-@echo off
+@echo off & setlocal & set "LUC_CMD=%~f0" & cd /d "%TEMP%" & powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & call exit /b %%errorlevel%%
 rem lol-ultra-client: atualiza o plugin e o complemento coach para a versao mais nova publicada no GitHub, sem admin.
 rem Origem fixa (api.github.com e github.com do REPO de versao.js), hash conferido (SHA256SUMS.txt e digest da API), troca
 rem item a item com volta e recusa de juncao ou de pasta dentro de um repositorio git. O resto deste arquivo e PowerShell.
-setlocal
-set "LUC_CMD=%~f0"
-cd /d "%TEMP%"
-setlocal EnableDelayedExpansion
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & exit /b !errorlevel!
+rem Tudo roda na 1a linha e sai nela: o cmd nunca le a 2a (ARMADILHAS, Windows: pagina de codigo UTF-8 e .cmd que se troca).
 #PS-INICIO#
-# A linha acima do marcador roda tudo e sai na mesma linha: o cmd nunca relê este arquivo depois da troca (a pasta dele muda).
+# A 1ª linha roda tudo e sai nela mesma: o cmd nunca relê este arquivo depois da troca (a pasta dele muda), e com o console na
+# página de código UTF-8 (chcp 65001, ou a opção "UTF-8 para suporte de idioma mundial" do Windows) o cmd erra o deslocamento
+# da linha seguinte num arquivo com acento e executaria pedaços deste PowerShell como lote. Sem EnableDelayedExpansion: o '!'
+# do caminho fica intacto; o código de saída volta pelo `call exit /b %%errorlevel%%` (expandido depois do PowerShell).
 # Mesmas regras do complemento coach (coletor/atualizar.py, P3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md):
 #   release   https://api.github.com/repos/<REPO>/releases/latest
 #   assets    browser_download_url == https://github.com/<REPO>/releases/download/<tag>/<nome>, exato; cada redirecionamento

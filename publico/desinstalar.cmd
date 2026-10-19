@@ -1,15 +1,12 @@
-@echo off
+@echo off & set "LUC_CMD=%~f0" & cd /d "%TEMP%" & powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & call exit /b %%errorlevel%%
 rem lol-ultra-client: desinstala o complemento coach e o plugin, sem administrador: fecha o complemento em execucao, apaga
 rem o atalho da pasta Inicializar, a pasta plugins\lol-ultra-client do Pengu Loader e LOCALAPPDATA\lol-client\complemento
 rem (codigo, ambiente Python e as partidas guardadas por ele). O resto e PowerShell.
-setlocal
-set "LUC_CMD=%~f0"
-cd /d "%TEMP%"
-setlocal EnableDelayedExpansion
-powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & exit /b !errorlevel!
+rem Tudo roda na 1a linha e sai nela: o cmd nunca le a 2a (ARMADILHAS, Windows: pagina de codigo UTF-8). Sem setlocal: o
+rem endlocal da saida voltaria para a pasta atual de antes, que este arquivo acabou de apagar.
 #PS-INICIO#
-# A linha acima do marcador roda tudo e sai na mesma linha: este arquivo pode estar dentro da pasta que ele apaga (o cmd não
-# relê nada depois; cd para o TEMP antes). P4.3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md.
+# A 1ª linha roda tudo e sai nela mesma: este arquivo pode estar dentro da pasta que ele apaga (o cmd não relê nada depois,
+# nem depende da página de código do console; cd para o TEMP antes). P4.3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md.
 #   fecha     relançador e coletor pelo pid das travas em dados\, só processo python com a pasta do complemento na linha de
 #             comando (pid reaproveitado e o coletor de outra instalação ficam de fora)
 #   apaga     o atalho lol-ultra-client.lnk da pasta Inicializar; plugins\lol-ultra-client (nunca junção nem pasta num

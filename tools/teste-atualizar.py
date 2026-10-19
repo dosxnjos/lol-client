@@ -643,12 +643,26 @@ def parte_g(base):
 
 # ---------- (h) publico/atualizar.cmd ----------
 
-def rodar_cmd(pasta_cmd, inst, g, extra=None):
+def rodar_cmd(pasta_cmd, inst, g, extra=None, pagina=None):
+    """pagina: página de código do console antes do .cmd (chcp; 65001 = UTF-8, a opção do Windows ou o terminal)"""
     env = {**os.environ, "LUC_API": g.base, "LUC_PLUGINS": str(inst.plugins), "LOCALAPPDATA": str(inst.local),
            "LUC_SEM_PAUSA": "1", **(extra or {})}
-    r = subprocess.run(["cmd", "/c", str(Path(pasta_cmd) / "atualizar.cmd")], cwd=str(pasta_cmd), env=env, capture_output=True,
-                       timeout=120)
-    return r.returncode, (r.stdout + r.stderr).decode("cp850", "replace")
+    arq = Path(pasta_cmd) / "atualizar.cmd"
+    linha = f'cmd /c "chcp {pagina} >nul & "{arq}""' if pagina else ["cmd", "/c", str(arq)]
+    antes = pagina_do_console() if pagina else None
+    try:
+        r = subprocess.run(linha, cwd=str(pasta_cmd), env=env, capture_output=True, timeout=120)
+    finally:
+        if antes:   # o chcp muda o console que este processo divide com os próximos .cmd: volta a de antes
+            subprocess.run(f"cmd /c chcp {antes} >nul", capture_output=True)
+    return r.returncode, (r.stdout + r.stderr).decode("utf-8" if pagina == "65001" else "cp850", "replace")
+
+
+def pagina_do_console():
+    """número da página de código ativa do console (chcp), ou None"""
+    import re
+    m = re.search(rb"(\d{3,5})", subprocess.run("cmd /c chcp", capture_output=True).stdout)
+    return m.group(1).decode() if m else None
 
 
 def parte_h(base, g, fora):
@@ -770,17 +784,31 @@ def parte_h(base, g, fora):
     rc, out = rodar_cmd(inst.plug, inst, g, {"LUC_API": "https://api.github.com"})
     caso("(h) cmd com LUC_API fora de loopback: rc 2, nada pedido", rc == 2 and g.hits == [] and intacta(inst), (rc, out))
 
-    # o .cmd que vai no pacote: sem CRLF exigido (nenhum rótulo nem goto) e sai na mesma linha que roda o PowerShell
+    # o .cmd que vai no pacote: tudo na 1ª linha, que sai nela mesma (P4, 19/10/2026: com o console na página de código UTF-8
+    # o cmd errava o deslocamento da 2ª linha num arquivo com acento e executava pedaços do PowerShell como lote, rc 255)
     texto = CMD.decode("utf-8")
     cab = texto.split("#PS-INICIO#")[0]
-    caso("(h) cabeçalho do .cmd só ASCII, sem rótulo nem goto, e o PowerShell sai na mesma linha (& exit /b)",
+    l1 = cab.splitlines()[0].strip().lower()
+    caso("(h) cabeçalho do .cmd só ASCII, sem rótulo nem goto; a 1ª linha faz tudo (LUC_CMD, cd para o TEMP, PowerShell) e sai "
+         "nela (call exit /b %%errorlevel%%), sem EnableDelayedExpansion ('!' no caminho sobrevive)",
          cab.isascii() and ":" not in "".join(l[:1] for l in cab.splitlines()) and "goto" not in cab.lower()
-         and any("powershell" in l and l.rstrip().endswith("& exit /b !errorlevel!") for l in cab.splitlines()), cab)
-    linhas = [l.strip().lower() for l in cab.splitlines()]
-    pos = lambda f: next((i for i, l in enumerate(linhas) if f(l)), -1)   # noqa: E731
-    atrasada = pos(lambda l: l.startswith("setlocal enabledelayedexpansion"))
-    caso("(h) LUC_CMD e o cd para o TEMP antes do EnableDelayedExpansion ('!' no caminho sobrevive)",
-         0 <= pos(lambda l: l.startswith('set "luc_cmd=')) < atrasada and 0 <= pos(lambda l: l.startswith("cd /d")) < atrasada, linhas)
+         and l1.startswith('@echo off & setlocal & set "luc_cmd=%~f0" & cd /d "%temp%" & powershell ')
+         and l1.endswith("& call exit /b %%errorlevel%%") and "enabledelayedexpansion" not in cab.lower(), cab)
+
+    g.limpar()
+    publicar(g)
+    g.redir = "dentro"
+    inst = Instalacao(base)
+    rc, out = rodar_cmd(inst.plug, inst, g, pagina="65001")
+    p, c = inst.fotos()
+    caso("(h) cmd com o console na página de código UTF-8 (chcp 65001): rc 0 e os 2 trocados (antes: rc 255, pedaços do "
+         "PowerShell rodando como lote)", rc == 0 and "Atualizado para a versão 0.2.0" in out and p == esperado(PLUGIN_NOVO)
+         and c == esperado({**COMP_NOVO, **DADOS}), (rc, out[-600:]))
+    g.limpar()
+    inst = Instalacao(base)
+    rc, out = rodar_cmd(inst.plug, inst, g, {"LUC_API": "https://api.github.com"}, pagina="65001")
+    caso("(h) cmd na página UTF-8 com recusa (LUC_API fora de loopback): o código de saída 2 chega ao chamador",
+         rc == 2 and g.hits == [] and intacta(inst), (rc, out[-300:]))
 
 
 # ---------- (i) revisão adversarial da P3 (19/10/2026) ----------
