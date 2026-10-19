@@ -26,7 +26,8 @@ Estado (19/10/2026): decisões do Gabriel tomadas (§ Decisões do Gabriel, abai
 execução. Revisão adversarial de 17/10 conferida contra o código (correções marcadas "revisão 17/10" no corpo). Relatório de
 execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`, nunca no corpo.
 - **Fase 1 feita em 19/10/2026** (código e provas offline: `teste-ponte.mjs` 35/35, `teste-aviso-partida.py` 101/101,
-  `teste-config.mjs` 59/59, bateria node verde); falta aplicar na instalação dele e as provas do client real:
+  `teste-config.mjs` 59/59, bateria node verde); falta aplicar na instalação dele, **coletor antes do plugin** (a ordem do
+  "Aplicar na instalação dele" abaixo deixaria a reserva velha sem o "não aceitar"), e as provas do client real:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-1.md).
 
 ## Decisões do Gabriel (19/10/2026)
