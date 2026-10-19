@@ -75,7 +75,8 @@ placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e
 | 2 derrotas seguidas: depois disso o seu winrate cai para 44% (número fixo do mantenedor) (19/10) | o mesmo com o número das partidas guardadas; sem amostra: "2 derrotas seguidas. Buscar mesmo assim?"; número sem queda: "o seu winrate é 55%" |
 | de madrugada o seu winrate cai: 47% contra 58% de dia (número fixo) (19/10) | sem amostra: "é madrugada (entre 1h e 6h). Buscar mesmo assim?"; com: os números calculados |
 | lições com o histórico do client (sem o complemento, mesmo com partidas guardadas) (19/10) | lições com matchup, traumas e histórico das 53 partidas guardadas neste computador |
-| adversário da sua rota ainda não travou (selo sem o complemento) (19/10) | nenhum inimigo travado no seu histórico desta rota; rota: "adversário no seu histórico com este campeão (topo)" |
+| adversário da sua rota ainda não travou (selo sem o complemento) (19/10) | ninguém travado: "adversário da sua rota ainda não travou"; travados fora do histórico da rota: "nenhum inimigo travado no seu histórico desta rota"; às cegas: a caixa some; rota: "adversário no seu histórico com este campeão (topo)" |
+| ⚙ freio de tilt com mais de 30 partidas: "Com 30 partidas guardadas neste computador, aparece aqui…" (19/10) | Com 10 partidas logo depois de 2 derrotas seguidas (9 até agora), aparece aqui o seu winrate nelas. |
 
 A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/2026-10-13-client-compacto.md).
 

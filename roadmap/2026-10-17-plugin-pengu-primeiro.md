@@ -64,6 +64,10 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   dia 58%; `teste-ponte.mjs` 47/47 com o pós-jogo sem complemento mostrando matchup e trauma e zero fetch à 8765; Fase 6 fora,
   decisão do Gabriel): falta reiniciar o coletor (importação) antes de recarregar o plugin, e as provas do client real:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-5.md).
+- **Revisão adversarial da Fase 5 (19/10/2026):** 4 achados (2 iguais), os 3 problemas reais e corrigidos: o acumulador só
+  responde à conta da sessão já lida, na carga e antes da lista (outra conta no mesmo PC via os números da dona; `f2c50a3`,
+  `teste-historico.mjs` 91/91), a ⚙ do freio de tilt acima de 30 partidas (`f2c50a3`) e a caixa "na sua rota" do selo local às
+  cegas e sem inimigo travado (`1f201a4`, `teste-compacto-lateral.mjs` 142/142); bateria node 29/29; tabela no relatório.
 
 ## Decisões do Gabriel (19/10/2026)
 

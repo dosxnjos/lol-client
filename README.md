@@ -131,7 +131,7 @@ acontece. Nunca bloqueia de vez, nunca busca sozinho. Em grupo ou sem ser o líd
 e não pede confirmação. Os números são calculados das partidas guardadas no plugin (acumulador; desde 19/10/2026, Fase 5
 do [plano plugin Pengu primeiro](roadmap/2026-10-17-plugin-pengu-primeiro.md)): abaixo de 30 partidas o texto sai sem
 número ("2 derrotas seguidas. Buscar mesmo assim?"), cada número precisa de 10 partidas na faixa, e o texto só diz "cai"
-quando cai; regra em [INSIGHTS](docs/INSIGHTS.md) § Contexto sem o complemento (`pengu/posjogo/contexto.js`
+quando cai; outra conta no mesmo PC (ou a conta ainda não lida, nos primeiros segundos) não vê número nenhum; regra em [INSIGHTS](docs/INSIGHTS.md) § Contexto sem o complemento (`pengu/posjogo/contexto.js`
 `medicaoDe`). Com o complemento, o acumulador começa com a importação do `/resumos`. O resultado da partida que acabou
 vem do fim de partida (`eog-stats-block`) até o histórico trazê-la: vitória zera na hora. Histórico que não carregou
 a tempo = "sequência de derrotas desconhecida" e também pede o 2º clique.

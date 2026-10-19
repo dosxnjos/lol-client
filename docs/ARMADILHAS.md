@@ -364,7 +364,11 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   revisão adversarial da Fase 4) e a importação do `GET /resumos` (recurso `resumos`, uma vez por abertura). Sintomas: **linha sem papel nem
   diferenças** = a LCU deu 404 na linha do tempo daquela partida (entra assim e não se pede de novo; outro erro fica de fora
   e volta na próxima abertura); **acumulador parado e "conta diferente da dona" no console** = outra conta no mesmo Pengu
-  (o `dono` é o puuid de quem gravou primeiro; nada lido nem gravado para a outra); **partidas de outra conta no `/resumos`**
+  (o `dono` é o puuid de quem gravou primeiro; nada lido nem gravado para a outra); **números da dona para outra conta
+  (freio, dica do lobby, selo, chave "Mostrar traumas")** = `linhas()` sem a conta da sessão lida devolvia as da dona até
+  a lista do histórico chegar (até 40 s, a seleção inteira se ela não chegasse); desde a revisão adversarial da Fase 5 a
+  conta sai na carga (`identificar`, `current-summoner`, qualquer fase) e no 1º passo antes da lista, e até lá `linhas()`
+  e `estado().minhas` ficam vazios (`teste-historico.mjs` 9c); **partidas de outra conta no `/resumos`**
   = o banco guarda o `eu` de cada partida pela conta logada na hora e o meta `puuid` muda a cada login: sem o filtro pelo
   participante `eu = 1` com o puuid do meta, o `dono` carimbava as de outra conta (corrigido na revisão adversarial da
   Fase 4, `teste-resumos.py` F); **"formato desconhecido"** = `v`
@@ -379,7 +383,8 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   importação do `/resumos`, **coletor reiniciado antes do plugin recarregar**; sem ela, ficam sem número até o backfill.
   Sintomas: **"cai para" virou "é"** = o número calculado não mostra queda (o texto só diz "cai" quando cai); **matchup da
   seleção some sem o complemento** = nenhum inimigo travado foi adversário de rota deste campeão nesta posição no
-  acumulador (sem a rota provável do draft, Fase 6 fora); **faixa horária diferente entre JS e Python** = fuso: os dois usam a
+  acumulador (sem a rota provável do draft, Fase 6 fora); às cegas (sem posição) a caixa "na sua rota" do compacto some e
+  fica só o trauma (`modeloSelo` `avisoRota`, revisão adversarial da Fase 5); **faixa horária diferente entre JS e Python** = fuso: os dois usam a
   hora local do PC (a paridade fixa `America/Sao_Paulo`, `tools/teste-contexto.*`); **ordem de matchups diferente** = texto
   comparado com `localeCompare` (o Python compara por código; `contexto.js` usa `<`/`>`). Prova: `teste-contexto.mjs`/`.py`,
   `teste-ponte.mjs` (g). Conferir: `__lolClient.historico.linhas().length`.
