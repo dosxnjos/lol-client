@@ -211,8 +211,20 @@ for (const [nome, resp] of [['404 (repositório ainda não existe)', () => ({ st
   await flush();
   caso('(f) fetch sem resposta: abortado aos 5 s (signal.aborted), calado, nenhuma consulta presa', antes === null && fim === 'falhou' && m.g.chamadas[0]?.op.signal?.aborted === true
     && !m.v.estado().verificando && m.logs.length === 0, JSON.stringify({ antes, fim, ab: m.g.chamadas[0]?.op.signal?.aborted }));
+  // "procurar agora" no meio de uma consulta em voo: um fetch só, e o resultado aparece no bloco
+  m.ds.set(CHAVE_ATUALIZACAO, { repo: REPO, em: 0 });
+  m.g.resposta = () => 'nunca';
+  const auto = m.v.consultar('teste');
+  await flush();
+  const manual = m.v.procurar();
+  await flush();
+  const durante = m.v.estado().resultado;
+  await m.rel.avancar(PRAZO_MS);
+  const [ra, rm] = await Promise.all([auto, manual]);
+  caso('(f) "procurar agora" com a consulta automática em voo: 1 fetch, "Procurando…" e depois o resultado', m.g.chamadas.length === 2 && durante === 'procurando'
+    && ra === 'falhou' && rm === 'falhou' && m.v.estado().resultado === 'falhou', JSON.stringify({ n: m.g.chamadas.length, durante, ra, rm }));
   const r = await Promise.race([m.v.procurar(), m.rel.avancar(PRAZO_MS).then(() => 'x')]);
-  caso('(f) "procurar agora" depois do prazo: consulta de novo e diz "não foi possível"', m.g.chamadas.length === 2 && m.v.estado().resultado === 'falhou', `${r} ${m.v.estado().resultado}`);
+  caso('(f) "procurar agora" depois do prazo: consulta de novo e diz "não foi possível"', m.g.chamadas.length === 3 && m.v.estado().resultado === 'falhou', `${r} ${m.v.estado().resultado}`);
   m.v.parar();
 }
 

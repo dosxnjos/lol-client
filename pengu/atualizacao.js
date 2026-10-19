@@ -108,7 +108,12 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
 
   // uma consulta (um por vez). manual = clique em "procurar agora" -> 'nova' | 'nenhuma' | 'falhou'
   function consultar(motivo, manual = false) {
-    if (emVoo) return emVoo;
+    if (emVoo) {
+      // "procurar agora" com a consulta automática em voo: espera ela e mostra o resultado (sem 2º fetch)
+      if (!manual) return emVoo;
+      tela.resultado = 'procurando'; avisar();
+      return emVoo.then(res => { tela.resultado = res; avisar(); return res; });
+    }
     if (!repoValido(repo)) { if (manual) { tela.resultado = 'falhou'; avisar(); } return Promise.resolve('falhou'); }
     const antes = salvo() || {};
     const t0 = agora();
