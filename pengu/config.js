@@ -18,9 +18,11 @@ export const OVERLAY_FORCAS = [['sutil', 'Sutil'], ['normal', 'Normal (padrão)'
 const ESCOLHAS = { 'coach.junglerLonge': JUNGLER_LONGE, 'coach.overlayCor': OVERLAY_CORES, 'coach.overlayForca': OVERLAY_FORCAS };
 // versão das migrações de valor (migrar): 2 = freioTilt 0 salvo antes de 13/10/2026 virou 2, uma vez só;
 // 3 = aceite.silenciarSom false salvo antes da leva de 13/10/2026 virou true, uma vez só (roadmap/2026-10-13-chat-popups-som.md).
+// 4 = coletor.ligado (ponte com o complemento coach) nasce false; config salva antes dela (a instalação do Gabriel) liga
+// uma vez só (roadmap/2026-10-17-plugin-pengu-primeiro.md, Fase 1, decisão técnica 2).
 // A marca vive em duas casas: versao dentro da config e CHAVE_VERSAO à parte. A de fora sobrevive a um revert do
 // plugin (a mescla antiga apaga chave que não está no PADRAO dela e a migração voltaria por cima de um 0 escolhido).
-const VERSAO = 3;
+export const VERSAO = 4;
 const CHAVE_VERSAO = 'lol-client.versao';
 
 export const PADRAO = {
@@ -50,6 +52,9 @@ export const PADRAO = {
   extras: { esconderEvento: false, esconderClassic: false, esconderLoja: false },
   champSelect: { ligado: true },
   traumas: { ligado: true }, // linha "X é trauma" no selo e bloco na aba Tendência (só o plugin)
+  // ponte com o complemento coach (coach.js): false = nenhuma chamada à 127.0.0.1:8765. Instalação nova nasce sem ela; a config
+  // salva antes da VERSAO 4 liga uma vez (migrar). É instalação, não preferência: restaurar() mantém o valor
+  coletor: { ligado: false },
   // chaves do coach: vão inteiras para o coletor (POST 127.0.0.1:8765/config, coach.js); mesmos nomes e
   // padrões do servidor_local.CONFIG_PADRAO. Mentor: sonnet + medium = vencedor da comparação (plano v2, passo 20)
   coach: {
@@ -106,6 +111,8 @@ function mesclar(padrao, salvo) {
 // faz valer uma vez só: se ele desligar depois (0 com versao 2), fica 0. marca = CHAVE_VERSAO lida à parte.
 // versao < 3: aceite.silenciarSom false era o padrão antigo, nunca escolhido -> true (decisão dele, 13/10/2026), mesma
 // regra de uma vez só. Config v1 recebe as duas na mesma carga.
+// versao < 4: quem já tinha config salva usava a ponte com o coletor (sempre ligada até 19/10/2026) -> coletor.ligado true,
+// uma vez só; desligar depois fica desligado. Instalação nova (nada salvo) não passa por aqui: fica o false do PADRAO.
 // -> salvo (alterado no lugar)
 export function migrar(salvo, marca = 0) {
   if (!salvo || typeof salvo !== 'object') return salvo;
@@ -114,6 +121,7 @@ export function migrar(salvo, marca = 0) {
   const versao = Math.max(Number(salvo.versao) || 0, Number(marca) || 0);
   if (versao < 2 && salvo.filaRapida?.freioTilt === 0) salvo.filaRapida.freioTilt = 2;
   if (versao < 3 && salvo.aceite?.silenciarSom === false) salvo.aceite.silenciarSom = true;
+  if (versao < 4) salvo.coletor = { ...(salvo.coletor && typeof salvo.coletor === 'object' ? salvo.coletor : {}), ligado: true };
   if (versao < VERSAO) salvo.versao = VERSAO;
   return salvo;
 }
@@ -152,11 +160,13 @@ export function salvar() {
 
 export const aoMudar = fn => (ouvintes.add(fn), () => ouvintes.delete(fn));
 
-// as regras de runa ficam: são dado do Gabriel, não preferência (plano v1, passo 7d)
+// as regras de runa ficam: são dado do Gabriel, não preferência (plano v1, passo 7d). A ponte com o complemento coach
+// (coletor.ligado) também: é instalação; sem isto o "restaurar padrão" desligaria a ponte calado
 export function restaurar() {
-  const regras = cfg.runas?.regras;
+  const regras = cfg.runas?.regras, ponte = cfg.coletor?.ligado;
   Object.assign(cfg, clonar(PADRAO));
   if (Array.isArray(regras)) cfg.runas.regras = clonar(regras);
+  if (typeof ponte === 'boolean') cfg.coletor.ligado = ponte;
   salvar();
 }
 
@@ -202,7 +212,6 @@ const ALTERNAVEIS = [
   ['aceite.trazerClient', 'trazer o client para a frente ao achar partida'],
   ['aceite.esconderPopup', 'esconder o popup de partida encontrada'],
   ['aceite.silenciarSom', 'silenciar o som depois de aceitar'],
-  ['coach.aceiteFlutuante', 'aceitar/recusar fora do client'],
   ['filaRapida.ligado', 'botão fila rápida'],
   ['filaRapida.jogarDeNovo', 'botão jogar de novo no pós-jogo'],
   ['filaRapida.freioMadrugada', 'pedir confirmação de madrugada (1h–6h)'],
@@ -221,21 +230,43 @@ const ALTERNAVEIS = [
   ['semPopups.smiteAutomatico', 'calar o aviso de golpear colocado sozinho'],
   ['champSelect.ligado', 'winrate no champ select'],
   ['runas.ligado', 'runa por campeão ao travar'],
-  ['traumas.ligado', 'traumas no selo e no pós-jogo'],
-  ['coach.painelAoVivo', 'painel ao vivo na 2ª tela'],
-  ['coach.voz', 'voz do coach'],
-  ['coach.alertasTela', 'moldura de alertas na tela'],
-  ['coach.overlayMinimapa', 'overlay do jungler no minimapa'],
-  ['coach.mentor', 'mentor no pós-jogo'],
+  ['coletor.ligado', 'falar com o complemento coach'],
   ['compacto.ligado', 'client compacto (botão e Ctrl+Shift+M)'],
   ['compacto.inicioCompacto', 'abrir cada fase no modo compacto'],
-  ['compacto.chatLateral', 'chat ao lado do compacto'],
   ['compacto.fundoPerfil', 'fundo do perfil no compacto'],
   ['compacto.chatSalaCresce', 'abrir a faixa da sala do time com mensagem nova'],
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],
 ];
+// atalhos do Ctrl+K que só existem com o recurso do complemento coach (aperto de mão, coach.js): [caminho, rótulo, recursos]
+// (qualquer um dos recursos basta). O CommandBar não tira ação registrada: entram uma vez, quando o recurso aparece
+export const ALTERNAVEIS_COACH = [
+  ['coach.aceiteFlutuante', 'aceitar/recusar fora do client', ['aceite-flutuante']],
+  ['traumas.ligado', 'traumas no selo e no pós-jogo', ['draft', 'contexto']],
+  ['coach.painelAoVivo', 'painel ao vivo na 2ª tela', ['painel']],
+  ['coach.voz', 'voz do coach', ['voz']],
+  ['coach.alertasTela', 'moldura de alertas na tela', ['alertas']],
+  ['coach.overlayMinimapa', 'overlay do jungler no minimapa', ['minimapa']],
+  ['coach.mentor', 'mentor no pós-jogo', ['mentor']],
+  ['compacto.chatLateral', 'chat ao lado do compacto', ['chat-janelas']],
+];
+const acoesCoach = new Set();
+// mostra(recurso) -> bool (coach.js mostraRecurso: anunciado agora ou lembrado do último aperto de mão bom)
+export function registrarAcoesCoach(mostra) {
+  if (typeof CommandBar === 'undefined' || typeof mostra !== 'function') return 0;
+  let n = 0;
+  for (const [caminho, rotulo, recursos] of ALTERNAVEIS_COACH) {
+    if (acoesCoach.has(caminho) || !recursos.some(r => mostra(r))) continue;
+    acoesCoach.add(caminho);
+    n++;
+    CommandBar.addAction({
+      name: `lol-client: ${rotulo} (liga/desliga)`, group: 'lol-client', tags: ['lol-client', caminho],
+      perform: () => { definir(caminho, !obter(caminho)); avisar(`${rotulo}: ${obter(caminho) ? 'ligado' : 'desligado'}`); },
+    });
+  }
+  return n;
+}
 
 export function registrarAcoes(extras = []) {
   if (typeof CommandBar === 'undefined') return;

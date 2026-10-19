@@ -172,11 +172,12 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   // chatSalaCresce (etapa A de 2026-10-16-chat-da-sala-som-icones): a faixa da sala do time cresce com mensagem de outro jogador
   caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, chatLateral, fundoPerfil, chatSalaCresce} (sem conversaSozinha)',
     igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true, chatSalaCresce: true }), JSON.stringify(c1.compacto));
-  salvo = { versao: 3, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, conversaSozinha: true } };
+  // (versao 4 = a atual desde 19/10/2026, VERSAO da ponte com o complemento coach: estes casos provam chave nova sem VERSAO nova)
+  salvo = { versao: 4, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, conversaSozinha: true } };
   const cVelha = JSON.parse(JSON.stringify(carregar()));
   caso('config: conversaSozinha salva antes de 16/10/2026 some na mescla (chave fora do padrão); fundoPerfil e chatSalaCresce entram ligados na config salva sem eles (mesma versao)',
     !('conversaSozinha' in cVelha.compacto) && cVelha.compacto.chatLateral === true && cVelha.compacto.fundoPerfil === true && cVelha.compacto.chatSalaCresce === true
-    && cVelha.versao === 3, JSON.stringify(cVelha.compacto));
+    && cVelha.versao === 4, JSON.stringify(cVelha.compacto));
   salvo = { versao: 3, compacto: { chatSalaCresce: false } };
   caso('config: chatSalaCresce desligado salvo fica desligado', JSON.parse(JSON.stringify(carregar())).compacto.chatSalaCresce === false);
   // 14/10/2026: barra de rolagem na tela 3 com 640. A config salva do Gabriel tem 640 (o padrão antigo; não há campo nas
@@ -186,9 +187,9 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   salvo = { versao: 3, compacto: { larg: 420, alt: 720 } };
   const cAlt2 = JSON.parse(JSON.stringify(carregar()));
   caso('config: alt 640 salvo (padrão antigo) vira 680; outro valor salvo fica', cAlt.compacto.alt === 680 && cAlt2.compacto.alt === 720, `${cAlt.compacto.alt} ${cAlt2.compacto.alt}`);
-  salvo = { versao: 3, filaRapida: { fila: 440 } };
+  salvo = { versao: 4, filaRapida: { fila: 440 } };
   const c2 = JSON.parse(JSON.stringify(carregar()));
-  caso('config: salva antes da chave ganha o padrão do compacto e segue na versao 3', c2.compacto.ligado && c2.compacto.inicioCompacto && c2.versao === 3 && c2.filaRapida.fila === 440);
+  caso('config: salva antes da chave ganha o padrão do compacto e segue na versao 4', c2.compacto.ligado && c2.compacto.inicioCompacto && c2.versao === 4 && c2.filaRapida.fila === 440);
   salvo = { versao: 3, compacto: { inicioCompacto: false, favoritos: [] , larg: 'x' } };
   const c3 = JSON.parse(JSON.stringify(carregar()));
   caso('config: escolha salva fica (inicioCompacto false, favoritos vazio); tipo torto volta ao padrão',

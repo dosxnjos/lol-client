@@ -1,6 +1,7 @@
 // Testa a carga da configuração do plugin (pengu/config.js): migração de avisosDesligados (lista até
-// 13/10/2026 -> {voz, tela}) e a mescla com o padrão. uso: node tools/teste-config.mjs
-import { carregar, cfg, migrar, PADRAO, classes, definir } from '../pengu/config.js';
+// 13/10/2026 -> {voz, tela}), a mescla com o padrão e a VERSAO 4 (ponte com o complemento coach: instalação nova false,
+// config salva antes dela true uma vez, restaurar mantém). uso: node tools/teste-config.mjs
+import { carregar, cfg, migrar, PADRAO, classes, definir, restaurar } from '../pengu/config.js';
 import { corpoConfig } from '../pengu/coach.js';
 
 globalThis.document = { documentElement: { classList: { toggle() {} } } };
@@ -39,41 +40,60 @@ const casos = [
       && c.filaRapida.freioTilt === 3 && !c.recompensas.ligado && c.recompensas.tft && c.coach.aceiteFlutuante === false],
   ['tipo errado salvo volta ao padrão (freioTilt "3" -> 2)', carregarCom({ filaRapida: { freioTilt: '3' } }), c => c.filaRapida.freioTilt === 2],
   // freios (decisão do Gabriel, 13/10/2026): padrão tilt 2 + madrugada; 0 salvo antes da marca vira 2 uma vez só
-  ['padrão: freioTilt 2, freioMadrugada ligado, versao 3', carregarCom(null),
-    c => c.filaRapida.freioTilt === 2 && c.filaRapida.freioMadrugada === true && c.versao === 3],
+  ['padrão: freioTilt 2, freioMadrugada ligado, versao 4', carregarCom(null),
+    c => c.filaRapida.freioTilt === 2 && c.filaRapida.freioMadrugada === true && c.versao === 4],
   ['migração: 0 salvo sem a marca vira 2 e grava com a marca', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0, fila: 440 } }); return { c, salvo, gravacoes }; })(),
-    ({ c, salvo: s, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.filaRapida.fila === 440 && g === 1 && s.versao === 3 && s.filaRapida.freioTilt === 2],
+    ({ c, salvo: s, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.filaRapida.fila === 440 && g === 1 && s.versao === 4 && s.filaRapida.freioTilt === 2],
   ['migração uma vez só: recarregar não grava de novo', (() => { gravacoes = 0; const c = recarregar(); return { c, gravacoes }; })(),
     ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 2 && g === 0],
   ['respeita desligar depois: definir 0 -> salvar -> recarregar = 0', (() => { definir('filaRapida.freioTilt', 0); return recarregar(); })(),
-    c => c.filaRapida.freioTilt === 0 && c.versao === 3],
+    c => c.filaRapida.freioTilt === 0 && c.versao === 4],
   ['com a marca, 0 salvo fica 0', carregarCom({ versao: 2, filaRapida: { freioTilt: 0 } }), c => c.filaRapida.freioTilt === 0],
-  ['sem a marca, limiar escolhido (3) fica 3', carregarCom({ filaRapida: { freioTilt: 3 } }), c => c.filaRapida.freioTilt === 3 && c.versao === 3],
-  ['migração grava a marca de fora (lol-client.versao = 3)', (carregarCom({ filaRapida: { freioTilt: 0 } }), marca), m => m === 3],
-  // revert do plugin: o código antigo apaga a versao de dentro da config; a marca de fora segura o 0 escolhido
-  ['revert: 0 salvo sem versao mas com a marca de fora (3) fica 0 e nada grava', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 } }, 3); return { c, gravacoes }; })(),
-    ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 0 && g === 0],
+  ['sem a marca, limiar escolhido (3) fica 3', carregarCom({ filaRapida: { freioTilt: 3 } }), c => c.filaRapida.freioTilt === 3 && c.versao === 4],
+  ['migração grava a marca de fora (lol-client.versao = 4)', (carregarCom({ filaRapida: { freioTilt: 0 } }), marca), m => m === 4],
+  // revert do plugin: o código antigo apaga a versao de dentro da config; a marca de fora segura o 0 escolhido. Marca 3 (antes
+  // da v4): só a migração da ponte roda e grava, uma vez
+  ['revert: 0 salvo sem versao mas com a marca de fora (3) fica 0; grava só a v4 (ponte ligada)', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 } }, 3); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 0 && c.coletor.ligado === true && g === 1],
+  ['revert: marca de fora 4 e nada dentro: nada migra nem grava', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, coletor: { ligado: false } }, 4); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 0 && c.coletor.ligado === false && g === 0],
   ['revert da v2: marca de fora 2 segura o 0 do freio; a migração do som ainda roda', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }, 2); return { c, gravacoes, m: marca }; })(),
-    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && c.aceite.silenciarSom === true && g === 1 && m === 3],
+    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && c.aceite.silenciarSom === true && g === 1 && m === 4],
   ['instalação nova sem nada salvo não grava a marca de fora', (carregarCom(null), marca), m => m === null],
-  ['config já na versão nova sem a marca de fora: grava a marca, não a config', (() => { gravacoes = 0; const c = carregarCom({ versao: 3, filaRapida: { freioTilt: 0 } }); return { c, gravacoes, m: marca }; })(),
-    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && g === 0 && m === 3],
+  ['config já na versão nova sem a marca de fora: grava a marca, não a config', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, filaRapida: { freioTilt: 0 } }); return { c, gravacoes, m: marca }; })(),
+    ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && g === 0 && m === 4],
   ['madrugada desligada salva fica desligada', carregarCom({ versao: 2, filaRapida: { freioMadrugada: false } }), c => c.filaRapida.freioMadrugada === false],
   // som do aceite (decisão do Gabriel, 13/10/2026): padrão ligado; false salvo antes da marca 3 vira true uma vez só
   ['som: padrão silenciarSom ligado', carregarCom(null), c => c.aceite.silenciarSom === true && PADRAO.aceite.silenciarSom === true],
   ['som: false salvo (v2) sem a marca 3 vira true e grava uma vez, com a marca', (() => { gravacoes = 0; const c = carregarCom({ versao: 2, aceite: { silenciarSom: false, atrasoS: 7 } }, 2); return { c, salvo, gravacoes, m: marca }; })(),
-    ({ c, salvo: s, gravacoes: g, m }) => c.aceite.silenciarSom === true && c.aceite.atrasoS === 7 && g === 1 && s.versao === 3 && s.aceite.silenciarSom === true && m === 3],
+    ({ c, salvo: s, gravacoes: g, m }) => c.aceite.silenciarSom === true && c.aceite.atrasoS === 7 && g === 1 && s.versao === 4 && s.aceite.silenciarSom === true && m === 4],
   ['som: recarregar depois da migração não grava de novo', (() => { gravacoes = 0; const c = recarregar(); return { c, gravacoes }; })(),
     ({ c, gravacoes: g }) => c.aceite.silenciarSom === true && g === 0],
   ['som: respeita desligar depois (definir false -> recarregar = false)', (() => { definir('aceite.silenciarSom', false); return recarregar(); })(),
-    c => c.aceite.silenciarSom === false && c.versao === 3],
+    c => c.aceite.silenciarSom === false && c.versao === 4],
   ['som: com a marca 3 dentro, false fica false', carregarCom({ versao: 3, aceite: { silenciarSom: false } }), c => c.aceite.silenciarSom === false],
-  ['som: revert (sem versao dentro, marca de fora 3) não migra nem grava', (() => { gravacoes = 0; const c = carregarCom({ aceite: { silenciarSom: false } }, 3); return { c, gravacoes }; })(),
-    ({ c, gravacoes: g }) => c.aceite.silenciarSom === false && g === 0],
-  ['config v1 recebe as duas migrações na mesma carga', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }); return { c, gravacoes }; })(),
-    ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.aceite.silenciarSom === true && g === 1],
-  ['migrar puro: v2 com som false -> true, freio 0 fica', migrar({ versao: 2, filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }),
-    s => s.aceite.silenciarSom === true && s.filaRapida.freioTilt === 0 && s.versao === 3],
+  ['som: revert (sem versao dentro, marca de fora 3) não migra o som (grava só a v4)', (() => { gravacoes = 0; const c = carregarCom({ aceite: { silenciarSom: false } }, 3); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.aceite.silenciarSom === false && g === 1],
+  ['config v1 recebe as três migrações na mesma carga', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.filaRapida.freioTilt === 2 && c.aceite.silenciarSom === true && c.coletor.ligado === true && g === 1],
+  ['migrar puro: v2 com som false -> true, freio 0 fica, ponte ligada', migrar({ versao: 2, filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }),
+    s => s.aceite.silenciarSom === true && s.filaRapida.freioTilt === 0 && s.coletor?.ligado === true && s.versao === 4],
+  // ponte com o complemento coach (VERSAO 4, roadmap/2026-10-17-plugin-pengu-primeiro.md Fase 1, decisão técnica 2)
+  ['ponte: instalação nova = coletor.ligado false (nada toca a 8765) e nada gravado', (() => { gravacoes = 0; const c = carregarCom(null); return { c, gravacoes, m: marca }; })(),
+    ({ c, gravacoes: g, m }) => PADRAO.coletor.ligado === false && c.coletor.ligado === false && g === 0 && m === null],
+  ['ponte: config v3 salva (a do Gabriel) = true uma vez, gravada com versao 4 e a marca 4', (() => { gravacoes = 0; const c = carregarCom({ versao: 3, coach: { voz: false } }, 3); return { c, salvo, gravacoes, m: marca }; })(),
+    ({ c, salvo: s, gravacoes: g, m }) => c.coletor.ligado === true && s.coletor.ligado === true && s.versao === 4 && g === 1 && m === 4 && c.coach.voz === false],
+  ['ponte: false escolhido depois fica false (recarregar não migra de novo)', (() => { definir('coletor.ligado', false); gravacoes = 0; const c = recarregar(); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.coletor.ligado === false && g === 0],
+  ['ponte: ... e sem a marca de fora (DataStore só com a config v4) também fica false', (() => { const s = JSON.parse(JSON.stringify(salvo)); return carregarCom(s, null); })(),
+    c => c.coletor.ligado === false],
+  ['ponte: restaurar() mantém coletor.ligado (instalação, não preferência) e as regras de runa', (() => {
+    carregarCom({ versao: 4, coletor: { ligado: true }, runas: { regras: [{ championId: 1, posicao: '*', paginas: [7] }] }, filaRapida: { freioTilt: 5 } }, 4);
+    restaurar(); return recarregar(); })(),
+    c => c.coletor.ligado === true && c.runas.regras.length === 1 && c.runas.regras[0].championId === 1 && c.filaRapida.freioTilt === 2],
+  ['ponte: restaurar() com a ponte desligada continua desligada', (() => { carregarCom({ versao: 4, coletor: { ligado: false } }, 4); restaurar(); return recarregar(); })(),
+    c => c.coletor.ligado === false],
+  ['ponte: classe lc-coletor sem colisão', (carregarCom(null), classes()), l => l.filter(([k]) => k === 'lc-coletor').length === 1],
   // chaves novas da leva de 13/10/2026 (chat do pós-jogo e avisos): padrão ligado, classes sem colisão
   ['chat e avisos: padrões ligados e nomes "ambos"', carregarCom(null),
     c => c.chatPosjogo.ligado && c.chatPosjogo.nomes === 'ambos' && c.chatPosjogo.iconeCampeao && c.chatPosjogo.corTime
@@ -100,8 +120,8 @@ const casos = [
   ['avisos 14/10: padrão = calibração (gank outra rota, jungler longe no painel, filtro do mid, corte da frase, mancha vermelha normal suave)', carregarCom(null),
     c => c.coach.gankOutraRota === true && c.coach.junglerLonge === 'painel' && c.coach.midSumiuFiltro === true
       && c.coach.cortarFalaRepetida === true && c.coach.overlayCor === 'vermelho' && c.coach.overlayForca === 'normal'
-      && c.coach.overlaySuave === true && c.versao === 3],
-  ['avisos 14/10: config salva antes das chaves ganha os padrões sem regravar (sem VERSAO nova)', (() => { gravacoes = 0; const c = carregarCom({ versao: 3, coach: { voz: false } }, 3); return { c, gravacoes }; })(),
+      && c.coach.overlaySuave === true && c.versao === 4],
+  ['avisos 14/10: config salva antes das chaves ganha os padrões sem regravar (sem VERSAO nova)', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, coach: { voz: false } }, 4); return { c, gravacoes }; })(),
     ({ c, gravacoes: g }) => c.coach.voz === false && c.coach.gankOutraRota === true && c.coach.junglerLonge === 'painel' && g === 0],
   ['avisos 14/10: escolhas salvas ficam', carregarCom({ coach: { gankOutraRota: false, junglerLonge: 'nada', midSumiuFiltro: false,
     cortarFalaRepetida: false, overlayCor: 'roxo', overlayForca: 'sutil', overlaySuave: false } }),
@@ -175,6 +195,16 @@ casos.push(
   globalThis.document = { ...docAntes, createElement: () => novoEl(), getElementById: () => null };
   acao?.perform();
   globalThis.document = docAntes;
+  // Fase 1 (ponte): sem o complemento, nenhum atalho coach.* nem o do chat ao lado; o da própria ponte existe sempre
+  const { registrarAcoesCoach } = await import('../pengu/config.js');
+  const tags = () => acoes.map(a => a.tags?.[1]);
+  const semCoach = ['coach.voz', 'coach.mentor', 'coach.aceiteFlutuante', 'coach.painelAoVivo', 'traumas.ligado', 'compacto.chatLateral'].filter(t => tags().includes(t));
+  const n0 = registrarAcoesCoach(() => false);
+  const n1 = registrarAcoesCoach(r => r === 'voz' || r === 'mentor');
+  const n2 = registrarAcoesCoach(r => r === 'voz' || r === 'mentor');
+  casos.push(['ponte: Ctrl+K sem o complemento não tem coach.*/traumas/chat ao lado; tem "falar com o complemento coach"; recurso novo entra uma vez',
+    { semCoach, n0, n1, n2, tags: tags() }, v => v.semCoach.length === 0 && v.n0 === 0 && v.n1 === 2 && v.n2 === 0
+      && v.tags.includes('coletor.ligado') && v.tags.includes('coach.voz') && v.tags.includes('coach.mentor') && !v.tags.includes('coach.painelAoVivo')]);
   casos.push(['b3: Ctrl+K liga/desliga com a camada à vista: confirmação dentro do #lc-compacto; sem ela, no Toast',
     { naCamada, toastsCamada, toasts }, v => v.naCamada.length === 1 && /esconder TFT: (ligado|desligado)/i.test(v.naCamada[0]) && v.toastsCamada === 0
       && v.toasts.length === 1 && /esconder TFT/i.test(v.toasts[0])]);
