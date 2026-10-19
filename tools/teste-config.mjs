@@ -60,7 +60,7 @@ const casos = [
   ['revert da v2: marca de fora 2 segura o 0 do freio; a migração do som ainda roda', (() => { gravacoes = 0; const c = carregarCom({ filaRapida: { freioTilt: 0 }, aceite: { silenciarSom: false } }, 2); return { c, gravacoes, m: marca }; })(),
     ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && c.aceite.silenciarSom === true && g === 1 && m === 4],
   ['instalação nova sem nada salvo não grava a marca de fora', (carregarCom(null), marca), m => m === null],
-  ['config já na versão nova sem a marca de fora: grava a marca, não a config', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, filaRapida: { freioTilt: 0 } }); return { c, gravacoes, m: marca }; })(),
+  ['config já na versão nova sem a marca de fora: grava a marca, não a config', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, filaRapida: { freioTilt: 0 }, coletor: { ligado: true } }); return { c, gravacoes, m: marca }; })(),
     ({ c, gravacoes: g, m }) => c.filaRapida.freioTilt === 0 && g === 0 && m === 4],
   ['madrugada desligada salva fica desligada', carregarCom({ versao: 2, filaRapida: { freioMadrugada: false } }), c => c.filaRapida.freioMadrugada === false],
   // som do aceite (decisão do Gabriel, 13/10/2026): padrão ligado; false salvo antes da marca 3 vira true uma vez só
@@ -93,6 +93,14 @@ const casos = [
     c => c.coletor.ligado === true && c.runas.regras.length === 1 && c.runas.regras[0].championId === 1 && c.filaRapida.freioTilt === 2],
   ['ponte: restaurar() com a ponte desligada continua desligada', (() => { carregarCom({ versao: 4, coletor: { ligado: false } }, 4); restaurar(); return recarregar(); })(),
     c => c.coletor.ligado === false],
+  // revisão adversarial de 19/10: o plugin de antes da v4 (revert) apaga coletor na mescla e mantém versao 4 (e a marca 4)
+  ['ponte: v4 salva sem a chave coletor (revert e volta) = true, gravada já', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, coach: { voz: false } }, 4); return { c, salvo, gravacoes }; })(),
+    ({ c, salvo: s, gravacoes: g }) => c.coletor.ligado === true && s.coletor?.ligado === true && g === 1 && c.coach.voz === false],
+  ['ponte: ... e recarregar depois do reparo não grava de novo', (() => { gravacoes = 0; const c = recarregar(); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.coletor.ligado === true && g === 0],
+  ['ponte: v4 salva com coletor.ligado false fica false (o reparo só olha a chave ausente)', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, coletor: { ligado: false } }, 4); return { c, gravacoes }; })(),
+    ({ c, gravacoes: g }) => c.coletor.ligado === false && g === 0],
+  ['ponte: v4 salva com coletor.ligado de tipo errado ("x") = true', carregarCom({ versao: 4, coletor: { ligado: 'x' } }, 4), c => c.coletor.ligado === true],
   ['ponte: classe lc-coletor sem colisão', (carregarCom(null), classes()), l => l.filter(([k]) => k === 'lc-coletor').length === 1],
   // chaves novas da leva de 13/10/2026 (chat do pós-jogo e avisos): padrão ligado, classes sem colisão
   ['chat e avisos: padrões ligados e nomes "ambos"', carregarCom(null),
@@ -121,7 +129,7 @@ const casos = [
     c => c.coach.gankOutraRota === true && c.coach.junglerLonge === 'painel' && c.coach.midSumiuFiltro === true
       && c.coach.cortarFalaRepetida === true && c.coach.overlayCor === 'vermelho' && c.coach.overlayForca === 'normal'
       && c.coach.overlaySuave === true && c.versao === 4],
-  ['avisos 14/10: config salva antes das chaves ganha os padrões sem regravar (sem VERSAO nova)', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, coach: { voz: false } }, 4); return { c, gravacoes }; })(),
+  ['avisos 14/10: config salva antes das chaves ganha os padrões sem regravar (sem VERSAO nova)', (() => { gravacoes = 0; const c = carregarCom({ versao: 4, coach: { voz: false }, coletor: { ligado: true } }, 4); return { c, gravacoes }; })(),
     ({ c, gravacoes: g }) => c.coach.voz === false && c.coach.gankOutraRota === true && c.coach.junglerLonge === 'painel' && g === 0],
   ['avisos 14/10: escolhas salvas ficam', carregarCom({ coach: { gankOutraRota: false, junglerLonge: 'nada', midSumiuFiltro: false,
     cortarFalaRepetida: false, overlayCor: 'roxo', overlayForca: 'sutil', overlaySuave: false } }),

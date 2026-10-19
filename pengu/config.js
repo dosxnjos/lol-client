@@ -113,7 +113,12 @@ function mesclar(padrao, salvo) {
 // regra de uma vez só. Config v1 recebe as duas na mesma carga.
 // versao < 4: quem já tinha config salva usava a ponte com o coletor (sempre ligada até 19/10/2026) -> coletor.ligado true,
 // uma vez só; desligar depois fica desligado. Instalação nova (nada salvo) não passa por aqui: fica o false do PADRAO.
+// Também liga quando a config salva não tem coletor.ligado booleano, em qualquer versão (revisão adversarial de 19/10): o
+// plugin de antes da v4 (revert de 8a54ae8/d53f20e) apaga a chave na mescla (não está no PADRAO dele) mas mantém versao 4,
+// e a ponte do Gabriel voltaria desligada calada. Toda config gravada pela v4 tem a chave (a mescla põe), então o false
+// escolhido nunca é tocado; instalação nova (salvo nulo) sai antes.
 // -> salvo (alterado no lugar)
+export const semPonteSalva = salvo => !!salvo && typeof salvo === 'object' && typeof salvo.coletor?.ligado !== 'boolean';
 export function migrar(salvo, marca = 0) {
   if (!salvo || typeof salvo !== 'object') return salvo;
   const d = salvo.coach?.avisosDesligados;
@@ -121,7 +126,7 @@ export function migrar(salvo, marca = 0) {
   const versao = Math.max(Number(salvo.versao) || 0, Number(marca) || 0);
   if (versao < 2 && salvo.filaRapida?.freioTilt === 0) salvo.filaRapida.freioTilt = 2;
   if (versao < 3 && salvo.aceite?.silenciarSom === false) salvo.aceite.silenciarSom = true;
-  if (versao < 4) salvo.coletor = { ...(salvo.coletor && typeof salvo.coletor === 'object' ? salvo.coletor : {}), ligado: true };
+  if (versao < 4 || semPonteSalva(salvo)) salvo.coletor = { ...(salvo.coletor && typeof salvo.coletor === 'object' ? salvo.coletor : {}), ligado: true };
   if (versao < VERSAO) salvo.versao = VERSAO;
   return salvo;
 }
@@ -134,6 +139,7 @@ export function carregar() {
   try { salvo = DataStore.get(CHAVE); marca = Number(DataStore.get(CHAVE_VERSAO)) || 0; } catch { /* sem DataStore: fica o padrão */ }
   const temSalvo = !!salvo && typeof salvo === 'object';
   const antes = temSalvo ? Math.max(Number(salvo.versao) || 0, marca) : VERSAO;
+  const reparou = semPonteSalva(salvo);   // v4 sem a chave da ponte (revert do plugin): grava o reparo já
   Object.assign(cfg, mesclar(PADRAO, migrar(salvo, marca)));
   // limiteS não é editável: dono é o PADRAO (ajuste depois de medir a janela chega a quem já salvou)
   cfg.aceite.limiteS = PADRAO.aceite.limiteS;
@@ -145,7 +151,7 @@ export function carregar() {
     if (!opcoes.some(([v]) => v === cfg[mod][chave])) cfg[mod][chave] = PADRAO[mod][chave];
   }
   // migrou agora: grava já com a marca (a migração não roda de novo nem se ele nunca mexer na configuração)
-  if (antes < VERSAO) try { DataStore.set(CHAVE, clonar(cfg)); } catch { /* ignora */ }
+  if (antes < VERSAO || reparou) try { DataStore.set(CHAVE, clonar(cfg)); } catch { /* ignora */ }
   // marca de fora: só depois que uma config salva passou pela versão nova (instalação nova sem nada salvo não marca)
   if (temSalvo && marca < VERSAO) try { DataStore.set(CHAVE_VERSAO, VERSAO); } catch { /* ignora */ }
   aplicarClasses();
