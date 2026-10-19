@@ -12,15 +12,16 @@ rem Tudo roda na 1a linha e sai nela: o cmd nunca le a 2a (ARMADILHAS, Windows: 
 #             de uma troca-incompleta do botão atualizar), o resto é trocado pelo do pacote
 #   python    py -3.14, -3.13, -3.12 e o python.exe do PATH, nessa ordem: o 1º com 3.12 ou mais e 64 bits; sem ele, diz onde baixar
 #   venv      %LOCALAPPDATA%\lol-client\complemento\venv (fora da pasta trocada pela atualização); reaproveitado se for da mesma
-#             versão do Python; pip install -r requirements-complemento.txt (versões fixas, só pacote pronto: --only-binary)
+#             versão do Python e o pip dele rodar; senão o de antes vai para venv.anterior e só sai depois do pip e da cópia
+#             (falha = volta); pip install -r requirements-complemento.txt (versões fixas, só pacote pronto: --only-binary)
 #   plugin    pengu\ do pacote + LICENSE, TERCEIROS.md, LEIA-ME.md e atualizar.cmd para plugins\lol-ultra-client, com a pasta
 #             plugins achada pela ativação do Pengu Loader (registro, só leitura) ou perguntada; nunca por cima de junção ou pasta
 #             num repositório git, nem com um plugins\lol-client ao lado (carregaria duas vezes)
 #   atalho    lol-ultra-client.lnk na pasta Inicializar: pythonw.exe do venv + coletor\relancador.py (espera o client, sobe o
 #             coletor de novo se ele cair); e já sobe o relançador agora
-#   recusa    destino que é junção ou está num repositório git (instalação de desenvolvimento), partida aberta; complemento em
-#             execução é fechado (pid das travas em dados\, só processo python com a pasta do destino na linha de comando) e
-#             volta no fim
+#   recusa    destino que é junção ou está num repositório git (instalação de desenvolvimento), partida aberta, rodar de dentro
+#             da pasta instalada (só do pacote extraído); complemento em execução é fechado (pid das travas em dados\, só
+#             processo python com a pasta do destino na linha de comando) e volta no fim, também quando a instalação falha
 # Teste (tools/teste-instalar.py): LOCALAPPDATA e as pastas no temp, LUC_PLUGINS, LUC_INICIALIZAR, LUC_PYTHON, LUC_PIP_RODAS
 # (pasta com os pacotes: pip sem rede), LUC_SEM_INICIAR, LUC_SEM_PAUSA.
 $ErrorActionPreference = 'Stop'
@@ -126,17 +127,41 @@ function PararComplemento([string]$pasta) {
   return $parados
 }
 
-# versão e bits de um Python, sem deixar o stderr dele virar erro do PowerShell
+function DeHex([string]$h) {
+  $b = New-Object byte[] ([int]($h.Length / 2))
+  for ($i = 0; $i -lt $b.Length; $i++) { $b[$i] = [Convert]::ToByte($h.Substring(2 * $i, 2), 16) }
+  return [Text.Encoding]::UTF8.GetString($b)
+}
+
+# versão e bits de um Python, sem deixar o stderr dele virar erro do PowerShell. Exe/Pre = o candidato como foi chamado (é
+# com ele que o venv nasce): o sys.executable impresso num pipe sai na página ANSI e o PowerShell lê na OEM, e um acento no
+# caminho (C:\Users\João) chegava trocado. Caminho = o sys.executable em hex do UTF-8, só para mostrar.
 function InfoPython([string]$exe, [string[]]$pre) {
   $ErrorActionPreference = 'Continue'
   try {
-    $saida = & $exe @pre -c "import sys, struct; print('%d.%d|%d|%s' % (sys.version_info[0], sys.version_info[1], struct.calcsize('P') * 8, sys.executable))" 2>$null
+    $saida = & $exe @pre -c "import sys, struct; print('%d.%d|%d|%s' % (sys.version_info[0], sys.version_info[1], struct.calcsize('P') * 8, sys.executable.encode('utf-8', 'replace').hex()))" 2>$null
   } catch { return $null }
   if ($LASTEXITCODE -ne 0 -or -not $saida) { return $null }
   $p = ([string](@($saida)[-1])).Split('|')
   if ($p.Count -lt 3) { return $null }
   try { $v = [Version]$p[0] } catch { return $null }
-  return [pscustomobject]@{ Versao = $v; Bits = [int]$p[1]; Exe = $p[2].Trim() }
+  try { $caminho = DeHex $p[2].Trim() } catch { $caminho = $exe }
+  return [pscustomobject]@{ Versao = $v; Bits = [int]$p[1]; Exe = $exe; Pre = @($pre); Caminho = $caminho }
+}
+
+# venv com pip que roda (fechar a janela durante a criação deixa o python.exe sem o pip: reaproveitar prendia para sempre)
+function TemPip([string]$vpy) {
+  $ErrorActionPreference = 'Continue'
+  try { & $vpy -m pip --version 2>$null | Out-Null } catch { return $false }
+  return ($LASTEXITCODE -eq 0)
+}
+
+# sobe o relançador da instalação (sem janela); LUC_SEM_INICIAR (teste) não sobe
+function SubirComplemento([string]$destino, [string]$vpyw) {
+  $rel = Join-Path $destino 'coletor\relancador.py'
+  if ($env:LUC_SEM_INICIAR -or -not [IO.File]::Exists($rel) -or -not [IO.File]::Exists($vpyw)) { return $false }
+  Start-Process -FilePath $vpyw -ArgumentList ('"' + $rel + '"') -WorkingDirectory $destino
+  return $true
 }
 
 function AcharPython {
@@ -170,7 +195,9 @@ function Principal {
   $base = Join-Path $env:LOCALAPPDATA 'lol-client\complemento'
   $destino = Join-Path $base $PASTA_COMPLEMENTO
   $venv = Join-Path $base 'venv'
-  if (Dentro $origem $destino) { Falhar 'pacote' 'pacote dentro da pasta de instalação' }
+  # rodar da própria pasta instalada recopiaria ela sobre si mesma e apagaria o .atualizacao\ (depois de uma troca-incompleta
+  # do botão atualizar, o anterior\ é a única cópia do que saiu): só do pacote extraído, que traz a árvore inteira
+  if ((Dentro $origem $destino) -or (MesmaPasta $origem $destino)) { Falhar 'pacote' 'pacote dentro da pasta de instalação' }
   if ([IO.Directory]::Exists($destino) -and (Desenvolvimento $destino)) { Falhar 'desenvolvimento' $destino }
   if ((Reparse $venv) -or (Reparse $base)) { Falhar 'desenvolvimento' 'venv ou pasta do complemento é junção' }
 
@@ -184,34 +211,43 @@ function Principal {
     Write-Host 'Baixe em https://www.python.org/downloads/windows/ (instalador de 64 bits; marque "Add python.exe to PATH") e rode o instalar.cmd de novo.'
     return 2
   }
-  Write-Host "Python $($py.Versao): $($py.Exe)"
+  Write-Host "Python $($py.Versao): $($py.Caminho)"
   if (Get-Process -Name 'League of Legends' -ErrorAction SilentlyContinue) { Falhar 'partida' '' }
-  # complemento desta instalação em execução: fecha antes do pip (biblioteca carregada não se troca) e volta no fim
+  # ambiente Python próprio, fora da pasta que a atualização troca; o de antes fica em venv.anterior até o pip dar certo
+  $vpy = Join-Path $venv 'Scripts\python.exe'
+  $vpyw = Join-Path $venv 'Scripts\pythonw.exe'
+  $anterior = Join-Path $base 'venv.anterior'
+  if (-not [IO.Directory]::Exists($venv) -and [IO.Directory]::Exists($anterior)) { [IO.Directory]::Move($anterior, $venv) }   # janela fechada no meio da última
+  # complemento desta instalação em execução: fecha antes do pip (biblioteca carregada não se troca); volta no fim e também
+  # se a instalação falhar daqui em diante (com o venv de antes devolvido)
   $parados = 0
   if ([IO.Directory]::Exists($destino)) { $parados = PararComplemento $destino }
   if ($parados) { Write-Host 'Complemento coach em execução: fechado para a instalação.' }
 
-  # ambiente Python próprio, fora da pasta que a atualização troca
-  $vpy = Join-Path $venv 'Scripts\python.exe'
-  $vpyw = Join-Path $venv 'Scripts\pythonw.exe'
-  $iv = $null
-  if ([IO.File]::Exists($vpy)) { $iv = InfoPython $vpy @() }
-  if ($iv -and $iv.Versao -eq $py.Versao) { Write-Host 'Ambiente Python do complemento: reaproveitado.' }
-  else {
-    if ([IO.Directory]::Exists($venv)) { Apagar $venv }
-    Write-Host 'Criando o ambiente Python do complemento…'
-    if ((Rodar $py.Exe @('-m', 'venv', $venv)) -ne 0 -or -not [IO.File]::Exists($vpyw)) { Falhar 'venv' 'python -m venv' }
-  }
-  Write-Host 'Instalando as bibliotecas com versão fixa (na 1ª vez, alguns minutos)…'
-  $pip = @('-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '--only-binary=:all:', '-q', '-r',
-           (Join-Path $origem 'requirements-complemento.txt'))
-  if ($env:LUC_PIP_RODAS) { $pip += @('--no-index', '--find-links', $env:LUC_PIP_RODAS) }
-  if ((Rodar $vpy $pip) -ne 0) { Falhar 'pip' 'pip install' }
-
-  # código do complemento: o dados\ fica, o resto é o do pacote
+  $movido = $false
   try {
-    if (MesmaPasta $origem $destino) { Apagar (Join-Path $destino '.atualizacao') }
-    else {
+    $iv = $null
+    if ([IO.File]::Exists($vpy)) { $iv = InfoPython $vpy @() }
+    if ($iv -and $iv.Versao -eq $py.Versao -and [IO.File]::Exists($vpyw) -and (TemPip $vpy)) {
+      Write-Host 'Ambiente Python do complemento: reaproveitado.'
+    } else {
+      if ([IO.Directory]::Exists($anterior)) { Apagar $anterior }
+      if ([IO.Directory]::Exists($venv)) {
+        try { [IO.Directory]::Move($venv, $anterior); $movido = $true } catch { Falhar 'copia' "venv em uso: $($_.Exception.Message)" }
+      }
+      Write-Host 'Criando o ambiente Python do complemento…'
+      if ((Rodar $py.Exe (@($py.Pre) + @('-m', 'venv', $venv))) -ne 0 -or -not [IO.File]::Exists($vpyw) -or -not (TemPip $vpy)) {
+        Falhar 'venv' 'python -m venv'
+      }
+    }
+    Write-Host 'Instalando as bibliotecas com versão fixa (na 1ª vez, alguns minutos)…'
+    $pip = @('-m', 'pip', 'install', '--disable-pip-version-check', '--no-input', '--only-binary=:all:', '-q', '-r',
+             (Join-Path $origem 'requirements-complemento.txt'))
+    if ($env:LUC_PIP_RODAS) { $pip += @('--no-index', '--find-links', $env:LUC_PIP_RODAS) }
+    if ((Rodar $vpy $pip) -ne 0) { Falhar 'pip' 'pip install' }
+
+    # código do complemento: o dados\ fica, o resto é o do pacote
+    try {
       [void][IO.Directory]::CreateDirectory($destino)
       foreach ($e in [IO.Directory]::GetFileSystemEntries($destino)) {
         if ([IO.Path]::GetFileName($e) -ine 'dados') { Apagar $e }
@@ -222,8 +258,19 @@ function Principal {
         if ([IO.Directory]::Exists($e)) { CopiarArvore $e (Join-Path $destino $n) }
         else { [IO.File]::Copy($e, (Join-Path $destino $n), $true) }
       }
+    } catch { Falhar 'copia' $_.Exception.Message }
+  } catch {
+    # falhou: o venv novo (incompleto) sai e o de antes volta; o complemento fechado acima sobe de novo com ele
+    if ($movido -or ([IO.Directory]::Exists($venv) -and -not (TemPip $vpy))) {
+      try { if ([IO.Directory]::Exists($venv)) { Apagar $venv } } catch { }
     }
-  } catch { Falhar 'copia' $_.Exception.Message }
+    if ($movido -and -not [IO.Directory]::Exists($venv)) { try { [IO.Directory]::Move($anterior, $venv) } catch { } }
+    if ($parados) {
+      try { if (SubirComplemento $destino $vpyw) { Write-Host 'O complemento coach fechado para a instalação foi iniciado de novo.' } } catch { }
+    }
+    throw
+  }
+  if ($movido) { try { Apagar $anterior } catch { } }
   Write-Host "Complemento coach em $destino"
 
   # plugin na pasta do Pengu Loader

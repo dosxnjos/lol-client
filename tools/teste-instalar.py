@@ -16,6 +16,8 @@
 #       (python com a pasta na linha de comando, pid na trava) fechado, pid de outro programa na trava intocado
 #   (f) pip que falha (sem pacote): rc 1 e nada copiado; plugins\lol-client ao lado: plugin não copiado
 #   (g) desinstalar.cmd da pasta instalada: fecha, apaga atalho, plugin e complemento; plugin de desenvolvimento (junção) fica
+#   (h) revisão adversarial da P4: instalar.cmd de dentro da pasta instalada recusado (.atualizacao\ intacto); Python e
+#       LOCALAPPDATA com acento; venv sem pip recriado; pip que falha devolve o venv de antes e sobe o relançador (falso)
 # Portas: só 8833 e 8834 (o ensaio). Nada toca a 8765, o Pengu de verdade nem o %LOCALAPPDATA%\lol-client real.
 #   python tools/teste-instalar.py [--zip <complemento.zip>] [--sem-ensaio] [--manter]
 import argparse
@@ -404,6 +406,9 @@ def _prova(a, tmp, falsos):
     caso("(f) plugins\\lol-client ao lado: rc 0, plugin não copiado (carregaria duas vezes) e o aviso diz por quê",
          rc == 0 and not (plugins2 / "lol-ultra-client").exists() and "plugins\\lol-client" in out, out[-500:])
 
+    # (h) revisão adversarial da P4: cada caso falha no instalar.cmd de antes
+    _revisao(tmp, origem, destino, base_env, fixas, falsos, py311)
+
     # (g) desinstalar da pasta instalada
     rodando = processo_falso(destino / "coletor" / "relancador.py")
     falsos.append(rodando)
@@ -434,6 +439,94 @@ def _prova(a, tmp, falsos):
 
     print(f"{'ok' if not falhas else 'FALHOU'}: {n_ok[0]}/{n_ok[0] + len(falhas)}" + (f"; falhas: {falhas}" if falhas else ""))
     return 1 if falhas else 0
+
+
+def _libs_ok(vpy, fixas):
+    """o venv tem pip e as bibliotecas nas versões fixas (import com -I)"""
+    if not Path(vpy).exists():
+        return False, "sem python no venv"
+    r = subprocess.run([str(vpy), "-I", "-c", "import json, importlib.metadata as m; print(json.dumps({n: m.version(n) "
+                        f"for n in {sorted(fixas)!r}}})); import numpy, scipy, cv2, mss, PIL, websockets, pip"],
+                       capture_output=True, text=True)
+    if r.returncode != 0:
+        return False, r.stderr[-300:]
+    v = json.loads(r.stdout.strip().splitlines()[-1])
+    return v == fixas, v
+
+
+def _revisao(tmp, origem, destino, base_env, fixas, falsos, py311):
+    # (h1) instalar.cmd rodado de dentro da pasta instalada, depois de uma troca-incompleta do botão atualizar: antes, rc 0 e
+    # o .atualizacao\ (anterior\ = a única cópia do que saiu, e a marca) apagado sem recopiar nada
+    est = destino / ".atualizacao"
+    (est / "anterior" / "coletor").mkdir(parents=True, exist_ok=True)
+    (est / "anterior" / "coletor" / "avisos.py").write_text("# única cópia", encoding="utf-8")
+    (est / "troca-em-curso").write_text("0.2.0", encoding="utf-8")
+    rc, out, _ = cmd(destino / "instalar.cmd", base_env, destino)
+    caso("(h1) instalar.cmd de dentro da pasta instalada: rc 2, manda usar o pacote extraído, .atualizacao\\ intacto",
+         rc == 2 and "pasta extraída do zip" in out and (est / "troca-em-curso").exists()
+         and (est / "anterior" / "coletor" / "avisos.py").exists(), out[-500:])
+    shutil.rmtree(est, ignore_errors=True)
+
+    # (h2) acento no caminho (C:\Users\João): o sys.executable impresso num pipe chegava trocado (ANSI lido como OEM) e o venv
+    # não nascia (rc 1, "tente de novo"). Python em pasta com acento (LUC_PYTHON) e LOCALAPPDATA também com acento
+    casa = tmp / "Usuário João"
+    pyac = casa / "Python314"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(pyac)], check=True, capture_output=True)
+    loc = casa / "AppData" / "Local"
+    venv = loc / "lol-client" / "complemento" / "venv"
+    rc, out, _ = cmd(origem / "instalar.cmd", {**base_env, "LOCALAPPDATA": str(loc),
+                                               "LUC_PYTHON": str(pyac / "Scripts" / "python.exe")}, origem)
+    ok, v = _libs_ok(venv / "Scripts" / "python.exe", fixas)
+    caso("(h2) Python e LOCALAPPDATA em pasta com acento: rc 0, o caminho aparece certo, venv com pip e as 6 bibliotecas",
+         rc == 0 and "Pronto." in out and str(pyac) in out and ok
+         and (loc / "lol-client" / "complemento" / "lol-ultra-client-complemento" / "coletor" / "relancador.py").exists(),
+         f"rc {rc} {v} | {out[-600:]}")
+
+    # (h3) venv da mesma versão sem pip (janela fechada durante a criação): antes, "reaproveitado" e o pip falhava para sempre
+    loc = tmp / "local-sem-pip"
+    venv = loc / "lol-client" / "complemento" / "venv"
+    subprocess.run([sys.executable, "-m", "venv", "--without-pip", str(venv)], check=True, capture_output=True)
+    rc, out, _ = cmd(origem / "instalar.cmd", {**base_env, "LOCALAPPDATA": str(loc), "LUC_PYTHON": sys.executable}, origem)
+    ok, v = _libs_ok(venv / "Scripts" / "python.exe", fixas)
+    caso("(h3) venv sem pip: não é reaproveitado, nasce de novo, rc 0 com pip e as 6 bibliotecas",
+         rc == 0 and "reaproveitado" not in out and ok and not (venv.parent / "venv.anterior").exists(),
+         f"rc {rc} {v} | {out[-600:]}")
+
+    # (h4) complemento em execução + pip que falha + Python trocado (venv de antes num 3.11): antes, o complemento ficava
+    # parado e o venv de antes era apagado. Agora: o de antes volta e o relançador sobe de novo. O relancador.py e o
+    # coletor.py da pasta são falsos (só anotam): sem LUC_SEM_INICIAR, nada de verdade pode subir aqui
+    if not py311:
+        caso("(h4) Python 3.11 desta máquina (py -0p) para o venv de outra versão", False, "não achado")
+        return
+    loc = tmp / "local-falha"
+    dest = loc / "lol-client" / "complemento" / "lol-ultra-client-complemento"
+    venv = loc / "lol-client" / "complemento" / "venv"
+    shutil.copytree(origem, dest)
+    marca = tmp / "relancador-subiu.txt"
+    (dest / "coletor" / "relancador.py").write_text(
+        f"import sys\nopen(r'{marca}', 'w', encoding='utf-8').write('%d.%d' % sys.version_info[:2])\n", encoding="utf-8")
+    (dest / "coletor" / "coletor.py").write_text("raise SystemExit(0)\n", encoding="utf-8")
+    subprocess.run([py311, "-m", "venv", "--without-pip", str(venv)], check=True, capture_output=True)
+    (venv / "meu-venv.txt").write_text("o de antes", encoding="utf-8")
+    (dest / "dados").mkdir()
+    rodando = processo_falso(dest / "coletor" / "relancador.py")
+    falsos.append(rodando)
+    (dest / "dados" / "relancador.lock").write_text(str(rodando.pid), encoding="utf-8")
+    time.sleep(0.5)
+    vazio = tmp / "sem-pacotes-h4"
+    vazio.mkdir()
+    env = {**base_env, "LOCALAPPDATA": str(loc), "LUC_PIP_RODAS": str(vazio), "LUC_PYTHON": sys.executable}
+    env.pop("LUC_SEM_INICIAR")
+    rc, out, _ = cmd(origem / "instalar.cmd", env, origem)
+    fim = time.time() + 15
+    while not marca.exists() and time.time() < fim:
+        time.sleep(0.5)
+    caso("(h4) pip que falha com o complemento em execução: rc 1, o venv de antes (3.11) volta e o relançador sobe de novo "
+         "com ele", rc == 1 and "bibliotecas" in out and not vivo(rodando.pid)
+         and (venv / "meu-venv.txt").exists() and not (venv.parent / "venv.anterior").exists()
+         and marca.exists() and marca.read_text(encoding="utf-8") == "3.11",
+         f"rc {rc} marca {marca.exists() and marca.read_text(encoding='utf-8')} venv {(venv / 'meu-venv.txt').exists()} "
+         f"| {out[-500:]}")
 
 
 if __name__ == "__main__":
