@@ -68,6 +68,12 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   responde à conta da sessão já lida, na carga e antes da lista (outra conta no mesmo PC via os números da dona; `f2c50a3`,
   `teste-historico.mjs` 91/91), a ⚙ do freio de tilt acima de 30 partidas (`f2c50a3`) e a caixa "na sua rota" do selo local às
   cegas e sem inimigo travado (`1f201a4`, `teste-compacto-lateral.mjs` 142/142); bateria node 29/29; tabela no relatório.
+- **Aplicado no client do Gabriel em 19/10/2026, 19:40** (Fases 1–5 + P0–P5 da publicação, até `39883d8`): bateria 70/70 e
+  `ensaio-coach.py --porta 8831 --porta-sim 8832` sem falha, com o jogo fechado; coletor reiniciado antes (o `/ola` anuncia 18
+  recursos, `resumos`, `atualizar` e `voz-pacote` entre eles, `edicao` completa, `pacote` 0.1.0); plugin recarregado em `None`,
+  33 módulos no `compacto-importar.js` sem ERRO; `historico.estado()` importado com 191 linhas, todas dele (`dono`); vozes
+  `recusa: desenvolvimento` (sem botão, certo); `atualizacao` fez o GET diário (404 calado até o P6). Falta o que só uma
+  partida prova (relatórios das Fases 4 e 5, § client real).
 
 ## Decisões do Gabriel (19/10/2026)
 
