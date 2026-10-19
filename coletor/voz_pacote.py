@@ -5,7 +5,8 @@
 # Qual pacote: voz-<pacote>-<versao>.zip, com <versao> = avisos.versao_catalogo() do código instalado (as falas que este coach
 # diz). O tools/publicar.py só anexa o zip ao release em que o catálogo mudou (decisão 3 do plano), então ele mora num release
 # qualquer: UMA consulta à lista (https://api.github.com/repos/<REPO>/releases?per_page=100, origem fixa) e o release mais novo
-# que tem o asset com esse nome EXATO. Download e hash como o atualizar.py (mesma Rede, mesmas origens): sha256 == linha do
+# que tem o asset com esse nome EXATO (só a 1ª página: o publicar.py anexa o zip de novo quando o release dele sai dos 90 mais
+# novos, JANELA_VOZ). Download e hash como o atualizar.py (mesma Rede, mesmas origens): sha256 == linha do
 # SHA256SUMS.txt daquele release == digest da API (nulo = falha).
 # Troca com volta (decisão 5): extrai em %LOCALAPPDATA%\lol-client\voz\pacotes\<pacote>.nova, confere o zip e o indice.json
 # (voz, versão, origem "release", todo arquivo citado é um .wav do zip com nome simples, nada a mais), renomeia a pasta atual

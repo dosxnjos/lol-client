@@ -23,8 +23,9 @@
 #                                            varredura (P0-c: fala com nome, Riot ID, e-mail... sai e cai na voz do Windows),
 #                                            sem as "suspeita". Reprova: pacote de outro catálogo ou incompleto (gerar antes,
 #                                            tools/voz-agendada.py). Sem pacote na pasta: o release sai sem vozes (aviso).
-#                                            O --publicar só anexa o zip quando nenhum release anterior tem esse nome (o
-#                                            catálogo mudou); o coletor/voz_pacote.py acha o release que tem o nome exato.
+#                                            O --publicar só anexa o zip quando nenhum dos 90 releases mais novos tem esse
+#                                            nome (o catálogo mudou, ou o release dele saiu da 1ª página que o
+#                                            coletor/voz_pacote.py lê para achar o release com o nome exato).
 # Arquivo da lista que falta no commit reprova ("falta (<fase>)").
 import argparse
 import hashlib
@@ -386,7 +387,7 @@ def imprimir(rel, todos=True):
     elif vz:
         fora = ", ".join(f"{c} {n}" for c, n in sorted(vz["fora"].items())) or "nenhuma"
         print(f"\nvoz: {vz['zip']}: {vz['falas']} falas; fora pela varredura: {fora}; suspeitas fora: {vz['suspeitas']}; "
-              f"faltam no pacote local: {vz['faltam']} (o --publicar só anexa se nenhum release anterior tiver esse nome)")
+              f"faltam no pacote local: {vz['faltam']} (o --publicar só anexa se nenhum dos {JANELA_VOZ} releases mais novos tiver esse nome)")
     if rel["difere"]:
         print(f"\naviso: {len(rel['difere'])} arquivo(s) da lista mexidos e não commitados (entra o do commit): "
               + ", ".join(rel["difere"]))
