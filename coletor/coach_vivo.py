@@ -135,7 +135,10 @@ def _icones(lcu, ids):
 
 def _vitrine(coach, game_id, relogio):
     """modo vitrine (tools/vitrine.py): marca na pasta do banco (dados/ no coletor; o ensaio e os testes
-    usam banco em temp/ e nunca consomem a marca do Gabriel). None = desligada"""
+    usam banco em temp/ e nunca consomem a marca do Gabriel). None = desligada; na edição pública sempre (o modo vitrine
+    é ferramenta do mantenedor, fora do zip)"""
+    if instalacao.PUBLICA:
+        return None
     import vitrine
     return vitrine.da_partida(Path(coach.db).parent / vitrine.MARCA_NOME, game_id, relogio)
 
