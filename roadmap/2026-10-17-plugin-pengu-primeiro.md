@@ -16,9 +16,43 @@ registra as provas da lista "O que só o client real prova" do
 sem elas; (2) os commits dele estão na `main`; (3) `git status -- pengu/ coletor/ tools/` limpo e nenhuma sessão viva com aquele plano
 (`mcp__central__sessoes`). A Fase 0 (só medição) pode correr antes.
 
-Estado (17/10/2026): só o plano, sem código. Revisão adversarial do mesmo dia conferida contra o código (correções
-marcadas "revisão 17/10" no corpo). Relatório de execução de cada fase no sidecar
-`roadmap/2026-10-17-plugin-pengu-primeiro.d/`, nunca no corpo.
+**Portão revisto (agente, 19/10/2026):** as condições (2) e (3) valem para começar a Fase 1 (os commits das telas,
+`4f86026`, `b2b7cdb`, `f6d3717`, estão na `main`); a condição (1), provas no client real, passa a travar só a **publicação**
+(Fase 8, passo do release): nada vai a público antes de o Gabriel jogar com a correção das telas e com a edição nova. Motivo:
+desde 16/10 12:44 não houve ranqueada (`dados/lol.db`), e esperar a prova travaria fases que não mudam o comportamento da
+instalação dele. Reverte: voltar a esperar a prova antes da Fase 1.
+
+Estado (19/10/2026): decisões do Gabriel tomadas (§ Decisões do Gabriel, abaixo); medição C feita; Fases 1 em diante em
+execução. Revisão adversarial de 17/10 conferida contra o código (correções marcadas "revisão 17/10" no corpo). Relatório de
+execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`, nunca no corpo.
+
+## Decisões do Gabriel (19/10/2026)
+
+Palavras dele: "janelas antigas pode ser removida do código. Pode colocar o aceite automático habilitado, por padrão.
+Recompensas, avisos calados também. Pode criar um repositório público. Aí dá para deixar o aviso quando tiver versão nova. Se
+possível, com botão para update. update automatizado ao clicar no botão, se possível. Se possível, também com o coach de voz.
+Com o botão que faz baixar os áudios. Pode sim apagar as amostras de partida de outra pessoa com as minhas. O resto segue como
+você recomendou."
+
+| decisão | resolução |
+| --- | --- |
+| licença | MIT |
+| onde publicar | **repositório público novo** (não o `dosxnjos/lol-client` privado, que tem mentor, MCP, roadmaps e dados dele); sem a etapa do zip para amigos. Conta e nome: perguntados (regra "repo novo → conta dona"); recomendação `dosxnjos/lol-compacto` |
+| aceite automático | **ligado por padrão** (como hoje), listado no aviso da 1ª execução |
+| recompensas, avisos calados | **ligados por padrão** (como hoje), listados no aviso da 1ª execução |
+| runas | ligadas (sem regra, nada acontece) |
+| minimizar no ready check | desligado para instalação nova: `PADRAO.aceite.trazerClient = true` (a config salva dele fica com `false` pela mescla) |
+| janelas antigas do chat | **aposentar** (Fase 2 roda) |
+| força do draft | fora da 1ª versão (Fase 6 sem o snapshot) |
+| versão nova | **sim**: aviso de versão nova pela `api.github.com`, 1 vez por dia, chave para desligar, **com botão Atualizar**; detalhe no plano da publicação |
+| complemento coach público | **sim, com a voz Aoede** e botão que baixa os áudios; sai do "Fase 9: não executar" para o plano da publicação |
+| idioma | só pt-BR |
+| nome nos comentários | publicar como está |
+| amostras das partidas assistidas | apagadas em 19/10 (510 `ao_vivo`, 35 `eventos_ao_vivo`, 18 `previsoes_jungler`), cópia antes em `dados/backup/lol-antes-limpeza-assistidas.db` |
+
+Atualização e complemento público: plano próprio
+[publicação, atualização e complemento público](2026-10-19-publicacao-e-complemento-publico.md) (substitui a Fase 8 passo 3 e
+a Fase 9 daqui).
 
 ## Pedido (Gabriel, 17/10/2026, palavras dele)
 
@@ -203,6 +237,9 @@ scratchpad, nunca no repo; credencial só em memória.
   `get` com x de 50, 150 e 300 KB (5 vezes cada, `performance.now()`), depois `DataStore.remove('lol-client.teste-medida')`
   e conferir que `lol-client.config` lê igual. Anotar também o tamanho do arquivo depois de cada `set`. Decide o teto da
   Fase 4.
+  **Feita em 19/10/2026** (client em `None`, cópia do `datastore` no scratchpad antes): `set` de 54 KB 1,5–3,6 ms, de 155 KB
+  3,1–3,8 ms, de 310 KB 5,5–9,9 ms (5 vezes cada; a 1ª é a mais lenta); `get` ≤ 0,1 ms; depois do `remove` o arquivo
+  voltou a 1.698 bytes e `lol-client.config` leu igual. Teto de 500 partidas confirmado (bem abaixo dos ~50 ms da decisão 4).
 
 ## Fase 1 — ponte com interruptor e aperto de mão; nada some sem motivo
 
