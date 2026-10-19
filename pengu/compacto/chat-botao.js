@@ -6,8 +6,17 @@
 // /lol-chat/v1/conversations (só conversa 1:1; sala do lobby, da seleção e do pós-jogo não conta). Só lê a LCU; a credencial
 // fica com o coletor. Importável no node (sem DOM no topo).
 import { h, estilo, icone } from './comum.js';
-import { naoLidasDaLcu } from './chat-ponte.js';
 import { recursoDe } from '../coach.js';
+
+// contador sem coletor: soma as não lidas das conversas diretas lidas pela própria LCU do plugin
+// (GET /lol-chat/v1/conversations); sala de grupo (champ select, pós-jogo, lobby) não conta. Veio do chat-ponte.js em
+// 19/10/2026 (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md: só LCU, nada do coletor)
+const SALA = /@(champ-select|post-game|lol-post-game|sec|lol-lobby|lobby|club|cs)\./i;
+export function naoLidasDaLcu(conversas) {
+  if (!Array.isArray(conversas)) return 0;
+  return conversas.reduce((s, c) => (c && String(c.type || '').toLowerCase() === 'chat' && !SALA.test(String(c.id || ''))
+    ? s + Math.max(0, Number(c.unreadMessageCount) || 0) : s), 0);
+}
 
 // não lidas das conversas diretas (type 'chat', fora das salas de grupo)
 export const naoLidas = conversas => naoLidasDaLcu(conversas);
