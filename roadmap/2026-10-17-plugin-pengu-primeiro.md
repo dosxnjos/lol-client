@@ -29,6 +29,10 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   `teste-config.mjs` 59/59, bateria node verde); falta aplicar na instalação dele, **coletor antes do plugin** (a ordem do
   "Aplicar na instalação dele" abaixo deixaria a reserva velha sem o "não aceitar"), e as provas do client real:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-1.md).
+- **Revisão adversarial da Fase 1 (19/10/2026):** 5 achados, os 5 reais e corrigidos (`fc516d3`, `d1d03e2`, `a180a72`): a
+  reserva passa a exigir contato do plugin durante o próprio ready check, a sessão do aceite vale o último aperto de mão bom e
+  a migração liga a ponte quando a chave falta; `teste-aviso-partida.py` 103/103, `teste-ponte.mjs` 39/39, `teste-config.mjs`
+  63/63, bateria node 28/28; tabela no relatório.
 
 ## Decisões do Gabriel (19/10/2026)
 
@@ -138,7 +142,10 @@ Edição = **P** (Pengu), **C** (complemento coach), **G** (só a instalação d
 - **Reserva do aceite só arma se o plugin falou com o complemento desde a última entrada em `Matchmaking`** (aperto de
   mão ou `POST /aceite/plugin`, com Origin do client ou do Pengu, regra de `origem_aceite_ok`; pedido sem Origin, como
   curl ou o painel, não conta), conferido na hora em que a reserva vai agir. "Nesta sessão do client" não basta (revisão
-  17/10): o plugin visto uma vez e a chave desligada depois deixariam a reserva armada sem o "não aceitar". Hoje ela arma com a rota
+  17/10): o plugin visto uma vez e a chave desligada depois deixariam a reserva armada sem o "não aceitar". **(Revisão
+  adversarial de 19/10: "desde a entrada em `Matchmaking`" também não basta, a chave desligada no meio da fila e a fase
+  `Matchmaking` perdida na reconexão deixavam a reserva armada; a regra implementada é contato durante o próprio ready
+  check, início pelo `timer` menos 1 s, relatório da Fase 1.)** Hoje ela arma com a rota
   `/aceite/plugin` no ar no próprio coletor (`coletor/coletor.py:476-493`, `:677`), sem saber se o plugin fala com ele: com
   `coletor.ligado` desligado e o complemento rodando, o "não aceitar" do plugin não chegaria e a reserva aceitaria contra a
   vontade dele. Com o complemento visto, o "não aceitar" e o diagnóstico (`aceite.js:204-215`, `:283`) nunca entram no

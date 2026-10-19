@@ -751,16 +751,20 @@ sinal do plugin há N s | nenhum sinal do plugin)` ou `reserva do aceite: não a
 - **Só arma com a rota do plugin no ar:** sem coach (`--sem-coach`) ou com o servidor local fora do ar (porta 8765
   ocupada), o "não aceitar" não teria por onde chegar, então `coletor._sinal_aceite` devolve `None`, o log diz
   `reserva do aceite desarmada: sem rota do plugin` e a janelinha (se ligada) abre só com os botões (`reserva=False`).
-- **Só age com o plugin visto nesta fila** (19/10/2026, Fase 1 do [plano plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md)):
-  a rota no ar não basta, porque o plugin pode estar com a ponte desligada (`coletor.ligado` false) e aí o "não aceitar"
-  dele nunca chegaria. Na hora de agir (depois da releitura, antes do POST), `SinalPlugin.visto_na_fila()` exige contato do
-  plugin **desde a última entrada em `Matchmaking`**: `GET /ola` (aperto de mão) ou `POST /aceite/plugin`, sempre **com
-  Origin** do client (`https://127.0.0.1:<porta da LCU>`) ou do Pengu (`https://plugins`, `riot`), a forma de
+- **Só age com o plugin visto neste ready check** (19/10/2026, Fase 1 do [plano plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md)
+  e a revisão adversarial do mesmo dia): a rota no ar não basta, porque o plugin pode estar com a ponte desligada
+  (`coletor.ligado` false) e aí o "não aceitar" dele nunca chegaria. Na hora de agir (depois da releitura, antes do POST),
+  `SinalPlugin.visto_desde(inicio − SINAL_ANTES_S)` exige contato do plugin **durante este ready check** (a mesma âncora do
+  "não aceitar": início pelo `timer` da LCU, 1 s de folga): `GET /ola` (aperto de mão) ou `POST /aceite/plugin`, sempre
+  **com Origin** do client (`https://127.0.0.1:<porta da LCU>`) ou do Pengu (`https://plugins`, `riot`), a forma de
   `servidor_local.origem_plugin`. Pedido sem Origin (curl, o painel) não conta. Sem contato: log `reserva do aceite
-  desarmada: o plugin não falou nesta fila (N s do ready check)` e nenhum POST. O plugin faz o aperto de mão ao entrar em
-  `Matchmaking` e em `ReadyCheck` (fora do recuo, `pengu/coach.js`) e manda o diagnóstico do aceite no início de cada ready
-  check, então com a ponte ligada o contato sempre chega. A linha do ready check diz `reserva do coletor armada (plugin
-  visto nesta fila)` ou `armada se o plugin falar nesta fila`. Prova: `teste-aviso-partida.py` H11–H18.
+  desarmada: o plugin não falou neste ready check (N s do ready check)` e nenhum POST. O plugin com a ponte ligada faz o
+  aperto de mão na fase `ReadyCheck` (fora do recuo, `pengu/coach.js`) e manda o diagnóstico a cada evento do ready check
+  (o plugin de antes da Fase 1 também manda o diagnóstico), então o contato sempre chega. A 1ª versão ("desde a última
+  entrada em `Matchmaking`") deixava a reserva armada com a ponte desligada no meio da fila e com a fase `Matchmaking`
+  perdida numa reconexão (`Lobby → ReadyCheck`). Resíduo: a ponte desligada **dentro** do ready check, depois do 1º evento,
+  ainda deixa a reserva armada. A linha do ready check diz `reserva do coletor armada se o plugin falar neste ready check`.
+  Prova: `teste-aviso-partida.py` H8–H19.
 - **Não age:** aceite automático desligado no espelho (`aceiteAtrasoS` `null`), "não aceitar" do overlay do plugin ou
   aceite desligado nele **neste** ready check (sinal recebido até 1 s antes do início dele, ancorado no `timer` da
   LCU; o coletor zera ao sair da fase; `ligado true` atrasado não destrava, só o `fim`), `Accepted`/`Declined`, ready

@@ -329,15 +329,21 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   - **404 passageiro no mesmo ready check** (14/10 11:27, logo depois do aceite do plugin, `timer` seguindo 9 → 10): a
     reserva tomava qualquer 404 como "outro ready check" e desistia; com o plugin morto, não aceitaria. Só o `timer`
     que volta marca outro ready check (`teste-aviso-partida.py` F24b).
-  - **"reserva do aceite desarmada: o plugin não falou nesta fila"** (19/10/2026) → a reserva só age com contato do plugin
-    (aperto de mão `GET /ola` ou `POST /aceite/plugin`, com Origin do client ou do Pengu) desde a última entrada em
-    `Matchmaking` ([COLETOR](COLETOR.md) § Quem aceita). Aparece com a ponte desligada (`coletor.ligado` false nas
-    Configurações), com o plugin velho que ainda não faz o aperto de mão e calado no ready check, ou com o coletor
-    reiniciado no meio da fila sem um aperto de mão depois. `curl`/painel sem Origin nunca arma.
+  - **"reserva do aceite desarmada: o plugin não falou neste ready check"** (19/10/2026) → a reserva só age com contato do
+    plugin (aperto de mão `GET /ola` ou `POST /aceite/plugin`, com Origin do client ou do Pengu) **durante o próprio ready
+    check** (início pelo `timer` da LCU menos 1 s; [COLETOR](COLETOR.md) § Quem aceita). Aparece com a ponte desligada
+    (`coletor.ligado` false nas Configurações, mesmo que ela tenha falado na fila) ou com o JS do plugin calado no ready
+    check inteiro. Contato da fila ou do Lobby não vale (a 1ª versão, "desde a entrada em `Matchmaking`", aceitava contra o
+    "não aceitar" com a ponte desligada na fila). `curl`/painel sem Origin nunca arma.
+  - **Plugin revertido e reaplicado: a ponte voltava desligada calada** (revisão de 19/10/2026) → o plugin de antes da v4
+    apaga `coletor` da config na mescla e mantém `versao: 4`; `migrar` (`pengu/config.js`) agora liga também quando a
+    chave falta. Depois de qualquer revert, conferir `__lolClient.cfg.coletor.ligado` no CDP.
 - **Ponte desligada ou complemento não visto = `coletor()` devolve status 0 sem fetch** (19/10/2026, `pengu/coach.js`) →
   quem chama vê "fora do ar" mesmo com o coletor de pé. Conferir no CDP `__lolClient.coach.estado()` (`ligado`, `visto`,
   `recursos`, `proximaEm`); `__lolClient.coach.apertar()` força o aperto de mão (só `GET /ola`). Rota nova no coletor só chega
-  ao plugin anunciada em `servidor_local.recursos()` **e** com o chamador conferindo `temRecurso`.
+  ao plugin anunciada em `servidor_local.recursos()` **e** com o chamador conferindo `temRecurso`. O evento do aceite
+  (`naSessao`, `estado().sessao`) vale o **último** aperto de mão bom: porta fechada mantém (complemento reiniciando), porta
+  que responde sem ser ele e a chave desligada zeram (revisão de 19/10/2026, `teste-ponte.mjs` (f)).
 - **Origem da página leva a porta da LCU: localStorage e IndexedDB morrem a cada abertura do client** (medido em
   17/10/2026) → a página é `https://127.0.0.1:<porta>` e a porta muda a cada abertura; `Cache\IndexedDB` tinha 6 pastas
   `https_127.0.0.1_<porta>.indexeddb.leveldb`. O que tem de sobreviver vai no DataStore do Pengu (`lol-client.*`).
