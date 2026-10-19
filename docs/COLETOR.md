@@ -337,11 +337,20 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   **Aperto de mão `GET /ola`** (19/10/2026): `{app: "lol-client-coletor", versao, recursos}`. `recursos` sai na hora do que
   está pendurado (`ServidorLocal.recursos`): rotas (`/draft` → `draft`, `/revisao/` → `revisao`,
   `/aceite/` → `aceite-reserva`, `/compacto/` → `expansoes`), `ao_config` → `coach`, `estado` dado → `estado-partida`,
-  Mentor → `mentor`, banco existente → `contexto`, e o que o dono declara (`coach_vivo`: `painel`, `voz`, `alertas`,
-  `minimapa`, `feiticos`, `carregamento`; `Coletor`: `aceite-flutuante`). `resumos` ainda não existe (Fase 4). O plugin só
+  Mentor → `mentor`, banco existente → `contexto` e `resumos`, e o que o dono declara (`coach_vivo`: `painel`, `voz`, `alertas`,
+  `minimapa`, `feiticos`, `carregamento`; `Coletor`: `aceite-flutuante`). O plugin só
   fala com a 8765 com `cfg.coletor.ligado` e um `/ola` bom, e só chama a rota do recurso anunciado (`pengu/coach.js`
   `temRecurso`); porta que responde sem esse `app` = outro programa, tratado como ausente. Para o usuário o nome é
   "complemento coach" ([TEXTOS-DA-INTERFACE](TEXTOS-DA-INTERFACE.md)).
+  **`GET /resumos?desde=<gameId>`** (19/10/2026, Fase 4 de
+  [plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md)): só leitura, `{v: 1, dono, campos, linhas}` no
+  formato do acumulador do plugin (`pengu/historico.js`, chave `lol-client.historico`; `resumos_do_banco`, campos em
+  `CAMPOS_RESUMO`, a mesma ordem do `CAMPOS` do plugin): até 500 partidas próprias com `game_id > desde`, mais recentes
+  primeiro, só as que entram nas contas; papel, adversário, diferenças aos 10/15 e mortes cedo pelo `analise.analisar`
+  quando há linha do tempo, senão null. Só agregado próprio (inimigo por campeão; `dono` = puuid desta conta, que o plugin
+  confere). O plugin pede uma vez por abertura do client, com `desde` = o maior gameId que já importou. Medido em
+  19/10/2026 no banco desta máquina: 191 partidas em 1,1 s, 25,6 KB. `desde` inválido → 400; sem banco → 404. Prova:
+  `python tools\teste-resumos.py` (`--real`: mede no `dados\lol.db`, só leitura).
   **Janelas do chat fora do client: aposentadas em 19/10/2026** (Fase 2 de
   [plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md), aprovada pelo Gabriel): saíram o módulo das
   janelas, as rotas `/chat/*`, as páginas `painel\chat\`, a assinatura do evento das conversas e o recurso `chat-janelas` do

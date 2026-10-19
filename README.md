@@ -75,6 +75,14 @@ complemento anuncia (`pengu/coach.js`); sem ele, os blocos somem e fica um bloco
 complemento. Desligar a chave não desliga o coach ao vivo: o complemento segue com a última configuração recebida. A
 coluna da direita diz quem precisa dele: chave do coach = só com o complemento; "(plugin…)" = roda sem ele.
 
+**Histórico próprio no plugin** (19/10/2026, Fase 4 do mesmo plano; sem chave, sem tela ainda): o plugin guarda até 500
+partidas próprias do Rift no DataStore (`lol-client.historico`, `pengu/historico.js`), uma linha curta cada (campeão, papel,
+adversário de rota e os 5 inimigos só por campeão, vitória, diferenças aos 10 e 15 min, mortes cedo, farm). Entra a partida
+que acaba (das leituras que o pós-jogo já faz), as que faltam da lista do histórico (1 a cada 5 s, só no lobby, no máximo 40
+por abertura do client) e, com o complemento, as do banco dele (`GET /resumos`, uma vez por abertura). É a amostra do
+contexto do pós-jogo e da seleção sem o complemento (Fase 5). Conferir: `__lolClient.historico.estado()` no CDP. Apagar:
+`DataStore.remove('lol-client.historico')` (nada mais lê a chave antes da Fase 5).
+
 | parte | bloco nas Configurações | chave do coach (precisa do complemento coach) |
 | --- | --- | --- |
 | falar com o complemento coach (aperto de mão, recuo 30 s → 2 min → 5 min sem achar; a linha de estado diz desligado / procurando / encontrado e a versão) | Complemento coach (e Ctrl+K) | (plugin: `coletor.ligado`; padrão desligado em instalação nova) |
@@ -161,6 +169,9 @@ passos 1 e 9 do [plano](roadmap/2026-10-13-client-compacto.md). Vale depois da p
 só a partida real prova: arrastar a janela compacta pelo topo (unidade do `Window.MoveTo`), a posição do "modo
 compacto" flutuante na seleção da Riot e se a Riot devolve a janela a 1280×720 sozinha (o compacto encolhe de novo).
 A variação de PDL do bloco "hoje" conta desde a 1ª leitura do ranque no dia (DataStore do Pengu).
+**Histórico próprio no plugin** (19/10/2026): testado só com LCU, DataStore e complemento falsos (`teste-historico.mjs`,
+`teste-resumos.py`); só o client prova o `set` real com centenas de linhas, o ritmo do backfill na fila da LCU e se a
+LCU tem a linha do tempo das partidas antigas ([relatório](roadmap/2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-4.md)).
 **Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
 antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 

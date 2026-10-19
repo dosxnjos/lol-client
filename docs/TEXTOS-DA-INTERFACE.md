@@ -83,4 +83,6 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
 - Texto que a Riot escreveu (trans.json copiado, ex.: o formulário de denúncia em `jogador-acoes.js`) e o
   `VOCABULARIO` do registro das expansões (`expansoes.js`): são exceções nomeadas em `tools/teste-textos.mjs`.
 - O texto do mentor (gerado pelo Claude no coletor) e nome de jogador ou campeão vindo da LCU (sempre por `esc()`).
-- Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap).
+- Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
+  "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026), que não tem texto visível até a Fase 5 do plano plugin
+  Pengu primeiro; o texto que mostrar a amostra dele (matchup, trauma, freios) entra no guia.
