@@ -2,9 +2,11 @@
 rem lol-ultra-client: atualiza o plugin e o complemento coach para a versao mais nova publicada no GitHub, sem admin.
 rem Origem fixa (api.github.com e github.com do REPO de versao.js), hash conferido (SHA256SUMS.txt e digest da API), troca
 rem item a item com volta e recusa de juncao ou de pasta dentro de um repositorio git. O resto deste arquivo e PowerShell.
-setlocal EnableDelayedExpansion
+setlocal
 set "LUC_CMD=%~f0"
-cd /d "%TEMP%" & powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & exit /b !errorlevel!
+cd /d "%TEMP%"
+setlocal EnableDelayedExpansion
+powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.File]::ReadAllText($env:LUC_CMD,[Text.Encoding]::UTF8); $m='#PS'+'-INICIO#'; iex $c.Substring($c.IndexOf($m)+$m.Length)" & exit /b !errorlevel!
 #PS-INICIO#
 # A linha acima do marcador roda tudo e sai na mesma linha: o cmd nunca relê este arquivo depois da troca (a pasta dele muda).
 # Mesmas regras do complemento coach (coletor/atualizar.py, P3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md):
@@ -14,7 +16,9 @@ cd /d "%TEMP%" & powershell -NoProfile -ExecutionPolicy Bypass -Command "$c=[IO.
 #   hash      sha256 calculado == SHA256SUMS.txt == digest da API (digest ausente = falha), nos zips e no próprio SHA256SUMS
 #   troca     extrai em <pasta>\.atualizacao\nova, confere, troca item a item (o que sai vai para <pasta>\.atualizacao\anterior;
 #             o dados\ do complemento fica); só rename no mesmo volume, nunca cópia; falha no meio devolve tudo, o plugin inclusive
-#   recusa    junção, pasta num repositório git, complemento coach em execução (o botão do client é o caminho dele)
+#   recusa    junção, pasta num repositório git (até a pasta do usuário, exclusive), troca anterior que não voltou inteira
+#             (.atualizacao\troca-em-curso), complemento coach em execução (antes da rede e de novo antes de trocar; o botão do
+#             client é o caminho dele)
 # Rodando da pasta do plugin, atualiza também o complemento em %LOCALAPPDATA%\lol-client\complemento\lol-ultra-client-complemento
 # (se existir); rodando da pasta do complemento, acha o plugin pela ativação do Pengu Loader (registro, só leitura).
 # Teste (tools/teste-atualizar.py): LUC_API = http://127.0.0.1:<porta> (só loopback), LUC_PLUGINS, LUC_SEM_PAUSA.
@@ -31,6 +35,7 @@ $API = 'https://api.github.com'
 $DOWNLOAD = 'https://github.com'
 $ORIGENS = @('https://github.com', 'https://objects.githubusercontent.com', 'https://release-assets.githubusercontent.com')
 $SUMS = 'SHA256SUMS.txt'
+$MARCA = 'troca-em-curso'                          # <pasta>\.atualizacao\troca-em-curso: troca começou e não fechou
 $IFEO = 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\LeagueClientUx.exe'
 $LIMITE_API = 2MB
 $LIMITE_SUMS = 64KB
@@ -116,9 +121,17 @@ function Reparse([string]$p) {
   try { return [bool]([IO.File]::GetAttributes($p) -band [IO.FileAttributes]::ReparsePoint) } catch { return $false }
 }
 
+function MesmaPasta([string]$a, [string]$b) {
+  if (-not $a -or -not $b) { return $false }
+  try { return ([IO.Path]::GetFullPath($a).TrimEnd('\') -ieq [IO.Path]::GetFullPath($b).TrimEnd('\')) } catch { return $false }
+}
+
+# .git na pasta ou acima, parando ANTES da pasta do usuário: um repositório de dotfiles em ~\.git não faz da instalação em
+# %LOCALAPPDATA% uma de desenvolvimento (coletor/atualizar.py em_git)
 function EmGit([string]$p) {
   $d = [IO.DirectoryInfo]::new([IO.Path]::GetFullPath($p))
   while ($d) {
+    if (MesmaPasta $d.FullName $env:USERPROFILE) { return $false }
     if ([IO.Directory]::Exists((Join-Path $d.FullName '.git')) -or [IO.File]::Exists((Join-Path $d.FullName '.git'))) { return $true }
     $d = $d.Parent
   }
@@ -256,6 +269,10 @@ function Principal {
   if ($plug -and (Desenvolvimento $plug)) { Falhar 'desenvolvimento' 'plugin' }
   if ($comp -and (Desenvolvimento $comp)) { Falhar 'desenvolvimento' 'complemento' }
   if (-not $plug -or -not [IO.Directory]::Exists($plug)) { Falhar 'sem-plugin' '' }
+  # troca anterior que não voltou inteira (do botão ou deste .cmd): a próxima apagaria o anterior\, a única cópia velha
+  foreach ($p in @($plug, $comp)) {
+    if ($p -and [IO.File]::Exists((Join-Path $p ".atualizacao\$MARCA"))) { Falhar 'troca-incompleta' "marca $MARCA de uma troca anterior" }
+  }
   if ($comp -and (ComplementoRodando $comp)) { Falhar 'rodando' '' }
   $lido = LerVersao $versaoJs
   $instalada = $lido[0]
@@ -303,26 +320,44 @@ function Principal {
 
   Write-Host 'Conferindo os arquivos…'
   $trocas = @()
-  foreach ($k in @($zips.Keys)) {
-    if ($k -eq 'plugin') { $destino = $plug; $prefixo = $PASTA_PLUGIN; $preservar = @('.atualizacao') } else { $destino = $comp; $prefixo = $PASTA_COMPLEMENTO; $preservar = @('.atualizacao', 'dados') }
-    $estagio = Join-Path $destino '.atualizacao'
-    if (Reparse $estagio) { Falhar 'troca' '.atualizacao é junção' }
-    $nova = Join-Path $estagio 'nova'
-    Apagar $nova
-    [void][IO.Directory]::CreateDirectory($nova)
-    $esp = Extrair $dados[$k] $prefixo $nova $preservar
-    ConferirExtraido $nova $esp
-    $trocas += , @($destino, $nova, (Join-Path $estagio 'anterior'), $preservar)
+  $novas = @()
+  try {   # extração que falha (disco cheio, zip ruim) ou complemento que subiu no meio não deixa nova\ ocupando o disco
+    foreach ($k in @($zips.Keys)) {
+      if ($k -eq 'plugin') { $destino = $plug; $prefixo = $PASTA_PLUGIN; $preservar = @('.atualizacao') } else { $destino = $comp; $prefixo = $PASTA_COMPLEMENTO; $preservar = @('.atualizacao', 'dados') }
+      $estagio = Join-Path $destino '.atualizacao'
+      if (Reparse $estagio) { Falhar 'troca' '.atualizacao é junção' }
+      $nova = Join-Path $estagio 'nova'
+      Apagar $nova
+      $novas += $nova
+      [void][IO.Directory]::CreateDirectory($nova)
+      $esp = Extrair $dados[$k] $prefixo $nova $preservar
+      ConferirExtraido $nova $esp
+      $trocas += , @($destino, $nova, (Join-Path $estagio 'anterior'), $preservar)
+    }
+    # de novo logo antes de trocar: o complemento pode ter subido durante o download (abriu o client)
+    if ($comp -and (ComplementoRodando $comp)) { Falhar 'rodando' 'subiu durante o download' }
+  } catch {
+    foreach ($n in $novas) { try { Apagar $n } catch { } }
+    throw
   }
 
   Write-Host 'Instalando…'
+  $marcas = @(foreach ($t in $trocas) { Join-Path (Split-Path -Parent $t[1]) $MARCA })
+  foreach ($m in $marcas) { [IO.File]::WriteAllText($m, "$versao`n") }   # antes do 1º Move: queda no meio também deixa a marca
   $feitos = New-Object Collections.ArrayList
   try {
     foreach ($t in $trocas) { Trocar $t[0] $t[1] $t[2] $t[3] $feitos }
   } catch {
+    $erro = $_.Exception.Message
     $ok = Desfazer $feitos
-    if ($ok) { Falhar 'troca' $_.Exception.Message } else { Falhar 'troca-incompleta' $_.Exception.Message }
+    if ($ok) {
+      foreach ($m in $marcas) { try { [IO.File]::Delete($m) } catch { } }
+      foreach ($n in $novas) { try { Apagar $n } catch { } }
+      Falhar 'troca' $erro
+    }
+    Falhar 'troca-incompleta' $erro
   }
+  foreach ($m in $marcas) { [IO.File]::Delete($m) }
   foreach ($t in $trocas) { Apagar $t[1] }
   Write-Host "Atualizado para a versão $versao. Reinicie o client (e o complemento coach, se estiver instalado) para usar a versão nova."
   return 0
