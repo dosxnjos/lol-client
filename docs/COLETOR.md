@@ -944,6 +944,45 @@ P3 do [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-pub
 | prova (release falso em 8831–8840, pastas no temp, rotas num servidor de teste, reinício, `atualizar.cmd`) | `python tools\teste-atualizar.py` |
 | prova do lado do plugin | `node tools\teste-atualizador.mjs` |
 
+### Pacote de vozes pelo botão do plugin (`POST /voz/baixar`, 19/10/2026)
+
+P5 do [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.md); código em `coletor\voz_pacote.py`, o
+`coletor.py` pendura (`_pacote_voz`) e o `/ola` anuncia `voz-pacote` só com a rota no ar. O plugin mostra a linha e o botão no
+bloco Voz (`pengu\vozes.js`) só com esse recurso. A geração continua só na máquina do mantenedor (`tools\gerar-pacote-voz.py`).
+
+- **Entrada:** `POST /voz/baixar {}` só com Origin do client ou do Pengu (`ROTAS_SO_PLUGIN_ESTRITO`, como o `/atualizar`: sem
+  Origin = 403). `GET /voz/estado` → `{estado, motivo, pacote, instalada: {versao, falas, release} | null, esperada,
+  disponivel: {versao, tag, tamanho} | null, acao: baixar | atualizar | nada, recusa, baixados, total}`; estados `parado`,
+  `consultando`, `baixando`, `conferindo`, `trocando`, `pronto`, `erro`, `recusado`. Um download por vez (409).
+- **Qual pacote:** `voz-<pacote>-<versao>.zip` com `<versao>` = `avisos.versao_catalogo()` **do código instalado** (as falas que
+  este coach diz). O `publicar.py` só anexa o zip no release em que o catálogo mudou, então ele mora num release qualquer: **1
+  consulta** a `https://api.github.com/repos/<REPO>/releases?per_page=100` e vale o release mais novo (sem rascunho nem
+  pré-lançamento) que tem o asset com esse nome exato e o `SHA256SUMS.txt`. O `GET /voz/estado` faz essa consulta em segundo plano
+  para o tamanho do botão, no máximo 1 vez em 6 h (falha: 10 min), e só com o botão possível (sem recusa, pacote ausente ou de
+  outra versão).
+- **Recusa antes de qualquer rede** (409): `desenvolvimento` (complemento numa pasta com `.git` ou junção, a do mantenedor; pasta
+  de pacotes que é junção), `gerado-aqui` (pacote instalado sem `"origem": "release"` no `indice.json`: gerado neste computador,
+  o botão apagaria a geração), `partida` (fora de `None`/`Lobby`), `em-dia`, `versao` (sem `REPO` ou catálogo).
+- **Origem e hash:** os mesmos do `atualizar.py` (`Rede`, `ORIGENS_DOWNLOAD`, redirecionamento conferido salto a salto): sha256 do
+  zip = linha do `SHA256SUMS.txt` daquele release = `digest`; `digest` nulo = falha. Progresso em bytes (`baixados`/`total`).
+- **Conferência:** extrai em `%LOCALAPPDATA%\lol-client\voz\pacotes\<pacote>.nova` (zip com `..`, contrabarra, absoluto ou outra
+  pasta-raiz = `pacote`) e confere o `indice.json`: `voz` = o pacote, `versao_catalogo` = a do nome, `origem` = `release`, toda
+  fala com `arquivo` de nome simples (`*.wav`, sem caminho: o `voz.Pacote` junta o nome à pasta) presente no zip e nada no zip
+  além do índice e dos `.wav` citados.
+- **Troca com volta:** a pasta inteira (não há dados dentro): `<pacote>` → `<pacote>.anterior` (guarda 1) e `<pacote>.nova` →
+  `<pacote>`; 2º rename que falha devolve o anterior; queda do processo entre os dois se recupera no próximo `PacoteVoz`
+  (`recuperar()`). Rename que falha com `PermissionError` (um `.wav` aberto: fala tocando, antivírus) tenta de novo por 10 s.
+- **Fala em curso:** o pedido só sai em `None`/`Lobby`, mas a troca pode cair numa partida se a fila andou no download. Não
+  atrapalha: o `voz.Voz` lê o pacote **entre** falas (`Pacote.relido`, pelo mtime do `indice.json`), a fala em curso termina
+  inteira e a seguinte já sai do pacote novo; sem pacote no começo da partida, ele vale a partir da próxima.
+- **Desinstalar:** o `desinstalar.cmd` apaga `aoede`, `aoede.nova` e `aoede.anterior` só com `"origem": "release"`.
+
+| o quê | comando |
+| --- | --- |
+| prova (release falso em 8831–8840, LOCALAPPDATA no temp, hash, zip ruim, queda, pasta presa, fala em curso, rotas) | `python tools\teste-voz-baixar.py` |
+| prova do lado do plugin | `node tools\teste-vozes.mjs` |
+| zip da voz do release (do pacote gerado aqui, só leitura; reprova pacote de outro catálogo ou incompleto) | `python -I tools\publicar.py` (`--voz <pasta>`, `--sem-voz`) |
+
 ## Medidor de travadas (`tools\medir-travadas.py`, 15/10/2026)
 
 Para as quedas de 1–5 s na partida (ping do jogo indo a ~300 ms e caindo). O diagnóstico de 15/10 e o porquê estão no

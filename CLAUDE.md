@@ -36,7 +36,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 - Print do overlay/moldura só pelo modo vitrine (`tools/vitrine.py`); nunca desligar `WDA_EXCLUDEFROMCAPTURE` nem
   trazer o jogo para a frente. Provas que abrem janela só com o jogo fechado (`rodar-testes.py` e `ensaio-coach.py` recusam).
 - Pacote de voz: a tarefa `lol-client-voz` completa e converge sozinha (`python tools/voz-agendada.py estado`); gerador
-  só com o jogo fechado e nada do `pythonw` sem `CREATE_NO_WINDOW` ([COLETOR](docs/COLETOR.md) § Avisos ao vivo).
+  só com o jogo fechado e nada do `pythonw` sem `CREATE_NO_WINDOW` ([COLETOR](docs/COLETOR.md) § Avisos ao vivo); quem instala o público baixa pelo botão "baixar vozes" (`coletor/voz_pacote.py`: origem fixa, hash, troca com volta, nunca pacote gerado aqui; prova `teste-voz-baixar.py`).
 - Atalho do coach (F7 em batidas, F8) só **observa** o teclado (`coletor/teclas.py`), em tecla livre no LoL (número de cima é item); nunca
   `RegisterHotKey` (não dispara com o jogo na frente), `SendInput`/`keybd_event` ou hook que coma tecla (ARMADILHAS § Windows).
 - Credencial do lockfile e a linha `Command Line` do r3dlog (token e chave da partida) nunca em arquivo, log ou doc; senha/token de sala de chat nunca no banco (`banco.SEGREDOS`); DataStore só agregado próprio, nunca nome/puuid alheio (acumulador `pengu/historico.js`, prova `teste-historico.mjs`). Heurísticas do pós-jogo: dona é

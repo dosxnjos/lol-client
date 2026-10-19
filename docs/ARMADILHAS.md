@@ -1182,6 +1182,12 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   `shutil.move` cai em `copytree` + `rmtree`, que apaga o que consegue da origem antes de esbarrar no preso. Troca com volta usa
   só `os.rename` (`[IO.Directory]::Move` no PowerShell) no mesmo volume (por isso o estágio mora dentro da pasta). Medido 19/10:
   pasta com um arquivo aberto dentro não renomeia (`WinError 5`), e a troca devolve tudo (`teste-atualizar.py` (c)).
+  Na pasta do pacote de vozes (P5) o arquivo aberto é um `.wav` tocando: o `voz_pacote` tenta o rename de novo por 10 s e a
+  troca sai quando a fala solta o arquivo (`teste-voz-baixar.py` (e) e (f): 0,35 s preso = troca; preso para sempre = volta).
+- **`zipfile` no Windows lê `..\` como `../`** (P5, medido 19/10/2026) → o `ZipInfo` troca `os.sep` por `/` ao ler o diretório
+  central, então um zip com `aoede/..\fora.wav` nos bytes chega como `aoede/../fora.wav`: quem recusa é a checagem de `..`
+  (`atualizar._nome_seguro`), não a de contrabarra, que no Windows nunca dispara. Prova de zip com `..\` tem de gravar o nome
+  cru (`zi.filename` depois do `ZipInfo`) e conferir os bytes; o `writestr` com o nome direto já grava `../`.
 - **Saída do PowerShell redirecionada vem na página OEM** (cp850) → quem lê a saída do `atualizar.cmd` por pipe decodifica com
   `cp850` (o `á` chega como `0xA0`); no console aparece certo.
 - **Caminho que o Python imprime chega trocado no PowerShell** (revisão da P4, medido 19/10/2026: `ã` 227 → `Ò` 210) → o

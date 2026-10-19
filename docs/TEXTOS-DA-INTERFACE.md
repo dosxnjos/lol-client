@@ -100,7 +100,12 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
   mesmo tom nas mensagens dele, e o `instalar.cmd` e o `desinstalar.cmd` (P4) também: fato + saída, impessoal ou "você"
   ("Python 3.12 ou mais novo (64 bits) não encontrado.", "Baixe em … e rode o instalar.cmd de novo.", "Plugin não copiado: …
   e os dois carregariam juntos."). Nenhuma guarda automática lê os `.cmd`: revisar à mão (o `teste-instalar.py` confere as
-  frases que as provas esperam).
+  frases que as provas esperam). O pacote de vozes no bloco Voz (P5, `pengu/vozes.js`): linha "Sem o pacote de vozes Aoede: os
+  avisos saem na voz Maria do Windows." ou "Pacote de vozes Aoede instalado (versão 76d3c16afdfb, 476 falas).", botões "baixar
+  vozes (36 MB)" e "atualizar vozes (36 MB)" (minúsculas, como "atualizar" e "recarregar agora"), etapas "Baixando as vozes… 12
+  de 36 MB", "Conferindo as vozes…", "Instalando as vozes…", fim "Vozes instaladas (versão …): valem a partir da próxima
+  partida." e recusas em fato + saída ("Baixe as vozes na tela inicial ou no lobby.", "Pacote de vozes gerado neste computador: o
+  botão não troca este pacote.").
 - Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
   "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026). O que mostra a amostra dele (Fase 5 do plano plugin Pengu
   primeiro: nota do pós-jogo, freios, dica do lobby, selo, Configurações) segue este guia: diz "partidas guardadas neste

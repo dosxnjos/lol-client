@@ -45,6 +45,12 @@ fica dentro da pasta do complemento (desvio do P0 achado 1). Python 3.12/3.13 n�
 Revisão adversarial da P4 (19/10, `257d60b`, `124686b`, `e613a49`; 5 achados, todos reais e corrigidos, tabela no relatório):
 `monitorPainel` do LEIA-ME era JSON inválido, `instalar.cmd` de dentro da pasta instalada, acento no caminho do Python, venv sem
 pip, complemento parado e venv apagado na falha; `teste-instalacao.py` 47/47 (41 antes), `teste-instalar.py` 35/35 (30/34 antes).
+**P5 feita em 19/10** (`8013f31` a `a5d864a` + docs; `teste-voz-baixar.py` 60/60, `teste-vozes.mjs` 42/42, `teste-publicar.py`
+66/66, `teste-instalar.py` 37/37, `publicar.py` ensaio **APROVADO** com `voz-aoede-76d3c16afdfb.zip` de 36 MB e 476 falas):
+`POST /voz/baixar`/`GET /voz/estado` (`coletor/voz_pacote.py`, recurso `voz-pacote`), release achado pela **lista** com o nome
+exato do catálogo do código (desvio: o zip só sobe quando o catálogo muda), troca da pasta com volta, fala em curso intacta;
+bloco Voz com "baixar vozes (36 MB)" (`pengu/vozes.js`); `desinstalar.cmd` apaga o pacote baixado
+([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p5.md)).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 

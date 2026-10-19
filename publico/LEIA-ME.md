@@ -89,8 +89,10 @@ no 3.14), o reconhecimento de texto do Windows com o idioma português (Brasil) 
    - cria o atalho "lol-ultra-client" na pasta Inicializar do Windows: o complemento sobe com o Windows, sem janela, espera o
      client abrir e volta sozinho se fechar. Nenhuma tarefa agendada, nada que peça administrador.
 3. No client: **Configurações › LOL-CLIENT › Complemento coach**, ligue "Usar o complemento coach".
-4. Voz: sem o pacote de voz, o coach fala com a voz do Windows. O botão "Baixar vozes" no bloco Voz baixa o pacote Aoede
-   (cerca de 42 MB).
+4. Voz: sem o pacote de voz, o coach fala com a voz do Windows. O botão "baixar vozes" no bloco Voz (na tela inicial ou no
+   lobby) baixa o pacote Aoede desta versão (cerca de 36 MB) da página de versões, confere o hash e o instala em
+   `%LOCALAPPDATA%\lol-client\voz`; vale a partir da próxima partida. Quando uma versão nova muda as falas, o mesmo botão vira
+   "atualizar vozes". O `desinstalar.cmd` apaga o pacote junto.
 
 O coach fica calado em partida assistida (modo espectador). O painel abre no monitor secundário de menor número; para usar
 outro, escreva o número dele na chave `"monitorPainel": "DISPLAY3"` do arquivo `dados\config.json` da pasta do complemento
