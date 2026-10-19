@@ -88,6 +88,9 @@ export const PADRAO = {
   // regras de runa (runas.js): {championId, posicao ('*' ou TOP…UTILITY), paginas: [ids de /lol-perks/v1/pages]}. Vazio
   // no padrão: os ids de página são por conta (sem regra, nada acontece). A semente do mantenedor está no README § Instalar
   runas: { ligado: true, regras: [] },
+  // aviso de versão nova do pacote público (atualizacao.js; P2 de roadmap/2026-10-19-publicacao-e-complemento-publico.md):
+  // 1 consulta por dia à api.github.com, ligada por padrão (decisão do Gabriel, 19/10/2026). Entra pela mescla, sem VERSAO nova
+  atualizacao: { verificar: true },
 };
 
 const kebab = s => s.replace(/[A-Z]/g, c => '-' + c.toLowerCase());
@@ -245,6 +248,7 @@ const ALTERNAVEIS = [
   ['extras.esconderEvento', 'esconder aba de evento'],
   ['extras.esconderClassic', 'esconder aba CLASSIC'],
   ['extras.esconderLoja', 'esconder loja'],
+  ['atualizacao.verificar', 'procurar versão nova uma vez por dia'],
 ];
 // atalhos do Ctrl+K que só existem com o recurso do complemento coach (aperto de mão, coach.js): [caminho, rótulo, recursos]
 // (qualquer um dos recursos basta). O CommandBar não tira ação registrada: entram uma vez, quando o recurso aparece

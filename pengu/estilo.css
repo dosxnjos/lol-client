@@ -137,6 +137,14 @@ html.lc-aceite.lc-esconder-popup:not(.lc-aceite-manual) #lol-uikit-layer-manager
 #lc-config-painel .lc-bloco > .lc-explica { margin-left: 0; }
 #lc-config-painel .lc-rodape { margin: 26px 0 8px; }
 #lc-config-painel .lc-restaurar { display: inline-block; width: auto; min-width: 190px; }
+/* versão nova (atualizacao.js linhaVersaoNova): linha no topo, antes da 1ª seção; notas do release só como texto */
+#lc-config-painel .lc-versao-linha { margin: 0 0 18px; padding: 10px 12px; border: 1px solid #785a28; background: rgba(30, 35, 40, .45); }
+#lc-config-painel .lc-versao-titulo { margin: 0 0 8px; font: 700 13px var(--font-display); letter-spacing: .05em; color: #f0e6d2; }
+#lc-config-painel .lc-versao-acoes { display: flex; gap: 10px; }
+#lc-config-painel .lc-versao-acoes > * { flex: 0 0 auto; min-width: 140px; }
+#lc-config-painel .lc-versao-linha > .lc-explica { margin-left: 0; user-select: text; }
+#lc-config-painel .lc-versao-notas { margin-top: 8px; max-height: 180px; overflow: auto; white-space: pre-wrap; user-select: text; font: 12px/16px var(--font-body); color: #a09b8c; }
+#lc-config-painel .lc-versao-procurar { display: inline-block; width: auto; min-width: 150px; margin-top: 6px; }
 
 /* selo do winrate no champ select (champselect.js); some com o champSelect desligado */
 html:not(.lc-champ-select) #lc-winrate { display: none; }

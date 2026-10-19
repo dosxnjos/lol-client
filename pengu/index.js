@@ -2,7 +2,9 @@
 // O Pengu chama init() antes do <body> existir: módulo que mexe no DOM espera o DOMContentLoaded.
 import './estilo.css';
 import { cfg, carregar, registrarAcoes, registrarAcoesCoach, definir, aoMudar, classes, restaurar } from './config.js';
-import { iniciarConfiguracoes, registrarBloco, usarRecursos, redesenharConfiguracoes } from './configuracoes.js';
+import { iniciarConfiguracoes, registrarBloco, usarRecursos, redesenharConfiguracoes, usarTopo } from './configuracoes.js';
+import { iniciarAtualizacao, aoFaseAtualizacao, sincronizarAtualizacao, aoMudarAtualizacao, linhaVersaoNova, blocoAtualizacao,
+  estadoAtualizacao, procurarAtualizacao } from './atualizacao.js';
 import { iniciarAceite, mostrarOverlay, esconderOverlay } from './aceite.js';
 import { iniciarFilaRapida } from './fila-rapida.js';
 import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel, ocupado as posjogoOcupado } from './posjogo/index.js';
@@ -33,6 +35,10 @@ export function init(context) {
   // Aperto de mão na carga e nas viradas de fase (None/Lobby/EndOfGame; Matchmaking e ReadyCheck fora do recuo)
   seguro('ponte', () => iniciarPonte(cfg));
   seguro('ponte: fases', () => context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => { seguro('ponte: fase', () => aoFasePonte(msg?.data)); }));
+  // aviso de versão nova (atualizacao.js, P2 do plano da publicação): 1 consulta por dia à api.github.com, só em None/Lobby, com a
+  // chave atualizacao.verificar; a fase de partida vem da LCU na carga (só GET) e do socket nas viradas
+  seguro('atualização', () => iniciarAtualizacao(cfg));
+  seguro('atualização: fases', () => context.socket.observe('/lol-gameflow/v1/gameflow-phase', msg => { seguro('atualização: fase', () => aoFaseAtualizacao(msg?.data)); }));
   // antes de tudo: os plugins do client começam a pedir logo depois deste init (só GET das rotas exatas; sem-popups.js)
   const semPopups = seguro('sem popups', () => iniciarSemPopups(cfg));
   const aceite = seguro('aceite', () => iniciarAceite(context, cfg, { avisarColetor: avisarAceite }));
@@ -73,6 +79,7 @@ export function init(context) {
   const compacto = seguro('compacto', () => iniciarCompacto(context, cfg, { fila, champ, runas, posjogo, coletor, historico, definir, aceite }));
   // blocos e chaves do coach só com o recurso do complemento (procurando: os do último aperto de mão bom, lol-client.ponte)
   seguro('configurações: recursos', () => usarRecursos(mostraRecurso));
+  seguro('configurações: versão nova', () => usarTopo(linhaVersaoNova));
   seguro('configurações', () => iniciarConfiguracoes({ cfg, definir, aoMudar, restaurar }));
   seguro('blocos', () => {
     const com = (...nomes) => ({ visivel: () => nomes.some(n => mostraRecurso(n)) });
@@ -90,6 +97,7 @@ export function init(context) {
     registrarBloco('chatPosjogo', blocoChatPosjogo, 'Chat do pós-jogo');
     registrarBloco('semPopups', blocoSemPopups, 'Avisos do client');
     registrarBloco('compacto', blocoCompacto, 'Client compacto');
+    registrarBloco('atualizacao', blocoAtualizacao, 'Atualizações');
   });
   // a config do coach vai no aperto de mão bom com "coach" (coach.js) e a cada mudança: aoMudar abaixo
   // liga/desliga sem recarregar: aceite desligado cancela a contagem em curso; fila rápida tira/põe o botão;
@@ -102,6 +110,13 @@ export function init(context) {
     seguro('coach', () => sincronizarConfig(c));
     seguro('chat do pós-jogo', () => chat?.atualizar()); // nomes, cores e avisos repintam na hora (desligado devolve o original)
     seguro('compacto', () => compacto?.sincronizar()); // ligado/inicioCompacto/tamanho valem na hora
+    seguro('atualização', () => sincronizarAtualizacao(c)); // chave ligada agora: consulta se o dia venceu; desligada: o aviso some
+  });
+  // versão nova vista, "procurar agora" respondeu, notas abertas: a linha do topo e o bloco repintam (⚙ do compacto aberta também);
+  // o ponto no ⚙ do compacto é a classe lc-versao-nova no <html> (atualizacao.js)
+  aoMudarAtualizacao(() => {
+    seguro('configurações', () => redesenharConfiguracoes());
+    seguro('compacto', () => compacto?.sincronizar());
   });
   // o complemento achado, perdido ou com outros recursos: blocos, ⚙ do compacto, selo e atalhos do Ctrl+K reagem sem recarregar
   aoMudarPonte(() => {
@@ -137,6 +152,7 @@ export function init(context) {
     chatPosjogo: chat, // estado() e atualizar()
     semPopups, // rotaFalsa(metodo, url): o que seria respondido por nós agora (só consulta)
     compacto, // estado(), alternar(), compactar(), expandir(), reavaliar()
+    atualizacao: { estado: estadoAtualizacao, procurar: procurarAtualizacao }, // aviso de versão nova (procurar = 1 GET na api.github.com)
   };
   document.documentElement.dataset.lolClient = 'ok';
   console.log('[lol-client] ok');

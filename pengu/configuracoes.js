@@ -34,6 +34,10 @@ export const usarRecursos = fn => { mostra = typeof fn === 'function' ? fn : () 
 // o complemento apareceu, sumiu ou mudou de recursos (coach.js aoMudarPonte): remonta a seção aberta
 export const redesenharConfiguracoes = () => redesenhar();
 export const recursoVisivel = nome => { try { return !!mostra(nome); } catch { return false; } };
+// linha antes da 1ª seção (atualizacao.js linhaVersaoNova: "Versão x.y.z disponível"): fn(ui) -> nó ou null. A ⚙ do compacto
+// mostra o que vem antes da 1ª seção acima dos blocos recolhíveis (compacto/lateral-config.js)
+let linhaTopo = () => null;
+export const usarTopo = fn => { linhaTopo = typeof fn === 'function' ? fn : () => null; };
 
 // renderizar(el, ui): el é um <div> vazio dentro do bloco; ui traz cfg, definir e os construtores abaixo.
 // Nome reservado (champSelect, runas) substitui o aviso; nome novo vira bloco no fim, com o nome de título.
@@ -118,6 +122,7 @@ function montar(painel, cfg, definir, restaurar) {
     definir('filaRapida.' + minha, v);
   });
 
+  try { add(linhaTopo(ui)); } catch (e) { console.error('[lol-client] topo das configurações', e); }
   add(ui.secao('Interface'),
     caixa('esconderTft', 'Esconder TFT', 'Tira a aba TFT da barra de cima e o card TFT da tela de modos.'),
     caixa('colunaLarga', 'Coluna larga das filas', 'Alarga a lista de filas do modo selecionado na tela de jogar.'),
