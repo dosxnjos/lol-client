@@ -109,6 +109,7 @@ class PacoteVoz:
         self._est = {"estado": "parado", "motivo": None, "baixados": 0, "total": None}
         self._disp = None          # {versao, tamanho, tag} do release, ou None
         self._consulta = None      # (monotonic, ok) da última consulta
+        self._pendente = False     # POST chegou durante a consulta: o download sai no fim dela
         self.thread = None
         self.recuperar()
 
@@ -245,22 +246,30 @@ class PacoteVoz:
         return True
 
     def _consultar(self):
+        disp, motivo, ok = None, None, False
         try:
             tag, assets = self.achar()
-            nome = nome_asset(self.pacote, self.esperada())
-            tam = assets[nome].get("size")
-            with self._trava:
-                self._disp = {"versao": self.esperada(), "tag": tag,
-                              "tamanho": tam if isinstance(tam, int) and tam > 0 else None}
-                self._consulta = (self.agora(), True)
-            self._por("parado", motivo=None)
+            tam = assets[nome_asset(self.pacote, self.esperada())].get("size")
+            disp = {"versao": self.esperada(), "tag": tag, "tamanho": tam if isinstance(tam, int) and tam > 0 else None}
+            ok = True
         except A.Falha as f:
-            with self._trava:
-                self._disp = None
-            self._por("parado", motivo=f.motivo)
+            motivo = f.motivo
         except Exception as e:   # noqa: BLE001
             log.warning("voz: consulta: %s", type(e).__name__)
-            self._por("parado", motivo="rede")
+            motivo = "rede"
+        # fim da consulta e o POST que chegou durante ela (pedir: _pendente) decididos sob a mesma trava: o plugin nunca lê um
+        # "parado" entre a consulta e o download que ele pediu
+        with self._trava:
+            self._disp = disp
+            if ok:
+                self._consulta = (self.agora(), True)
+            pendente, self._pendente = self._pendente, False
+            if pendente:
+                self._est.update(estado="baixando", motivo=None, baixados=0, total=None)
+            else:
+                self._est.update(estado="parado", motivo=motivo)
+        if pendente:
+            self._rodar()
 
     # ---- POST /voz/baixar ----
     def pedir(self):
@@ -275,9 +284,14 @@ class PacoteVoz:
         if motivo:
             self._por("recusado", motivo=motivo, baixados=0, total=None)
             return 409, self.estado()
-        if self.thread is not None and self.thread.is_alive():   # a consulta do estado ainda em voo: espera ela
-            self.thread.join(A.PRAZO_S + 5)
         with self._trava:
+            if self._est["estado"] == "consultando" and not self._pendente:
+                # a consulta do GET /voz/estado ainda em voo (GitHub lento: até PRAZO_S): responde já e o download sai no fim
+                # dela, na mesma thread (o plugin desiste do POST em 8 s; esperar aqui daria "sem resposta" com o download
+                # começando depois)
+                self._pendente = True
+                self._est.update(motivo=None, baixados=0, total=None)
+                return 202, {**self._est}
             if self._ocupado():
                 return 409, {**self._est}
             self._est.update(estado="baixando", motivo=None, baixados=0, total=None)

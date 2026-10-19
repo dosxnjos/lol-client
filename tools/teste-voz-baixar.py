@@ -69,6 +69,8 @@ class _H(BaseHTTPRequestHandler):
         g = self.server.g
         g.hits.append(self.path)
         p = self.path.split("?")[0]
+        if g.atraso.get(p.rsplit("/", 1)[-1]):   # GitHub lento (lista ou um asset)
+            time.sleep(g.atraso[p.rsplit("/", 1)[-1]])
         if p == f"/repos/{REPO}/releases":
             return self._enviar(200, json.dumps(g.lista).encode(), "application/json")
         if p.startswith(f"/{REPO}/releases/download/"):
@@ -127,7 +129,7 @@ class Falso:
         threading.Thread(target=self.srv.serve_forever, daemon=True).start()
 
     def limpar(self):
-        self.lista, self.blobs, self.hits, self.cortar, self.redir = [], {}, [], set(), None
+        self.lista, self.blobs, self.hits, self.cortar, self.redir, self.atraso = [], {}, [], set(), None, {}
 
     def parar(self):
         self.srv.shutdown()
@@ -371,6 +373,35 @@ def parte_d(g):
     g.cortar = set()
     st, e = rodar(novo(inst, g))
     caso("(d) de novo sem a queda: pronto", e["estado"] == "pronto" and inst.foto().keys() >= esperado(NOVO).keys(), e)
+
+    # GitHub lento (revisão da P5): o POST durante a consulta do GET /voz/estado responde na hora e o download sai no fim dela
+    g.limpar()
+    publicar(g)
+    g.atraso = {"releases": 1.5, NOME: 1.0}
+    inst = Inst()
+    pv = novo(inst, g)
+    pv.rota_get("/voz/estado")
+    time.sleep(0.2)
+    t0 = time.monotonic()
+    st, e = pv.pedir()
+    dt = time.monotonic() - t0
+    caso("(d) POST durante a consulta lenta: 202 em menos de 0,5 s, estado consultando (o plugin mostra 'Baixando as vozes…')",
+         st == 202 and dt < 0.5 and e["estado"] == "consultando", (st, dt, e))
+    vistos = set()
+    st2 = None
+    fim = time.monotonic() + 15
+    while time.monotonic() < fim and pv.estado()["estado"] not in ("pronto", "erro"):
+        vistos.add(pv.estado()["estado"])
+        if pv.estado()["estado"] == "baixando" and st2 is None:
+            st2, e2 = pv.pedir()
+        time.sleep(0.02)
+    caso("(d) o download sai no fim da consulta, na mesma thread, sem 'parado' no meio, e termina pronto",
+         pv.estado()["estado"] == "pronto" and "parado" not in vistos and {"consultando", "baixando"} <= vistos
+         and inst.foto() == esperado(NOVO), (vistos, pv.estado()))
+    caso("(d) 2º POST com o download em curso: 409 com o estado de agora, 1 download só do zip",
+         st2 == 409 and sum(1 for h in g.hits if h.endswith(NOME)) == 1, (st2, g.hits))
+    caso("(d) a lista sai 2 vezes: a do GET e a do download (URL e digest lidos na hora do download)",
+         sum(1 for h in g.hits if "/releases?" in h) == 2, g.hits)
 
 
 # ---------- (e) troca ----------
