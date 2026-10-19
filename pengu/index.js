@@ -6,6 +6,7 @@ import { iniciarConfiguracoes, registrarBloco, usarRecursos, redesenharConfigura
 import { iniciarAtualizacao, aoFaseAtualizacao, sincronizarAtualizacao, aoMudarAtualizacao, linhaVersaoNova, blocoAtualizacao,
   estadoAtualizacao, procurarAtualizacao, registrarAtualizador } from './atualizacao.js';
 import { criarAtualizador } from './atualizador.js';
+import { criarVozes } from './vozes.js';
 import { iniciarAceite, mostrarOverlay, esconderOverlay } from './aceite.js';
 import { iniciarFilaRapida } from './fila-rapida.js';
 import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel, ocupado as posjogoOcupado } from './posjogo/index.js';
@@ -81,6 +82,12 @@ export function init(context) {
   // (definir: a tela 1 grava fila e posições em filaRapida.*; coletor: o fetch da ponte (coach.js) das telas e do registro das expansões; aceite: null = o
   // aceite.js quebrou no init e o ReadyCheck expande em vez de ceder)
   const compacto = seguro('compacto', () => iniciarCompacto(context, cfg, { fila, champ, runas, posjogo, coletor, historico, definir, aceite }));
+  // pacote de vozes no bloco Voz (vozes.js, P5 do plano da publicação): estado e botão "baixar vozes", só com o recurso
+  // "voz-pacote"; o complemento baixa, confere e troca. Mudou o estado: repinta a ⚙ (a do compacto também)
+  const vozes = seguro('vozes', () => criarVozes({ coletor, temRecurso, aoMudar: () => {
+    seguro('configurações', () => redesenharConfiguracoes());
+    seguro('compacto', () => compacto?.sincronizar());
+  } }));
   // blocos e chaves do coach só com o recurso do complemento (procurando: os do último aperto de mão bom, lol-client.ponte)
   seguro('configurações: recursos', () => usarRecursos(mostraRecurso));
   seguro('configurações: versão nova', () => usarTopo(linhaVersaoNova));
@@ -92,7 +99,7 @@ export function init(context) {
     registrarBloco('coach', blocoConexao(estadoPonte, () => apertarMao('procurar agora')), 'Complemento coach');
     registrarBloco('coachAusente', blocoCoachAusente, 'Coach ao vivo', { visivel: () => !mostraRecurso('coach') });
     registrarBloco('painel', blocoPainel, 'Painel ao vivo (2ª tela)', com('painel'));
-    registrarBloco('voz', blocoVoz, 'Voz', com('voz'));
+    registrarBloco('voz', (corpo, ctx) => blocoVoz(corpo, ctx, vozes), 'Voz', com('voz'));
     registrarBloco('alertas', blocoAlertas, 'Alertas na tela', com('alertas'));
     registrarBloco('minimapa', blocoMinimapa, 'Minimapa e jungler', com('minimapa', 'feiticos'));
     registrarBloco('mentor', blocoMentor, 'Mentor', com('mentor'));
@@ -158,6 +165,8 @@ export function init(context) {
     compacto, // estado(), alternar(), compactar(), expandir(), reavaliar()
     // aviso de versão nova (procurar = 1 GET na api.github.com); o "atualizar" fica só no clique da linha (troca arquivos)
     atualizacao: { estado: estadoAtualizacao, procurar: procurarAtualizacao },
+    // pacote de vozes: estado() e consultar() (GET /voz/estado); o "baixar vozes" fica só no clique do bloco Voz
+    vozes: vozes && { estado: vozes.estado, consultar: vozes.consultar },
   };
   document.documentElement.dataset.lolClient = 'ok';
   console.log('[lol-client] ok');

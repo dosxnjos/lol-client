@@ -189,11 +189,15 @@ export const blocoPainel = (corpo, ctx) => corpo.append(
   caixaCoach(ctx, 'painelAoVivo', 'Painel ao vivo na 2ª tela', 'Na partida, abre o painel no monitor secundário (sua rota, ameaça, seu padrão, time e objetivos) e fecha no fim.'),
   caixaCoach(ctx, 'amostrasAoVivo', 'Gravar amostras da partida', 'A cada 10 s guarda nível, itens, ouro estimado e KDA dos 10 no banco: deixa o pós-jogo mais fino.'));
 
-// voz: pacote Aoede gravado antes (coletor/voz.py), Maria do Windows só para a frase que falta no pacote
-export const blocoVoz = (corpo, ctx) => corpo.append(
-  caixaCoach(ctx, 'voz', 'Voz do coach', 'Fala os avisos em português com a voz Aoede, gravada antes; frase que ainda não foi gravada sai na voz Maria do Windows. No máximo 1 fala a cada 20 s, fora o gank.'),
-  ctx.ui.linha(ctx.ui.lista('coach.tomVoz', 'Tom', TONS, ctx.cfg.coach.tomVoz, v => ctx.definir('coach.tomVoz', v))),
-  caixaCoach(ctx, 'cortarFalaRepetida', 'Não repetir a mesma frase em menos de 1 minuto', 'Se a voz acabou de dizer a mesma coisa, pula (aviso de perigo igual só é pulado nos primeiros 10 s). A borda e o painel mostram do mesmo jeito.'));
+// voz: pacote Aoede gravado antes (coletor/voz.py), Maria do Windows só para a frase que falta no pacote. vozes (vozes.js, P5 da
+// publicação): estado do pacote e o botão "baixar vozes", só com o recurso "voz-pacote" do complemento
+export const blocoVoz = (corpo, ctx, vozes = null) => {
+  corpo.append(
+    caixaCoach(ctx, 'voz', 'Voz do coach', 'Fala os avisos em português com a voz Aoede, gravada antes; frase que ainda não foi gravada sai na voz Maria do Windows. No máximo 1 fala a cada 20 s, fora o gank.'),
+    ctx.ui.linha(ctx.ui.lista('coach.tomVoz', 'Tom', TONS, ctx.cfg.coach.tomVoz, v => ctx.definir('coach.tomVoz', v))),
+    caixaCoach(ctx, 'cortarFalaRepetida', 'Não repetir a mesma frase em menos de 1 minuto', 'Se a voz acabou de dizer a mesma coisa, pula (aviso de perigo igual só é pulado nos primeiros 10 s). A borda e o painel mostram do mesmo jeito.'));
+  vozes?.bloco(corpo, ctx.ui);
+};
 
 // liga/desliga um tipo de aviso num destino ('voz' | 'tela'); lê o valor vivo: duas caixas seguidas sem remontar o painel
 export function trocarAviso(cfg, definir, destino, tipo, ligado) {
