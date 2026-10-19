@@ -115,7 +115,7 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
   let dono = null, imp = 0, inerte = false, carregado = false;
   let pendentes = 0, sets = 0, eu = null, outraConta = false;
   let fase = null, timer = null, ctl = null, emPasso = false;
-  let feitos = 0, importado = false, tentativasImp = 0, fim = false;
+  let feitos = 0, importado = false, tentativasImp = 0, fim = false, falhasEu = 0;
   const tentados = new Set();
 
   function carregar() {
@@ -202,7 +202,7 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
   function aoFase(f) {
     if (f === fase) return;
     fase = f;
-    if (livre()) { fim = false; if (!timer && !emPasso && !inerte) agendarPasso(); } else parar();
+    if (livre()) { fim = false; falhasEu = 0; if (!timer && !emPasso && !inerte) agendarPasso(); } else parar();
   }
   // a ponte mudou (complemento achado com "resumos") ou a lista do histórico chegou: volta a olhar se estava parado
   function cutucar() {
@@ -259,9 +259,12 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
     let seguir = true;
     try {
       if (ocupado()) return;   // pós-jogo ou lista do histórico lendo: nunca em paralelo (a LCU atende em fila)
-      if (!(await garantirEu()) || !livre()) return;
+      const importar_ = !importado && temRecurso('resumos') && typeof coletor === 'function';
+      if (!importar_ && !Array.isArray(partidas())) return;   // lista ainda não lida e nada a importar: espera sem GET
+      if (!(await garantirEu())) { if (++falhasEu >= 3) seguir = false; return; }   // sem conta (antes do login): para até a próxima fase
+      if (!livre()) return;
       if (!contaOk(eu)) { seguir = false; return; }
-      if (!importado && temRecurso('resumos') && typeof coletor === 'function') { await importar(); return; }
+      if (importar_) { await importar(); return; }
       if (feitos >= MAX_POR_ABERTURA) { seguir = false; return; }
       const g = proxima();
       if (g === undefined) return;   // lista ainda não lida: o selo da seleção lê 5 s depois da carga
@@ -294,8 +297,10 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
 
   const estado = () => ({ linhas: porId.size, dono: !!dono, imp, inerte, outraConta, fase, feitos, tentados: tentados.size,
     pendentes, sets, importado, fim, rodando: !!timer || emPasso });
-  // as linhas como objetos, mais recentes primeiro (Fase 5: contexto do pós-jogo e da seleção)
-  const linhas = () => (outraConta ? [] : [...porId.values()].sort((a, b) => b[IDX.criacao] - a[IDX.criacao]).map(comoObjeto));
+  // as linhas como objetos, mais recentes primeiro (Fase 5: contexto do pós-jogo e da seleção). puuid = a conta de quem
+  // pede: de outra conta que não a dona, nada (sem puuid, vale o que a sessão já sabe: outraConta só depois do 1º passo)
+  const linhas = (puuid = null) => (outraConta || (puuid && dono && puuid !== dono) ? []
+    : [...porId.values()].sort((a, b) => b[IDX.criacao] - a[IDX.criacao]).map(comoObjeto));
 
   return { carregar, registrar, aoFase, cutucar, passo, importar, estado, linhas, parar };
 }

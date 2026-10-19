@@ -253,7 +253,17 @@ function cenario({ n = 60, rotasExtra = {}, ocupado = () => false, ds = dsFalso(
   d.setLista(null);
   d.h.aoFase('Lobby');
   await d.rel.avancar(PASSO_MS * 4);
-  caso('6 lista do histórico ainda não lida: nenhuma GET de partida, segue tentando', d.getsPartida().length === 0 && d.h.estado().rodando);
+  caso('6 lista do histórico ainda não lida: nenhuma GET (nem a do puuid), segue tentando', d.getsPartida().length === 0
+    && d.lcu.chamadas.length === 0 && d.h.estado().rodando, d.lcu.chamadas.map(x => x.url));
+  // sem conta (antes do login, current-summoner 404): no máximo 3 GET e para até a próxima fase livre
+  const e = cenario({ rotasExtra: { 'GET /lol-summoner/v1/current-summoner': { status: 404, json: { message: 'nao' } } } });
+  e.h.aoFase('Lobby');
+  await e.rel.avancar(PASSO_MS * 20);
+  const eus = () => e.lcu.chamadas.filter(x => x.url === '/lol-summoner/v1/current-summoner').length;
+  caso('6 current-summoner 404: 3 tentativas e para (nenhuma GET de partida)', eus() === 3 && e.getsPartida().length === 0 && !e.h.estado().rodando, eus());
+  e.h.aoFase('None');
+  await e.rel.avancar(PASSO_MS * 20);
+  caso('6 próxima fase livre: tenta de novo (mais 3)', eus() === 6, eus());
 }
 {
   // 6. linha do tempo 404 entra sem os campos dela; 500 fica de fora nesta abertura
@@ -349,6 +359,8 @@ function complemento({ dono = EU, linhas, campos = CAMPOS, status = 200 } = {}) 
   const logs = [];
   const h = criarHistorico({ ds, log: m => logs.push(m) });
   h.carregar();
+  caso('8 linhas(puuid) de outra conta = nada, mesmo antes do 1º registro; a dona vê as dela', h.linhas(EU).length === 0
+    && h.linhas('puuid-da-dona').length === 1);
   caso('8 conta diferente da dona: o pós-jogo não grava', !h.registrar(partida(42, 1_790_000_000_000), LINHA, EU) && ds.sets === 0);
   caso('8 e as linhas da dona não aparecem para ela', h.linhas().length === 0 && logs.some(m => m.includes('conta diferente')), logs);
   const c = cenario({ ds: dsFalso({ v: VERSAO, dono: 'puuid-da-dona', imp: 0, campos: CAMPOS, linhas: [] }) });
