@@ -19,7 +19,9 @@
     // Fase 4 de roadmap/2026-10-17-plugin-pengu-primeiro.md (acumulador do histórico)
     'historico.js',
     // Fase 5 (contexto do pós-jogo, selo e freios sobre o acumulador)
-    'posjogo/contexto.js', 'freios.js'];
+    'posjogo/contexto.js', 'freios.js',
+    // P2, P3 e P5 de roadmap/2026-10-19-publicacao-e-complemento-publico.md (versão nova, botão atualizar, baixar vozes)
+    'versao.js', 'atualizacao.js', 'atualizador.js', 'vozes.js'];
   const out = {};
   for (const m of mods) {
     try { const mod = await import(`${base}${m}?v=${v}`); out[m] = Object.keys(mod).length + (typeof mod.montar === 'function' ? ' montar' : ''); }
