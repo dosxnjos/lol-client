@@ -74,18 +74,27 @@ O que soma ao plugin: coach ao vivo com voz (1 fala por vez, sobre a sua rota, o
 numa 2ª tela, alertas e área provável do jungler sobre o minimapa, Flash dos inimigos pelo chat ou pela tecla F7, a janela
 de aceitar partida fora do client e lições do pós-jogo sobre todas as partidas guardadas.
 
-Requisitos a mais: Python 3.12 ou mais novo ([python.org](https://www.python.org/downloads/windows/)), o reconhecimento de
-texto do Windows com o idioma português (Brasil) instalado e o Microsoft Edge (para o painel).
+Requisitos a mais: Python 3.12 ou mais novo, de 64 bits ([python.org](https://www.python.org/downloads/windows/); testado
+no 3.14), o reconhecimento de texto do Windows com o idioma português (Brasil) instalado e o Microsoft Edge (para o painel).
 
 1. Baixe `lol-ultra-client-complemento-<versão>.zip` da mesma versão do plugin e confira o hash como no plugin.
-2. Extraia e rode `instalar.cmd` (sem administrador): ele cria um ambiente Python só do complemento, instala as bibliotecas
-   com versão fixa, copia o plugin para a pasta do Pengu Loader e cria um atalho na inicialização do Windows que espera o
-   client abrir.
+2. Extraia e rode `instalar.cmd` (duplo clique, sem administrador). Ele:
+   - procura o Python (sem um 3.12 ou mais novo, diz onde baixar e não muda nada);
+   - cria um ambiente Python só do complemento em `%LOCALAPPDATA%\lol-client\complemento\venv` e instala nele as
+     bibliotecas com versão fixa (`requirements-complemento.txt`; na 1ª vez, alguns minutos de download);
+   - copia o complemento para `%LOCALAPPDATA%\lol-client\complemento\lol-ultra-client-complemento` (numa reinstalação, as
+     partidas e as configurações guardadas ficam);
+   - copia o plugin para `plugins\lol-ultra-client` do Pengu Loader (a pasta vem da ativação do Pengu Loader; sem ela, o
+     `instalar.cmd` pergunta);
+   - cria o atalho "lol-ultra-client" na pasta Inicializar do Windows: o complemento sobe com o Windows, sem janela, espera o
+     client abrir e volta sozinho se fechar. Nenhuma tarefa agendada, nada que peça administrador.
 3. No client: **Configurações › LOL-CLIENT › Complemento coach**, ligue "Usar o complemento coach".
 4. Voz: sem o pacote de voz, o coach fala com a voz do Windows. O botão "Baixar vozes" no bloco Voz baixa o pacote Aoede
    (cerca de 42 MB).
 
-O coach fica calado em partida assistida (modo espectador).
+O coach fica calado em partida assistida (modo espectador). O painel abre no monitor secundário de menor número; para usar
+outro, escreva o nome dele (por exemplo `\\.\DISPLAY3`) em `"monitorPainel"` no arquivo `dados\config.json` da pasta do
+complemento. A pasta do League of Legends é achada sozinha (a registrada pelo Riot Client ou a do client aberto).
 
 ## Atualizar
 
@@ -96,9 +105,10 @@ Plugin e complemento sempre saem juntos, na mesma versão.
 
 ## Desinstalar
 
-1. Plugin: com o client fechado, apague a pasta `plugins\lol-ultra-client` do Pengu Loader.
-2. Complemento coach: apague o atalho "lol-ultra-client" da pasta Inicializar do Windows (Win+R, `shell:startup`) e a pasta
-   `%LOCALAPPDATA%\lol-client`.
+- Com o complemento coach: feche o client e rode `desinstalar.cmd` (na pasta do complemento ou na extraída do zip). Ele
+  fecha o complemento, apaga o atalho da pasta Inicializar, a pasta `plugins\lol-ultra-client` do Pengu Loader e a pasta
+  `%LOCALAPPDATA%\lol-client\complemento` (com as partidas guardadas por ele).
+- Só o plugin: com o client fechado, apague a pasta `plugins\lol-ultra-client` do Pengu Loader.
 
 ## Licença
 
