@@ -363,7 +363,10 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   fase) e a importação do `GET /resumos` (recurso `resumos`, uma vez por abertura). Sintomas: **linha sem papel nem
   diferenças** = a LCU deu 404 na linha do tempo daquela partida (entra assim e não se pede de novo; outro erro fica de fora
   e volta na próxima abertura); **acumulador parado e "conta diferente da dona" no console** = outra conta no mesmo Pengu
-  (o `dono` é o puuid de quem gravou primeiro; nada lido nem gravado para a outra); **"formato desconhecido"** = `v`
+  (o `dono` é o puuid de quem gravou primeiro; nada lido nem gravado para a outra); **partidas de outra conta no `/resumos`**
+  = o banco guarda o `eu` de cada partida pela conta logada na hora e o meta `puuid` muda a cada login: sem o filtro pelo
+  participante `eu = 1` com o puuid do meta, o `dono` carimbava as de outra conta (corrigido na revisão adversarial da
+  Fase 4, `teste-resumos.py` F); **"formato desconhecido"** = `v`
   diferente de 1 (nada regravado por cima); linha sem linha do tempo não melhora sozinha (o `imp` já passou dela e o
   backfill pula gameId que já tem; só o pós-jogo aberto naquela partida troca, porque a mais completa ganha). Prova:
   `teste-historico.mjs`, `teste-resumos.py`. Conferir: `__lolClient.historico.estado()`.

@@ -191,14 +191,20 @@ def resumos_do_banco(c, desde=0, teto=TETO_RESUMOS):
     """{v, dono, campos, linhas}: até `teto` partidas próprias com game_id > desde, mais recentes primeiro, só as que entram
     nas contas (mapa 11, fila fora de analise.FORA_DAS_CONTAS, duração >= analise.REMAKE_S). Com linha do tempo no banco,
     papel, adversário, diferenças aos 10/15 e mortes cedo saem do analise.analisar (o mesmo que o pós-jogo do plugin
-    calcula em JS); sem ela, null. dono = puuid desta conta (meta), que o plugin confere antes de mesclar"""
+    calcula em JS); sem ela, null. dono = puuid desta conta (meta), que o plugin confere antes de mesclar.
+    Só as partidas desta conta: o `eu` de cada partida é o participante da conta logada quando ela foi gravada e o meta
+    puuid muda a cada login, então o banco pode ter partidas de outra conta que jogou neste PC (revisão adversarial da
+    Fase 4); o filtro é o participante `eu = 1` com o puuid do meta. Sem puuid no meta: nenhuma linha"""
     import analise  # noqa: PLC0415 (só quando pedem: o servidor sobe sem ele)
     puuid = banco.meta(c, "puuid")
+    linhas = []
+    if not puuid:
+        return {"v": VERSAO_RESUMOS, "dono": None, "campos": list(CAMPOS_RESUMO), "linhas": linhas}
     sql = ("select game_id, criacao, duracao, fila, campeao, time, vitoria, tem_timeline from partidas "
            f"where eu is not null and mapa = 11 and fila not in {analise.FORA_DAS_CONTAS} and duracao >= {analise.REMAKE_S} "
+           "and exists (select 1 from participantes p where p.game_id = partidas.game_id and p.eu = 1 and p.puuid = ?) "
            "and game_id > ? order by criacao desc, game_id desc limit ?")
-    linhas = []
-    for gid, criacao, duracao, fila, campeao, time_, vitoria, tem_tl in c.execute(sql, (int(desde), int(teto))).fetchall():
+    for gid, criacao, duracao, fila, campeao, time_, vitoria, tem_tl in c.execute(sql, (puuid, int(desde), int(teto))).fetchall():
         inimigos = [r[0] for r in c.execute(
             "select campeao from participantes where game_id = ? and time <> ? order by participant_id", (gid, time_))]
         cs = c.execute("select coalesce(cs_tropas, 0) + coalesce(cs_selva, 0) from participantes where game_id = ? and eu = 1",

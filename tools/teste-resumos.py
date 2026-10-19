@@ -7,6 +7,7 @@
 #   C. só partidas que entram nas contas (ARAM, personalizada, treino e remake fora), mais recentes primeiro, desde e teto
 #   D. privacidade: JSON sem gameName, tagLine, summonerName nem puuid/nome de outro jogador
 #   E. pela rede: 200 com Origin do client, desde inválido = 400, sem banco = 404; recurso "resumos" só com banco
+#   F. conta: partida gravada sob outra conta (outra conta logada neste PC) não sai; sem puuid no meta, nenhuma linha
 # --real: mede também no dados/lol.db (só leitura, banco.abrir_leitura; imprime só contagem, tempo e bytes) e varre
 # a privacidade nele.
 # uso: python tools/teste-resumos.py [--real]
@@ -134,6 +135,27 @@ def principal():
         mut = json.loads(texto)
         mut["linhas"][0].append(game["participantIdentities"])
         caso("D mutação (identidades na linha) deixa a varredura vermelha", varrer(json.dumps(mut, ensure_ascii=False), outros, nomes))
+
+        # F. conta: outra conta que jogou neste PC (o coletor grava `eu` pelo puuid da sessão daquele momento e reescreve
+        # o meta puuid a cada login) nunca sai no /resumos desta conta com dono = esta (revisão adversarial da Fase 4)
+        b, gid_b = outros[0], ID + 10
+        banco.gravar_partida(c, {**game, "gameId": gid_b, "gameCreation": game["gameCreation"] + 10_000}, b, timeline)
+        ra = servidor_local.resumos_do_banco(c)
+        ids_a = [l[0] for l in ra["linhas"]]
+        caso("F partida gravada sob outra conta não sai no /resumos desta conta (o resto igual)", gid_b not in ids_a and ids_a == ids
+             and ra["dono"] == puuid, [gid_b in ids_a, len(ids_a), len(ids)])
+        banco.meta(c, "puuid", b)
+        rb = servidor_local.resumos_do_banco(c)
+        meu_b = next(p for p in game["participants"] if p["participantId"] == next(
+            i["participantId"] for i in game["participantIdentities"] if i["player"].get("puuid") == b))
+        caso("F com a outra conta logada (meta = B): só a partida dela, com o campeão dela",
+             [l[0] for l in rb["linhas"]] == [gid_b] and rb["dono"] == b and rb["linhas"][0][4] == meu_b["championId"],
+             [[l[0] for l in rb["linhas"]], rb["dono"] == b])
+        c.execute("delete from meta where chave = 'puuid'")
+        r0 = servidor_local.resumos_do_banco(c)
+        caso("F sem puuid no meta: nenhuma linha", r0["linhas"] == [] and r0["dono"] is None, len(r0["linhas"]))
+        banco.meta(c, "puuid", puuid)
+        c.commit()
         c.close()
 
         # E

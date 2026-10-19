@@ -348,7 +348,9 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
   `CAMPOS_RESUMO`, a mesma ordem do `CAMPOS` do plugin): até 500 partidas próprias com `game_id > desde`, mais recentes
   primeiro, só as que entram nas contas; papel, adversário, diferenças aos 10/15 e mortes cedo pelo `analise.analisar`
   quando há linha do tempo, senão null. Só agregado próprio (inimigo por campeão; `dono` = puuid desta conta, que o plugin
-  confere). O plugin pede uma vez por abertura do client, com `desde` = o maior gameId que já importou. Medido em
+  confere) e só partidas **desta conta**: o `eu` de cada partida é o participante da conta logada quando ela foi gravada e o
+  meta `puuid` muda a cada login, então a rota filtra pelo participante `eu = 1` com o puuid do meta (partida de outra conta
+  que jogou neste PC não sai; sem puuid no meta, `linhas: []`; revisão adversarial da Fase 4). O plugin pede uma vez por abertura do client, com `desde` = o maior gameId que já importou. Medido em
   19/10/2026 no banco desta máquina: 191 partidas em 1,1 s, 25,6 KB. `desde` inválido → 400; sem banco → 404. Prova:
   `python tools\teste-resumos.py` (`--real`: mede no `dados\lol.db`, só leitura).
   **Janelas do chat fora do client: aposentadas em 19/10/2026** (Fase 2 de
