@@ -146,15 +146,22 @@ export function htmlTopo(r, nome, opcoes = {}) {
 }
 
 // estado do contexto das lições. 'sem' = sem o complemento coach com o recurso "contexto" (Fase 1 de
-// roadmap/2026-10-17-plugin-pengu-primeiro.md): nota neutra, nada de "fora do ar"
-const ctxNota = estado => ({
-  coletor: 'lições do complemento coach: o histórico inteiro, com matchup, traumas e taxa por horário',
-  ok: 'lições com matchup, traumas e histórico do complemento coach',
-  esperando: 'esperando o complemento coach gravar a partida (matchup, traumas e histórico entram quando ela chegar)',
-  fora: 'complemento coach sem resposta: lições sem matchup, traumas e histórico',
-  erro: 'complemento coach sem esta partida: lições sem matchup, traumas e histórico',
-  sem: 'lições com o histórico do client',
-}[estado] || 'consultando o complemento coach…');
+// roadmap/2026-10-17-plugin-pengu-primeiro.md): nota neutra, nada de "fora do ar". 'local' = sem ele, com o contexto do
+// acumulador (posjogo/contexto.js, Fase 5); local = quantas partidas guardadas entraram (0 = nenhum contexto local), que
+// também valem enquanto o complemento não responde
+export const ctxNota = (estado, local = 0) => {
+  const comLocal = `lições com as ${local} partidas guardadas neste computador`;
+  return ({
+    coletor: 'lições do complemento coach: o histórico inteiro, com matchup, traumas e taxa por horário',
+    ok: 'lições com matchup, traumas e histórico do complemento coach',
+    local: `lições com matchup, traumas e histórico das ${local} partidas guardadas neste computador`,
+    esperando: local ? `esperando o complemento coach gravar a partida; até lá, ${comLocal}`
+      : 'esperando o complemento coach gravar a partida (matchup, traumas e histórico entram quando ela chegar)',
+    fora: local ? `complemento coach sem resposta: ${comLocal}` : 'complemento coach sem resposta: lições sem matchup, traumas e histórico',
+    erro: local ? `complemento coach sem esta partida: ${comLocal}` : 'complemento coach sem esta partida: lições sem matchup, traumas e histórico',
+    sem: 'lições com o histórico do client',
+  }[estado] || (local ? `consultando o complemento coach; até lá, ${comLocal}` : 'consultando o complemento coach…'));
+};
 
 // Resumo (docs/INSIGHTS.md § Pós-jogo v2, D7 do roadmap 2026-10-14): faixa do veredito do mentor no topo (vazia até
 // ele chegar: pintar('mentor') enche), placar e lições do motor à esquerda (recolhidas com o mentor ligado:
@@ -177,7 +184,7 @@ export function abaResumo(r, licoes, ctxEstado, opcoes = {}) {
       <div class="lc-placar">${placar.map(([k, v]) => `<div><b>${esc(v)}</b><span>${k}</span></div>`).join('')}</div>
       <details class="lc-licoes-det" data-licoes${abertas ? ' open' : ''}><summary>${rotulo}</summary>
         <div class="lc-licoes">${lic}</div></details>
-      <div class="lc-nota" data-ctx-nota>${ctxNota(ctxEstado)}</div>
+      <div class="lc-nota" data-ctx-nota>${ctxNota(ctxEstado, r.ctxLocal ? r.amostraLocal || 0 : 0)}</div>
     </div>
     ${opcoes.mentor === false ? '' : `<div class="lc-res-dir lc-mentor">
       <h3>mentor</h3>

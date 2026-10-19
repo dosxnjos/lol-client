@@ -5,6 +5,17 @@ const C = 14925; // eixo do rio: x + y = C
 const PAPEIS_ROTA = ['TOP', 'MIDDLE', 'BOTTOM'];
 export const FORA_DAS_CONTAS = [0, 3100, 3140]; // personalizada e treino: fora da amostra de farm e da "última"
 
+// item da amostra de farm: partida da lista do histórico da LCU (participants[0] é o próprio) ou linha do acumulador como
+// objeto (historico.js comoObjeto: só Rift, cs = tropas + selva). null = nenhum dos dois
+export function itemDeAmostra(g) {
+  const p = g?.participants?.[0];
+  if (p?.stats) return { gameId: g.gameId, gameCreation: g.gameCreation, gameDuration: g.gameDuration, queueId: g.queueId, mapId: g.mapId,
+    championId: p.championId, cs: p.stats.totalMinionsKilled + p.stats.neutralMinionsKilled };
+  if (g && !g.participants && typeof g.cs === 'number' && Number.isFinite(g.criacao)) return { gameId: g.gameId, gameCreation: g.criacao,
+    gameDuration: g.duracao, queueId: g.fila, mapId: 11, championId: g.campeao, cs: g.cs };
+  return null;
+}
+
 // frame do minuto m: não é o final e está a no máximo 5 s da grade
 export function frameMinuto(frames, m) {
   if (m >= frames.length - 1) return null;
@@ -140,17 +151,21 @@ export function analisar(partida, linha, puuid, historico = []) {
     diffs[String(m)] = { ouro: vEu.ouro - vAdv.ouro, xp: vEu.xp - vAdv.xp, farm: vEu.farm - vAdv.farm, eu: vEu, adv: vAdv };
   }
 
-  // farm por minuto contra a média com o mesmo campeão
+  // farm por minuto contra a média com o mesmo campeão. A amostra aceita a lista do histórico da LCU e as linhas do acumulador
+  // (../historico.js, Fase 5 do plano plugin Pengu primeiro: passa das 20–200 partidas do cache do client); mesma partida nas
+  // duas fontes conta uma vez (a primeira que aparece)
   const fpm = (stats, dur) => (stats.totalMinionsKilled + stats.neutralMinionsKilled) / (dur / 60);
+  const vistos = new Set();
   const amostra = historico
-    .filter(g => g.mapId === 11 && g.gameDuration >= 300 && !FORA_DAS_CONTAS.includes(g.queueId)
+    .map(itemDeAmostra)
+    .filter(g => g && g.mapId === 11 && g.gameDuration >= 300 && !FORA_DAS_CONTAS.includes(g.queueId)
       && g.gameCreation < partida.gameCreation
-      && g.gameId !== partida.gameId && g.participants?.[0]?.championId === meu.championId)
+      && g.gameId !== partida.gameId && g.championId === meu.championId && !vistos.has(g.gameId) && vistos.add(g.gameId))
     .sort((a, b) => b.gameCreation - a.gameCreation)
     .slice(0, 20);
   const valor = fpm(meu.stats, partida.gameDuration);
   const n = amostra.length;
-  const media = n >= 3 ? amostra.reduce((s, g) => s + fpm(g.participants[0].stats, g.gameDuration), 0) / n : null;
+  const media = n >= 3 ? amostra.reduce((s, g) => s + g.cs / (g.gameDuration / 60), 0) / n : null;
 
   return {
     gameId: partida.gameId, participantId: eu, time: meuTime, campeao: meu.championId, papel,

@@ -13,7 +13,8 @@ import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
 import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
 import { estilo, frase } from '../compacto/comum.js';
 import { icone, iconeHtml } from '../icones.js';
-import { registrarPartida } from '../historico.js';
+import { registrarPartida, linhasHistorico, linhaDe, comoObjeto } from '../historico.js';
+import { contextoPartida, AMOSTRA_LOCAL } from './contexto.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -57,6 +58,18 @@ const historico = (prazoMs = 0) => (prazoMs ? Promise.race([lerHistorico(), espe
 let emAnalise = 0;
 export const ocupado = () => !!histEmVoo || emAnalise > 0;
 
+// {ctx, n} do contexto.js com as linhas do acumulador e a desta partida (unidas por gameId: o registro pode não ter gravado,
+// outra conta ou formato desconhecido), ou null: partida fora das contas ou amostra abaixo de AMOSTRA_LOCAL. Nunca lança
+export function contextoLocal(partida, linha, puuid, r, acum) {
+  try {
+    const l = linhaDe(partida, puuid, linha, r);
+    if (!l) return null;
+    const esta = comoObjeto(l);
+    const todas = [esta, ...(acum || []).filter(x => x.gameId !== esta.gameId)];
+    return todas.length >= AMOSTRA_LOCAL ? { ctx: contextoPartida(todas, esta), n: todas.length } : null;
+  } catch (e) { console.error('[lol-client] contexto local', e); return null; }
+}
+
 export async function analisarPartida(gameId, opcoes = {}) {
   emAnalise++;
   try { return await analisarLendo(gameId, opcoes); } finally { emAnalise--; }
@@ -70,10 +83,18 @@ async function analisarLendo(gameId, { aoEsperar, vivo } = {}) {
   const [partida, linha] = await buscarComRetentativa(gameId, aoEsperar, vivo);
   const lido = await historico(cacheHist.size ? 1500 : 8000).catch(() => null);
   const hist = lido || [...cacheHist.values()];
-  const r = analisar(partida, linha, eu.puuid, hist);
+  // linhas do acumulador (historico.js) desta conta: a amostra da média de farm passa do cache do client (Fase 5)
+  let acum = [];
+  try { acum = linhasHistorico(eu.puuid); } catch (e) { console.error('[lol-client] histórico', e); }
+  const r = analisar(partida, linha, eu.puuid, acum.length ? [...hist, ...acum] : hist);
   if (r.erro) return r;
   // acumulador do histórico (historico.js, Fase 4): a partida entra das GET que já foram feitas aqui, sem GET a mais
   try { registrarPartida(partida, linha, eu.puuid, r); } catch (e) { console.error('[lol-client] histórico', e); }
+  // contexto local (matchup, traumas, tilt) sobre o acumulador e esta partida (contexto.js, Fase 5): o das lições sem o
+  // complemento coach, e enquanto ele não responde
+  const local = contextoLocal(partida, linha, eu.puuid, r, acum);
+  r.ctxLocal = local?.ctx || null;
+  r.amostraLocal = local?.n || 0;
   r.historicoIncompleto = !lido;
   const meu = partida.participants.find(p => p.participantId === r.participantId);
   r.esta = {
@@ -137,7 +158,7 @@ export async function licoesLocais(gameId) {
   try {
     const r = await obterAnalise(Number(gameId)).promessa;
     if (!r || r.erro) return null;
-    return { licoes: calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes };
+    return { licoes: calcularLicoes(regrasMd, r, r.historico, r.criacao, r.ctxLocal || null, nomes).licoes };
   } catch { return null; }
 }
 const textoCarregando = a => (a?.esperaMs ? `processando a partida (nova tentativa em ${a.esperaMs / 1000} s)…` : 'analisando a partida…');
@@ -230,13 +251,17 @@ function vigiarInteracao(sim) {
 export const licoesAuto = p => !(p.mentor?.status === 'pronto' && partesMentor(p.mentor.texto).veredito);
 const licoesAbertas = p => (p.licoesAbertas === null ? licoesAuto(p) : p.licoesAbertas);
 
-// bloco "traumas" da Tendência: a chave e uma fonte (o complemento coach com "contexto"; o acumulador local vem na Fase 5)
-const mostrarTraumas = p => !!p.cfg.traumas?.ligado && p.tem?.contexto !== false;
+// bloco "traumas" da Tendência: a chave e uma fonte (o complemento coach com "contexto" ou o acumulador local com amostra,
+// contexto.js; Fase 5)
+const mostrarTraumas = p => !!p.cfg.traumas?.ligado && (p.tem?.contexto !== false || !!p.r?.ctxLocal);
+// contexto das lições e das abas: o do complemento quando respondeu; senão (sem ele, esperando, fora do ar, sem a partida) o
+// local do acumulador, quando há amostra (ordem da fonte da Fase 5: complemento -> local)
+const ctxAtual = p => (p.ctxEstado === 'ok' ? p.ctx : p.r?.ctxLocal || null);
 
 // estado do painel aberto; as partes que chegam do coletor repintam só o seu pedaço
 function pintar(p, partes) {
   const q = s => p.el.querySelector(s);
-  const ctx = p.ctxEstado === 'ok' ? p.ctx : null;
+  const ctx = ctxAtual(p);
   for (const parte of partes) {
     if (parte === 'licoes') {
       // com o coletor, as lições dele (mesmo licoes.md e mesmo motor, sobre o banco inteiro); sem ele, o motor
@@ -418,15 +443,15 @@ function montar(r, cfg, coletor, vivo, fimDePartida = false) {
   // roadmap/2026-10-17-plugin-pengu-primeiro.md): sem ele, nenhuma chamada e nenhum texto de "fora do ar"
   const tem = { contexto: recursoDe(coletor, 'contexto'), mentor: recursoDe(coletor, 'mentor'), revisao: recursoDe(coletor, 'revisao') };
   const p = { r, cfg, coletor: coletor || (async () => ({ status: 0, dados: null })), temColetor: !!coletor, tem, vivo, aba: 'resumo',
-    ctx: null, ctxEstado: tem.contexto ? 'carregando' : 'sem', mentor: null, revisao: tem.revisao ? null : false, ranked: null, licoesAbertas: null };
-  p.licoes = calcularLicoes(regrasMd, r, r.historico, r.criacao, null, nomes).licoes;
+    ctx: null, ctxEstado: tem.contexto ? 'carregando' : r.ctxLocal ? 'local' : 'sem', mentor: null, revisao: tem.revisao ? null : false, ranked: null, licoesAbertas: null };
+  p.licoes = calcularLicoes(regrasMd, r, r.historico, r.criacao, ctxAtual(p), nomes).licoes;
   const html = {
     resumo: abaResumo(r, p.licoes, p.ctxEstado, { licoesAbertas: licoesAbertas(p), mentor: tem.mentor }),
     rota: abaRota(r, nome),
     mortes: abaMortes(r, nome),
     objetivos: abaObjetivos(r),
-    tendencia: abaTendencia(r, nome, null, p.ctxEstado, p.revisao, mostrarTraumas(p)),
-    sessao: abaSessao(r, nome, r.sessao, null, null, p.ctxEstado, new Date().getHours()),
+    tendencia: abaTendencia(r, nome, ctxAtual(p), p.ctxEstado, p.revisao, mostrarTraumas(p)),
+    sessao: abaSessao(r, nome, r.sessao, null, ctxAtual(p), p.ctxEstado, new Date().getHours()),
   };
   p.el = moldura(`<div class="lc-caixa lc-v2">${htmlTopo(r, nome, { jogarDeNovo: fimDePartida && !!cfg.filaRapida?.jogarDeNovo })}
     <div class="lc-paineis">${ABAS.map(([id]) => `<section class="lc-painel lc-painel-${id}" data-painel="${id}">${html[id]}</section>`).join('')}</div></div>`);
