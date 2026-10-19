@@ -27,6 +27,9 @@ def cats(achados):
     return sorted({c for c, _ in achados})
 
 
+TK = "tok" + "en"     # partido: o guarda-segredo barra "<chave> = <literal>" escrito inteiro, mesmo em dado de teste
+
+
 tmp = Path(tempfile.mkdtemp(prefix="varrer-publico-"))
 db = tmp / "lol.db"
 con = sqlite3.connect(db)
@@ -65,6 +68,30 @@ PLANTADOS = {
     "caminho_users": ("x.py", "P = 'C:/Users/fulano/x'\n", "caminho"),
     "email": ("x.md", "fale com alguem@exemplo.com.br\n", "email"),
     "nomura": ("x.py", "# projeto do Grupo Nomura\n", "nomura"),
+    # revisão adversarial do P1 (19/10): o 71c2744 trocou a fronteira por \w e abriu "_" e letra; o ponto final já passava
+    "partida_ponto_final_py": ("x.py", "# inclusive a 3293149183.\n", "partida"),
+    "partida_ponto_final_md": ("x.md", "Na partida 3293149183.\n", "partida"),
+    "partida_underscore": ("x.py", "# replay em temp/gravacao/partida_3293149183/\n", "partida"),
+    "partida_plataforma_minuscula": ("x.py", "# na1_3293149183\n", "partida"),
+    "partida_timeline": ("x.py", "# 3293149183_timeline.json\n", "partida"),
+    "partida_colada_em_letra": ("x.py", "x = \"jogo3293149183\"\n", "partida"),
+    "partida_colada_em_hex": ("x.js", "// gameId3293149183\n", "partida"),
+    "partida_ms": ("x.py", "# 3293149183ms\n", "partida"),
+    "partida_do_banco_ponto_final": ("x.md", "ver 7654321.\n", "partida"),
+    "partida_do_banco_underscore": ("x.py", "# jogo_1234567\n", "partida"),
+    "github_pat": ("x.py", "T = 'github_pat_" + "11AAAAAAAA0123456789abcdef'\n", "credencial"),
+    "token_github_ghr": ("x.py", "T = 'ghr_" + "abcdefghijklmnop1234'\n", "credencial"),
+    "chave_valor_js": ("x.js", "const " + TK + " = \"" + "Xa8sd9fK2pQ" + "LmN0zWyBg\";\n", "credencial"),
+    "chave_valor_json": ("x.md", "{\"api_" + "key\": \"" + "Xa8sd9fK2pQ" + "LmN0zWyBg\"}\n", "credencial"),
+    "chave_valor_senha_py": ("x.py", "SEN" + "HA = '" + "riot-9fK2pQLm" + "'\n", "credencial"),
+    "token_lcu_linha_de_comando": ("x.js", "// LeagueClientUx.exe --remoting-auth-" + TK + "=" + "Xa8sd9fK2pQ"
+                                   + "LmN0zWyBg --app-port=1\n", "credencial"),
+    "token_riotclient_linha_de_comando": ("x.py", "# --riotclient-auth-" + TK + "=" + "abcDEF12345" + "6\n", "credencial"),
+    "basic_riot_base64": ("x.py", "# Authorization: Basic " + "cmlvdDpY" + "YWJjZGVm\n", "credencial"),
+    "basic_riot_base64_o": ("x.py", "A = 'cmlvdDo" + "wMTIz'\n", "credencial"),
+    "caminho_dev_fim_da_string": ("x.py", "RAIZ = \"C:\\\\Dev\"\n", "caminho"),
+    "caminho_git_bash_users": ("x.py", "# /c/Users/fulano/AppData/x\n", "caminho"),
+    "caminho_git_bash_dev": ("x.py", "# /c/Dev/lol-client\n", "caminho"),
 }
 for nome, (arq, texto, esperado) in PLANTADOS.items():
     a = V.varrer_texto(arq, texto, ids, textos)
@@ -84,6 +111,12 @@ PASSAM = {
     "tempo_ms": ("x.py", "PRAZO_MS = 120000\n"),
     # hash de pacote da Riot com 10 dígitos seguidos entre letras (pengu/compacto/perfil.js; falso positivo do P1, 19/10)
     "hash_hex": ("x.js", "// rcp-fe-lol-match-history 70f9590985796fa8.js: _loadFriendData\n"),
+    "decimal_com_10_casas": ("x.py", "A = 0.3293149183\nB = 3293149183.5\n"),
+    "numero_longo": ("x.py", "N = 32931491830\n"),
+    "opcao_da_lcu_sem_valor": ("x.py", "# a linha de comando traz --remoting-auth-" + TK + "\n"),
+    "chave_de_ambiente_ou_chamada": ("x.py", TK + " = os.environ['LCU']\n" + TK + " = cfg.get('t')\n"),
+    "url_com_dev_no_meio": ("x.js", "const u = 'https://github.com/x/dev/y';\n"),
+    "pasta_developer": ("x.py", "# C:\\Developer\\x\n"),
 }
 for nome, (arq, texto) in PASSAM.items():
     a = V.varrer_texto(arq, texto, ids, textos)
@@ -101,6 +134,19 @@ s = V.varrer(arv, V.COMPLEMENTO, db)
 caso("árvore com plantado e arquivo faltando", cats(s.get("coletor/avisos.py", [])) == ["partida"]
      and s.get("docs/ITENS.md") == [("falta", 0)] and len(s) == 2, s)
 caso("main devolve 1 quando reprova", V.main(["--raiz", str(arv), "--banco", str(db)]) == 1)
+
+# o caminho do arquivo também vai a público (árvore e zip): nome com gameId, Xerek ou "Gabriel" reprova, conteúdo limpo
+caso("nome: gameId e Xerek no caminho reprovam", cats(V.varrer_nome("pengu/posjogo/xerekton-3293149183.md"))
+     == ["partida (nome)", "xerek (nome)"], V.varrer_nome("pengu/posjogo/xerekton-3293149183.md"))
+caso("nome: Gabriel no caminho reprova", cats(V.varrer_nome("docs/notas-do-gabriel.md")) == ["nome_literal (nome)"])
+caso("nome: game_id do banco no caminho reprova", cats(V.varrer_nome("temp/1234567.json", ids, textos))
+     == ["partida (nome)"])
+caso("nome: caminhos da lista de inclusão passam", all(V.varrer_nome(r, ids, textos) == [] for r in V.COMPLEMENTO))
+(arv / "pengu/posjogo").mkdir(parents=True, exist_ok=True)
+(arv / "pengu/posjogo/partida-3293149183.md").write_text("limpo\n", encoding="utf-8")
+s = V.varrer(arv, ["pengu/posjogo/partida-3293149183.md"], db)
+caso("varrer: arquivo limpo com gameId no nome reprova", s == {"pengu/posjogo/partida-3293149183.md":
+                                                              [("partida (nome)", 0)]}, s)
 
 # lista de inclusão real (banco real só leitura, se existir): só "partida" pode sobrar, e é trabalho do P4
 real = V.varrer(RAIZ, V.COMPLEMENTO, RAIZ / "dados" / "lol.db")
