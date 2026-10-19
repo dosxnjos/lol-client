@@ -19,6 +19,9 @@ lista (P4.5), `vida.py` vai junto; nome tirado do `docs/ITENS.md` e de 1 string 
 `tools/publicar.py` em ensaio sobre o HEAD = plugin 50 arquivos limpo, complemento 32 e foto 78 reprovados só por 28 gameIds
 (P4.1) e pelos `.cmd` (P3.3, P4.3); `pengu/versao.js` 0.1.0 já existe; voz fica no P5
 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p1.md)).
+Revisão adversarial do P1 (19/10, `f419daf`, `fd33373`; 9 achados = 7 distintos, todos reais e corrigidos, tabela no
+relatório): gameId com fronteira de dígito, credencial e caminho mais largos, nome do arquivo e `--notas` varridos,
+complemento leva `pengu/`, release que cai depois do push se retoma; `teste-varrer-publico.py` 72/72, `teste-publicar.py` 52/52.
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
@@ -159,8 +162,9 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
    proporção do monitor do jogo, com a escala do OCR baixando para a faixa × escala ficar abaixo de 2600 px
    (`Windows.Media.Ocr`); prova com print falso de 2560×1440 e 3840×2160, e a leitura em 2560×1080 igual à de hoje.
 3. `instalar.cmd` sem admin: confere Python (3.12+; sem ele, diz onde baixar), cria o venv em
-   `%LOCALAPPDATA%\lol-client\complemento\venv`, `pip install -r requirements.txt` (versões fixas), copia o plugin para a
-   pasta de plugins do Pengu (achada pelo registro de instalação ou perguntada), cria o atalho na pasta Inicializar do
+   `%LOCALAPPDATA%\lol-client\complemento\venv`, `pip install -r requirements.txt` (versões fixas), copia o plugin (a pasta
+   `pengu\` do próprio zip do complemento, que o `publicar.py` já põe lá desde a revisão do P1) para a pasta de plugins do
+   Pengu como `lol-ultra-client` (achada pelo registro de instalação ou perguntada), cria o atalho na pasta Inicializar do
    Windows (`pythonw`, sem janela) que espera o client. Nada de tarefa agendada nem gatilho que pede admin.
    **Esperar o client (revisão do P0):** o `coletor.py` sai sozinho com `--ocioso-min` padrão 10 ("ocioso 10 min sem
    client"); na máquina dele o gatilho 4688 relança quando o client abre e o vigia relança se cair, e os dois ficam fora.

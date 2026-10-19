@@ -187,7 +187,7 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 
 | o quê | comando |
 | --- | --- |
-| todas as provas offline (inclui o ensaio a 20x; ~4 min, mais ~2 min do `teste-publicar.py` desde 19/10/2026) | `python tools\rodar-testes.py` |
+| todas as provas offline (inclui o ensaio a 20x; ~4 min, mais ~3 min do `teste-publicar.py` desde 19/10/2026) | `python tools\rodar-testes.py` |
 | ensaio ponta a ponta sem o client (banco copiado, portas 8766/2996) | `python tools\ensaio-coach.py` |
 | simulador da Live Client (porta 2998) | `python tools\simular-liveclient.py` |
 | registro de queda e vigia do coletor (`--real`: pela tarefa agendada, com tarefas de teste de outro nome, removidas no fim) | `python tools\teste-vida.py` · `python tools\teste-vigia.py` |
