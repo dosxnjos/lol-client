@@ -1,5 +1,5 @@
 # Atualização do lol-ultra-client pelo complemento coach (P3 de roadmap/2026-10-19-publicacao-e-complemento-publico.md).
-#   POST /atualizar {"versao": "x.y.z"}   (Origin do client ou do Pengu, a regra do /aceite/plugin: servidor_local.ROTAS_SO_PLUGIN)
+#   POST /atualizar {"versao": "x.y.z"}   (Origin do client ou do Pengu obrigatório: servidor_local.ROTAS_SO_PLUGIN_ESTRITO)
 #   GET  /atualizar/estado                {estado, versao, instalada, motivo, reiniciar}
 # O plugin manda só a versão; a URL o complemento acha sozinho, sempre na origem fixa (decisão 4 do plano):
 #   release   https://api.github.com/repos/<REPO>/releases/tags/v<versao> (REPO e VERSAO de pengu/versao.js)
@@ -15,12 +15,15 @@
 # estágio mora DENTRO da pasta trocada: mesmo volume sempre (os.rename; o shutil.move cairia em cópia + rmtree e apagaria
 # metade de um item preso), e nunca ao lado do plugin (pasta irmã em plugins\ do Pengu carregaria como outro plugin). Falha
 # no meio desfaz tudo (o plugin também volta se o complemento falhar: saem sempre juntos).
-# Recusa antes de qualquer rede: pasta que é junção (ponto de reparse) ou que está num repositório git (.git nela ou acima) é
-# instalação de desenvolvimento (a do mantenedor: plugins\lol-client é junção para a pasta de trabalho). Fora de None/Lobby
-# também recusa: trocar e reiniciar no meio da fila ou da partida derrubaria o coach.
+# Recusa antes de qualquer rede: pasta que é junção (ponto de reparse) ou que está num repositório git (.git nela ou acima, até
+# a pasta do usuário, exclusive: dotfiles em ~\.git não contam) é instalação de desenvolvimento (a do mantenedor: plugins\
+# lol-client é junção para a pasta de trabalho). RAIZ sem resolve(): o resolve() segue a junção e a recusa nunca a veria.
+# Uma troca que não voltou inteira deixa <pasta>/.atualizacao/troca-em-curso: a próxima recusa (anterior/ é a única cópia).
+# Fora de None/Lobby também recusa, no pedido E de novo logo antes de trocar (a fila pode andar durante o download): processo
+# velho rodando uma partida em cima dos arquivos novos carregaria módulo novo em import tardio.
 # Depois da troca: estado "pronto" com reiniciar=True, segurado SEGURAR_S para o plugin ler, e o dono (coletor.py) reinicia o
-# complemento só em None/Lobby (o código novo só vale depois do reinício; até lá, nenhum import tardio fica pela metade: o
-# reinício vem logo).
+# complemento logo depois, em qualquer fase (a troca foi em None/Lobby; adiar o reinício deixaria import tardio misturando
+# versões; o plugin também reconhece o sucesso pela instância nova: 'instalada' == versão pedida).
 # Prova: tools/teste-atualizar.py (servidor de release falso em 8831-8840, pastas no temp).
 import hashlib
 import json
@@ -39,7 +42,7 @@ from io import BytesIO
 from pathlib import Path
 from urllib.parse import urljoin, urlsplit
 
-RAIZ = Path(__file__).resolve().parent.parent
+RAIZ = Path(os.path.abspath(__file__)).parent.parent   # sem resolve(): uma junção na pasta do complemento fica visível
 PASTA_PLUGIN = "lol-ultra-client"                    # pasta em plugins\ do Pengu (tools/publicar.py PASTA_PLUGIN)
 PASTA_COMPLEMENTO = "lol-ultra-client-complemento"   # pasta-raiz do zip do complemento (tools/publicar.py)
 NOME = "lol-ultra-client"
@@ -49,6 +52,7 @@ ORIGENS_DOWNLOAD = ("https://github.com", "https://objects.githubusercontent.com
                     "https://release-assets.githubusercontent.com")
 SUMS = "SHA256SUMS.txt"
 ESTAGIO = ".atualizacao"                             # <pasta>/.atualizacao/{nova,anterior}
+MARCA = "troca-em-curso"                             # <pasta>/.atualizacao/troca-em-curso: troca começou e não fechou
 PRESERVAR = {"plugin": frozenset({ESTAGIO}), "complemento": frozenset({ESTAGIO, "dados"})}
 LIMITE_API = 2 << 20
 LIMITE_SUMS = 64 << 10
@@ -58,7 +62,6 @@ LIMITE_ARQUIVOS = 5000
 MAX_REDIRECIONAMENTOS = 5
 PRAZO_S = 30
 SEGURAR_S = 5          # "pronto" segurado antes do reinício: o plugin lê o estado e mostra "Atualizado"
-ESPERA_FASE_S = 5
 FASES_OK = (None, "None", "Lobby")
 IFEO = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion\Image File Execution Options\LeagueClientUx.exe"
 _TESTE = re.compile(r"^http://127\.0\.0\.1:\d{1,5}$")   # origem trocada só em loopback (tools/teste-atualizar.py)
@@ -112,17 +115,36 @@ def reparse(p):
     return stat.S_ISLNK(st.st_mode) or bool(getattr(st, "st_file_attributes", 0) & 0x400)   # FILE_ATTRIBUTE_REPARSE_POINT
 
 
-def em_git(p):
-    """True se p ou uma pasta acima tem .git (a mesma busca do git)"""
+def _mesma(a, b):
+    """mesma pasta (nome curto 8.3, maiúsculas e junção não enganam); False se uma não existe"""
+    try:
+        return os.path.samefile(a, b)
+    except (OSError, ValueError):
+        return False
+
+
+def em_git(p, teto=None):
+    """True se p ou uma pasta acima tem .git (a busca do git), parando ANTES de `teto` (padrão: a pasta do usuário). Um
+    repositório de dotfiles em ~\\.git marcaria toda instalação em %LOCALAPPDATA% como de desenvolvimento; pasta fora da do
+    usuário (a pasta de trabalho do mantenedor, Program Files) sobe até a raiz do disco"""
+    if teto is None:
+        try:
+            teto = Path.home()
+        except RuntimeError:   # sem pasta do usuário conhecida: sobe até a raiz
+            teto = None
     p = Path(os.path.abspath(p))
     for q in (p, *p.parents):
+        if teto is not None and _mesma(q, teto):
+            return False
         if (q / ".git").exists():
             return True
     return False
 
 
 def desenvolvimento(p):
-    return reparse(p) or em_git(p)
+    """a pasta é junção, ou está num repositório git pelo caminho dado ou pelo destino real (junção num pai). Só a própria
+    pasta conta como junção: %LOCALAPPDATA% levado para outro disco por junção num pai é instalação comum"""
+    return reparse(p) or em_git(p) or em_git(os.path.realpath(p))
 
 
 def ler_sums(texto):
@@ -216,8 +238,8 @@ def extrair(dados_zip, prefixo, destino, preservar=frozenset()):
             raise Falha("pacote", "zip vazio")
         for rel, tam in esperados.items():
             alvo = destino.joinpath(*rel.split("/"))
-            alvo.parent.mkdir(parents=True, exist_ok=True)
-            try:
+            try:   # o mkdir também: disco cheio, permissão ou arquivo com o nome da pasta é pacote que não extrai
+                alvo.parent.mkdir(parents=True, exist_ok=True)
                 with z.open(f"{prefixo}/{rel}") as fonte, open(alvo, "wb") as f:
                     shutil.copyfileobj(fonte, f)   # o CRC confere na leitura (BadZipFile se não bater)
             except (zipfile.BadZipFile, OSError) as e:
@@ -292,11 +314,11 @@ class Troca:
 
 class Atualizador:
     """estado e rotas do /atualizar. plugins: pasta plugins\\ do Pengu (Path, função ou None = pelo registro). fase(): fase
-    do gameflow que o dono vê (None = sem client). reiniciar(): chamado depois do "pronto" segurado, em None/Lobby.
-    api/download/origens: só a origem fixa, ou http://127.0.0.1:<porta> nos testes (outra coisa = ValueError)"""
+    do gameflow que o dono vê (None = sem client). reiniciar(): chamado logo depois do "pronto" segurado (a troca foi em
+    None/Lobby). api/download/origens: só a origem fixa, ou http://127.0.0.1:<porta> nos testes (outra coisa = ValueError)"""
 
     def __init__(self, raiz=RAIZ, plugins=None, fase=lambda: None, reiniciar=None, api=API, download=DOWNLOAD,
-                 origens=ORIGENS_DOWNLOAD, rede=None, segurar_s=SEGURAR_S, espera_fase_s=ESPERA_FASE_S):
+                 origens=ORIGENS_DOWNLOAD, rede=None, segurar_s=SEGURAR_S):
         trocada = (api, download, tuple(origens)) != (API, DOWNLOAD, ORIGENS_DOWNLOAD)
         if trocada and not (_TESTE.match(api) and _TESTE.match(download) and all(_TESTE.match(o) for o in origens)):
             raise ValueError("origem trocada só em loopback (teste)")
@@ -306,7 +328,8 @@ class Atualizador:
         self.reiniciar = reiniciar
         self.api, self.download, self.origens = api, download, tuple(origens)
         self.rede = rede or Rede()
-        self.segurar_s, self.espera_fase_s = segurar_s, espera_fase_s
+        self.segurar_s = segurar_s
+        self.mover = os.rename   # tools/teste-atualizar.py troca para simular item preso na troca e na volta
         self.instalada, self.repo = ler_versao(self.raiz)
         self._trava = threading.Lock()
         self._est = {"estado": "parado", "versao": None, "motivo": None, "reiniciar": False}
@@ -332,7 +355,7 @@ class Atualizador:
 
     # ---- conferências antes de qualquer rede ----
     def conferir(self, versao):
-        """(pasta do plugin) ou Falha: versão, fase, instalação de desenvolvimento, plugin ausente"""
+        """(pasta do plugin) ou Falha: versão, fase, instalação de desenvolvimento, plugin ausente, troca incompleta antes"""
         alvo = versao_tupla(versao)
         if not alvo or not self.repo or not versao_tupla(self.instalada or ""):
             raise Falha("versao", "versão inválida")
@@ -348,6 +371,9 @@ class Atualizador:
             raise Falha("desenvolvimento", "plugin")
         if pasta is None or not pasta.is_dir():
             raise Falha("sem-plugin", str(pasta) if pasta else "Pengu não encontrado")
+        for p in (pasta, self.raiz):   # troca que não voltou inteira: a próxima apagaria o anterior/, a única cópia velha
+            if (p / ESTAGIO / MARCA).exists():
+                raise Falha("troca-incompleta", f"{p / ESTAGIO / MARCA} de uma troca anterior")
         return pasta
 
     def pedir(self, versao):
@@ -384,9 +410,10 @@ class Atualizador:
             threading.Thread(target=self._reiniciar_quando_puder, name="atualizar-reinicio", daemon=True).start()
 
     def _reiniciar_quando_puder(self):
+        # em qualquer fase: os arquivos novos já estão no disco; esperar o lobby deixaria o processo velho importando módulo
+        # novo a partida inteira. A troca foi em None/Lobby (executar confere logo antes), e de lá em SEGURAR_S só dá para
+        # chegar na busca ou numa seleção de personalizada, que o coach retoma ao subir
         time.sleep(self.segurar_s)
-        while self.fase() not in FASES_OK:      # fila ou partida começou depois do clique: reinicia na volta ao lobby
-            time.sleep(self.espera_fase_s)
         try:
             self.reiniciar()
         except Exception as e:
@@ -435,24 +462,47 @@ class Atualizador:
     def _baixar(self, nome, tag, limite):
         return self.rede.pegar(f"{self.download}/{self.repo}/releases/download/{tag}/{nome}", self.origens, limite)
 
+    def _conferir_fase(self):
+        f = self.fase()
+        if f not in FASES_OK:
+            raise Falha("partida", str(f))
+
     def executar(self, versao, pasta):
+        self._conferir_fase()
         zips = self.baixar(versao)
         self._por("conferindo")
         pacotes = (("plugin", pasta, zips[f"{NOME}-plugin-{versao}.zip"], PASTA_PLUGIN),
                    ("complemento", self.raiz, zips[f"{NOME}-complemento-{versao}.zip"], PASTA_COMPLEMENTO))
-        trocas = []
-        for nome, destino, dados, prefixo in pacotes:
-            estagio = destino / ESTAGIO
-            if reparse(estagio):
-                raise Falha("troca", f"{ESTAGIO} é junção")
-            nova = estagio / "nova"
-            _apagar(nova)
-            nova.mkdir(parents=True)
-            esperados = extrair(dados, prefixo, nova, PRESERVAR[nome])
-            conferir_extraido(nova, esperados)
-            trocas.append(Troca(destino, nova, estagio / "anterior", PRESERVAR[nome]))
+        trocas, novas = [], []
+        try:   # extração ou conferência que falha (disco cheio, zip ruim, a fila andou) não deixa nova/ ocupando o disco
+            for nome, destino, dados, prefixo in pacotes:
+                estagio = destino / ESTAGIO
+                if reparse(estagio):
+                    raise Falha("troca", f"{ESTAGIO} é junção")
+                nova = estagio / "nova"
+                _apagar(nova)
+                novas.append(nova)
+                try:
+                    nova.mkdir(parents=True)
+                except OSError as e:
+                    raise Falha("pacote", f"{type(e).__name__}") from None
+                esperados = extrair(dados, prefixo, nova, PRESERVAR[nome])
+                conferir_extraido(nova, esperados)
+                trocas.append(Troca(destino, nova, estagio / "anterior", PRESERVAR[nome], mover=self.mover))
+            self._conferir_fase()   # a fila pode ter andado durante o download: fora de None/Lobby nada troca
+        except BaseException:
+            self._apagar_novas(novas)
+            raise
         self._por("trocando")
         self._sair_das_pastas([t.pasta for t in trocas])
+        marcas = [t.pasta / ESTAGIO / MARCA for t in trocas]
+        try:   # antes do 1º rename: queda do processo no meio também deixa a marca
+            for m in marcas:
+                m.write_text(f"{versao}\n", encoding="utf-8")
+        except OSError as e:
+            self._apagar_marcas(marcas)
+            self._apagar_novas(novas)
+            raise Falha("troca", f"marca: {type(e).__name__}") from None
         feitas = []
         try:
             for t in trocas:
@@ -460,10 +510,29 @@ class Atualizador:
                 t.fazer()
         except Exception as e:
             ok = all([t.desfazer() for t in reversed(feitas)])
+            if ok:   # tudo de volta: a marca sai e a nova/ (os itens novos voltaram para ela) também
+                self._apagar_marcas(marcas)
+                self._apagar_novas(novas)
             raise Falha("troca" if ok else "troca-incompleta", f"{type(e).__name__}: {e}") from None
-        for t in trocas:
-            _apagar(t.nova)
+        self._apagar_marcas(marcas)
+        self._apagar_novas(novas)
         log.info("atualização: versão %s instalada (a anterior em %s/anterior de cada pasta)", versao, ESTAGIO)
+
+    @staticmethod
+    def _apagar_novas(novas):
+        for n in novas:
+            try:
+                _apagar(n)
+            except OSError as e:
+                log.warning("atualização: %s ficou (%s)", n, e)
+
+    @staticmethod
+    def _apagar_marcas(marcas):
+        for m in marcas:
+            try:
+                m.unlink(missing_ok=True)
+            except OSError as e:
+                log.warning("atualização: marca %s ficou (%s)", m, e)
 
     def _sair_das_pastas(self, pastas):
         """processo com a pasta atual dentro de um item trocado: o rename falharia ("em uso por outro processo"); a raiz da

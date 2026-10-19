@@ -526,8 +526,12 @@ def _atualizador(coach, col):
         return None
 
 
+SCRIPT = Path(os.path.abspath(__file__))   # na carga, antes de qualquer chdir (a troca da atualização sai das pastas trocadas)
+
+
 def comando_sucessor(argv, pid, executavel=None):
-    """linha de comando da instância que sobe depois desta (reinício da atualização): os mesmos argumentos, sem um
+    """linha de comando da instância que sobe depois desta (reinício da atualização): este coletor.py (SCRIPT, nunca o
+    argv[0] resolvido na saída: relativo, ele apontaria para a pasta atual de agora), os mesmos argumentos, sem um
     --esperar-pid antigo, mais --esperar-pid <este pid> (a trava recusaria a 2ª instância com esta ainda viva)"""
     resto, pular = [], False
     for a in argv[1:]:
@@ -540,7 +544,7 @@ def comando_sucessor(argv, pid, executavel=None):
         if a.startswith("--esperar-pid="):
             continue
         resto.append(a)
-    return [executavel or sys.executable, str(Path(argv[0]).resolve()), *resto, "--esperar-pid", str(pid)]
+    return [executavel or sys.executable, str(SCRIPT), *resto, "--esperar-pid", str(pid)]
 
 
 def lancar_sucessor(cmd):

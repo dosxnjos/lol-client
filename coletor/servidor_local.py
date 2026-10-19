@@ -248,6 +248,10 @@ def origem_ok(origem):
 # mesma regra (só quem roda dentro do client escreve no registro).
 # /atualizar (P3 da publicação, 19/10/2026): a mesma regra; um site no navegador nunca dispara a troca dos arquivos.
 ROTAS_SO_PLUGIN = ("/aceite/", "/compacto/", "/atualizar")
+# POST /atualizar troca arquivos e reinicia o complemento: ali nem o pedido SEM Origin passa (curl, outro processo, outra conta do
+# Windows no mesmo loopback), só o Origin do client ou do Pengu (revisão adversarial da P3). Não é autenticação (um processo
+# local forja o cabeçalho); tira o disparo por engano ou por ferramenta genérica. O GET /atualizar/estado segue a regra comum
+ROTAS_SO_PLUGIN_ESTRITO = ("/atualizar",)
 
 
 def origem_aceite_ok(rota, origem):
@@ -306,6 +310,10 @@ class _Handler(BaseHTTPRequestHandler):
             self._enviar(403, {"erro": "origem"})
             return True
         if not origem_aceite_ok(urlsplit(self.path).path, self.headers.get("Origin")):
+            self._enviar(403, {"erro": "origem"})
+            return True
+        if (self.command == "POST" and urlsplit(self.path).path.rstrip("/") in ROTAS_SO_PLUGIN_ESTRITO
+                and not origem_plugin(self.headers.get("Origin"))):
             self._enviar(403, {"erro": "origem"})
             return True
         return False
