@@ -12,11 +12,12 @@
 //   7. importação do complemento: uma vez por abertura, só com "resumos", mescla por gameId, limpa campo estranho, recusa outra conta
 //   8. conta diferente da dona: nada lido nem gravado; formato desconhecido: nada regravado
 //   9. carregar de outra ordem de campos; nada gravado sem mudança
+//   9c. outra conta no mesmo PC antes da lista do histórico: linhas() vazio até ler a conta (passo e carga), revisão da Fase 5
 // uso: node tools/teste-historico.mjs
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
-import { criarHistorico, iniciarHistorico, linhaDe, limpar, remapear, comoObjeto, conta, CAMPOS, CHAVE, TETO, PASSO_MS, LOTE, MAX_POR_ABERTURA, VERSAO }
+import { criarHistorico, iniciarHistorico, linhasHistorico, linhaDe, limpar, remapear, comoObjeto, conta, CAMPOS, CHAVE, TETO, PASSO_MS, LOTE, MAX_POR_ABERTURA, VERSAO }
   from '../pengu/historico.js';
 
 const casos = [];
@@ -144,8 +145,8 @@ function varrer(texto) {
   const ds = dsFalso({ v: VERSAO, dono: EU, imp: 0, campos: CAMPOS, linhas });
   const h = criarHistorico({ ds, log: () => {} });
   h.carregar();
-  caso('4 carregar 520 linhas guarda as 500 mais recentes', h.estado().linhas === TETO && h.linhas()[0].gameId === 1519 && h.linhas().at(-1).gameId === 1020,
-    [h.estado().linhas, h.linhas()[0]?.gameId, h.linhas().at(-1)?.gameId]);
+  caso('4 carregar 520 linhas guarda as 500 mais recentes', h.estado().linhas === TETO && h.linhas(EU)[0].gameId === 1519 && h.linhas(EU).at(-1).gameId === 1020,
+    [h.estado().linhas, h.linhas(EU)[0]?.gameId, h.linhas(EU).at(-1)?.gameId]);
   caso('4 carregar não grava', ds.sets === 0);
   const velha = partida(77, 1_600_000_000_000);
   caso('4 cheio: partida mais antiga que a última não entra nem grava', !h.registrar(velha, LINHA, EU) && ds.sets === 0 && h.estado().linhas === TETO);
@@ -314,8 +315,9 @@ function cenario({ n = 60, rotasExtra = {}, ocupado = () => false, ds = dsFalso(
   d.setLista(null);
   d.h.aoFase('Lobby');
   await d.rel.avancar(PASSO_MS * 4);
-  caso('6 lista do histórico ainda não lida: nenhuma GET (nem a do puuid), segue tentando', d.getsPartida().length === 0
-    && d.lcu.chamadas.length === 0 && d.h.estado().rodando, d.lcu.chamadas.map(x => x.url));
+  // revisão adversarial da Fase 5: a conta sai antes de esperar a lista (era "nem a do puuid"; sem ela linhas() fica vazio)
+  caso('6 lista do histórico ainda não lida: só a GET do puuid (1 vez), nenhuma de partida, segue tentando', d.getsPartida().length === 0
+    && d.lcu.chamadas.map(x => x.url).join() === '/lol-summoner/v1/current-summoner' && d.h.estado().rodando, d.lcu.chamadas.map(x => x.url));
   // sem conta (antes do login, current-summoner 404): no máximo 3 GET e para até a próxima fase livre
   const e = cenario({ rotasExtra: { 'GET /lol-summoner/v1/current-summoner': { status: 404, json: { message: 'nao' } } } });
   e.h.aoFase('Lobby');
@@ -441,7 +443,7 @@ function complemento({ dono = EU, linhas, campos = CAMPOS, status = 200 } = {}) 
   const ds = dsFalso({ v: VERSAO, dono: EU, imp: 5, campos, linhas: [[...l].reverse()] });
   const h = criarHistorico({ ds, log: () => {} });
   h.carregar();
-  caso('9 carregar de outra ordem de campos remapeia pelo nome', JSON.stringify(h.linhas()[0]) === JSON.stringify(comoObjeto(l)), h.linhas()[0]);
+  caso('9 carregar de outra ordem de campos remapeia pelo nome', JSON.stringify(h.linhas(EU)[0]) === JSON.stringify(comoObjeto(l)), h.linhas(EU)[0]);
   caso('9 campo que falta vira null (inimigos: [])', JSON.stringify(remapear(['gameId', 'criacao'], [[1, 2]])[0]) === JSON.stringify(CAMPOS.map(c => (c === 'gameId' ? 1 : c === 'criacao' ? 2 : c === 'inimigos' ? [] : c === 'vitoria' ? 0 : null))));
   caso('9 nada gravado sem mudança', ds.sets === 0 && !h.registrar(GAME, LINHA, EU) && ds.sets === 0);
   caso('9 conta(): mesma regra do coletor', conta({ mapId: 11, gameDuration: 300, queueId: 420 }) && !conta({ mapId: 11, gameDuration: 299, queueId: 420 })
@@ -460,6 +462,52 @@ function complemento({ dono = EU, linhas, campos = CAMPOS, status = 200 } = {}) 
   const h2 = criarHistorico({ ds: dsFalso(null), log: () => {}, aoSalvar: () => { throw new Error('quebrou'); } });
   h2.carregar();
   caso('9b aoSalvar que lança não desfaz a gravação', h2.registrar(GAME, LINHA, EU) === true && h2.estado().sets === 1);
+}
+
+// ---------- 9c. revisão adversarial da Fase 5: outra conta no mesmo PC antes da lista do histórico ----------
+// acumulador da conta A (40 partidas); a conta B entra sem o complemento e com a lista do champselect ainda não lida (até 40 s).
+// Antes: linhas() sem puuid devolvia as da dona até o 1º passo com lista, e freios, dica do lobby, selo e a chave "Mostrar
+// traumas" (estado) mostravam os números de A para B
+{
+  const base = linhaDe(GAME, EU, LINHA);
+  const deA = [];
+  for (let i = 0; i < 40; i++) { const l = [...base]; l[0] = 8000 + i; l[1] = 1_760_000_000_000 + i * 3_600_000; deA.push(l); }
+  const montar = quem => {
+    const rel = relogio();
+    const lf = lcuFalsa({ 'GET /lol-summoner/v1/current-summoner': { puuid: quem } });
+    const lcu = async u => { const r = await lf.fetch(u); let dados = null; try { dados = await r.json(); } catch { /* vazio */ } return { status: r.status, dados }; };
+    const h = criarHistorico({ ds: dsFalso({ v: VERSAO, dono: 'puuid-A', imp: 0, campos: CAMPOS, linhas: deA }), lcu, agendar: rel.agendar,
+      cancelar: rel.cancelar, partidas: () => null, log: () => {} });
+    h.carregar();
+    return { h, lf };
+  };
+  const b = montar('puuid-B');
+  caso('9c conta ainda não lida: linhas() sem puuid = nada (nem as da dona) e estado().minhas 0', b.h.linhas().length === 0
+    && b.h.estado().minhas === 0 && b.h.linhas('puuid-A').length === 40, [b.h.linhas().length, b.h.estado().minhas]);
+  b.h.aoFase('Lobby');
+  await b.h.passo();
+  caso('9c conta B com a lista ainda não lida: o 1º passo lê a conta (só a GET do puuid) e marca outraConta; linhas() = nada',
+    b.h.linhas().length === 0 && b.h.estado().outraConta === true && b.h.estado().minhas === 0
+    && b.lf.chamadas.map(x => x.url).join() === '/lol-summoner/v1/current-summoner', [b.h.linhas().length, b.h.estado(), b.lf.chamadas.map(x => x.url)]);
+  const a = montar('puuid-A');
+  a.h.aoFase('Lobby');
+  await a.h.passo();
+  caso('9c a dona com a lista ainda não lida: vê as 40 dela depois do 1º passo', a.h.linhas().length === 40 && a.h.estado().minhas === 40
+    && !a.h.estado().outraConta, [a.h.linhas().length, a.h.estado()]);
+  // na carga do plugin (iniciarHistorico): a conta sai já na carga, em qualquer fase (plugin recarregado na seleção), com 1 GET
+  const avisos = [];
+  for (const [quem, n] of [['puuid-B', 0], ['puuid-A', 40]]) {
+    const lf = lcuFalsa({ 'GET /lol-summoner/v1/current-summoner': { puuid: quem } });
+    const inst = iniciarHistorico({ socket: { observe: () => {} } }, { ds: dsFalso({ v: VERSAO, dono: 'puuid-A', imp: 0, campos: CAMPOS, linhas: deA }),
+      janela: null, agendar: () => null, cancelar: () => {}, partidas: () => null, log: () => {}, aoConta: () => avisos.push(quem),
+      lcu: async u => { const r = await lf.fetch(u); let dados = null; try { dados = await r.json(); } catch { /* vazio */ } return { status: r.status, dados }; } });
+    await inst.identificar?.();
+    await flush();
+    caso(`9c iniciarHistorico lê a conta na carga (${quem === 'puuid-A' ? 'dona' : 'outra'}): linhasHistorico() = ${n}, 1 GET do puuid`,
+      linhasHistorico().length === n && inst.estado().minhas === n && inst.estado().outraConta === (n === 0)
+      && lf.chamadas.filter(x => x.url === '/lol-summoner/v1/current-summoner').length === 1, [linhasHistorico().length, inst.estado(), lf.chamadas.length]);
+  }
+  caso('9c aoConta avisa quando a conta é lida (a chave "Mostrar traumas" e o Ctrl+K reavaliam)', avisos.join() === 'puuid-B,puuid-A', avisos);
 }
 
 // ---------- 10. ponta a ponta: o pós-jogo (posjogo/index.js analisarPartida) alimenta sem GET a mais ----------

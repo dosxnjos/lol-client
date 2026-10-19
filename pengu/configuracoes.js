@@ -6,7 +6,7 @@
 // Seletores medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md.
 import { ATRASOS, FREIOS } from './config.js';
 import { medicaoAtual, JANELA_MS } from './freios.js';
-import { PISO_MEDICAO } from './posjogo/contexto.js';
+import { PISO_MEDICAO, PISO_FAIXA } from './posjogo/contexto.js';
 
 const SEL = {
   container: '.lol-settings-container',
@@ -90,9 +90,13 @@ export const ui = {
 };
 
 // textos dos freios com a medição do acumulador (freios.js medicaoAtual; Fase 5 do plano plugin Pengu primeiro): sem amostra
-// (abaixo de 30 partidas), nenhum número; "cai" só quando o número cai
+// (abaixo de 30 partidas), nenhum número; acima delas e com menos de 10 partidas logo depois de 2 derrotas, quantas a faixa
+// já tem (revisão adversarial da Fase 5: antes repetia "com 30 partidas" para quem já tinha 120); "cai" só quando o número cai
 export function textoMedicaoTilt(med) {
-  if (typeof med?.wrDepoisDe2 !== 'number') return `Com ${PISO_MEDICAO} partidas guardadas neste computador, aparece aqui o seu winrate depois de 2 derrotas seguidas.`;
+  if (!med) return `Com ${PISO_MEDICAO} partidas guardadas neste computador, aparece aqui o seu winrate depois de 2 derrotas seguidas.`;
+  if (typeof med.wrDepoisDe2 !== 'number') {
+    return `Com ${PISO_FAIXA} partidas logo depois de 2 derrotas seguidas (${Number(med.nDepoisDe2) || 0} até agora), aparece aqui o seu winrate nelas.`;
+  }
   const cai = typeof med.wrGeral === 'number' && med.wrDepoisDe2 < med.wrGeral;
   return `Depois de 2 derrotas seguidas, o seu winrate ${cai ? 'cai para' : 'é'} ${med.wrDepoisDe2}%, contra ${med.wrGeral}% no geral (${med.partidas} partidas).`;
 }

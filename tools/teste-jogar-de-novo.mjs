@@ -8,6 +8,7 @@
 // uso: node tools/teste-jogar-de-novo.mjs
 import { jogarDeNovo, prepararLobby, restricaoDura, Recusa, buscarFilaRapida, criarSequencia, resultadoDoEog, contaNoFreio } from '../pengu/fila-rapida.js';
 import { criarConfirmacao, cliqueComFreio, derrotasSeguidasAgora, avaliarFreios, textoFreios, ehMadrugada, medicaoAtual, JANELA_MS, ATUALIZANDO } from '../pengu/freios.js';
+import { textoMedicaoTilt } from '../pengu/configuracoes.js';
 import { htmlTopo } from '../pengu/posjogo/abas.js';
 import { lcuFalsa, relatar } from './lcu-falsa.mjs';
 import { readFileSync } from 'node:fs';
@@ -404,9 +405,14 @@ caso('contaNoFreio: personalizada/treino, fila 0, 3140 e ARAM não',
   process.env.TZ = 'America/Sao_Paulo';   // as faixas horárias da fixture (tools/teste-contexto.mjs usa a mesma)
   const { iniciarHistorico } = await import('../pengu/historico.js');
   const fx = JSON.parse(readFileSync(new URL('./fixtures/historico-1.json', import.meta.url), 'utf8'));
-  const iniciar = valor => iniciarHistorico({ socket: { observe: () => {} } },
-    { ds: { get: () => valor, set: () => {} }, lcu: async () => ({ status: 0, dados: null }), janela: null, log: () => {} });
-  iniciar(fx);
+  // a LCU responde a conta dona da fixture: sem a conta lida, o acumulador não mostra nada (revisão adversarial da Fase 5)
+  const iniciar = (valor, puuid = fx.dono) => iniciarHistorico({ socket: { observe: () => {} } },
+    { ds: { get: () => valor, set: () => {} }, lcu: async u => (u === '/lol-summoner/v1/current-summoner' ? { status: 200, dados: { puuid } } : { status: 0, dados: null }),
+      agendar: () => null, cancelar: () => {}, janela: null, log: () => {} });
+  const outra = iniciar(fx, 'puuid-de-outra-conta');
+  caso('acumulador de outra conta (ainda não lida e depois lida): medicaoAtual() = null', medicaoAtual() === null
+    && await outra.identificar().then(() => medicaoAtual() === null && outra.estado().outraConta));
+  await iniciar(fx).identificar();
   const m = medicaoAtual();
   caso('acumulador de pé: medicaoAtual() da fixture (53 partidas, madrugada 29%, dia 60%, depois de 2 sem amostra)',
     m?.partidas === 53 && m.wrMadrugada === 29 && m.wrDia === 60 && m.wrDepoisDe2 === null, JSON.stringify(m));
@@ -415,8 +421,16 @@ caso('contaNoFreio: personalizada/treino, fila 0, 3140 e ARAM não',
     textoFreios([{ tipo: 'madrugada' }, { tipo: 'tilt', derrotas: 2 }]));
   const c = await cenario({ cfgFila: { freioMadrugada: true }, opcoes: { relogio: as(3) } });
   caso('acumulador de pé: jogar de novo de madrugada cita os números dele', c.res.status === 'confirmar' && c.res.texto.includes('29% contra 60%'), JSON.stringify(c.res));
+  // ⚙ (configuracoes.js textoMedicaoTilt; revisão adversarial da Fase 5): com 53 partidas e só 9 logo depois de 2 derrotas, o
+  // texto não promete o número "com 30 partidas": diz quantas faltam na faixa (10)
+  caso('⚙ freio de tilt acima de 30 partidas e faixa abaixo de 10: diz a faixa (9 de 10), não "com 30 partidas"',
+    textoMedicaoTilt(m) === 'Com 10 partidas logo depois de 2 derrotas seguidas (9 até agora), aparece aqui o seu winrate nelas.', textoMedicaoTilt(m));
+  caso('⚙ freio de tilt abaixo de 30 partidas: "com 30 partidas guardadas"; com o número: o número',
+    textoMedicaoTilt(null) === 'Com 30 partidas guardadas neste computador, aparece aqui o seu winrate depois de 2 derrotas seguidas.'
+    && textoMedicaoTilt({ ...m, wrDepoisDe2: 44, nDepoisDe2: 17 }) === `Depois de 2 derrotas seguidas, o seu winrate cai para 44%, contra ${m.wrGeral}% no geral (53 partidas).`,
+    [textoMedicaoTilt(null), textoMedicaoTilt({ ...m, wrDepoisDe2: 44, nDepoisDe2: 17 })]);
   const ordenadas = fx.linhas.filter(l => l[3] !== 0 && l[2] >= 300).slice(0, 29);
-  iniciar({ ...fx, linhas: ordenadas });
+  await iniciar({ ...fx, linhas: ordenadas }).identificar();
   caso('acumulador com 29 partidas: sem número (piso de 30)', medicaoAtual() === null && textoFreios([{ tipo: 'madrugada' }]) === TEXTO_MADRUGADA);
 }
 

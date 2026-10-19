@@ -47,20 +47,22 @@ export function init(context) {
   // fonte local de matchup e traumas (contexto.js, Fase 5): o acumulador desta conta com amostra. A chave "Mostrar traumas" e o
   // atalho dela no Ctrl+K aparecem com ela ou com o complemento ("draft"/"contexto"); "historico" é o nome dessa fonte em
   // ALTERNAVEIS_COACH (config.js), não um recurso do aperto de mão
-  const temAmostraLocal = () => { const e = acumulador?.estado(); return !!e && !e.outraConta && e.linhas >= AMOSTRA_LOCAL; };
+  // minhas = as linhas que a conta da sessão vê (0 com outra conta ou com a conta ainda não lida; revisão adversarial da Fase 5)
+  const temAmostraLocal = () => (acumulador?.estado()?.minhas || 0) >= AMOSTRA_LOCAL;
   const mostraComLocal = nome => mostraRecurso(nome) || (nome === 'historico' && temAmostraLocal());
   let amostraVista = false;
+  // a amostra desta conta chegou ao mínimo (conta lida na carga, pós-jogo, backfill ou importação): a chave e o atalho dos
+  // traumas aparecem sem recarregar
+  const aoAmostra = () => {
+    if (amostraVista || !temAmostraLocal()) return;
+    amostraVista = true;
+    seguro('configurações', () => redesenharConfiguracoes());
+    seguro('ações do coach', () => registrarAcoesCoach(mostraComLocal));
+  };
   const acumulador = seguro('histórico', () => iniciarHistorico(context, {
     partidas: () => champ?.partidas() ?? null,
     ocupado: () => !!(posjogoOcupado() || champ?.estado().carregando),
-    coletor, temRecurso,
-    // a amostra chegou ao mínimo (pós-jogo, backfill ou importação): a chave e o atalho dos traumas aparecem sem recarregar
-    aoSalvar: n => {
-      if (amostraVista || n < AMOSTRA_LOCAL) return;
-      amostraVista = true;
-      seguro('configurações', () => redesenharConfiguracoes());
-      seguro('ações do coach', () => registrarAcoesCoach(mostraComLocal));
-    },
+    coletor, temRecurso, aoSalvar: aoAmostra, aoConta: aoAmostra,
   }));
   const chat = seguro('chat do pós-jogo', () => iniciarChatPosjogo(context, cfg));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));

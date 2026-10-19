@@ -112,7 +112,7 @@ async function lcuPadrao(url, signal) {
 export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, ms) => setTimeout(fn, ms), cancelar = t => clearTimeout(t),
   partidas = () => null, ocupado = () => false, coletor = null, temRecurso = () => false,
   Abort = typeof AbortController === 'function' ? AbortController : null, log = m => console.log('[lol-client]', m),
-  aoSalvar = () => {} } = {}) {
+  aoSalvar = () => {}, aoConta = () => {} } = {}) {
   const porId = new Map();   // gameId -> linha
   let dono = null, imp = 0, inerte = false, carregado = false;
   let pendentes = 0, sets = 0, eu = null, outraConta = false;
@@ -218,12 +218,28 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
     if (livre() && !timer && !emPasso && !inerte) { fim = false; agendarPasso(); }
   }
 
-  async function garantirEu() {
-    if (eu) return eu;
-    const r = await lcu('/lol-summoner/v1/current-summoner');
-    eu = r.status === 200 && typeof r.dados?.puuid === 'string' ? r.dados.puuid : null;
-    return eu;
+  // conta da sessão (current-summoner, não é match-history: não entra na fila da LCU que o ocupado() protege). Lida na carga
+  // (iniciarHistorico, em qualquer fase) e no 1º passo, antes de esperar a lista: linhas() só responde depois dela (revisão
+  // adversarial da Fase 5: outra conta no mesmo PC via as linhas da dona até a lista do histórico chegar, até 40 s).
+  // Uma GET por vez; aoConta avisa quem depende da amostra (chave "Mostrar traumas", Ctrl+K)
+  let euEmVoo = null;
+  function garantirEu() {
+    if (eu) return Promise.resolve(eu);
+    euEmVoo ??= (async () => {
+      try {
+        const r = await lcu('/lol-summoner/v1/current-summoner');
+        const p = r.status === 200 && typeof r.dados?.puuid === 'string' && r.dados.puuid ? r.dados.puuid : null;
+        if (p && !eu) {
+          eu = p;
+          contaOk(p);
+          try { aoConta(); } catch (e) { log(`histórico: aoConta (${e?.message || e})`); }
+        }
+        return eu;
+      } finally { euEmVoo = null; }
+    })();
+    return euEmVoo;
   }
+  const identificar = () => (inerte ? Promise.resolve(null) : garantirEu());
 
   // próxima partida que falta: da lista já lida, a mais recente; undefined = lista ainda não lida; null = nada falta
   function proxima() {
@@ -274,9 +290,10 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
       // cada GET, não só na largada: o pós-jogo e a lista não esperam o backfill (revisão adversarial da Fase 4). A GET que
       // já saiu segue na fila da LCU; o que se evita é a próxima
       if (ocupado()) return;
-      const importar_ = !importado && temRecurso('resumos') && typeof coletor === 'function';
-      if (!importar_ && !Array.isArray(partidas())) return;   // lista ainda não lida e nada a importar: espera sem GET
+      // a conta antes de esperar a lista (só a GET do puuid): sem ela linhas() fica vazio
       if (!(await garantirEu())) { if (++falhasEu >= 3) seguir = false; return; }   // sem conta (antes do login): para até a próxima fase
+      const importar_ = !importado && temRecurso('resumos') && typeof coletor === 'function';
+      if (!importar_ && !Array.isArray(partidas())) return;   // lista ainda não lida e nada a importar: espera sem GET de partida
       if (!livre() || ocupado()) return;
       if (!contaOk(eu)) { seguir = false; return; }
       if (importar_) { await importar(); return; }
@@ -314,15 +331,18 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
     }
   }
 
-  const estado = () => ({ linhas: porId.size, dono: !!dono, imp, inerte, outraConta, fase, feitos, tentados: tentados.size,
-    pendentes, sets, importado, fim, rodando: !!timer || emPasso });
-  // as linhas como objetos, mais recentes primeiro (Fase 5: contexto do pós-jogo e da seleção). puuid = a conta de quem
-  // pede: de outra conta que não a dona, nada. Sem puuid, vale a conta que esta sessão já leu (pós-jogo ou backfill: eu);
-  // antes de ler nenhuma, as linhas da dona (outraConta só depois do 1º passo)
-  const linhas = (puuid = eu) => (outraConta || (puuid && dono && puuid !== dono) ? []
+  // as linhas são de quem pede? puuid = a conta de quem pede; sem puuid, a que esta sessão já leu (carga, passo ou pós-jogo: eu).
+  // Conta ainda não lida = não (revisão adversarial da Fase 5: antes, valiam as da dona e outra conta via os números dela)
+  const daConta = (puuid = eu) => !!puuid && !outraConta && !(dono && puuid !== dono);
+  // minhas = linhas que a conta da sessão vê (a chave "Mostrar traumas" e o Ctrl+K, index.js temAmostraLocal)
+  const estado = () => ({ linhas: porId.size, minhas: daConta() ? porId.size : 0, dono: !!dono, imp, inerte, outraConta, fase, feitos,
+    tentados: tentados.size, pendentes, sets, importado, fim, rodando: !!timer || emPasso });
+  // as linhas como objetos, mais recentes primeiro (Fase 5: contexto do pós-jogo e da seleção); de outra conta ou de conta
+  // ainda não lida, nada
+  const linhas = (puuid = eu) => (!daConta(puuid) ? []
     : [...porId.values()].sort((a, b) => b[IDX.criacao] - a[IDX.criacao]).map(comoObjeto));
 
-  return { carregar, registrar, aoFase, cutucar, passo, importar, estado, linhas, parar, gravarPendentes };
+  return { carregar, registrar, aoFase, cutucar, passo, importar, estado, linhas, parar, gravarPendentes, identificar };
 }
 
 // ---- instância do plugin (index.js chama iniciarHistorico). Antes dela, registrarPartida não faz nada ----
@@ -332,6 +352,8 @@ let inst = null;
 export function iniciarHistorico(context, opcoes = {}) {
   inst = criarHistorico(opcoes);
   inst.carregar();
+  // a conta da sessão já na carga, em qualquer fase (plugin recarregado na seleção: o passo só roda em None/Lobby)
+  inst.identificar().catch(() => {});
   const janela = 'janela' in opcoes ? opcoes.janela : (typeof window === 'undefined' ? null : window);
   const meu = inst;
   try { janela?.addEventListener?.('beforeunload', () => meu.gravarPendentes()); } catch { /* sem janela */ }
