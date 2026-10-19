@@ -353,7 +353,7 @@ class _Handler(BaseHTTPRequestHandler):
         if self._barrar():
             return
         srv = self.server.dono
-        self._contato(rota)   # POST /aceite/plugin com Origin do plugin: ele falou nesta fila
+        self._contato(rota)   # POST /aceite/plugin com Origin do plugin: ele falou (neste ready check, para a reserva)
         prefixo = next((p for p in srv.rotas_post if rota.startswith(p)), None)
         if prefixo:  # ex.: /chat/ (coletor/chat_janelas.py): f(rota, corpo bruto) -> (status, corpo[, tipo])
             try:

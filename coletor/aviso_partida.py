@@ -15,10 +15,13 @@
 # automática do coletor na LCU. Com coach.aceiteFlutuante false a reserva roda sem janela (janela=False); sem a rota
 # do plugin no ar (coletor.py _sinal_aceite None) ela nem arma (reserva=False). Outro ready check na mesma instância
 # (timer que volta, 404 entre payloads) para a reserva: falha fechada.
-# Contato do plugin (plano plugin Pengu primeiro, Fase 1, 19/10/2026): na hora de agir, a reserva exige que o plugin tenha
-# falado com o coletor desde a última entrada em Matchmaking (GET /ola ou POST /aceite/plugin com Origin do client ou do
-# Pengu, SinalPlugin.contato). Plugin com a ponte desligada ou morto desde antes da fila = o "não aceitar" dele não chegaria:
-# a reserva não age ("reserva do aceite desarmada: o plugin não falou nesta fila").
+# Contato do plugin (plano plugin Pengu primeiro, Fase 1, 19/10/2026; revisão adversarial do mesmo dia): na hora de agir, a
+# reserva exige que o plugin tenha falado com o coletor DURANTE este ready check (desde o início dele menos SINAL_ANTES_S,
+# a mesma âncora do "não aceitar"): GET /ola ou POST /aceite/plugin com Origin do client ou do Pengu (SinalPlugin.contato).
+# O plugin vivo com a ponte ligada faz o aperto de mão na fase ReadyCheck e manda o diagnóstico a cada evento do ready
+# check; com a ponte desligada (mesmo depois de ter falado na fila) ou morto, o "não aceitar" dele não chegaria: a reserva
+# não age ("reserva do aceite desarmada: o plugin não falou neste ready check"). "Desde a entrada em Matchmaking" (a 1ª
+# versão) deixava a reserva armada com a ponte desligada no meio da fila e com a fase Matchmaking perdida na reconexão.
 #   python coletor/aviso_partida.py --demo [--atraso 10] [--segundos 12]   (LCU falsa, nada sai da máquina)
 import ctypes
 import ctypes.wintypes as wt
@@ -51,8 +54,8 @@ SINAL_ANTES_S = 1.0
 IDADE_MIN_S = 1.5
 # prazo do POST da reserva (a consulta e a janelinha param enquanto ele roda; fechar() espera 3 s)
 POST_RESERVA_S = 3
-# motivo da reserva que não agiu porque o plugin não falou desde a última entrada em Matchmaking (SinalPlugin.visto_na_fila)
-SEM_PLUGIN = "o plugin não falou nesta fila"
+# motivo da reserva que não agiu porque o plugin não falou durante este ready check (SinalPlugin.visto_desde)
+SEM_PLUGIN = "o plugin não falou neste ready check"
 # cores do painel (painel/painel.css :root)
 COR = {"fundo": "#0b0e13", "bloco": "#141922", "borda": "#2e3848", "texto": "#eef2f7", "suave": "#8d97a6",
        "verde": "#3ccf6e", "vermelho": "#ff5a52", "verde_claro": "#5ee08a", "cinza": "#232b38",
@@ -226,22 +229,16 @@ class SinalPlugin:
         self.desligado_em = None     # relógio do último ligado false
         self.ultimo_em = None        # relógio do último sinal qualquer (o JS do plugin estava vivo)
         self.contato_em = None       # relógio do último contato com Origin do plugin (GET /ola, POST /aceite/*)
-        self.fila_em = None          # relógio da última entrada em Matchmaking (coletor.py fase)
 
     def contato(self):
-        """o plugin falou com Origin dele (servidor_local._contato): vale para a fila em curso"""
+        """o plugin falou com Origin dele (servidor_local._contato)"""
         with self._trava:
             self.contato_em = self.relogio()
 
-    def entrada_fila(self):
-        """fase entrou em Matchmaking: o contato de antes (fila anterior) deixa de valer"""
+    def visto_desde(self, t):
+        """True se o plugin falou desde `t` (mesmo relógio). A reserva passa o início do ready check menos SINAL_ANTES_S"""
         with self._trava:
-            self.fila_em = self.relogio()
-
-    def visto_na_fila(self):
-        """True se o plugin falou desde a última entrada em Matchmaking (sem entrada vista: desde que o coletor subiu)"""
-        with self._trava:
-            return self.contato_em is not None and (self.fila_em is None or self.contato_em >= self.fila_em)
+            return self.contato_em is not None and self.contato_em >= t
 
     def registrar(self, corpo):
         """corpo do POST (dict já validado em tipo pelo chamador ou não): guarda o que serve à reserva"""
@@ -492,10 +489,11 @@ class AvisoPartida:
             self._reserva_fim(d.get("motivo") or ("clique do Gabriel em voo" if self.clicado else "aviso fechado"),
                               decorrido)
             return None
-        # conferido aqui, na hora de agir (o POST do diagnóstico do plugin no início do ready check chega junto com a fase)
-        if self.sinal is not None and not self.sinal.visto_na_fila():
+        # conferido aqui, na hora de agir: contato durante ESTE ready check (o aperto de mão da fase ReadyCheck e o diagnóstico
+        # de cada evento do plugin chegam junto com a fase), pela mesma âncora do "não aceitar" (início pelo timer da LCU)
+        if self.sinal is not None and not self.sinal.visto_desde(self.inicio - SINAL_ANTES_S):
             self.reserva_fim = SEM_PLUGIN
-            log.info("reserva do aceite desarmada: o plugin não falou nesta fila (%.1f s do ready check)", decorrido)
+            log.info("reserva do aceite desarmada: %s (%.1f s do ready check)", SEM_PLUGIN, decorrido)
             return None
         self.reserva_fim = "aceitando"
         ok = self._postar("aceitar", "reserva")

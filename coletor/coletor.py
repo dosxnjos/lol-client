@@ -141,7 +141,7 @@ class LCU:
         (chat_janelas.py), enviar mensagem, convidar e marcar a conversa como lida (metodo="PUT"), por clique do
         Gabriel. A única escrita sozinha é a reserva do aceite (aviso_partida.py): accept do ready check em andamento
         quando o plugin não aceitou no alvo dele, com o aceite automático ligado, sem "não aceitar" e com o plugin visto
-        desde a última entrada em Matchmaking (SinalPlugin.visto_na_fila)."""
+        durante esse ready check (SinalPlugin.visto_desde)."""
         dados = json.dumps(corpo).encode() if corpo is not None else b""
         req = urllib.request.Request(f"https://127.0.0.1:{self.porta}{caminho}", data=dados, method=metodo,
                                      headers={"Authorization": self.auth, "Accept": "application/json",
@@ -699,10 +699,8 @@ class Coletor:
         """ReadyCheck liga a janelinha (se coach.aceiteFlutuante) e a reserva do aceite (se o aceite automático está
         ligado no espelho; sem a janelinha, roda sem janela); qualquer outra fase fecha. Nunca derruba fase()"""
         try:
-            # entrada na fila (vinda de outra fase; o websocket reconectado replica a mesma): o contato do plugin de antes
-            # não vale para esta fila (a reserva confere na hora de agir, aviso_partida SinalPlugin.visto_na_fila)
-            if fase == "Matchmaking" and self.fase_atual != "Matchmaking" and self.sinal is not None:
-                self.sinal.entrada_fila()
+            # a reserva só age com contato do plugin durante o próprio ready check (aviso_partida SinalPlugin.visto_desde,
+            # conferido na hora de agir): nenhuma fronteira de fila a marcar aqui, nem com a fase Matchmaking perdida
             if fase == "ReadyCheck":
                 ligado, atraso = self._cfg_aviso()
                 reserva = self.sinal is not None   # sem a rota do plugin no ar, nunca aceita sozinho
@@ -711,8 +709,7 @@ class Coletor:
                         self.aviso = self.fab_aviso(self.lcu, atraso, sinal=self.sinal, janela=ligado, reserva=reserva)
                         self.aviso.mostrar()
                         auto = "desligado" if atraso is None else f"em {atraso:g} s, reserva do coletor " + (
-                            ("armada (plugin visto nesta fila)" if self.sinal.visto_na_fila() else
-                             "armada se o plugin falar nesta fila") if reserva else "desarmada: sem rota do plugin")
+                            "armada se o plugin falar neste ready check" if reserva else "desarmada: sem rota do plugin")
                         log.info("aviso de partida aberto (aceite automático %s)" if ligado else
                                  "aviso de partida sem janela (aceite automático %s)", auto)
                     return

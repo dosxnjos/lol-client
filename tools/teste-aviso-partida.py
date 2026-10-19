@@ -10,7 +10,7 @@
 #      clique em voo; POST que falha não repete
 #   G. rota POST /aceite/plugin num servidor local de teste (porta livre, 0): origem, sinal gravado, linha no log
 #   H. aperto de mão GET /ola (recursos calculados do que está pendurado, com e sem cada módulo) e a reserva presa ao
-#      contato do plugin desde a última entrada em Matchmaking (plano plugin Pengu primeiro, Fase 1)
+#      contato do plugin durante o próprio ready check (plano plugin Pengu primeiro, Fase 1 e revisão adversarial de 19/10)
 #   E. janela real com LCU falsa: estilo sem foco, canto inferior direito, GetForegroundWindow intocado,
 #      contagem, botões chamam accept/decline, some ao sair do ReadyCheck sem deixar thread nem janela,
 #      fecha sozinha se ninguém fechar, reserva com a janela. Pulado com o jogo aberto ou com --sem-janela.
@@ -194,14 +194,16 @@ def integracao():
 
     async def roteiro():
         col = novo_coletor({"aceiteFlutuante": True, "aceiteAtrasoS": 8}, AvisoFalso, rota=True)
-        col.sinal.contato()   # plugin visto antes da fila (fila anterior)
+        col.sinal.contato()   # plugin visto na fila (Matchmaking), 5 s antes do ready check
+        col.sinal.contato_em -= 5
         await col.fase("Matchmaking")
         caso("D1 Matchmaking não abre", not criados)
-        caso("D1b entrar em Matchmaking marca a fila: o contato de antes deixa de valer",
-             col.sinal.fila_em is not None and not col.sinal.visto_na_fila())
-        f0 = col.sinal.fila_em
-        await col.fase("Matchmaking")   # websocket reconectado replica a fase: não é fila nova
-        caso("D1c Matchmaking repetido não marca de novo", col.sinal.fila_em == f0)
+        inicio_rc = col.sinal.relogio()
+        caso("D1b contato da fila (5 s antes) não vale para o ready check: a reserva olha o início dele menos 1 s",
+             not col.sinal.visto_desde(inicio_rc - aviso_partida.SINAL_ANTES_S))
+        await col.fase("Matchmaking")   # websocket reconectado replica a fase
+        caso("D1c Matchmaking não marca fronteira nenhuma no sinal (revisão de 19/10: a âncora é o ready check)",
+             not hasattr(col.sinal, "fila_em") and not hasattr(col.sinal, "entrada_fila"))
         col.sinal.contato()
         await col.fase("ReadyCheck")
         await col.fase("ReadyCheck")   # websocket reconectado replica a fase
@@ -372,7 +374,7 @@ def reserva():
     caso("F14 com 'não aceitar' a janelinha não promete aceite (conta até expirar, sem alerta)",
          av.estado()["fase"] in ("expirando",) and "alerta" not in av.estado(), av.estado())
     sinal = SinalPlugin()
-    sinal.contato()   # o plugin falou nesta fila (H cobre o caso sem contato)
+    sinal.contato()   # o plugin falou neste ready check (H cobre o caso sem contato)
     sinal.registrar({"desligadoNestaVez": True})
     sinal.nao_aceitar_em -= 5   # chegou 5 s antes deste ready check: era do anterior
     lcu = LCURegistro()
@@ -442,7 +444,7 @@ def reserva():
          lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and t_post is not None and t_post >= 1.45,
          (lcu.ops, av.reserva_fim))
     sinal = SinalPlugin()
-    sinal.contato()   # sem o contato a reserva pararia pela regra da fila, e o caso não provaria o "não aceitar"
+    sinal.contato()   # sem o contato a reserva pararia pela regra do contato, e o caso não provaria o "não aceitar"
     lcu = LCURegistro(timer0=11)
     av = rodar_reserva(lcu, atraso=10, s=2.2, idade_min_s=1.5, sinal=sinal, antes=lambda a: threading.Timer(
         0.8, sinal.registrar, args=({"evento": "evento", "desligadoNestaVez": True},)).start())
@@ -586,26 +588,28 @@ def aperto_de_mao():
             except urllib.error.HTTPError as e:
                 return e.code, None
         s = col.sinal
-        s.entrada_fila()
+        t0 = s.relogio() - 1   # "início do ready check menos 1 s" de antes de qualquer pedido deste bloco
         st, d = ola()
         caso("H7 GET /ola responde {app, versao, recursos} (o que o plugin confere)",
              st == 200 and d["app"] == servidor_local.APP == "lol-client-coletor" and d["versao"] == servidor_local.VERSAO_PONTE
              and d["recursos"] == cheio.recursos(), d)
         caso("H8 GET /ola sem Origin (curl, painel) responde mas NÃO conta como contato do plugin",
-             s.contato_em is None and not s.visto_na_fila())
+             s.contato_em is None and not s.visto_desde(t0))
         ola("http://localhost:3000")
-        caso("H9 /ola de outra página local em http também não conta", not s.visto_na_fila())
+        caso("H9 /ola de outra página local em http também não conta", not s.visto_desde(t0))
         caso("H10 /ola de site de fora: 403", ola("https://exemplo.com")[0] == 403)
         st, _ = ola("https://127.0.0.1:54321")
-        caso("H11 /ola da página do client (https://127.0.0.1:<porta da LCU>) conta: plugin visto nesta fila",
-             st == 200 and s.visto_na_fila())
-        s.entrada_fila()
-        caso("H12 nova entrada em Matchmaking: o contato da fila anterior deixa de valer", not s.visto_na_fila())
+        caso("H11 /ola da página do client (https://127.0.0.1:<porta da LCU>) conta: plugin visto",
+             st == 200 and s.visto_desde(t0))
+        time.sleep(0.05)
+        caso("H12 ready check que começa depois do contato (+ a folga de 1 s): o contato de antes não vale",
+             not s.visto_desde(s.relogio() + 0.01))
+        t1 = s.relogio() - 0.01
         req = urllib.request.Request(f"http://127.0.0.1:{porta}/aceite/plugin", data=json.dumps({"evento": "evento", "timer": 0}).encode(),
                                      method="POST", headers={"Content-Type": "application/json", "Origin": "https://plugins"})
         with urllib.request.urlopen(req, timeout=5) as r:
             st = r.status
-        caso("H13 POST /aceite/plugin do diagnóstico (Pengu) conta como contato", st == 200 and s.visto_na_fila())
+        caso("H13 POST /aceite/plugin do diagnóstico (Pengu) conta como contato", st == 200 and s.visto_desde(t1))
     finally:
         cheio.parar()
 
@@ -615,28 +619,58 @@ def aperto_de_mao():
     av = rodar_reserva(lcu, sinal=sinal)
     caso("H14 rota no ar e plugin mudo: a reserva fica desarmada (nenhum POST, motivo no fim)",
          lcu.posts == [] and av.reserva_fim == SEM_PLUGIN, (lcu.ops, av.reserva_fim))
+    # revisão adversarial de 19/10 (achados 2 e 3): o plugin fala na fila (aperto de mão da entrada em Matchmaking), a ponte é
+    # desligada ainda na fila, e no ready check o "não aceitar" não sai. Antes: visto "nesta fila" -> a reserva aceitava
     sinal = SinalPlugin()
     sinal.contato()
-    time.sleep(0.01)
-    sinal.entrada_fila()
+    sinal.contato_em -= 5   # o aperto de mão da fila, 5 s antes do ready check
     lcu = LCURegistro()
     av = rodar_reserva(lcu, sinal=sinal)
-    caso("H15 plugin visto na fila anterior e mudo nesta: desarmada", lcu.posts == [] and av.reserva_fim == SEM_PLUGIN,
-         (lcu.ops, av.reserva_fim))
+    caso("H15 plugin visto na fila e calado no ready check (ponte desligada na fila): desarmada, nenhum POST",
+         lcu.posts == [] and av.reserva_fim == SEM_PLUGIN, (lcu.ops, av.reserva_fim))
     sinal = SinalPlugin()
-    sinal.entrada_fila()
     lcu = LCURegistro()
     # o GET /ola sem Origin não chama contato() (H8): igual ao plugin mudo
     av = rodar_reserva(lcu, sinal=sinal)
-    caso("H16 GET /ola sem Origin nesta fila (nada marcado): desarmada", lcu.posts == [] and av.reserva_fim == SEM_PLUGIN,
+    caso("H16 GET /ola sem Origin neste ready check (nada marcado): desarmada", lcu.posts == [] and av.reserva_fim == SEM_PLUGIN,
          av.reserva_fim)
     sinal = SinalPlugin()
-    sinal.entrada_fila()
+    sinal.contato()
+    sinal.contato_em -= 5   # contato velho (outra fila)
     lcu = LCURegistro()
     # o diagnóstico chega 0,2 s depois do ready check começar (o mesmo evento de fase dispara os dois)
     av = rodar_reserva(lcu, sinal=sinal, antes=lambda a: threading.Timer(0.2, sinal.contato).start())
     caso("H17 POST /aceite/plugin do diagnóstico no início do ready check: armada, aceita no alvo + folga",
          lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and av.reserva_fim == "aceitou", (lcu.ops, av.reserva_fim))
+    sinal = SinalPlugin()
+    sinal.contato()
+    sinal.contato_em -= 0.5   # o evento do plugin chegou meio segundo antes de o coletor ver a fase
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, sinal=sinal)
+    caso("H17b contato até 1 s antes do início do ready check (SINAL_ANTES_S, a âncora do 'não aceitar'): armada",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and av.reserva_fim == "aceitou", (lcu.ops, av.reserva_fim))
+    # achado 4: a fase Matchmaking perdida (websocket caiu na fila) não pode deixar valer um contato do Lobby. Coletor de
+    # verdade (fase -> AvisoPartida sem janela, LCU falsa): Matchmaking da fila anterior, Lobby com o aperto de mão e a
+    # ponte desligada ali, e a reconexão já em ReadyCheck (Lobby -> ReadyCheck, sem Matchmaking)
+    col = novo_coletor({"aceiteFlutuante": False, "aceiteAtrasoS": 0.3}, lambda l, a, **kw: aviso_partida.AvisoPartida(
+        l, a, idade_min_s=0, **kw), rota=True)
+
+    async def sem_matchmaking():
+        await col.fase("Matchmaking")
+        await asyncio.sleep(1.0)
+        await col.fase("Lobby")
+        col.sinal.contato()        # aperto de mão do Lobby (relógio de verdade: a fila anterior ficou 1 s antes)
+        await asyncio.sleep(1.6)   # a ponte é desligada; o websocket do coletor cai e perde a fase Matchmaking
+        col.lcu = LCURegistro()    # ready check novo: timer 0 agora
+        await col.fase("ReadyCheck")
+        av = col.aviso
+        await asyncio.sleep(1.8)
+        await col.fase("Lobby")
+        return av, col.lcu
+    av, lcu = asyncio.run(sem_matchmaking())
+    caso("H19 Lobby -> ReadyCheck sem Matchmaking, contato só no Lobby: desarmada, nenhum POST",
+         av is not None and lcu.posts == [] and av.reserva_fim == SEM_PLUGIN, (lcu.ops, av and av.reserva_fim))
+    col.c.close()
     linhas = []
 
     class Coletar(logging.Handler):
@@ -653,8 +687,8 @@ def aperto_de_mao():
     finally:
         lg.removeHandler(h)
         lg.setLevel(nivel)
-    caso("H18 log diz 'reserva do aceite desarmada: o plugin não falou nesta fila'",
-         any(ln.startswith("reserva do aceite desarmada: o plugin não falou nesta fila") for ln in linhas), linhas)
+    caso("H18 log diz 'reserva do aceite desarmada: o plugin não falou neste ready check'",
+         any(ln.startswith("reserva do aceite desarmada: o plugin não falou neste ready check") for ln in linhas), linhas)
 
 
 # ---------- E. janela real ----------
