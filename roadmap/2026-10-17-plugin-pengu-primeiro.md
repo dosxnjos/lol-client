@@ -49,8 +49,8 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   `teste-config.mjs` 73/73) e a seleção sem a lista do client e sem favorito visível deixa de dizer "nenhum campeão com esse
   nome" e "só os favoritos" (`adb3ca2`, commit próprio, `teste-compacto-selecao.mjs` 265/265); bateria node 28/28; tabela no
   relatório.
-- **Fase 4 feita em 19/10/2026** (`16d1eb7` plugin, `f97d697` coletor: acumulador `lol-client.historico` com 20 campos,
-  15 min incluídos, teto 500, `dono` próprio; `teste-historico.mjs` 69/69, `teste-resumos.py` 19/19 com a linha JS = Python,
+- **Fase 4 feita em 19/10/2026** (`16d1eb7` e `687da5c` plugin, `f97d697` coletor: acumulador `lol-client.historico` com 20 campos,
+  15 min incluídos, teto 500, `dono` próprio; `teste-historico.mjs` 72/72, `teste-resumos.py` 19/19 com a linha JS = Python,
   `teste-aviso-partida.py` 125/125, bateria node 29/29; `/resumos` no banco desta máquina: 191 partidas, 1,06 s, 25,6 KB):
   falta recarregar o plugin e reiniciar o coletor (importação), e as provas do client real:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-4.md).
