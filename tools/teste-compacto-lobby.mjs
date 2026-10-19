@@ -429,25 +429,22 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('convite: recusar = POST .../decline', igual(s.escritas(), ['POST /lol-lobby/v2/received-invitations/xyz/decline']) && s.avisos.some(([m]) => m === 'convite recusado'), s.escritas().join(', '));
 }
 {
-  // chat: com o coletor abre a janela; sem rota/coletor, expande (chat da Riot)
+  // chat sem a lateral (este cenário não monta a lateral): expande para o chat da Riot, mesmo com o complemento respondendo; as
+  // janelas do chat do complemento saíram em 19/10/2026 (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
   const s = cenario({ rotas: { 'GET /lol-chat/v1/conversations': [{ type: 'chat', unreadMessageCount: 2 }, { type: 'customGame', unreadMessageCount: 9 }] }, coletor: async () => ({ status: 200, dados: { ok: true } }) });
   await s.iniciar();
   const bolha = s.doc.getElementById('lc-compacto').querySelector('.lc-cp-bolha');
   caso('chat: contador só das conversas 1:1', bolha?.textContent === '2' && bolha.style.display === '');
-  // revisão de 17/10/2026 (ícones): sem o chat ao lado o botão é o mesmo "chat" (ícone e aria-label), só abre as janelas do coletor
+  // revisão de 17/10/2026 (ícones): sem o chat ao lado o botão é o mesmo "chat" (ícone e aria-label)
   const btChat = s.doc.getElementById('lc-compacto').querySelector('[data-a="chat"]');
   caso('chat sem o chat ao lado: ícone chat e aria-label "chat" (o nome do ícone, não "amigos")',
     btChat?.getAttribute('aria-label') === 'chat' && !!btChat?.querySelector('[data-icone="chat"]'), btChat?.getAttribute('aria-label'));
   await s.clicar('[data-a="chat"]');
-  caso('chat: coletor abriu = POST /chat/abrir/amigos e o compacto fica', s.colChamadas.some(([m, c]) => m === 'POST' && c === '/chat/abrir/amigos') && s.efetivo() === 'compacto');
+  caso('chat sem a lateral: expande e avisa, e nada vai ao complemento (rota /chat/ aposentada)',
+    s.efetivo() === 'expandido' && !s.doc.getElementById('lc-compacto') && s.avisos.some(([m]) => m.includes('chat ao lado indisponível'))
+      && !s.colChamadas.some(([, c]) => String(c).startsWith('/chat/')), JSON.stringify({ avisos: s.avisos, col: s.colChamadas }));
   await s.evento('/lol-chat/v1/conversations', null);
   caso('chat: nada de escrita na LCU', s.escritas().length === 0);
-}
-{
-  const s = cenario({ coletor: async () => ({ status: 404, dados: { erro: 'não existe' } }) });
-  await s.iniciar();
-  await s.clicar('[data-a="chat"]');
-  caso('chat sem a rota do chat: expande e avisa', s.efetivo() === 'expandido' && !s.doc.getElementById('lc-compacto') && s.avisos.some(([m]) => m.includes('chat em janela própria indisponível')), JSON.stringify(s.avisos));
 }
 {
   const s = cenario({ servicos: { coletor: undefined } });
@@ -456,7 +453,7 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('chat sem coletor nenhum: expande', s.efetivo() === 'expandido');
 }
 {
-  // + convidar: sem o chat do coletor, a lista de amigos dentro da tela; convite só no clique
+  // + convidar: sem a lateral, a lista de amigos dentro da tela; convite só no clique
   const amigos = [{ summonerId: 333, puuid: 'p333', gameName: 'zé', availability: 'chat', product: 'league_of_legends', lol: { gameStatus: 'outOfGame' } }];
   const s = cenario({ lobby: null, fase: 'None', coletor: async () => ({ status: 0, dados: null }),
     rotas: { 'GET /lol-chat/v1/friends': amigos, 'POST /lol-lobby/v2/lobby/invitations': c => ({ status: 200, json: c }) } });
@@ -471,18 +468,13 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('convidar: aviso de convite enviado', s.avisos.some(([m]) => m === 'convite enviado para zé'));
 }
 {
-  // contrato de coletor/chat_janelas.py: POST /chat/abrir/amigos -> 202 {ok: true}
-  const s = cenario({ coletor: async c => (c === '/chat/abrir/amigos' ? { status: 202, dados: { ok: true } } : { status: 404 }) });
+  // Fase 2 (19/10/2026): com o complemento no ar e respondendo 202 a tudo, o "+ convidar" não pede mais a lista ao complemento
+  // (a antiga rota das janelas do chat): a lista é a da própria tela
+  const s = cenario({ coletor: async () => ({ status: 202, dados: { ok: true } }), rotas: { 'GET /lol-chat/v1/friends': [] } });
   await s.iniciar();
   await s.clicar('[data-a="convidar"]');
-  caso('convidar: com o chat do coletor (202), abre a lista de amigos dele', s.colChamadas.some(([m, c]) => m === 'POST' && c === '/chat/abrir/amigos') && !s.q('[data-a="amigos"]') && s.efetivo() === 'compacto');
-  s.colChamadas.length = 0;
-}
-{
-  const s = cenario({ coletor: async c => (c === '/chat/abrir/amigos' ? { status: 202, dados: { ok: false } } : { status: 404 }) });
-  await s.iniciar();
-  await s.clicar('[data-a="chat"]');
-  caso('chat: coletor recusou (ok false) = expande', s.efetivo() === 'expandido');
+  caso('convidar: com o complemento respondendo, nada vai à rota /chat/ e a lista é a da tela',
+    !s.colChamadas.some(([, c]) => String(c).startsWith('/chat/')) && !!s.q('[data-a="amigos"]') && s.efetivo() === 'compacto', JSON.stringify(s.colChamadas));
 }
 {
   // o GET /dica saiu em 19/10/2026 (o coletor nunca teve a rota; Fase 1 do plano plugin Pengu primeiro): só a dica local

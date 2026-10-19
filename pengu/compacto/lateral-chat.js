@@ -1,8 +1,9 @@
 // Chat ao lado do compacto (roadmap/2026-10-13-client-compacto.md, passo 13, tela A1; pedido de 14/10/2026 ~17:00: "o próprio
 // modo compacto ganhando espaço para a direita, mostrando a lista. E se eu abrir esse chat com alguém, esse chat também expande
 // mais para a direita"). Lista de amigos, conversa 1:1 e a sala do time na seleção ("chat do time entra sim", 14/10 ~20:00).
-// Quem abre, fecha e decide a largura é compacto/lateral.js; aqui só dados (funções puras, portadas 1:1 de
-// coletor/chat_janelas.py) e o desenho de cada painel. Importável no node: nada de DOM no topo.
+// Quem abre, fecha e decide a largura é compacto/lateral.js; aqui só dados (funções puras, portadas 1:1 das antigas janelas
+// do chat do coletor, aposentadas em 19/10/2026: esta é agora a única implementação) e o desenho de cada painel. Importável no
+// node: nada de DOM no topo.
 // Etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md (16/10/2026): o painel de chat ganha os RECENTES (verRecentes,
 // criarRecentes: conversas 1:1 pela última mensagem) em cima e a conversa escolhida embaixo; a lista de amigos (👥) não tem mais
 // a sala do time (ela é a 1ª linha dos recentes na seleção).
@@ -33,7 +34,7 @@ const RE_SALA = /@(champ-select|post-game|lol-post-game|sec|lol-lobby|lobby|club
 const ORDEM = { chat: 0, fila: 1, jogo: 2, away: 3, mobile: 4, off: 5 };
 export const POS_PT = { TOP: 'Topo', JUNGLE: 'Selva', MIDDLE: 'Meio', BOTTOM: 'Atirador', UTILITY: 'Suporte' };
 
-// ---------- funções puras (tools/teste-compacto-lateral.mjs; espelho de coletor/chat_janelas.py) ----------
+// ---------- funções puras (tools/teste-compacto-lateral.mjs) ----------
 export function ehConversaDireta(c) {
   if (!c || typeof c !== 'object') return false;
   return String(c.type || '').toLowerCase() === 'chat' && !RE_SALA.test(String(c.id || ''));

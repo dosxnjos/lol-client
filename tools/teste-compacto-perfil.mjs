@@ -344,7 +344,7 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
   };
   const falsa = lcuFalsa(rotas);
   const s = { doc, est, falsa, rotas, avisos: [], expandiu: 0, relogio: null };
-  const cfg = { compacto: { ligado: true, chatLateral: true, larg: 420, alt: 680 } };
+  const cfg = { compacto: { ligado: true, larg: 420, alt: 680 } };
   s.cfg = cfg;
   const rot = { pedirLateral(l) { s.lateralPedida = l; }, medidasJanela: () => ({ col: 420 }), expandir() { s.expandiu++; }, estado: () => ({}) };
   // o relógio da lateral (1,5 s) fica guardado: o teste dá as voltas com s.relogio()
@@ -598,15 +598,16 @@ function cenario({ fase = 'Lobby', rotasExtra = {}, falharPrefs = 0 } = {}) {
 }
 
 {
-  // "chat ao lado" desligado com o perfil de amigo por cima do coach na seleção: o perfil fecha e o coach volta (antes: sumia junto)
+  // lateral desligada (compacto desligado; a chave própria do chat ao lado saiu em 19/10/2026) com o perfil de amigo por cima do
+  // coach na seleção: o perfil fecha e o coach volta (antes: sumia junto)
   const s = cenario({ fase: 'ChampSelect' });
   await s.preparar();
   s.lat.alternarLista(); await tick(12); await s.lat.lerAmigos(); await tick();
   s.lat.alternarCoach(); await tick(12);
   s.lat.verPerfil('a2@br1.pvp.net', {}); await tick(16);
   const cobriu = s.lat.estado().painel === 'perfil' && s.lat.estado().anterior === 'coach';
-  s.cfg.compacto.chatLateral = false; s.lat.sincronizar(); await tick();
-  caso('chat ao lado desligado com o perfil por cima do coach: o perfil fecha e o coach volta',
+  s.cfg.compacto.ligado = false; s.lat.sincronizar(); await tick();
+  caso('lateral desligada com o perfil por cima do coach: o perfil fecha e o coach volta',
     cobriu && s.lat.estado().painel === 'coach' && s.lat.estado().perfil === null && s.lat.estado().anterior === null, JSON.stringify(s.lat.estado()));
   globalThis.document = undefined;
 }

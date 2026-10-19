@@ -176,7 +176,7 @@ export function dicaLocal({ seq, hoje, data }) {
 
 // não lidas do chat (só conversas 1:1; salas do lobby/seleção ficam de fora), abrir a lista de amigos e o 💬: moram em
 // ./chat-botao.js (as telas 3 e 4 também têm o 💬); reexportados aqui para quem já importava daqui
-export { naoLidas, abrirChat, ROTA_CHAT } from './chat-botao.js';
+export { naoLidas, abrirChat } from './chat-botao.js';
 
 // amigos do LoL online para convidar (GET /lol-chat/v1/friends) -> [{summonerId, puuid, nome, status, livre}]
 const STATUS_JOGO = { outOfGame: 'no client', inGame: 'em partida', inQueue: 'na fila', championSelect: 'na seleção' };
@@ -558,8 +558,7 @@ async function responderConvite(s, ctx, id, acao) {
   } finally { s.ocupado = false; s.pintar(); }
 }
 
-// "+ convidar": a lista de amigos ao lado (a do 👥, chat ao lado ligado) ou em janela própria (coletor); sem as duas, a lista
-// dentro desta tela
+// "+ convidar": a lista de amigos ao lado (a do 👥); sem a lateral, a lista dentro desta tela
 async function abrirConvidar(s, ctx) {
   if (await abrirChat(ctx)) return;
   if (!ctx.vivo()) return;

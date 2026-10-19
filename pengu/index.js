@@ -43,7 +43,7 @@ export function init(context) {
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
   const recompensas = seguro('recompensas', () => iniciarRecompensas(context, cfg));
   // client compacto (roadmap/2026-10-13-client-compacto.md): roteador por fase; telas em compacto/tela-*.js
-  // (definir: a tela 1 grava fila e posições em filaRapida.*; coletor: POST /chat/plugin e o 💬; aceite: null = o
+  // (definir: a tela 1 grava fila e posições em filaRapida.*; coletor: o fetch da ponte (coach.js) das telas e do registro das expansões; aceite: null = o
   // aceite.js quebrou no init e o ReadyCheck expande em vez de ceder)
   const compacto = seguro('compacto', () => iniciarCompacto(context, cfg, { fila, champ, runas, posjogo, coletor, historico, definir, aceite }));
   // blocos e chaves do coach só com o recurso do complemento (procurando: os do último aperto de mão bom, lol-client.ponte)

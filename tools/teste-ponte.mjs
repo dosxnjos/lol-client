@@ -506,8 +506,8 @@ async function plugin({ salvo = null, srv }) {
   const t = r.config.titulos;
   caso('(a) Configurações sem o complemento: "Complemento coach" e "Coach ao vivo"; nenhum bloco do coach', t.includes('Complemento coach') && t.includes('Coach ao vivo')
     && !['Painel ao vivo (2ª tela)', 'Voz', 'Alertas na tela', 'Minimapa e jungler', 'Mentor', 'Tela de carregamento', 'Traumas'].some(x => t.includes(x)), JSON.stringify(t));
-  caso('(a) Configurações sem o complemento: sem a janelinha fora do client nem a chave do chat em janelas; com a chave da ponte',
-    !r.config.ids.includes('coach.aceiteFlutuante') && !r.config.ids.includes('compacto.chatLateral') && r.config.ids.includes('coletor.ligado'), JSON.stringify(r.config.ids));
+  caso('(a) Configurações sem o complemento: sem a janelinha fora do client; com a chave da ponte',
+    !r.config.ids.includes('coach.aceiteFlutuante') && r.config.ids.includes('coletor.ligado'), JSON.stringify(r.config.ids));
   caso('(a) Configurações sem o complemento: nenhum texto com "coletor", "8765" ou "MCP"', !/coletor|8765|\bMCP\b/i.test(r.config.texto), r.config.texto.match(/.{0,60}(coletor|8765|MCP).{0,60}/i)?.[0]);
 }
 
@@ -526,13 +526,25 @@ async function plugin({ salvo = null, srv }) {
     r.a8765.filter(c => c.caminho.startsWith('/draft')).every(c => c.fase === 'ChampSelect')
     && ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'EndOfGame'].every(f => r.a8765.some(c => c.caminho === '/ola' && c.fase === f)), JSON.stringify(porFase));
   console.log(`(d) chamadas à 8765 em ${Math.round(r.total)} min, por fase e rota: ${JSON.stringify(porFase)}`);
-  caso('(d) nenhum POST /aceite/plugin, /chat/plugin nem /compacto/expansoes sem o recurso', !r.a8765.some(c => /^\/(aceite|chat|compacto)\//.test(c.caminho)));
+  caso('(d) nenhum POST /aceite/plugin nem /compacto/expansoes sem o recurso, e nada à rota /chat/ (aposentada na Fase 2)', !r.a8765.some(c => /^\/(aceite|chat|compacto)\//.test(c.caminho)));
   caso('(d) lol-client.ponte gravado com os recursos do aperto de mão', JSON.stringify(r.dsMem.get(CHAVE_PONTE)?.recursos) === JSON.stringify(['coach', 'draft']));
   const t = r.config.titulos;
   caso('(d) Configurações com coach + draft: "Traumas" aparece (fonte: draft); Voz, Painel, Mentor e "Coach ao vivo" não',
     t.includes('Complemento coach') && t.includes('Traumas') && !t.includes('Coach ao vivo') && !t.includes('Voz') && !t.includes('Painel ao vivo (2ª tela)') && !t.includes('Mentor'),
     JSON.stringify(t));
   caso('(d) estado da ponte nas Configurações: "Complemento coach encontrado (versão 1)"', /Complemento coach encontrado \(versão 1\)/.test(r.config.texto), r.config.texto.slice(0, 300));
+}
+
+// ---------- (f) Fase 2 (19/10/2026): complemento antigo, ainda anunciando as janelas do chat (coletor não reiniciado) ----------
+// o plugin novo ignora o recurso aposentado: nada à rota /chat/, nenhuma chave nem atalho do chat nas Configurações
+{
+  const r = await plugin({ salvo: { versao: 4, coletor: { ligado: true } },
+    srv: async (caminho, op) => ({ status: 200, json: async () => (caminho === '/ola' ? { app: APP, versao: 1, recursos: ['coach', 'chat-janelas'] } : { ok: true }) }) });
+  const rotas = [...new Set(r.a8765.map(c => c.caminho.replace(/\/\d+$/, '/<id>')))].sort();
+  caso('(f) complemento antigo com "chat-janelas": o plugin inteiro chama só /ola e /config, nada à rota /chat/',
+    rotas.every(x => ['/config', '/ola'].includes(x)) && !r.a8765.some(c => c.caminho.startsWith('/chat/')), JSON.stringify(rotas));
+  caso('(f) Configurações sem chave do chat ao lado nem texto das janelas do chat',
+    !r.config.ids.some(id => /^compacto\.chat(?!SalaCresce)/.test(id)) && !/janelas? do chat|chat em janela/i.test(r.config.texto), JSON.stringify(r.config.ids));
 }
 
 relatar(casos);

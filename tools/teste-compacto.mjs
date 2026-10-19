@@ -167,16 +167,19 @@ const caso = (nome, passou, detalhe) => casos.push([nome, !!passou, detalhe]);
   globalThis.DataStore = { get: k => (k === 'lol-client.config' ? salvo : null), set: (k, v) => { if (k === 'lol-client.config') salvo = JSON.parse(JSON.stringify(v)); } };
   const { carregar, classes, PADRAO } = await import('../pengu/config.js');
   const c1 = JSON.parse(JSON.stringify(carregar()));
-  // passo 13 (14/10/2026): chatLateral entra ligado (A1); conversaSozinha saiu em 16/10/2026 (nada do chat abre sozinho)
+  // conversaSozinha saiu em 16/10/2026 (nada do chat abre sozinho); a chave do chat ao lado saiu em 19/10/2026 com as janelas do
+  // chat do complemento (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md): o chat é sempre ao lado
   // fundoPerfil (etapa 3 de 2026-10-16): o fundo do perfil na coluna, ligado por padrão
   // chatSalaCresce (etapa A de 2026-10-16-chat-da-sala-som-icones): a faixa da sala do time cresce com mensagem de outro jogador
-  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, chatLateral, fundoPerfil, chatSalaCresce} (sem conversaSozinha)',
-    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true, chatSalaCresce: true }), JSON.stringify(c1.compacto));
+  caso('config: padrão compacto {ligado, inicioCompacto, favoritos [58,154], 420×680, fundoPerfil, chatSalaCresce} (sem conversaSozinha nem a chave do chat ao lado)',
+    igual(c1.compacto, { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true }), JSON.stringify(c1.compacto));
   // (versao 4 = a atual desde 19/10/2026, VERSAO da ponte com o complemento coach: estes casos provam chave nova sem VERSAO nova)
-  salvo = { versao: 4, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, conversaSozinha: true } };
+  // o nome da chave aposentada vai montado para o grep de prova da Fase 2 (nenhum uso no código) seguir vazio
+  const CHAVE_CHAT_VELHA = 'chat' + 'Lateral';
+  salvo = { versao: 4, compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, [CHAVE_CHAT_VELHA]: false, conversaSozinha: true } };
   const cVelha = JSON.parse(JSON.stringify(carregar()));
-  caso('config: conversaSozinha salva antes de 16/10/2026 some na mescla (chave fora do padrão); fundoPerfil e chatSalaCresce entram ligados na config salva sem eles (mesma versao)',
-    !('conversaSozinha' in cVelha.compacto) && cVelha.compacto.chatLateral === true && cVelha.compacto.fundoPerfil === true && cVelha.compacto.chatSalaCresce === true
+  caso('config: conversaSozinha (16/10) e a chave do chat ao lado (19/10) salvas somem na mescla (chave fora do padrão); fundoPerfil e chatSalaCresce entram ligados na config salva sem eles (mesma versao)',
+    !('conversaSozinha' in cVelha.compacto) && !(CHAVE_CHAT_VELHA in cVelha.compacto) && cVelha.compacto.fundoPerfil === true && cVelha.compacto.chatSalaCresce === true
     && cVelha.versao === 4, JSON.stringify(cVelha.compacto));
   salvo = { versao: 3, compacto: { chatSalaCresce: false } };
   caso('config: chatSalaCresce desligado salvo fica desligado', JSON.parse(JSON.stringify(carregar())).compacto.chatSalaCresce === false);

@@ -74,13 +74,14 @@ export const PADRAO = {
   // 13/10/2026); favoritos = championId fixos no topo da busca (58 Renekton, 154 Zac); larg/alt = janela em px CSS.
   // alt 680 desde 14/10/2026 (a tela 3 passava 26 px de 640 e mostrava barra de rolagem; carregar() leva o 640 salvo).
   // Classes: lc-compacto (ligado) e lc-inicio-compacto; a camada à vista é html.lc-modo-compacto (compacto/index.js)
-  // passo 13 (aprovado em 14/10/2026 ~20:00): chatLateral = chat (💬) e amigos (👥) ao lado da coluna (e as janelas do coletor
-  // deixam de abrir conversa sozinhas). Entra pela mescla, sem VERSAO nova. A chave conversaSozinha saiu em 16/10/2026 (nada do
+  // passo 13 (aprovado em 14/10/2026 ~20:00): chat (💬) e amigos (👥) ao lado da coluna. A chave que escolhia entre o chat ao
+  // lado e as janelas do chat do coletor saiu em 19/10/2026 com as janelas (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md):
+  // o chat é sempre ao lado e o valor salvo some na mescla. A chave conversaSozinha saiu em 16/10/2026 (nada do
   // chat abre sozinho, pedido do Gabriel; roadmap/2026-10-16-compacto-chat-amigos-perfil.md): o valor salvo some na mescla.
   // fundoPerfil (etapa 3 do mesmo plano, 16/10/2026): o fundo do perfil dele como fundo da coluna compacta (compacto/fundo.js).
   // chatSalaCresce (etapa A de roadmap/2026-10-16-chat-da-sala-som-icones.md): a faixa da sala do time (seleção, honra, pós-jogo)
   // cresce sozinha com mensagem de outro jogador (compacto/chat-sala.js). Entra pela mescla, sem VERSAO nova.
-  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, chatLateral: true, fundoPerfil: true, chatSalaCresce: true },
+  compacto: { ligado: true, inicioCompacto: true, favoritos: [58, 154], larg: 420, alt: 680, fundoPerfil: true, chatSalaCresce: true },
   // regras de runa (runas.js); semente medida em 13/10/2026: ids estáveis, o nome é só para exibir
   runas: {
     ligado: true,
@@ -255,7 +256,6 @@ export const ALTERNAVEIS_COACH = [
   ['coach.alertasTela', 'moldura de alertas na tela', ['alertas']],
   ['coach.overlayMinimapa', 'overlay do jungler no minimapa', ['minimapa']],
   ['coach.mentor', 'mentor no pós-jogo', ['mentor']],
-  ['compacto.chatLateral', 'chat ao lado do compacto', ['chat-janelas']],
 ];
 const acoesCoach = new Set();
 // mostra(recurso) -> bool (coach.js mostraRecurso: anunciado agora ou lembrado do último aperto de mão bom)

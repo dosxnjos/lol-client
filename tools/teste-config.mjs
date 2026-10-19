@@ -203,10 +203,13 @@ casos.push(
   globalThis.document = { ...docAntes, createElement: () => novoEl(), getElementById: () => null };
   acao?.perform();
   globalThis.document = docAntes;
-  // Fase 1 (ponte): sem o complemento, nenhum atalho coach.* nem o do chat ao lado; o da própria ponte existe sempre
-  const { registrarAcoesCoach } = await import('../pengu/config.js');
+  // Fase 1 (ponte): sem o complemento, nenhum atalho coach.*; o da própria ponte existe sempre. Fase 2 (19/10/2026): o atalho do
+  // chat ao lado saiu com as janelas do chat do complemento (nenhuma ação compacto.chat* em recurso nenhum, abaixo)
+  const { registrarAcoesCoach, ALTERNAVEIS_COACH } = await import('../pengu/config.js');
   const tags = () => acoes.map(a => a.tags?.[1]);
-  const semCoach = ['coach.voz', 'coach.mentor', 'coach.aceiteFlutuante', 'coach.painelAoVivo', 'traumas.ligado', 'compacto.chatLateral'].filter(t => tags().includes(t));
+  const semCoach = ['coach.voz', 'coach.mentor', 'coach.aceiteFlutuante', 'coach.painelAoVivo', 'traumas.ligado'].filter(t => tags().includes(t));
+  casos.push(['Fase 2: nenhum atalho do Ctrl+K liga a escolha do chat (lista do coach sem compacto.chat* nem o recurso das janelas)',
+    ALTERNAVEIS_COACH.map(([c, , r]) => [c, r.join()]), v => v.every(([c, r]) => !/^compacto\.chat/.test(c) && !/chat-janelas/.test(r))]);
   const n0 = registrarAcoesCoach(() => false);
   const n1 = registrarAcoesCoach(r => r === 'voz' || r === 'mentor');
   const n2 = registrarAcoesCoach(r => r === 'voz' || r === 'mentor');

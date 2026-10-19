@@ -1,12 +1,11 @@
-// 💬 com o contador de não lidas no topo das telas compactas (protótipo aprovado: telas 1, 2, 3 e 4). Com o chat ao lado ligado
-// (compacto.chatLateral, compacto/lateral.js), o 💬 abre/fecha o painel de chat (recentes + a última conversa aberta) e o 👥 ao
-// lado dele abre/fecha a lista de amigos (etapa 1 de roadmap/2026-10-16-compacto-chat-amigos-perfil.md). Desligado (a chave só
-// existe com o recurso "chat-janelas" do complemento coach), o 💬 abre a janela própria do coletor (coletor/chat_janelas.py,
-// POST /chat/abrir/amigos) e não há 👥; sem os dois, o chat é o da Riot no client normal. Também aqui: ⚙ (configurações à esquerda, B1) e 📊 (coach da seleção, B2). Contador: GET
-// /lol-chat/v1/conversations (só conversa 1:1; sala do lobby, da seleção e do pós-jogo não conta). Só lê a LCU; a credencial
-// fica com o coletor. Importável no node (sem DOM no topo).
+// 💬 com o contador de não lidas no topo das telas compactas (protótipo aprovado: telas 1, 2, 3 e 4). O 💬 abre/fecha o painel de
+// chat ao lado (recentes + a última conversa aberta, compacto/lateral.js) e o 👥 ao lado dele abre/fecha a lista de amigos (etapa 1
+// de roadmap/2026-10-16-compacto-chat-amigos-perfil.md). Sem a lateral (quebrou no init), o chat é o da Riot no client normal. As
+// janelas próprias do chat no complemento coach saíram em 19/10/2026 (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md,
+// aprovada pelo Gabriel). Também aqui: ⚙ (configurações à esquerda, B1) e 📊 (coach da seleção, B2). Contador: GET
+// /lol-chat/v1/conversations (só conversa 1:1; sala do lobby, da seleção e do pós-jogo não conta). Só lê a LCU. Importável no
+// node (sem DOM no topo).
 import { h, estilo, icone } from './comum.js';
-import { recursoDe } from '../coach.js';
 
 // contador sem coletor: soma as não lidas das conversas diretas lidas pela própria LCU do plugin
 // (GET /lol-chat/v1/conversations); sala de grupo (champ select, pós-jogo, lobby) não conta. Veio do chat-ponte.js em
@@ -21,21 +20,14 @@ export function naoLidasDaLcu(conversas) {
 // não lidas das conversas diretas (type 'chat', fora das salas de grupo)
 export const naoLidas = conversas => naoLidasDaLcu(conversas);
 
-// abre a lista de amigos -> true se abriu ("+ convidar" do lobby). Passo 13: com o chat ao lado ligado (compacto.chatLateral,
-// padrão), a lista é a lateral da própria janela (compacto/lateral.js, a do 👥); desligado, a janela própria do coletor como antes
-export const ROTA_CHAT = '/chat/abrir/amigos';
+// abre a lista de amigos -> true se abriu ("+ convidar" do lobby): a lateral da própria janela (compacto/lateral.js, a do 👥).
+// Sem a lateral, false (quem chama mostra a lista dentro da tela ou expande para o chat da Riot)
 export async function abrirChat(ctx, { alternar = false } = {}) {
   const lat = ctx.servicos?.lateral;
-  if (lat?.ligada?.()) {
-    if (alternar) return lat.alternarLista() !== false;
-    if (!lat.estado?.().lista) return lat.alternarLista() !== false;
-    return true;
-  }
-  // janela própria do chat: só com o complemento coach anunciando "chat-janelas" (coach.js temRecurso)
-  const col = ctx.servicos?.coletor;
-  if (!recursoDe(col, 'chat-janelas')) return false;
-  const r = await col(ROTA_CHAT, { metodo: 'POST', corpo: {}, prazoMs: 3000 });
-  return r?.status >= 200 && r.status < 300 && r.dados?.ok !== false;
+  if (!lat?.ligada?.()) return false;
+  if (alternar) return lat.alternarLista() !== false;
+  if (!lat.estado?.().lista) return lat.alternarLista() !== false;
+  return true;
 }
 
 export const CSS_CHAT = `
@@ -53,7 +45,7 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
   const bolha = h('i', { doc, class: 'lc-cp-bolha', style: { display: 'none' } });
   let abrindo = false;
   const aoLado = !!ctx.servicos?.lateral?.ligada?.();
-  const bt = h('button', { doc, class: 'lc-cp-ic', title: aoLado ? 'chat: conversas recentes ao lado (outro clique fecha)' : 'chat: amigos e conversas em janela própria',
+  const bt = h('button', { doc, class: 'lc-cp-ic', title: aoLado ? 'chat: conversas recentes ao lado (outro clique fecha)' : 'chat: abre o chat no client normal',
     'aria-label': 'chat', dataset: { a: 'chat' }, on: { click: ctx.seguro(async () => {
     if (abrindo) return;
     abrindo = true;
@@ -63,9 +55,9 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
       if (lat?.ligada?.() && typeof lat.alternarChat === 'function') { if (lat.alternarChat() !== false) return; }
       else if (await abrirChat(ctx, { alternar: true })) return;
       if (!ctx.vivo()) return;
-      // sem o complemento (ou sem a rota do chat): o chat é o da Riot, no client normal (plano § Riscos)
+      // sem o chat ao lado: o chat é o da Riot, no client normal (plano § Riscos)
       ctx.expandir();
-      ctx.avisar('chat em janela própria indisponível: abrindo o client normal', true);
+      ctx.avisar('chat ao lado indisponível: abrindo o client normal', true);
     } finally { abrindo = false; }
   }) } }, icone('chat', { doc }), bolha);
   if (antesDe && antesDe.parentNode === ctx.extras && typeof ctx.extras.insertBefore === 'function') ctx.extras.insertBefore(bt, antesDe);
@@ -83,8 +75,7 @@ export function botaoChat(ctx, { antesDe = null } = {}) {
 }
 
 // 👥 lista de amigos ao lado (etapa 1 de 2026-10-16: "do lado do botão de chat pode ter um botão de amigos"), logo depois do 💬.
-// Só com o chat ao lado ligado (desligado, o 💬 já abre a lista na janela do coletor). data-a "lista-amigos": "amigos" é a lista
-// dentro da tela do lobby (tela-lobby.js, sem a lateral)
+// Só com a lateral de pé. data-a "lista-amigos": "amigos" é a lista dentro da tela do lobby (tela-lobby.js, sem a lateral)
 export function botaoAmigos(ctx, { depoisDe = null } = {}) {
   const lat = ctx.servicos?.lateral;
   if (typeof lat?.alternarLista !== 'function' || !lat.ligada?.()) return null;

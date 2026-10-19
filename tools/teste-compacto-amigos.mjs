@@ -261,7 +261,7 @@ function cenario({ fase = 'Lobby', dm = false, semGrupos = false } = {}) {
   for (const a of FX.amigos) { rotas[`PUT /lol-chat/v1/friends/${encodeURIComponent(a.id)}`] = ok(); rotas[`DELETE /lol-chat/v1/friends/${encodeURIComponent(a.id)}`] = ok(204); }
   const falsa = lcuFalsa(rotas);
   const s = { doc, est, falsa, avisos: [], logs: [], expandiu: 0 };
-  const cfg = { compacto: { ligado: true, chatLateral: true, larg: 420, alt: 680 } };
+  const cfg = { compacto: { ligado: true, larg: 420, alt: 680 } };
   const rot = { pedirLateral() {}, medidasJanela: () => ({ col: 420 }), expandir() { s.expandiu++; }, estado: () => ({}) };
   s.lat = criarLateral({ cfg, rot: () => rot, doc, lcu: (m, u, c) => lcuReal(m, u, c, falsa.fetch), avisar: (m, e) => s.avisos.push([m, !!e]), log: (...a) => s.logs.push(a.map(String).join(' ')),
     repetir: () => 1, pararRepetir: () => {}, agora: () => 1e12 });

@@ -15,7 +15,7 @@ import { criarJanela, invocadorRiot, criarCamada, tamanho, LATERAL_MAX, CSS as C
 import { criarRoteador, criarArrastoJanela, CLASSE, geometriaAtiva } from '../pengu/compacto/index.js';
 import { lcu as lcuReal } from '../pengu/compacto/comum.js';
 import { criarGeometria, lerTelaRiot, posicaoAlvo, cabeSemMover, normalizarTela } from '../pengu/compacto/geometria.js';
-import { criarLateral, layout } from '../pengu/compacto/lateral.js';
+import { criarLateral, layout, lateralLigada } from '../pengu/compacto/lateral.js';
 import { verAmigos, statusAmigo, lerSalaTime, elencoTime, acharSalaTime, lobbyParaConvite, pedidosRecebidos, lerConversa, limparConversas, verRecentes,
   quandoCurto } from '../pengu/compacto/lateral-chat.js';
 import { modeloSelo, meuNaSessao } from '../pengu/compacto/lateral-coach.js';
@@ -294,7 +294,7 @@ function cenario({ mon = 'meio', x = 640, canto = true, cfgCompacto = {}, champ 
   lobby: { localMember: { isLeader: true, puuid: 'puuid-eu', summonerId: 111 }, members: [{ puuid: 'puuid-eu', summonerId: 111 }] }, sessao: null, mudo: false, conv2: null };
   const falsa = lcuFalsa(rotasPadrao(est));
   const lcu = (m, u, c) => lcuReal(m, u, c, falsa.fetch);
-  const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680, chatLateral: true, ...cfgCompacto }, aceite: { ligado: true }, traumas: { ligado: true } };
+  const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 680, ...cfgCompacto }, aceite: { ligado: true }, traumas: { ligado: true } };
   let agoraMs = 1_000_000;
   const janela = criarJanela({ invocar: invocadorRiot(win, () => {}), medir: () => (quadros ? [win.vista, win.h] : [win.w, win.h]), agora: () => agoraMs });
   const s = { doc, win, est, falsa, cfg, avisos: [], logs: [], agora: () => agoraMs, avancar: ms => { agoraMs += ms; } };
@@ -856,15 +856,22 @@ async function nadaSozinho() {
 
 // =================== 8. chat desligado, configurações e configurações da Riot ===================
 {
-  const s = cenario({ cfgCompacto: { chatLateral: false } });
+  // Fase 2 (19/10/2026): a chave do chat ao lado saiu com as janelas do chat do complemento; o chat segue o compacto ligado
+  caso('lateralLigada: só o compacto decide (desligado = sem lateral; ligado = com)',
+    lateralLigada({ compacto: { ligado: false } }) === false && lateralLigada({ compacto: { ligado: true } }) === true && lateralLigada(null) === false);
+  const s = cenario();
   await s.ir('Lobby');
-  caso('chat ao lado desligado: chat não abre a lateral (o botão cai nas janelas do coletor)', s.lat.alternarLista() === false && s.win.w === 420);
-  s.cfg.compacto.chatLateral = true;
   await s.passo(() => s.lat.alternarLista());
   await s.passo(() => s.lat.abrirConversa(A1));
-  s.cfg.compacto.chatLateral = false;
+  const abriu = !!s.lat.estado().lista && s.lat.estado().painel === 'chat';
+  s.cfg.compacto.ligado = false;
   await s.passo(() => s.lat.sincronizar());
-  caso('desligar a chave com o chat aberto: lista e chat fecham na hora (420)', s.win.w === 420 && s.lat.estado().painel === null && !s.lat.estado().lista, JSON.stringify(s.lat.estado()));
+  caso('desligar o compacto com o chat aberto: lista e chat fecham na hora e a lateral recusa abrir',
+    abriu && s.lat.estado().painel === null && !s.lat.estado().lista && s.lat.alternarLista() === false, JSON.stringify(s.lat.estado()));
+  // a chave aposentada, ainda salva na config de quem tinha desligado, não tira mais o chat ao lado (nome montado: grep da Fase 2)
+  const v = cenario({ cfgCompacto: { ['chat' + 'Lateral']: false } });
+  await v.ir('Lobby');
+  caso('chave aposentada do chat ao lado salva como false: o chat ao lado continua ligado', v.lat.ligada() === true && v.lat.alternarLista() !== false);
   // configurações com o cfg de verdade (PADRAO): os blocos da seção lol-client, sem "restaurar padrão"
   const r = cenario();
   const cfgReal = JSON.parse(JSON.stringify(PADRAO));

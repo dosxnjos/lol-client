@@ -46,7 +46,6 @@ TESTES = [
     ["node", "tools/teste-icones.mjs"],   # ícones Lucide embutidos (pengu/icones.js) e nenhum emoji como ícone (17/10/2026)
     [PY, "tools/teste-expansoes.py"],      # rota /compacto/expansoes (porta 8798), jsonl com rotação e relatório
     [PY, "tools/teste-medir-compacto.py"],
-    [PY, "tools/teste-chat-janelas.py"],   # sem janela de verdade (o --real abre o Edge: só à mão, jogo fechado)
     [PY, "tools/teste-coach.py"],
     [PY, "tools/teste-assistida.py"],      # partida assistida (espectador): nada de coach, voz, painel, medidor nem gravação (17/10/2026)
     [PY, "tools/teste-pacote-voz.py"],
