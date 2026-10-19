@@ -330,18 +330,23 @@ inimigo): uma frase curta "daqui não dá para ver isso" e o que os dados mostra
 - **`coletor\servidor_local.py`** (`127.0.0.1:8765`): `/` painel (estado embutido no 1º quadro),
   `/estado`, `/config` GET/POST (`dados\config.json`; chaves em § Coach na partida), `/mentor/...`
   (encaminha ao `Mentor.rota_http`), `/contexto/<gameId>` e `/licoes/<gameId>` (`coach.py`), e as rotas
-  que o coach pendura (`/draft`, `/revisao/<gameId>`) e o coletor (`/chat/...`, `POST /aceite/plugin`: § Sinal e
+  que o coach pendura (`/draft`, `/revisao/<gameId>`) e o coletor (`POST /aceite/plugin`: § Sinal e
   diagnóstico do plugin; `POST /compacto/expansoes`: § Registro das expansões do compacto). CORS só para origem local (`127.0.0.1`,
   `localhost`, `plugins`, `riot`; preflight responde `Access-Control-Allow-Private-Network`); `Host` de
   fora → 403. O plugin chama `http://127.0.0.1:8765` (por IP: loopback não é conteúdo misto).
   **Aperto de mão `GET /ola`** (19/10/2026): `{app: "lol-client-coletor", versao, recursos}`. `recursos` sai na hora do que
-  está pendurado (`ServidorLocal.recursos`): rotas (`/draft` → `draft`, `/revisao/` → `revisao`, `/chat/` → `chat-janelas`,
+  está pendurado (`ServidorLocal.recursos`): rotas (`/draft` → `draft`, `/revisao/` → `revisao`,
   `/aceite/` → `aceite-reserva`, `/compacto/` → `expansoes`), `ao_config` → `coach`, `estado` dado → `estado-partida`,
   Mentor → `mentor`, banco existente → `contexto`, e o que o dono declara (`coach_vivo`: `painel`, `voz`, `alertas`,
   `minimapa`, `feiticos`, `carregamento`; `Coletor`: `aceite-flutuante`). `resumos` ainda não existe (Fase 4). O plugin só
   fala com a 8765 com `cfg.coletor.ligado` e um `/ola` bom, e só chama a rota do recurso anunciado (`pengu/coach.js`
   `temRecurso`); porta que responde sem esse `app` = outro programa, tratado como ausente. Para o usuário o nome é
   "complemento coach" ([TEXTOS-DA-INTERFACE](TEXTOS-DA-INTERFACE.md)).
+  **Janelas do chat fora do client: aposentadas em 19/10/2026** (Fase 2 de
+  [plugin Pengu primeiro](../roadmap/2026-10-17-plugin-pengu-primeiro.md), aprovada pelo Gabriel): saíram o módulo das
+  janelas, as rotas `/chat/*`, as páginas `painel\chat\`, a assinatura do evento das conversas e o recurso `chat-janelas` do
+  `/ola`; o chat é só o ao lado do compacto (plugin). Coletor antigo ainda de pé anuncia `chat-janelas`: o plugin novo
+  ignora. O perfil `dados\edge-chat` (e `edge-chat.pid`) sobra até ser apagado com o Edge fechado.
 - **`painel\`**: HTML/CSS/JS sem build, 4 blocos fixos + faixa de 1 aviso, consulta `/estado` 1/s. O que
   as frentes acrescentaram entra **dentro** dos 4 blocos (via-negativa): carregamento → previsão em faixa
   no "Teu padrão" e tags do adversário na "Ameaça"; jogo → chip do jungler na "Ameaça", feitiços em

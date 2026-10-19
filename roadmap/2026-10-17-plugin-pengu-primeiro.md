@@ -33,6 +33,10 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   reserva passa a exigir contato do plugin durante o próprio ready check, a sessão do aceite vale o último aperto de mão bom e
   a migração liga a ponte quando a chave falta; `teste-aviso-partida.py` 103/103, `teste-ponte.mjs` 39/39, `teste-config.mjs`
   63/63, bateria node 28/28; tabela no relatório.
+- **Fase 2 feita em 19/10/2026** (janelas antigas do chat aposentadas: `e74edd8`, `5971068`, `2d523bf`, `c18b8fa`; node
+  28/28, Python 29/29 sem `ensaio-coach`/`teste-expansoes` por porta, grep de aceite vazio); falta recarregar o plugin,
+  reiniciar o coletor e apagar `dados/edge-chat` com o Edge fechado:
+  [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-2.md).
 
 ## Decisões do Gabriel (19/10/2026)
 
@@ -230,6 +234,7 @@ complemento coach. Nunca chave cinza, nunca "coletor fora do ar", nunca chamada 
   "lições do coach · sem o coletor" (`tela-posjogo.js:697-709`) saem.
 - **Chave "Mostrar traumas":** só aparece quando há fonte de traumas (complemento ou acumulador com amostra).
 - **Chat:** sempre ao lado; a chave `chatLateral` e o `POST /chat/plugin` só existem com `chat-janelas` anunciado.
+  (Fase 2, 19/10/2026: a chave, o POST e o recurso saíram de vez; o chat é sempre ao lado, com ou sem complemento.)
 
 ## Fase 0 — medições (só leitura; pode correr antes do portão)
 

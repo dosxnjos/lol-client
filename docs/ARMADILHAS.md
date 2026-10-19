@@ -570,8 +570,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   a partida inteira de 13/10/2026 com ~160 linhas de chat na tela: só dá para ler por tela (OCR).
 - **`/lol-chat/v1/conversations` mistura as salas de grupo com as conversas 1:1** (`/help`, 13/10/2026) → sala do
   champ select, pós-jogo e lobby vêm na mesma lista com `password` e `mucJwtDto`, e a do champ select ranqueado tem nome
-  oculto. As janelas do chat só servem `type` `chat` com id fora de `@champ-select.`/`@post-game.`… e tiram esses campos
-  de toda resposta (`chat_janelas.eh_conversa_direta`, `limpo`). Corpos ainda [S], sem conversa real: envio
+  oculto. O chat ao lado do compacto só mostra `type` `chat` com id fora de `@champ-select.`/`@post-game.`… e guarda só os
+  campos que usa (`lateral-chat.js` `ehConversaDireta`, `limparConversas`; as janelas do chat do coletor, que faziam o
+  mesmo, foram **aposentadas em 19/10/2026**, Fase 2 do plano plugin Pengu primeiro). Corpos ainda [S], sem conversa real: envio
   `{body, type: "chat"}`, convite `[{toSummonerId}]`, "lida" = `PUT conversations/active {id}`, e o evento de mensagem
   nova com uri `/lol-chat/v1/conversations/<id>/messages/<mid>` `Create` (rede, se o evento vier em outro formato: a
   subida do `unreadMessageCount` lida a cada 5 s com o compacto ligado também abre a conversa).
@@ -579,13 +580,14 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
     fromId, fromSummonerId, isHistorical:false, timestamp, body}` (sendMessage, também nas salas); conversa nova = `POST
     conversations {id, type:"chat"}`; "lida" = `PUT conversations/active {id}`, fechar = `DELETE conversations/active`; convite
     = `[{toSummonerId}]`. A lateral do compacto (`compacto/lateral*.js`) usa esses corpos.
-  - "lida" (`PUT conversations/active`) só depois de clique ou tecla de verdade na janela aberta sozinha (`?auto=1`): ela
-    pode nascer com o foco (`JanelasEdge.abrir` admite), e `document.hasFocus()` sozinho marcava a conversa sem ele ver.
-  - `/chat/*` (menos `/chat/plugin`, `/chat/abrir/amigos`, `/chat/estado`) só aceita a origem das próprias páginas
-    (`http://127.0.0.1:<porta>`) ou pedido sem Origin: outra página local ou outro plugin lia as chaves e mandava
-    mensagem em nome dele (`servidor_local.origem_chat_ok`).
-  - `{compacto: false}` do plugin vence a lista de amigos aberta: conversa nova não abre sozinha (o bloco das
-    Configurações promete isso); sem aviso ainda (`None`, coletor reiniciou), a lista aberta vale.
+  - (história, janelas aposentadas em 19/10/2026) "lida" (`PUT conversations/active`) só depois de clique ou tecla de
+    verdade numa janela que nasceu sozinha: ela pode nascer com o foco, e `document.hasFocus()` sozinho marcava a
+    conversa sem ele ver. Vale para qualquer tela de chat que volte a abrir sem clique.
+  - (história, idem) rota local que escreve na LCU em nome dele (enviar, convidar, lida) aceitava só a origem das próprias
+    páginas ou pedido sem Origin: sem isso outra página local ou outro plugin do Pengu lia as chaves e mandava mensagem.
+    Rota nova desse tipo no servidor local leva a mesma regra.
+  - (história, idem) o aviso do modo do plugin ao coletor (`{compacto, lateral}` a cada 60 s) existia só para as janelas
+    não abrirem conversa em dobro com o chat ao lado; saiu com elas.
   - **as 1:1 também trazem `password` e `mucJwtDto`** (medido em 16/10/2026, 5 conversas em plena partida), não só as salas:
     toda leitura da lista passa por `lateral-chat.limparConversas` (da 1:1 ficam id, pid, nome, não lidas e da `lastMessage`
     só remetente, `body`, `timestamp` e `type`). Os recentes do chat saem dessa `lastMessage` (ordem por `timestamp`, trecho
@@ -1062,14 +1064,15 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
   dele. `janela_painel.pid_existe` recusa processo criado depois do `ts` do arquivo (13/10/2026).
 - **`taskkill /PID <edge> /T` sem `/F` não fecha o Edge** (esperou 3 s e precisou do `/F`) →
   `WM_CLOSE` na janela do pid fecha em 0,4 s (`janela_painel.py`, 13/10/2026).
-- **Janelas do chat (várias `--app` num perfil só): o pid do 2º `msedge` morre na hora** → ele entrega a URL ao Edge
-  do perfil e sai; a janela nova é do 1º processo. `chat_janelas.JanelasEdge` acha cada janela pelo hwnd novo desse
-  processo (e o Edge órfão pelo fim do título, ` · chat lol`) e fecha por `WM_CLOSE` no hwnd. Perfil `dados\edge-chat`,
-  nunca o do painel (o `--app` do chat cairia nele). Medido 13/10/2026 (`teste-chat-janelas.py --real`).
-- **Janela do Edge rouba o foco ao nascer** (13/10/2026, as duas do `--real`) → o Edge ignora o `SW_SHOWNOACTIVATE` do
-  `STARTUPINFO`, e a janela entregue a um Edge que está em primeiro plano também ativa. A aberta sozinha (mensagem nova)
-  é minimizada e restaurada com `SW_SHOWNOACTIVATE`: o Windows devolve a ativação à janela de antes, sem
-  `SetForegroundWindow` (medido: "não roubou o foco"). Com uma janela do chat em primeiro plano ela nem abre (espera).
+- **Várias janelas `--app` num perfil só do Edge: o pid do 2º `msedge` morre na hora** → ele entrega a URL ao Edge
+  do perfil e sai; a janela nova é do 1º processo. Achar cada janela pelo hwnd novo desse processo (e o Edge órfão pelo
+  fim do título) e fechar por `WM_CLOSE` no hwnd; perfil próprio por uso, nunca o do painel (o `--app` cairia nele).
+  Medido 13/10/2026 nas janelas do chat do coletor (aposentadas em 19/10/2026; o perfil `dados\edge-chat` sobra até ser
+  apagado com o Edge fechado). Vale para qualquer `--app` novo.
+- **Janela do Edge rouba o foco ao nascer** (13/10/2026, nas janelas do chat do coletor, aposentadas em 19/10/2026) → o
+  Edge ignora o `SW_SHOWNOACTIVATE` do `STARTUPINFO`, e a janela entregue a um Edge que está em primeiro plano também
+  ativa. Remédio medido: a janela aberta sozinha é minimizada e restaurada com `SW_SHOWNOACTIVATE`; o Windows devolve a
+  ativação à janela de antes, sem `SetForegroundWindow` ("não roubou o foco"). Vale para qualquer `--app` que nasça sem clique.
   Lançado pela tarefa agendada (sem direito de primeiro plano), o Edge talvez nem roube: não medido.
 - **Print headless do painel sai vazio** → `msedge --headless --screenshot` tira a foto no load,
   antes do 1º `fetch('/estado')`: o servidor embute o estado no HTML; `--virtual-time-budget=3000` ajuda.
