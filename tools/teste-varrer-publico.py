@@ -82,6 +82,8 @@ PASSAM = {
     "url_em_string_js": ("x.js", "const u = 'https://ddragon.leagueoflegends.com/x';\n"),
     "cor_css": ("x.css", "a{color:#ffcc00}\n"),
     "tempo_ms": ("x.py", "PRAZO_MS = 120000\n"),
+    # hash de pacote da Riot com 10 dígitos seguidos entre letras (pengu/compacto/perfil.js; falso positivo do P1, 19/10)
+    "hash_hex": ("x.js", "// rcp-fe-lol-match-history 70f9590985796fa8.js: _loadFriendData\n"),
 }
 for nome, (arq, texto) in PASSAM.items():
     a = V.varrer_texto(arq, texto, ids, textos)

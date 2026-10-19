@@ -42,10 +42,11 @@ SEMPRE = [
     ("riot_id", re.compile(r"[\w.-]#[A-Za-z0-9]{2,5}\b")),
     ("puuid", re.compile(r"(?<![\w-])[A-Za-z0-9_-]{78}(?![\w-])"
                          r"|\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b", re.I)),
-    ("partida", re.compile(r"(?<![\d.])\d{10}(?![\d.])|\b[A-Z]{2,4}\d?_\d{6,}\b")),
+    # número colado em letra não é gameId: hash de pacote da Riot ("70f9590985796fa8.js", pengu/compacto/perfil.js, P1)
+    ("partida", re.compile(r"(?<![\w.])\d{10}(?![\w.])|\b[A-Z]{2,4}\d?_\d{6,}\b")),
 ]
 NOME = re.compile(r"gabriel", re.I)
-NUMERO = re.compile(r"(?<![\d.])\d{5,}(?![\d.])")
+NUMERO = re.compile(r"(?<![\w.])\d{5,}(?![\w.])")
 
 
 def do_banco(caminho):
