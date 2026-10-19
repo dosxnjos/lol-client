@@ -865,6 +865,39 @@ janela da Riot fecha (etapa 6): `como` = "a janela da Riot fechou".
 | prova (rota, origem, saneamento, rotação, relatório) | `python tools\teste-expansoes.py` |
 | prova do lado do plugin (cada caminho de saída, volta, privacidade, fila sem coletor) | `node tools\teste-compacto-expansoes.mjs` |
 
+### Atualização pelo botão do plugin (`POST /atualizar`, 19/10/2026)
+
+P3 do [plano da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.md); código em `coletor\atualizar.py`, o
+`coletor.py` pendura (`_atualizador`) e o `/ola` anuncia o recurso `atualizar` só com a rota no ar.
+
+- **Entrada:** `POST /atualizar {"versao": "x.y.z"}` com Origin do client ou do Pengu (a regra do `/aceite/plugin`:
+  `ROTAS_SO_PLUGIN`; site no navegador = 403). Só a versão: a URL o complemento acha sozinho. `GET /atualizar/estado` →
+  `{estado, versao, instalada, motivo, reiniciar}`; estados `parado`, `baixando`, `conferindo`, `trocando`, `pronto`, `erro`,
+  `recusado`. Uma troca por vez (2º POST = 409 com o estado de agora).
+- **Recusa antes de qualquer rede** (409, `recusado`): `versao` (fora de `x.y.z` ou não mais nova que a de `pengu\versao.js`),
+  `partida` (fase do gameflow fora de `None`/`Lobby`), `desenvolvimento` (pasta do complemento ou do plugin é junção ou está
+  num repositório git: **esta instalação**), `sem-plugin` (`plugins\lol-ultra-client` do Pengu, achado pelo `Debugger` do IFEO
+  do `LeagueClientUx.exe`, só leitura do registro).
+- **Origem fixa:** `https://api.github.com/repos/<REPO>/releases/tags/v<versao>`; cada asset com `browser_download_url` igual a
+  `https://github.com/<REPO>/releases/download/v<versao>/<nome>`; cada redirecionamento só em https e nos hosts de
+  `ORIGENS_DOWNLOAD` (ARMADILHAS § Client e Pengu).
+- **Hash:** sha256 de cada zip = linha do `SHA256SUMS.txt` = `digest` da API; o `SHA256SUMS.txt` confere com o `digest` dele;
+  `digest` nulo = falha.
+- **Troca com volta:** extrai em `<pasta>\.atualizacao\nova`, confere arquivo a arquivo (lista e tamanho do zip) e troca **item a
+  item** da raiz (o que estava vai para `<pasta>\.atualizacao\anterior`, guarda 1). Item a item porque o `dados\` mora dentro da
+  pasta do complemento e fica aberto (log, trava, banco): `dados\` e `.atualizacao\` nunca saem do lugar, e zip que traz um
+  deles é recusado. Plugin primeiro, complemento depois; falha em qualquer um desfaz os dois (`erro`/`troca`).
+- **Reinício:** `pronto` fica segurado 5 s (o plugin lê "Atualizado"), depois o complemento espera `None`/`Lobby` e chama
+  `Coletor.pedir_saida(..., reiniciar=True)`: o `rodar()` devolve, o `principal` encerra limpo e sobe a próxima instância
+  (`--esperar-pid <este pid>`, sem janela, fora do job da tarefa se o job deixar), que espera esta sair antes da trava.
+- **Sem o complemento:** o `atualizar.cmd` do pacote faz o mesmo (PowerShell sem admin) e recusa também o complemento em
+  execução (trava com pid vivo de python).
+
+| o quê | comando |
+| --- | --- |
+| prova (release falso em 8831–8840, pastas no temp, rotas num servidor de teste, reinício, `atualizar.cmd`) | `python tools\teste-atualizar.py` |
+| prova do lado do plugin | `node tools\teste-atualizador.mjs` |
+
 ## Medidor de travadas (`tools\medir-travadas.py`, 15/10/2026)
 
 Para as quedas de 1–5 s na partida (ping do jogo indo a ~300 ms e caindo). O diagnóstico de 15/10 e o porquê estão no

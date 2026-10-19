@@ -502,6 +502,17 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   muda a versão (bloco dizendo "Nenhuma versão nova." com a linha dizendo 0.2.0). Em `atualizacao.js` o botão some só com
   `resultado === 'procurando'`, a automática que responde apaga o resultado do clique, a mensagem guarda a versão que citou e
   desligar a chave apaga o "nova" do clique. Prova: `teste-atualizacao.mjs` (r).
+- **Asset do release do GitHub redireciona para outro host** (medido 19/10/2026, `curl -sI` num asset do `cli/cli`) →
+  `github.com/<repo>/releases/download/...` responde 302 para `release-assets.githubusercontent.com` (antes era
+  `objects.githubusercontent.com`). Quem baixa com origem fixa confere cada salto: `coletor/atualizar.py` `ORIGENS_DOWNLOAD`
+  e o `$ORIGENS` do `publico/atualizar.cmd` aceitam os dois e o `github.com`, só em https. Host novo do GitHub = "fora da origem
+  fixa" (falha fechada) até entrar na lista.
+- **Pasta irmã em `plugins\` do Pengu vira outro plugin** (P3 da publicação, 19/10/2026; não medido, evitado) → o Pengu carrega
+  cada pasta de `plugins\`; um `lol-ultra-client.nova` ou `.anterior` ao lado carregaria duas cópias do plugin. O estágio da troca
+  mora **dentro** da pasta trocada (`<pasta>\.atualizacao\{nova,anterior}`), nunca ao lado.
+- **Atualizar a instalação de desenvolvimento apagaria o código** → `plugins\lol-client` é junção para `pengu\` e o complemento
+  roda de `C:\Dev\lol-client` (com `.git`): o `/atualizar` e o `atualizar.cmd` recusam junção e pasta dentro de repositório git
+  antes de qualquer rede ("Instalação de desenvolvimento"). Prova: `teste-atualizar.py` (d) e (h).
 
 ## LCU API
 
@@ -1118,6 +1129,18 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **`.cmd` perde o CRLF no `git add`** → o `core.autocrlf=true` do Git desta máquina (config do sistema) converte; o
   `tools/publicar.py` monta a foto do blob cru, e `cmd.exe` com LF quebra rótulo e `goto`. `.gitattributes` tem
   `*.cmd -text` (P1 da publicação, 19/10/2026; medido: `i/crlf` com o atributo, `i/lf` sem).
+- **`.cmd` que se troca relê o próprio arquivo** → o `cmd.exe` lê o lote linha a linha pelo deslocamento e relê o arquivo depois
+  de cada comando; o `atualizar.cmd` troca a pasta onde ele mesmo está. Ele roda o PowerShell e sai **na mesma linha**
+  (`powershell ... & exit /b !errorlevel!`), sem rótulo nem `goto` (funciona com LF, sem depender do CRLF), e faz `cd /d
+  "%TEMP%"` antes (duplo clique abre o cmd com a pasta atual dentro da pasta trocada: o rename falharia).
+- **`exit /b` sem número depois de `&` devolve 0** (medido 19/10/2026: o PowerShell saiu com 1, o `cmd /c` deu 0) → o código
+  de saída se perde; `setlocal EnableDelayedExpansion` e `exit /b !errorlevel!` (o `%errorlevel%` expande antes do comando).
+- **`shutil.move` que falha no rename copia e apaga pela metade** → com um arquivo preso no item, o `os.rename` falha e o
+  `shutil.move` cai em `copytree` + `rmtree`, que apaga o que consegue da origem antes de esbarrar no preso. Troca com volta usa
+  só `os.rename` (`[IO.Directory]::Move` no PowerShell) no mesmo volume (por isso o estágio mora dentro da pasta). Medido 19/10:
+  pasta com um arquivo aberto dentro não renomeia (`WinError 5`), e a troca devolve tudo (`teste-atualizar.py` (c)).
+- **Saída do PowerShell redirecionada vem na página OEM** (cp850) → quem lê a saída do `atualizar.cmd` por pipe decodifica com
+  `cp850` (o `á` chega como `0xA0`); no console aparece certo.
 - **Commit público com o e-mail desta máquina** → o `user.name`/`user.email` do Git aqui é o nome completo e o e-mail
   pessoal; o `publicar.py` commita e marca a tag com `dosxnjos <dosxnjos@users.noreply.github.com>` por variável de
   ambiente, nunca com a config (prova em `teste-publicar.py`).

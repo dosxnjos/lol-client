@@ -5,7 +5,7 @@ Mod pessoal do client do LoL (plugin Pengu, coletor SQLite, pós-jogo, MCP). Hub
 
 - **Nunca** `POST .../matchmaking/search` nem accept/decline do ready check em teste contra o client real (só LCU falsa);
   recarregar a interface só em fase `None`/`Lobby`. Detalhe: [docs/ARMADILHAS.md](docs/ARMADILHAS.md).
-- Única escrita sozinha do coletor na LCU: a reserva do aceite, só com o plugin visto durante o próprio ready check (aperto de mão ou `POST /aceite/plugin` com Origin) e sem "não aceitar"; o plugin só fala com a 8765 com `coletor.ligado` e aperto de mão, e só na rota do recurso anunciado (`pengu/coach.js`; [COLETOR](docs/COLETOR.md) § Quem aceita). Rede externa do plugin: só o GET diário de versão (`pengu/atualizacao.js`), nunca código baixado rodando no client.
+- Única escrita sozinha do coletor na LCU: a reserva do aceite, só com o plugin visto durante o próprio ready check (aperto de mão ou `POST /aceite/plugin` com Origin) e sem "não aceitar"; o plugin só fala com a 8765 com `coletor.ligado` e aperto de mão, e só na rota do recurso anunciado (`pengu/coach.js`; [COLETOR](docs/COLETOR.md) § Quem aceita). Rede externa do plugin: só o GET diário de versão (`pengu/atualizacao.js`), nunca código baixado rodando no client; o botão atualizar troca arquivo só pelo complemento ou pelo `atualizar.cmd` (origem fixa, hash conferido, troca com volta, nunca junção nem pasta com `.git`; [COLETOR](docs/COLETOR.md) § Atualização, prova `teste-atualizar.py`).
 - Busca na fila só por clique do Gabriel (fila rápida, jogar de novo), sempre pelos freios de `pengu/freios.js`
   (tilt e madrugada, 2º clique); escrita da coleta de recompensas só por
   `ROTAS_COLETA` (`pengu/recompensas.js`), nunca rota que gasta (baú, criação, fichas, passe).

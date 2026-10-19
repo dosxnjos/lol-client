@@ -92,7 +92,12 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
 - As notas do release ("o que mudou", `pengu/atualizacao.js`, 19/10/2026): texto de quem publica, mostrado só por `textContent`.
   Os textos do aviso em volta seguem este guia: "Versão 0.2.0 disponível (instalada: 0.1.0).", botões "atualizar", "o que
   mudou" e "procurar agora", bloco "Atualizações"; falha da consulta automática não vira aviso (só o "procurar agora" diz
-  "Não foi possível consultar agora: tente mais tarde.").
+  "Não foi possível consultar agora: tente mais tarde."). O botão atualizar (P3, `pengu/atualizador.js`): etapas "Baixando a
+  versão 0.2.0…", "Conferindo os arquivos…", "Instalando…"; fim "Atualizado para a versão 0.2.0." com o botão "recarregar
+  agora" (fora de None/Lobby: "Recarregue na tela inicial ou no lobby."); recusas e erros em frase de fato + saída ("Instalação
+  de desenvolvimento (…): o botão não troca estes arquivos.", "Os arquivos da versão 0.2.0 não conferem com o release: nada foi
+  trocado."); sem o complemento, o caminho do `atualizar.cmd` e o endereço com "copiar link". O `publico/atualizar.cmd` segue o
+  mesmo tom nas mensagens dele.
 - Comentário de código, log (`console.*`) e documentação para agentes (README, ARMADILHAS, roadmap). Ex.: as linhas
   "histórico: …" do acumulador (`pengu/historico.js`, 19/10/2026). O que mostra a amostra dele (Fase 5 do plano plugin Pengu
   primeiro: nota do pós-jogo, freios, dica do lobby, selo, Configurações) segue este guia: diz "partidas guardadas neste

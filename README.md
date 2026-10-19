@@ -94,8 +94,15 @@ ligada por padrão, também no Ctrl+K), o plugin faz 1 `GET https://api.github.c
 5 s; erro, 404 (o repositório público ainda não existe até o P6) e resposta torta ficam calados. Versão mais nova → linha
 "Versão x.y.z disponível" no topo das Configurações (client normal e ⚙ do compacto, acima dos blocos) com **atualizar** e
 **o que mudou** (notas do release só como texto) e um ponto no ⚙ do compacto (classe `lc-versao-nova` no `<html>`). Nada
-abre nem baixa sozinho; "procurar agora" (bloco Atualizações) consulta na hora; desligar a chave tira a linha e o ponto. O **atualizar** chama o atualizador da P3
-(`registrarAtualizador` em `atualizacao.js`); até lá diz onde baixar. Estado no DataStore `lol-client.atualizacao` (hora,
+abre nem baixa sozinho; "procurar agora" (bloco Atualizações) consulta na hora; desligar a chave tira a linha e o ponto.
+**atualizar** (P3, `pengu/atualizador.js`): com o complemento coach anunciando `atualizar` no `/ola`, só em `None`/`Lobby`, o
+plugin manda `POST /atualizar {versao}` e o complemento (`coletor/atualizar.py`) baixa da origem fixa (`api.github.com` e
+`github.com` do `REPO`, cada redirecionamento conferido), confere sha256 = `SHA256SUMS.txt` = `digest` da API, troca plugin e
+complemento item a item com volta (`<pasta>\.atualizacao\anterior`; `dados\` fica) e reinicia em `None`/`Lobby`; a linha mostra
+Baixando…, Conferindo…, Instalando… e "Atualizado para a versão x." com **recarregar agora** (só em `None`/`Lobby`, por clique).
+Junção ou pasta num repositório git (esta instalação) = "Instalação de desenvolvimento": nada troca. Sem o complemento: o caminho
+do `atualizar.cmd` (vem no pacote, na pasta do plugin; mesmas regras, PowerShell sem admin) e o endereço da página da versão com
+**copiar link**; nada abre o navegador até a medição P0-a. Estado no DataStore `lol-client.atualizacao` (hora,
 versão vista, notas cortadas em 4.000 caracteres; nada pessoal). Conferir: `__lolClient.atualizacao.estado()` no CDP;
 consultar já: `__lolClient.atualizacao.procurar()` (1 GET); esquecer o dia: `DataStore.remove('lol-client.atualizacao')`.
 
@@ -195,6 +202,10 @@ LCU tem a linha do tempo das partidas antigas ([relatório](roadmap/2026-10-17-p
 **Aviso de versão nova** (19/10/2026): testado com fetch espião, relógio e DOM falsos e um servidor HTTP falso local
 (`teste-atualizacao.mjs`); só o client prova a consulta de verdade à `api.github.com` (404 calado até o repositório existir),
 a linha no topo das Configurações e o ponto no ⚙ desenhados no CEF ([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p2.md)).
+**Botão atualizar** (19/10/2026): testado com release falso local, pastas no temp e complemento falso (`teste-atualizar.py`,
+`teste-atualizador.mjs`); só o client prova o "copiar link" no CEF, o `location.reload()` da recarga e a troca com o Pengu e o
+Explorer abertos na pasta; nesta máquina, depois do próximo reinício do coletor, o botão responde "Instalação de desenvolvimento"
+([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p3.md)).
 **Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
 antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
 
@@ -210,6 +221,7 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | auditoria do pacote de voz (cada `.wav` pelo Whisper contra o catálogo inteiro; o que não bate vira suspeita, toca na Maria e a tarefa `lol-client-voz` refaz no modelo-alvo; só com o jogo fechado, retoma) | `python tools\auditar-pacote-voz.py` (`--so-indice`, `--relatorio`, `--refazer "frase"`) |
 | foto pública do `lol-ultra-client` (ensaio, padrão: monta do commit pela lista de inclusão, varre e mostra o que entraria; zips e `SHA256SUMS.txt` em `dist\v<versão>\` só se a varredura passar; `--publicar` só depois do portão do P6 do [plano da publicação](roadmap/2026-10-19-publicacao-e-complemento-publico.md)). Textos do público: `publico\LEIA-ME.md` (vira o `README.md` do repositório público), `LICENSE`, `TERCEIROS.md`; versão em `pengu\versao.js` | `python -I tools\publicar.py` (prova: `python -I tools\teste-publicar.py`) |
 | aviso de versão nova (1 consulta por dia, chave, fase, erros calados, notas como texto; servidor falso local na porta 0; ~6 s) | `node tools\teste-atualizacao.mjs` |
+| botão atualizar: complemento e `atualizar.cmd` contra um release falso em 8831–8840 (hash, digest nulo, queda, junção, `.git`, origem, troca com volta; pastas no temp; ~40 s) e o lado do plugin (progresso, recarregar só em None/Lobby, copiar link) | `python tools\teste-atualizar.py` · `node tools\teste-atualizador.mjs` |
 | medição passiva da próxima ranqueada para o client compacto (só GET, só sinais em `dados\medicao-compacto-<data>.jsonl`; prints do painel por Edge headless em `temp\prints-partida\`; para sozinho 10 min depois do fim da partida) | `python tools\medir-compacto.py` (`--continuo`: todas as partidas até fechar o client; `--ensaio`: 5 s e sai) |
 
 Pegadinhas medidas: [ARMADILHAS](docs/ARMADILHAS.md). Regras do pós-jogo: [INSIGHTS](docs/INSIGHTS.md).

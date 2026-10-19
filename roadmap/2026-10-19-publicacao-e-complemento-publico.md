@@ -28,6 +28,10 @@ complemento leva `pengu/`, release que cai depois do push se retoma; `teste-varr
 Revisão adversarial da P2 (19/10, `ef59f7a`; 6 achados, todos reais e corrigidos, tabela no relatório): limite diário também em
 memória, "procurar agora" some só durante o clique, resultado velho do clique e mensagem de versão antiga apagados, desligar a
 chave tira a linha; `teste-atualizacao.mjs` 87/87 (81/87 no código de antes).
+**P3 feita em 19/10** (`8877043`, `9d66dac`, `43a1aaa`, `dd07d37`, `ea814f8`; `teste-atualizar.py` 83/83, `teste-atualizador.mjs`
+46/46): `POST /atualizar` (`coletor/atualizar.py`) e `publico/atualizar.cmd` com origem fixa, sha256 = SHA256SUMS = digest, troca
+**item a item** em `<pasta>\.atualizacao` (o `dados\` fica; desvio da decisão 5), recusa de junção e `.git`; reinício só em
+None/Lobby; sem complemento, `atualizar.cmd` e "copiar link" ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p3.md)).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
