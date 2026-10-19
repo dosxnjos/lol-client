@@ -7,9 +7,10 @@
 // Nenhuma chamada sai para o client de verdade (fetch global trocado pela LCU falsa).
 // uso: node tools/teste-jogar-de-novo.mjs
 import { jogarDeNovo, prepararLobby, restricaoDura, Recusa, buscarFilaRapida, criarSequencia, resultadoDoEog, contaNoFreio } from '../pengu/fila-rapida.js';
-import { criarConfirmacao, cliqueComFreio, derrotasSeguidasAgora, avaliarFreios, textoFreios, ehMadrugada, MEDICAO, JANELA_MS, ATUALIZANDO } from '../pengu/freios.js';
+import { criarConfirmacao, cliqueComFreio, derrotasSeguidasAgora, avaliarFreios, textoFreios, ehMadrugada, medicaoAtual, JANELA_MS, ATUALIZANDO } from '../pengu/freios.js';
 import { htmlTopo } from '../pengu/posjogo/abas.js';
 import { lcuFalsa, relatar } from './lcu-falsa.mjs';
+import { readFileSync } from 'node:fs';
 
 const BUSCA = 'POST /lol-lobby/v2/lobby/matchmaking/search';
 const POS = 'PUT /lol-lobby/v2/lobby/members/localMember/position-preferences';
@@ -191,16 +192,27 @@ caso('restricaoDura: canStartActivity false sem restrição -> null (não recusa
 }
 
 // ---- freios (decisão do Gabriel, 13/10/2026: tilt 2 e madrugada) ----
-const TEXTO_TILT_2 = '2 derrotas seguidas: depois disso o seu winrate cai para 44%. Buscar mesmo assim?';
-const TEXTO_MADRUGADA = 'de madrugada o seu winrate cai: 47% contra 58% de dia. Buscar mesmo assim?';
-caso('números da medição num lugar só, com a data', MEDICAO.data === '13/10/2026' && MEDICAO.wrDepoisDe2 === 44 && MEDICAO.wrMadrugada === 47 && MEDICAO.wrDia === 58);
+// Fase 5 do plano plugin Pengu primeiro (19/10/2026): os números saem do acumulador (freios.js medicaoAtual, parâmetro medicao de
+// textoFreios). Aqui não há acumulador: o texto padrão vem sem número; com a medição passada, os números dela
+const TEXTO_TILT_2 = '2 derrotas seguidas. Buscar mesmo assim?';
+const TEXTO_MADRUGADA = 'é madrugada (entre 1h e 6h). Buscar mesmo assim?';
+const MED = { partidas: 174, wrGeral: 51, wrDepoisDe2: 44, wrMadrugada: 47, wrDia: 58 };   // os números de 13/10/2026 do mantenedor
+caso('sem acumulador, medicaoAtual() = null (nenhum número fixo no código)', medicaoAtual() === null);
 caso('janela do 2º clique: 8 s', JANELA_MS === 8000);
 caso('madrugada: 01:00 e 05:59 sim; 00:59 e 06:00 não',
   ehMadrugada(as(1)()) && ehMadrugada(as(5, 59)()) && !ehMadrugada(as(0, 59)()) && !ehMadrugada(as(6)()));
-caso('texto do tilt cita as derrotas e os 44%', textoFreios([{ tipo: 'tilt', derrotas: 2 }]) === TEXTO_TILT_2, textoFreios([{ tipo: 'tilt', derrotas: 2 }]));
-caso('texto da madrugada cita 47% contra 58%', textoFreios([{ tipo: 'madrugada' }]) === TEXTO_MADRUGADA, textoFreios([{ tipo: 'madrugada' }]));
+caso('texto do tilt sem medição: as derrotas, sem número', textoFreios([{ tipo: 'tilt', derrotas: 2 }]) === TEXTO_TILT_2, textoFreios([{ tipo: 'tilt', derrotas: 2 }]));
+caso('texto da madrugada sem medição: sem número', textoFreios([{ tipo: 'madrugada' }]) === TEXTO_MADRUGADA, textoFreios([{ tipo: 'madrugada' }]));
+caso('texto do tilt com medição cita as derrotas e os 44%', textoFreios([{ tipo: 'tilt', derrotas: 2 }], MED) === '2 derrotas seguidas: depois disso o seu winrate cai para 44%. Buscar mesmo assim?',
+  textoFreios([{ tipo: 'tilt', derrotas: 2 }], MED));
+caso('texto da madrugada com medição cita 47% contra 58%', textoFreios([{ tipo: 'madrugada' }], MED) === 'de madrugada o seu winrate cai: 47% contra 58% de dia. Buscar mesmo assim?');
 caso('3 derrotas: cita as 3 e o número medido (o de 2), não inventa outro',
-  /^3 derrotas seguidas: depois de 2, o seu winrate já cai para 44%\. Buscar mesmo assim\?$/.test(textoFreios([{ tipo: 'tilt', derrotas: 3 }])));
+  /^3 derrotas seguidas: depois de 2, o seu winrate já cai para 44%\. Buscar mesmo assim\?$/.test(textoFreios([{ tipo: 'tilt', derrotas: 3 }], MED)));
+caso('número que não cai não diz "cai" (madrugada melhor que o dia; 2 derrotas acima do geral)',
+  textoFreios([{ tipo: 'madrugada' }, { tipo: 'tilt', derrotas: 2 }], { ...MED, wrMadrugada: 60, wrDepoisDe2: 55 })
+  === 'de madrugada o seu winrate é 60%, contra 58% de dia; e 2 derrotas seguidas: depois disso o seu winrate é 55%. Buscar mesmo assim?');
+caso('faixa sem amostra (só o depois de 2 null): só ela sem número', textoFreios([{ tipo: 'tilt', derrotas: 3 }], { ...MED, wrDepoisDe2: null }) === '3 derrotas seguidas. Buscar mesmo assim?');
+caso('freio de 1 derrota: singular', textoFreios([{ tipo: 'tilt', derrotas: 1 }], null) === '1 derrota. Buscar mesmo assim?');
 caso('sequência incerta tem frase própria', /sequência de derrotas desconhecida/.test(textoFreios([{ tipo: 'tilt', derrotas: null }])));
 caso('avaliarFreios: madrugada desligada não pede', avaliarFreios({ freioTilt: 0, freioMadrugada: false }, { derrotasSeguidas: 0, data: as(3)() }).length === 0);
 for (const [h, m, pede] of [[1, 0, true], [5, 59, true], [6, 0, false], [0, 59, false]]) {
@@ -214,7 +226,7 @@ for (const [h, m, pede] of [[1, 0, true], [5, 59, true], [6, 0, false], [0, 59, 
   caso('jogar de novo: tilt 2 com 2 derrotas pede, com o texto das derrotas', c.res.status === 'confirmar' && c.res.texto === TEXTO_TILT_2 && c.w.length === 0, JSON.stringify(c.res));
   const d = await cenario({ cfgFila: { freioTilt: 2, freioMadrugada: true }, opcoes: { derrotasSeguidas: 2, relogio: as(2) } });
   caso('jogar de novo: os dois freios de uma vez = uma confirmação com as duas frases',
-    d.res.status === 'confirmar' && d.res.motivos.length === 2 && /44%/.test(d.res.texto) && /47% contra 58%/.test(d.res.texto) && d.w.length === 0, JSON.stringify(d.res));
+    d.res.status === 'confirmar' && d.res.motivos.length === 2 && d.res.texto === '2 derrotas seguidas; e é madrugada (entre 1h e 6h). Buscar mesmo assim?' && d.w.length === 0, JSON.stringify(d.res));
 }
 {
   // mecanismo do botão: 1º clique arma, 2º em até 8 s busca; fora da janela vale como 1º de novo
@@ -383,6 +395,29 @@ caso('contaNoFreio: personalizada/treino, fila 0, 3140 e ARAM não',
   caso('não-líder de madrugada com 2 derrotas: volta ao lobby sem pedir confirmação', a.res.status === 'grupo' && !a.w.includes(BUSCA), JSON.stringify(a.res));
   const b = await cenario({ lq: { memberSummonerIds: [111, 222] }, cfgFila: { freioMadrugada: true }, opcoes: { relogio: as(3) } });
   caso('grupo de madrugada: grupo, nunca confirmar', b.res.status === 'grupo', JSON.stringify(b.res));
+}
+
+// Fase 5: com o acumulador de pé (historico.js, a fixture de 53 partidas que contam), o texto padrão do freio (sem passar medicao)
+// leva os números calculados dela: madrugada 29% contra 60% de dia; o depois de 2 tem só 9 partidas (abaixo de 10), sem número.
+// Com 29 partidas (abaixo do piso de 30), nenhum número
+{
+  process.env.TZ = 'America/Sao_Paulo';   // as faixas horárias da fixture (tools/teste-contexto.mjs usa a mesma)
+  const { iniciarHistorico } = await import('../pengu/historico.js');
+  const fx = JSON.parse(readFileSync(new URL('./fixtures/historico-1.json', import.meta.url), 'utf8'));
+  const iniciar = valor => iniciarHistorico({ socket: { observe: () => {} } },
+    { ds: { get: () => valor, set: () => {} }, lcu: async () => ({ status: 0, dados: null }), janela: null, log: () => {} });
+  iniciar(fx);
+  const m = medicaoAtual();
+  caso('acumulador de pé: medicaoAtual() da fixture (53 partidas, madrugada 29%, dia 60%, depois de 2 sem amostra)',
+    m?.partidas === 53 && m.wrMadrugada === 29 && m.wrDia === 60 && m.wrDepoisDe2 === null, JSON.stringify(m));
+  caso('acumulador de pé: o texto padrão do freio usa a medição dele',
+    textoFreios([{ tipo: 'madrugada' }, { tipo: 'tilt', derrotas: 2 }]) === 'de madrugada o seu winrate cai: 29% contra 60% de dia; e 2 derrotas seguidas. Buscar mesmo assim?',
+    textoFreios([{ tipo: 'madrugada' }, { tipo: 'tilt', derrotas: 2 }]));
+  const c = await cenario({ cfgFila: { freioMadrugada: true }, opcoes: { relogio: as(3) } });
+  caso('acumulador de pé: jogar de novo de madrugada cita os números dele', c.res.status === 'confirmar' && c.res.texto.includes('29% contra 60%'), JSON.stringify(c.res));
+  const ordenadas = fx.linhas.filter(l => l[3] !== 0 && l[2] >= 300).slice(0, 29);
+  iniciar({ ...fx, linhas: ordenadas });
+  caso('acumulador com 29 partidas: sem número (piso de 30)', medicaoAtual() === null && textoFreios([{ tipo: 'madrugada' }]) === TEXTO_MADRUGADA);
 }
 
 relatar(casos);

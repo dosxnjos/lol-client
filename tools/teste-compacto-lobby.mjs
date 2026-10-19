@@ -14,7 +14,7 @@ import { criarTelaLobby, estadoGrupo, planoJogar, convitesPendentes, proximaPosi
 import { criarTelaFila, estadoBusca, textoEspera, CSS_FILA } from '../pengu/compacto/tela-fila.js';
 import * as modFila from '../pengu/compacto/tela-fila.js';
 import * as modLobby from '../pengu/compacto/tela-lobby.js';
-import { MEDICAO, ATUALIZANDO } from '../pengu/freios.js';
+import { ATUALIZANDO } from '../pengu/freios.js';
 
 // ---------- DOM mínimo (mesmo do teste-compacto.mjs) ----------
 class Classes {
@@ -253,13 +253,26 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('haQuanto', haQuanto(T0 - 219 * 60000, T0) === 'há 3 h 39 min' && haQuanto(T0 - 12 * 60000, T0) === 'há 12 min' && haQuanto(T0, T0) === 'agora');
   caso('mmss', mmss(41) === '00:41' && mmss(130) === '02:10' && mmss(-5) === '00:00');
 
-  const d2 = dicaLocal({ seq: 2, hoje: r, data: new Date(T0) });
-  caso('dicaLocal: 2 derrotas seguidas cita o número medido', d2.startsWith('2 derrotas seguidas') && d2.includes(`${MEDICAO.wrDepoisDe2}%`));
-  const dm = dicaLocal({ seq: 0, hoje: r, data: new Date(2026, 9, 13, 3) });
-  caso('dicaLocal: madrugada', dm.startsWith('de madrugada') && dm.includes(`${MEDICAO.wrMadrugada}%`));
-  const dd = dicaLocal({ seq: 1, hoje: { v: 1, d: 3, n: 4 }, data: new Date(T0) });
-  caso('dicaLocal: de dia, derrotas não seguidas', dd.includes(`${MEDICAO.wrDia}%`) && dd.includes('as 3 derrotas de hoje não foram seguidas'));
-  caso('dicaLocal: sequência incerta não inventa número', !dicaLocal({ seq: ATUALIZANDO, hoje: r, data: new Date(T0) }).includes('não foram seguidas'));
+  // medição dos freios calculada do acumulador (Fase 5 do plano plugin Pengu primeiro): parâmetro medicao; null = sem número
+  const MED = { partidas: 191, wrGeral: 50, wrDepoisDe2: 44, wrMadrugada: 47, wrDia: 58 };
+  const d2 = dicaLocal({ seq: 2, hoje: r, data: new Date(T0), medicao: MED });
+  caso('dicaLocal: 2 derrotas seguidas cita o número calculado e a amostra', d2.startsWith('2 derrotas seguidas') && d2.includes(`cai para ${MED.wrDepoisDe2}%`) && d2.includes('(191 partidas)'), d2);
+  const dm = dicaLocal({ seq: 0, hoje: r, data: new Date(2026, 9, 13, 3), medicao: MED });
+  caso('dicaLocal: madrugada', dm.startsWith('de madrugada o seu winrate cai') && dm.includes(`${MED.wrMadrugada}%`), dm);
+  const dd = dicaLocal({ seq: 1, hoje: { v: 1, d: 3, n: 4 }, data: new Date(T0), medicao: MED });
+  caso('dicaLocal: de dia, derrotas não seguidas', dd.includes(`${MED.wrDia}%`) && dd.includes('as 3 derrotas de hoje não foram seguidas'), dd);
+  caso('dicaLocal: sequência incerta não inventa número', !dicaLocal({ seq: ATUALIZANDO, hoje: r, data: new Date(T0), medicao: MED }).includes('não foram seguidas'));
+  // sem amostra (acumulador abaixo de 30 partidas): nenhum número; madrugada e dia sem número = nenhuma dica
+  const s2 = dicaLocal({ seq: 2, hoje: r, data: new Date(T0), medicao: null });
+  const sm = dicaLocal({ seq: 0, hoje: r, data: new Date(2026, 9, 13, 3), medicao: null });
+  const sd = dicaLocal({ seq: 1, hoje: { v: 1, d: 3, n: 4 }, data: new Date(T0), medicao: null });
+  caso('dicaLocal sem medição: texto sem número (2 derrotas; madrugada; de dia só as derrotas de hoje; nada a dizer = vazia)',
+    s2 === '2 derrotas seguidas nesta sessão.' && sm === 'é madrugada (entre 1h e 6h).' && sd === 'as 3 derrotas de hoje não foram seguidas.'
+    && dicaLocal({ seq: 0, hoje: { v: 2, d: 0, n: 2 }, data: new Date(T0), medicao: null }) === '', JSON.stringify([s2, sm, sd]));
+  const semQueda = dicaLocal({ seq: 2, hoje: r, data: new Date(T0), medicao: { ...MED, wrDepoisDe2: 55 } });
+  caso('dicaLocal: número que não cai não diz "cai"', semQueda.includes('o seu winrate é 55%') && !semQueda.includes('cai'), semQueda);
+  const soNumeroFaixa = dicaLocal({ seq: 2, hoje: r, data: new Date(T0), medicao: { ...MED, wrDepoisDe2: null } });
+  caso('dicaLocal: faixa sem amostra (depois de 2 = null) = sem número só nela', soNumeroFaixa === '2 derrotas seguidas nesta sessão.', soNumeroFaixa);
 
   caso('naoLidas: só conversa 1:1', naoLidas([{ type: 'chat', unreadMessageCount: 2 }, { type: 'customGame', unreadMessageCount: 5 }, { type: 'chat', unreadMessageCount: 1 }]) === 3 && naoLidas(null) === 0);
   const am = amigosParaConvidar([
@@ -293,7 +306,9 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   caso('lobby: montar + 30 s de timers e eventos = zero escrita na LCU', s.escritas().length === 0, s.escritas().join(', '));
   caso('lobby: cabeçalho com nome e ranque', s.texto().includes('Xerekton') && s.texto().includes('Esmeralda IV · 14 PDL'));
   caso('lobby: hoje 1V 3D', /1V\s*3D/.test(s.texto()) && s.texto().includes('4 partidas hoje'), s.texto());
-  caso('lobby: dica do coach (local, número primeiro)', s.q('.lc-cp-dica')?.textContent.includes(`${MEDICAO.wrDia}%`));
+  // sem acumulador neste cenário (medição null): a dica não cita número nenhum (Fase 5); as 3 derrotas de hoje não foram seguidas
+  const dica = s.q('.lc-cp-dica')?.textContent || '';
+  caso('lobby: dica do coach local sem medição = sem número', dica.includes('as 3 derrotas de hoje não foram seguidas') && !/\d+\s*%/.test(dica), dica);
   caso('lobby: JOGAR mostra fila e posições', s.q('[data-a="jogar"]')?.textContent.includes('Ranqueada Solo/Duo · Topo / Selva'));
   const pdl = s.q('[data-a="pdl-dia"]');
   caso('lobby: bloco "hoje" com a variação do dia em destaque e o elo embaixo (protótipo: "PDL ±0" / "Esmeralda IV 14")',
@@ -334,7 +349,9 @@ const igual = (a, b) => JSON.stringify(a) === JSON.stringify(b);
   await s.iniciar();
   await s.clicar('[data-a="jogar"]');
   caso('freio de madrugada: 1º clique só avisa', s.buscas() === 0 && s.q('[data-a="freio"]')?.textContent.includes('madrugada'));
-  caso('freio de madrugada: a dica do coach fala da madrugada', s.q('.lc-cp-dica')?.textContent.includes('de madrugada'));
+  caso('freio de madrugada: a dica do coach fala da madrugada (sem medição: sem número)', s.q('.lc-cp-dica')?.textContent.includes('madrugada')
+    && !/\d+\s*%/.test(s.q('.lc-cp-dica')?.textContent || ''));
+  caso('freio de madrugada sem medição: o aviso não cita número', !/\d+\s*%/.test(s.q('[data-a="freio"]')?.textContent || ''), s.q('[data-a="freio"]')?.textContent);
 }
 {
   const s = cenario({ cfgFila: { freioTilt: 2 }, servicos: { fila: { derrotasSeguidas: async () => null } } });

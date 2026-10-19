@@ -14,7 +14,7 @@
 // handler/timer/evento (ctx.seguro) devolve o client normal.
 import { h, fotoCampeao, campeoes, estilo, preferidasLobby, perfilSalvo, icone, comIcone } from './comum.js';
 import { buscarFilaRapida, Recusa, restricaoDura, FILAS_COM_POSICAO } from '../fila-rapida.js';
-import { criarConfirmacao, cliqueComFreio, avaliarFreios, textoFreios, derrotasSeguidasAgora, ehMadrugada, MEDICAO,
+import { criarConfirmacao, cliqueComFreio, avaliarFreios, textoFreios, derrotasSeguidasAgora, ehMadrugada, medicaoAtual,
   JANELA_MS, ATUALIZANDO } from '../freios.js';
 import { valida } from '../posjogo/abas.js';
 import { definir as definirConfig } from '../config.js';
@@ -165,13 +165,25 @@ export function sequenciaHoje(lista) {
 }
 
 // dica do coach em 1 linha, número primeiro, sem ordem (a única: o GET /dica saiu em 19/10/2026). seq: derrotas seguidas
-// (número, null ou ATUALIZANDO); hoje: resumoHoje; data: Date local.
-export function dicaLocal({ seq, hoje, data }) {
-  const M = MEDICAO;
-  if (typeof seq === 'number' && seq >= 2) return `${seq} derrotas seguidas: depois de 2, o seu winrate cai para ${M.wrDepoisDe2}% (${M.partidas} partidas, ${M.data}).`;
-  if (data && ehMadrugada(data)) return `de madrugada o seu winrate cai: ${M.wrMadrugada}% contra ${M.wrDia}% de dia (${M.partidas} partidas).`;
-  const extra = hoje && hoje.d >= 2 && typeof seq === 'number' && seq < 2 ? ` as ${hoje.d} derrotas de hoje não foram seguidas.` : '';
-  return `de dia o seu winrate é ${M.wrDia}%, contra ${M.wrMadrugada}% de madrugada (${M.partidas} partidas, ${M.data}).${extra}`;
+// (número, null ou ATUALIZANDO); hoje: resumoHoje; data: Date local; medicao: a dos freios (freios.js medicaoAtual, calculada
+// do acumulador; null abaixo de 30 partidas = dica sem número, ou nenhuma: '' some da tela). "cai" só quando o número cai.
+export function dicaLocal({ seq, hoje, data, medicao = medicaoAtual() }) {
+  const M = medicao || {};
+  const n = M.partidas;
+  const num = v => typeof v === 'number';
+  if (typeof seq === 'number' && seq >= 2) {
+    if (!num(M.wrDepoisDe2)) return `${seq} derrotas seguidas nesta sessão.`;
+    return `${seq} derrotas seguidas: depois de 2, o seu winrate ${num(M.wrGeral) && M.wrDepoisDe2 < M.wrGeral ? 'cai para' : 'é'} ${M.wrDepoisDe2}% (${n} partidas).`;
+  }
+  const temHora = num(M.wrMadrugada) && num(M.wrDia);
+  if (data && ehMadrugada(data)) {
+    if (!temHora) return 'é madrugada (entre 1h e 6h).';
+    return M.wrMadrugada < M.wrDia ? `de madrugada o seu winrate cai: ${M.wrMadrugada}% contra ${M.wrDia}% de dia (${n} partidas).`
+      : `de madrugada o seu winrate é ${M.wrMadrugada}%, contra ${M.wrDia}% de dia (${n} partidas).`;
+  }
+  const extra = hoje && hoje.d >= 2 && typeof seq === 'number' && seq < 2 ? `as ${hoje.d} derrotas de hoje não foram seguidas.` : '';
+  if (!temHora) return extra;
+  return `de dia o seu winrate é ${M.wrDia}%, contra ${M.wrMadrugada}% de madrugada (${n} partidas).${extra ? ` ${extra}` : ''}`;
 }
 
 // não lidas do chat (só conversas 1:1; salas do lobby/seleção ficam de fora), abrir a lista de amigos e o 💬: moram em

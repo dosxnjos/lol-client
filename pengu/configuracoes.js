@@ -5,7 +5,8 @@
 // Módulos novos plugam controles sem editar este arquivo: registrarBloco(nome, renderizar).
 // Seletores medidos em 13/10/2026 (patch 16.20): docs/ARMADILHAS.md.
 import { ATRASOS, FREIOS } from './config.js';
-import { MEDICAO, JANELA_MS } from './freios.js';
+import { medicaoAtual, JANELA_MS } from './freios.js';
+import { PISO_MEDICAO } from './posjogo/contexto.js';
 
 const SEL = {
   container: '.lol-settings-container',
@@ -88,8 +89,19 @@ export const ui = {
   linha: (...filhos) => el('div', { class: 'lol-settings-general-row lc-campos' }, ...filhos),
 };
 
+// textos dos freios com a medição do acumulador (freios.js medicaoAtual; Fase 5 do plano plugin Pengu primeiro): sem amostra
+// (abaixo de 30 partidas), nenhum número; "cai" só quando o número cai
+export function textoMedicaoTilt(med) {
+  if (typeof med?.wrDepoisDe2 !== 'number') return `Com ${PISO_MEDICAO} partidas guardadas neste computador, aparece aqui o seu winrate depois de 2 derrotas seguidas.`;
+  const cai = typeof med.wrGeral === 'number' && med.wrDepoisDe2 < med.wrGeral;
+  return `Depois de 2 derrotas seguidas, o seu winrate ${cai ? 'cai para' : 'é'} ${med.wrDepoisDe2}%, contra ${med.wrGeral}% no geral (${med.partidas} partidas).`;
+}
+export const textoMedicaoMadrugada = med => (typeof med?.wrMadrugada === 'number' && typeof med?.wrDia === 'number'
+  ? ` De madrugada, o seu winrate é ${med.wrMadrugada}%, contra ${med.wrDia}% de dia.` : '');
+
 function montar(painel, cfg, definir, restaurar) {
   const topo = painel.scrollTop;
+  const med = medicaoAtual();
   painel.replaceChildren();
   const add = (...n) => painel.append(...n.filter(Boolean)); // append(null) escreveria "null" (ARMADILHAS § Client)
   const caixa = (caminho, rotulo, explicacao) => {
@@ -126,8 +138,8 @@ function montar(painel, cfg, definir, restaurar) {
     caixa('filaRapida.jogarDeNovo', 'Botão "jogar de novo" no pós-jogo', 'Um clique volta ao lobby da mesma fila da partida, põe as suas posições e busca. Em grupo só volta ao lobby: quem busca é o líder. Nunca busca sozinho.'),
     ui.linha(ui.lista('filaRapida.freioTilt', 'Pedir confirmação depois de', FREIOS.map(n => [n, n ? `${n} derrotas seguidas` : 'nunca']),
       cfg.filaRapida.freioTilt, v => definir('filaRapida.freioTilt', v))),
-    ui.explica(`Freio de tilt: com essa sequência de derrotas na sessão, a fila rápida e o "jogar de novo" pedem um segundo clique em até ${JANELA_MS / 1000} s. Depois de 2 derrotas seguidas, o seu winrate cai para ${MEDICAO.wrDepoisDe2}% (${MEDICAO.partidas} partidas, ${MEDICAO.data}).`),
-    caixa('filaRapida.freioMadrugada', 'Pedir confirmação de madrugada (1h–6h)', `Entre 01:00 e 05:59 (hora do PC), a fila rápida e o "jogar de novo" pedem um segundo clique. De madrugada, o seu winrate é ${MEDICAO.wrMadrugada}%, contra ${MEDICAO.wrDia}% de dia.`));
+    ui.explica(`Freio de tilt: com essa sequência de derrotas na sessão, a fila rápida e o "jogar de novo" pedem um segundo clique em até ${JANELA_MS / 1000} s. ${textoMedicaoTilt(med)}`),
+    caixa('filaRapida.freioMadrugada', 'Pedir confirmação de madrugada (1h–6h)', `Entre 01:00 e 05:59 (hora do PC), a fila rápida e o "jogar de novo" pedem um segundo clique.${textoMedicaoMadrugada(med)}`));
 
   add(ui.secao('Recompensas'),
     caixa('recompensas.ligado', 'Coletar recompensas sozinho', 'Ao abrir o client e 30 s depois de cada partida, pega as recompensas que não têm escolha (concessões, trilha do evento); de cada tipo, pega uma primeiro e confere antes do resto. Nunca abre baú, cria, desencanta nem compra; recompensa com escolha fica para você, com aviso.'),

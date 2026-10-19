@@ -3,12 +3,19 @@
 // nunca busca sozinho. Módulo puro (sem window/document): roda no node (tools/teste-jogar-de-novo.mjs).
 // Decisão do Gabriel (13/10/2026): "pode seguir com 2, com freio por horário" (roadmap/2026-10-13-jogar-de-novo.md).
 import { valida, SESSAO_GAP_MS } from './posjogo/abas.js';
+import { linhasHistorico } from './historico.js';
+import { medicaoDe } from './posjogo/contexto.js';
 
-// Medição de 13/10/2026 (MCP tilt, 174 partidas no Rift), winrate da partida seguinte:
-// - por derrotas seguidas antes: 0 = 50,9%; 1 = 53,7%; 2 = 43,8% (16 partidas); 3+ = 71,4% (7, ruído);
-// - por faixa horária: 00–06 47,1% (70 partidas); 06–12 58,8%; 12–18 58,5%; 18–24 50,0%.
-// Os textos da confirmação citam só estes números: medir de novo = trocar aqui (e a data).
-export const MEDICAO = { data: '13/10/2026', partidas: 174, wrDepoisDe2: 44, wrMadrugada: 47, wrDia: 58 };
+// Números da confirmação: calculados do acumulador de quem usa (historico.js; posjogo/contexto.js medicaoDe), não mais fixos
+// (Fase 5 do roadmap/2026-10-17-plugin-pengu-primeiro.md; até 19/10/2026 era a MEDICAO de 13/10 com 174 partidas do
+// mantenedor: 2 derrotas 44%, madrugada 47%, dia 58%). medicao = {partidas, wrGeral, wrDepoisDe2, wrMadrugada, wrDia} (inteiros)
+// ou null abaixo de 30 partidas; cada número null com menos de 10 partidas na faixa. Sem número, o texto não cita nenhum.
+// Na instalação com o complemento coach, o acumulador começa com a importação do /resumos (Fase 4)
+export function medicaoAtual() {
+  try { return medicaoDe(linhasHistorico()); } catch { return null; }
+}
+// "cai" só quando o número é menor que a comparação (o calculado pode não mostrar queda): senão o texto só diz o número
+const cai = (a, b) => typeof a === 'number' && typeof b === 'number' && a < b;
 export const MADRUGADA = { de: 1, ate: 6 }; // [1h, 6h): 01:00 pede, 05:59 pede, 06:00 e 00:59 não
 export const JANELA_MS = 8000; // 2º clique confirma até 8 s depois do 1º
 // 2º clique antes disto é o mesmo duplo clique de reflexo (revisão de 13/10/2026): ignorado, a janela segue armada
@@ -49,16 +56,25 @@ export function avaliarFreios(fr, { derrotasSeguidas = 0, data }) {
   return out;
 }
 
-// 44% foi medido depois de exatamente 2 derrotas; com 3+ a amostra é ruído (71%, 7 partidas): cita o 2
-const frase = m => {
-  if (m.tipo === 'madrugada') return `de madrugada o seu winrate cai: ${MEDICAO.wrMadrugada}% contra ${MEDICAO.wrDia}% de dia`;
+// o número é o de depois de exatamente 2 derrotas (com 3+ a amostra é ruído: 71% em 7 partidas na medição de 13/10): cita o 2.
+// med = medicao (null = texto sem número)
+const seguidas = n => `${n} ${n === 1 ? 'derrota' : 'derrotas seguidas'}`;
+const frase = (m, med) => {
+  if (m.tipo === 'madrugada') {
+    const mad = med?.wrMadrugada, dia = med?.wrDia;
+    if (typeof mad !== 'number' || typeof dia !== 'number') return 'é madrugada (entre 1h e 6h)';
+    return cai(mad, dia) ? `de madrugada o seu winrate cai: ${mad}% contra ${dia}% de dia` : `de madrugada o seu winrate é ${mad}%, contra ${dia}% de dia`;
+  }
   if (m.derrotas === null) return 'sequência de derrotas desconhecida (o histórico não carregou)';
   if (m.derrotas === ATUALIZANDO) return 'sequência de derrotas desconhecida (o histórico ainda não tem a última partida)';
-  if (m.derrotas === 2) return `2 derrotas seguidas: depois disso o seu winrate cai para ${MEDICAO.wrDepoisDe2}%`;
-  return `${m.derrotas} derrotas seguidas: depois de 2, o seu winrate já cai para ${MEDICAO.wrDepoisDe2}%`;
+  const d2 = med?.wrDepoisDe2;
+  if (typeof d2 !== 'number') return seguidas(m.derrotas);
+  const verbo = cai(d2, med.wrGeral) ? 'cai para' : 'é';
+  if (m.derrotas === 2) return `2 derrotas seguidas: depois disso o seu winrate ${verbo} ${d2}%`;
+  return `${seguidas(m.derrotas)}: depois de 2, o seu winrate ${cai(d2, med.wrGeral) ? 'já cai para' : 'é'} ${d2}%`;
 };
-// os dois freios de uma vez: uma frase só, um 2º clique confirma os dois
-export const textoFreios = motivos => `${motivos.map(frase).join('; e ')}. Buscar mesmo assim?`;
+// os dois freios de uma vez: uma frase só, um 2º clique confirma os dois. medicao: parâmetro (padrão: a do acumulador agora)
+export const textoFreios = (motivos, medicao = medicaoAtual()) => `${motivos.map(m => frase(m, medicao)).join('; e ')}. Buscar mesmo assim?`;
 
 // dois cliques: o 1º que cai num freio arma a janela; o 2º dentro dela confirma. Fora dela vale como 1º de novo.
 // 2º clique antes de minMs (duplo clique de reflexo) é ignorado: não confirma nem rearma. agora injetável (teste sem
