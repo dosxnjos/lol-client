@@ -8,7 +8,9 @@
 #   F. reserva do aceite sem janela (LCU falsa): aceita no alvo + folga, relê antes do POST, não aceita se já
 #      Accepted/Declined, "não aceitar" ou desligado no plugin, aceite desligado no espelho, ready check acabado,
 #      clique em voo; POST que falha não repete
-#   G. rota POST /aceite/plugin num servidor local de teste (porta 8797): origem, sinal gravado, linha no log
+#   G. rota POST /aceite/plugin num servidor local de teste (porta livre, 0): origem, sinal gravado, linha no log
+#   H. aperto de mão GET /ola (recursos calculados do que está pendurado, com e sem cada módulo) e a reserva presa ao
+#      contato do plugin desde a última entrada em Matchmaking (plano plugin Pengu primeiro, Fase 1)
 #   E. janela real com LCU falsa: estilo sem foco, canto inferior direito, GetForegroundWindow intocado,
 #      contagem, botões chamam accept/decline, some ao sair do ReadyCheck sem deixar thread nem janela,
 #      fecha sozinha se ninguém fechar, reserva com a janela. Pulado com o jogo aberto ou com --sem-janela.
@@ -192,8 +194,15 @@ def integracao():
 
     async def roteiro():
         col = novo_coletor({"aceiteFlutuante": True, "aceiteAtrasoS": 8}, AvisoFalso, rota=True)
+        col.sinal.contato()   # plugin visto antes da fila (fila anterior)
         await col.fase("Matchmaking")
         caso("D1 Matchmaking não abre", not criados)
+        caso("D1b entrar em Matchmaking marca a fila: o contato de antes deixa de valer",
+             col.sinal.fila_em is not None and not col.sinal.visto_na_fila())
+        f0 = col.sinal.fila_em
+        await col.fase("Matchmaking")   # websocket reconectado replica a fase: não é fila nova
+        caso("D1c Matchmaking repetido não marca de novo", col.sinal.fila_em == f0)
+        col.sinal.contato()
         await col.fase("ReadyCheck")
         await col.fase("ReadyCheck")   # websocket reconectado replica a fase
         caso("D2 ReadyCheck abre uma vez só, com o atraso da config",
@@ -363,6 +372,7 @@ def reserva():
     caso("F14 com 'não aceitar' a janelinha não promete aceite (conta até expirar, sem alerta)",
          av.estado()["fase"] in ("expirando",) and "alerta" not in av.estado(), av.estado())
     sinal = SinalPlugin()
+    sinal.contato()   # o plugin falou nesta fila (H cobre o caso sem contato)
     sinal.registrar({"desligadoNestaVez": True})
     sinal.nao_aceitar_em -= 5   # chegou 5 s antes deste ready check: era do anterior
     lcu = LCURegistro()
@@ -374,6 +384,7 @@ def reserva():
     av = rodar_reserva(lcu, sinal=sinal, antes=lambda a: sinal.registrar({"evento": "evento", "ligado": False}))
     caso("F16 aceite desligado no plugin durante o ready check: nenhum POST", lcu.posts == [], av.reserva_fim)
     sinal.zerar()
+    sinal.contato()
     lcu = LCURegistro()
     rodar_reserva(lcu, sinal=sinal)
     caso("F17 ligado false de um ready check anterior (zerado na troca de fase) não trava o seguinte",
@@ -431,10 +442,12 @@ def reserva():
          lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and t_post is not None and t_post >= 1.45,
          (lcu.ops, av.reserva_fim))
     sinal = SinalPlugin()
+    sinal.contato()   # sem o contato a reserva pararia pela regra da fila, e o caso não provaria o "não aceitar"
     lcu = LCURegistro(timer0=11)
     av = rodar_reserva(lcu, atraso=10, s=2.2, idade_min_s=1.5, sinal=sinal, antes=lambda a: threading.Timer(
         0.8, sinal.registrar, args=({"evento": "evento", "desligadoNestaVez": True},)).start())
-    caso("F26b ... e o 'não aceitar' que chega nessa espera ainda barra", lcu.posts == [], (lcu.ops, av.reserva_fim))
+    caso("F26b ... e o 'não aceitar' que chega nessa espera ainda barra",
+         lcu.posts == [] and av.reserva_fim == "não aceitar nesta vez (plugin)", (lcu.ops, av.reserva_fim))
     # "não aceitar" de antes do aviso nascer (websocket reconectado no meio): vale pelo início do ready check
     relo = [100.0]
     sinal = SinalPlugin(relogio=lambda: relo[0])
@@ -471,7 +484,8 @@ def rota_plugin():
     lg = logging.getLogger("coletor.aceite")
     lg.addHandler(h)
     lg.setLevel(logging.INFO)
-    coach = SimpleNamespace(srv=servidor_local.ServidorLocal(porta=8797, config=TMP / "cfg-rota.json"),
+    # porta 0: o sistema escolhe uma livre (nunca 8765/8766 nem as portas de outras sessões)
+    coach = SimpleNamespace(srv=servidor_local.ServidorLocal(porta=0, config=TMP / "cfg-rota.json", db=TMP / "nao.db"),
                             servidor_no_ar=False)
     col = novo_coletor({}, lambda *a, **k: None)
     caso("G0 sem coach (--sem-coach) ou servidor fora do ar (porta ocupada): sem sinal, nada pendurado",
@@ -479,14 +493,15 @@ def rota_plugin():
          and "/aceite/" not in coach.srv.rotas_post)
     coach.servidor_no_ar = coach.srv.iniciar()
     if not coach.servidor_no_ar:
-        caso("G2 porta de teste 8797 livre", False)
+        caso("G2 porta de teste livre", False)
         return
+    porta = coach.srv.httpd.server_address[1]
     sinal = coletor._sinal_aceite(coach)
     caso("G1 o coletor pendura /aceite/ no servidor do coach", "/aceite/" in coach.srv.rotas_post and sinal is not None)
     try:
         def post(corpo, origem=None, rota="/aceite/plugin"):
             dados = corpo if isinstance(corpo, bytes) else json.dumps(corpo).encode()
-            req = urllib.request.Request(f"http://127.0.0.1:8797{rota}", data=dados, method="POST",
+            req = urllib.request.Request(f"http://127.0.0.1:{porta}{rota}", data=dados, method="POST",
                                          headers={"Content-Type": "application/json", **({"Origin": origem} if origem else {})})
             try:
                 with urllib.request.urlopen(req, timeout=5) as r:
@@ -499,8 +514,8 @@ def rota_plugin():
              post(corpo, "https://127.0.0.1:54321") == 200 and sinal.nao_aceitar_em is not None)
         caso("G3 Pengu (https://plugins) e pedido sem Origin passam",
              post({"evento": "evento"}, "https://plugins") == 200 and post({"evento": "evento"}) == 200)
-        caso("G4 página do próprio coletor (http://127.0.0.1:8797) e outra página local em http são recusadas",
-             post(corpo, "http://127.0.0.1:8797") == 403 and post(corpo, "http://localhost:3000") == 403)
+        caso("G4 página do próprio coletor (http://127.0.0.1:<porta>) e outra página local em http são recusadas",
+             post(corpo, f"http://127.0.0.1:{porta}") == 403 and post(corpo, "http://localhost:3000") == 403)
         caso("G5 site de fora recusado", post(corpo, "https://exemplo.com") == 403)
         caso("G6 json inválido -> 400; rota desconhecida -> 404",
              post(b"{nao", "https://plugins") == 400 and post({}, "https://plugins", "/aceite/outra") == 404)
@@ -512,6 +527,134 @@ def rota_plugin():
         coach.srv.parar()
         lg.removeHandler(h)
         col.c.close()
+
+
+# ---------- H. aperto de mão (GET /ola) e a reserva presa ao contato do plugin ----------
+def aperto_de_mao():
+    import urllib.error
+    import urllib.request
+    from aviso_partida import SEM_PLUGIN, SinalPlugin
+    db_vazio = TMP / "nao-existe.db"
+    nu = servidor_local.ServidorLocal(porta=0, config=TMP / "cfg-ola.json", db=db_vazio)
+    caso("H1 servidor sem nada pendurado (sem coach, sem banco): recursos vazios", nu.recursos() == [], nu.recursos())
+    db = TMP / "ola.db"
+    db.write_bytes(b"")
+    rotas = {"/draft": lambda r: (200, {}), "/revisao/": lambda r: (200, {})}
+    cheio = servidor_local.ServidorLocal(lambda: {"partida": False}, db=db, porta=0, config=TMP / "cfg-ola.json",
+                                         mentor_http=lambda *a: (200, {}), ao_config=lambda c: None, rotas_get=rotas,
+                                         recursos=servidor_local.RECURSOS_COACH)
+    esperado = sorted(["coach", "painel", "voz", "alertas", "minimapa", "feiticos", "carregamento", "estado-partida",
+                       "mentor", "contexto", "draft", "revisao"])
+    caso("H2 coach de pé (como o coach_vivo monta): coach, módulos declarados, estado, mentor, contexto, draft, revisão",
+         cheio.recursos() == esperado, cheio.recursos())
+    sem_draft = servidor_local.ServidorLocal(lambda: {}, db=db, porta=0, config=TMP / "cfg-ola.json",
+                                             ao_config=lambda c: None, rotas_get={"/revisao/": rotas["/revisao/"]})
+    caso("H3 sem o módulo do draft pendurado: 'draft' não é anunciado (nem mentor sem Mentor)",
+         "draft" not in sem_draft.recursos() and "mentor" not in sem_draft.recursos() and "revisao" in sem_draft.recursos(),
+         sem_draft.recursos())
+    coach = SimpleNamespace(srv=cheio, servidor_no_ar=True)
+    antes = cheio.recursos()
+    caso("H4 reserva desarmada (sem /aceite/): 'aceite-reserva' fora", "aceite-reserva" not in antes)
+    sinal = coletor._sinal_aceite(coach)
+    coletor._registro_expansoes(coach)
+    cheio.rotas_post["/chat/"] = lambda r, b: (200, {})
+    rec = cheio.recursos()
+    caso("H5 /aceite/, /compacto/ e /chat/ pendurados: aceite-reserva, expansoes e chat-janelas anunciados",
+         {"aceite-reserva", "expansoes", "chat-janelas"} <= set(rec) and "resumos" not in rec, rec)
+    original = coletor._chat_padrao
+    coletor._chat_padrao = lambda *a, **k: None   # sem a thread das janelas do chat neste teste
+    try:
+        args = SimpleNamespace(db=str(TMP / "teste.db"), ocioso_min=10, lockfile=None, config=str(TMP / "cfg-ola.json"))
+        col = coletor.Coletor(args, SimpleNamespace(srv=cheio, servidor_no_ar=True), fab_aviso=lambda *a, **k: None)
+    finally:
+        coletor._chat_padrao = original
+    caso("H6 o Coletor declara a janelinha (aceite-flutuante) e liga o contato do plugin ao sinal",
+         "aceite-flutuante" in cheio.recursos() and cheio.contato_plugin == col.sinal.contato, cheio.recursos())
+    col.c.close()
+
+    # pela rede, numa porta livre
+    if not cheio.iniciar():
+        caso("H7 porta de teste livre", False)
+        return
+    porta = cheio.httpd.server_address[1]
+    try:
+        def ola(origem=None):
+            req = urllib.request.Request(f"http://127.0.0.1:{porta}/ola", headers={"Origin": origem} if origem else {})
+            try:
+                with urllib.request.urlopen(req, timeout=5) as r:
+                    return r.status, json.loads(r.read() or b"null")
+            except urllib.error.HTTPError as e:
+                return e.code, None
+        s = col.sinal
+        s.entrada_fila()
+        st, d = ola()
+        caso("H7 GET /ola responde {app, versao, recursos} (o que o plugin confere)",
+             st == 200 and d["app"] == servidor_local.APP == "lol-client-coletor" and d["versao"] == servidor_local.VERSAO_PONTE
+             and d["recursos"] == cheio.recursos(), d)
+        caso("H8 GET /ola sem Origin (curl, painel) responde mas NÃO conta como contato do plugin",
+             s.contato_em is None and not s.visto_na_fila())
+        ola("http://localhost:3000")
+        caso("H9 /ola de outra página local em http também não conta", not s.visto_na_fila())
+        caso("H10 /ola de site de fora: 403", ola("https://exemplo.com")[0] == 403)
+        st, _ = ola("https://127.0.0.1:54321")
+        caso("H11 /ola da página do client (https://127.0.0.1:<porta da LCU>) conta: plugin visto nesta fila",
+             st == 200 and s.visto_na_fila())
+        s.entrada_fila()
+        caso("H12 nova entrada em Matchmaking: o contato da fila anterior deixa de valer", not s.visto_na_fila())
+        req = urllib.request.Request(f"http://127.0.0.1:{porta}/aceite/plugin", data=json.dumps({"evento": "evento", "timer": 0}).encode(),
+                                     method="POST", headers={"Content-Type": "application/json", "Origin": "https://plugins"})
+        with urllib.request.urlopen(req, timeout=5) as r:
+            st = r.status
+        caso("H13 POST /aceite/plugin do diagnóstico (Pengu) conta como contato", st == 200 and s.visto_na_fila())
+    finally:
+        cheio.parar()
+
+    # a reserva na hora de agir (LCU falsa, alvo 0,3 + folga 0,7)
+    sinal = SinalPlugin()
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, sinal=sinal)
+    caso("H14 rota no ar e plugin mudo: a reserva fica desarmada (nenhum POST, motivo no fim)",
+         lcu.posts == [] and av.reserva_fim == SEM_PLUGIN, (lcu.ops, av.reserva_fim))
+    sinal = SinalPlugin()
+    sinal.contato()
+    time.sleep(0.01)
+    sinal.entrada_fila()
+    lcu = LCURegistro()
+    av = rodar_reserva(lcu, sinal=sinal)
+    caso("H15 plugin visto na fila anterior e mudo nesta: desarmada", lcu.posts == [] and av.reserva_fim == SEM_PLUGIN,
+         (lcu.ops, av.reserva_fim))
+    sinal = SinalPlugin()
+    sinal.entrada_fila()
+    lcu = LCURegistro()
+    # o GET /ola sem Origin não chama contato() (H8): igual ao plugin mudo
+    av = rodar_reserva(lcu, sinal=sinal)
+    caso("H16 GET /ola sem Origin nesta fila (nada marcado): desarmada", lcu.posts == [] and av.reserva_fim == SEM_PLUGIN,
+         av.reserva_fim)
+    sinal = SinalPlugin()
+    sinal.entrada_fila()
+    lcu = LCURegistro()
+    # o diagnóstico chega 0,2 s depois do ready check começar (o mesmo evento de fase dispara os dois)
+    av = rodar_reserva(lcu, sinal=sinal, antes=lambda a: threading.Timer(0.2, sinal.contato).start())
+    caso("H17 POST /aceite/plugin do diagnóstico no início do ready check: armada, aceita no alvo + folga",
+         lcu.posts == ["/lol-matchmaking/v1/ready-check/accept"] and av.reserva_fim == "aceitou", (lcu.ops, av.reserva_fim))
+    linhas = []
+
+    class Coletar(logging.Handler):
+        def emit(self, rec):
+            linhas.append(rec.getMessage())
+    h = Coletar(logging.INFO)
+    lg = logging.getLogger("coletor.aviso")
+    lg.addHandler(h)
+    nivel = lg.level
+    lg.setLevel(logging.INFO)
+    try:
+        sinal = SinalPlugin()
+        rodar_reserva(LCURegistro(), sinal=sinal)
+    finally:
+        lg.removeHandler(h)
+        lg.setLevel(nivel)
+    caso("H18 log diz 'reserva do aceite desarmada: o plugin não falou nesta fila'",
+         any(ln.startswith("reserva do aceite desarmada: o plugin não falou nesta fila") for ln in linhas), linhas)
 
 
 # ---------- E. janela real ----------
@@ -709,6 +852,7 @@ def principal():
     integracao()
     reserva()
     rota_plugin()
+    aperto_de_mao()
     if a.sem_janela:
         print("parte E pulada (--sem-janela)")
     elif jogo_aberto():

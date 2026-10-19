@@ -796,7 +796,9 @@ class Coach:
             self.estado, db=self.db, porta=porta, config=config,
             mentor_http=self.mentor.rota_http if self.mentor else None, ao_config=self.configurar,
             rotas_get={"/draft": self._rota_draft, "/revisao/": self._rota_revisao},
-            garantir_partida=self.garantir_partida)
+            garantir_partida=self.garantir_partida,
+            # módulos do coach ao vivo anunciados no aperto de mão (GET /ola); as rotas o servidor calcula sozinho
+            recursos=servidor_local.RECURSOS_COACH)
         self._busca = {}   # gameId -> monotonic da última busca avulsa na LCU (no máximo 1 a cada 3 s)
         self._trava_busca = threading.Lock()
         self.jan = self.fab["janela"](f"http://127.0.0.1:{porta}/", lambda: self.cfg()["painelAoVivo"])

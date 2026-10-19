@@ -13,6 +13,9 @@
 #   GET/POST /chat/...     janelas do chat fora do client (coletor/chat_janelas.py pendura em rotas_get/rotas_post)
 #   POST /aceite/plugin    sinal e diagnóstico do aceite do plugin (aviso_partida.rota_aceite; coletor.py pendura)
 #   POST /compacto/expansoes registro das saídas do client compacto (expansoes.rota_expansoes; coletor.py pendura)
+#   GET  /ola              aperto de mão do plugin (pengu/coach.js): {app, versao, recursos}; recursos calculados na hora
+#                          do que está pendurado (rotas e o que o dono declarou), nunca lista fixa. Com Origin do client ou
+#                          do Pengu conta como contato do plugin (reserva do aceite, coletor.py _sinal_aceite)
 # CORS: só origem local (o client roda em https://127.0.0.1:<porta da LCU>; o Pengu em
 # https://plugins); site qualquer no navegador não lê nem muda nada. Host fora de 127.0.0.1/localhost
 # é recusado (rebinding de DNS).
@@ -30,6 +33,11 @@ import avisos  # noqa: E402
 import banco  # noqa: E402
 
 PORTA = 8765
+# aperto de mão (GET /ola): o plugin só fala com quem responde este app (porta 8765 de outro programa = ausente)
+APP = "lol-client-coletor"
+VERSAO_PONTE = 1
+# recursos que o dono do servidor (coach_vivo.Coach) declara: não são rotas, são módulos do coach ao vivo
+RECURSOS_COACH = ("painel", "voz", "alertas", "minimapa", "feiticos", "carregamento")
 PAINEL = banco.RAIZ / "painel"
 CONFIG = banco.RAIZ / "dados" / "config.json"
 ARQUIVOS = {"/painel.css": ("painel.css", "text/css; charset=utf-8"),
@@ -210,6 +218,15 @@ def origem_aceite_ok(rota, origem):
         return False
 
 
+# contato do plugin (reserva do aceite: plano plugin Pengu primeiro, Fase 1): só pedido COM Origin do client ou do Pengu,
+# a mesma forma de origem_aceite_ok. Sem Origin (curl, o painel, navegação) nunca conta: não prova que o plugin está vivo
+ROTAS_CONTATO = ("/ola", "/aceite/")
+
+
+def origem_plugin(origem):
+    return bool(origem) and origem_aceite_ok("/aceite/", origem)
+
+
 class _Handler(BaseHTTPRequestHandler):
     server_version = "lol-client"
     sys_version = ""
@@ -254,6 +271,15 @@ class _Handler(BaseHTTPRequestHandler):
             return True
         return False
 
+    def _contato(self, rota):
+        """GET /ola e POST /aceite/* com Origin do plugin: avisa o dono (SinalPlugin.contato). Nunca derruba o pedido"""
+        f = getattr(self.server.dono, "contato_plugin", None)
+        if f and rota.startswith(ROTAS_CONTATO) and origem_plugin(self.headers.get("Origin")):
+            try:
+                f()
+            except Exception as e:
+                log.warning("contato do plugin: %s", e)
+
     # -- verbos --
     def do_OPTIONS(self):
         if self._barrar():
@@ -282,6 +308,9 @@ class _Handler(BaseHTTPRequestHandler):
             elif rota in ARQUIVOS:
                 nome, tipo = ARQUIVOS[rota]
                 self._enviar(200, (PAINEL / nome).read_bytes(), tipo)
+            elif rota == "/ola":
+                self._contato(rota)
+                self._enviar(200, {"app": APP, "versao": VERSAO_PONTE, "recursos": srv.recursos()})
             elif rota == "/estado":
                 self._enviar(200, srv.estado())
             elif rota == "/config":
@@ -324,6 +353,7 @@ class _Handler(BaseHTTPRequestHandler):
         if self._barrar():
             return
         srv = self.server.dono
+        self._contato(rota)   # POST /aceite/plugin com Origin do plugin: ele falou nesta fila
         prefixo = next((p for p in srv.rotas_post if rota.startswith(p)), None)
         if prefixo:  # ex.: /chat/ (coletor/chat_janelas.py): f(rota, corpo bruto) -> (status, corpo[, tipo])
             try:
@@ -363,14 +393,20 @@ class _Handler(BaseHTTPRequestHandler):
 class ServidorLocal:
     """estado: f() -> dict (AoVivo.estado). /mentor…: mentor_http(metodo, caminho, corpo) -> (status, dict)
     (Mentor.rota_http, GET e POST); sem ele, GET lê a última linha da tabela `mentor` em `db`
-    (mentor: f(game_id) -> dict|None troca essa leitura). iniciar() sobe numa thread; False = porta ocupada."""
+    (mentor: f(game_id) -> dict|None troca essa leitura). iniciar() sobe numa thread; False = porta ocupada.
+    recursos: o que o dono declara além das rotas (RECURSOS_COACH); quem pendura depois (coletor.py) soma em
+    recursos_declarados. contato_plugin: f() chamada no GET /ola e no POST /aceite/* com Origin do plugin."""
 
     def __init__(self, estado=None, mentor=None, db=banco.DB_PADRAO, porta=PORTA, config=CONFIG, mentor_http=None,
-                 ao_config=None, rotas_get=None, garantir_partida=None, rotas_post=None):
+                 ao_config=None, rotas_get=None, garantir_partida=None, rotas_post=None, recursos=None):
+        self.estado_real = estado is not None   # /estado com a partida de verdade (sem ele, sempre {"partida": false})
         self.estado = estado or (lambda: {"partida": False})
         self.db = db
+        self.mentor_real = mentor is not None or mentor_http is not None
         self.mentor = mentor or mentor_do_banco(db)
         self.mentor_http = mentor_http
+        self.recursos_declarados = set(recursos or ())
+        self.contato_plugin = None
         self.porta = porta
         self.config = config
         self.ao_config = ao_config            # f(cfg) depois de cada POST /config
@@ -381,6 +417,25 @@ class ServidorLocal:
         self.garantir_partida = garantir_partida
         self.httpd = None
         self.thread = None
+
+    def recursos(self):
+        """recursos do aperto de mão (GET /ola), calculados AGORA do que está pendurado: anunciar uma rota ausente faria o
+        plugin chamá-la (ex.: aceite-reserva com a reserva desarmada, draft com --sem-coach). resumos não existe ainda"""
+        r = set(self.recursos_declarados)
+        if self.ao_config is not None:   # POST /config chega a um coach ao vivo (coach_vivo.Coach.configurar)
+            r.add("coach")
+        if self.estado_real:
+            r.add("estado-partida")
+        if self.mentor_real:
+            r.add("mentor")
+        if Path(self.db).exists():       # /contexto e /licoes leem o banco
+            r.add("contexto")
+        pendurados = [*self.rotas_get, *self.rotas_post]
+        for prefixo, nome in (("/draft", "draft"), ("/revisao/", "revisao"), ("/chat/", "chat-janelas"),
+                              ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes")):
+            if any(p.startswith(prefixo) for p in pendurados):
+                r.add(nome)
+        return sorted(r)
 
     def licoes_ou_contexto(self, rota):
         """GET /contexto/<gameId> (o JSON que o pós-jogo do client junta às lições) e /licoes/<gameId>"""

@@ -140,7 +140,8 @@ class LCU:
         """escrita do coletor na LCU: aceitar/recusar o ready check na janelinha e, nas janelas do chat
         (chat_janelas.py), enviar mensagem, convidar e marcar a conversa como lida (metodo="PUT"), por clique do
         Gabriel. A única escrita sozinha é a reserva do aceite (aviso_partida.py): accept do ready check em andamento
-        quando o plugin não aceitou no alvo dele, com o aceite automático ligado e sem "não aceitar"."""
+        quando o plugin não aceitou no alvo dele, com o aceite automático ligado, sem "não aceitar" e com o plugin visto
+        desde a última entrada em Matchmaking (SinalPlugin.visto_na_fila)."""
         dados = json.dumps(corpo).encode() if corpo is not None else b""
         req = urllib.request.Request(f"https://127.0.0.1:{self.porta}{caminho}", data=dados, method=metodo,
                                      headers={"Authorization": self.auth, "Accept": "application/json",
@@ -485,6 +486,8 @@ def _sinal_aceite(coach):
         import aviso_partida
         sinal = aviso_partida.SinalPlugin()
         srv.rotas_post["/aceite/"] = aviso_partida.rota_aceite(sinal)
+        # GET /ola e POST /aceite/* com Origin do plugin: a reserva só age com o plugin visto desde a entrada na fila
+        srv.contato_plugin = sinal.contato
         return sinal
     except Exception as e:
         log.warning("reserva do aceite desarmada: sinal fora: %s: %s", type(e).__name__, e)
@@ -529,6 +532,10 @@ class Coletor:
         self.aviso = None
         self.sinal = _sinal_aceite(coach)   # "não aceitar" e diagnóstico do plugin (POST /aceite/plugin)
         _registro_expansoes(coach)          # saídas do client compacto (POST /compacto/expansoes)
+        # a janelinha aceitar/recusar mora aqui (aviso_partida), não numa rota: anunciada no aperto de mão (GET /ola)
+        declarados = getattr(getattr(coach, "srv", None), "recursos_declarados", None)
+        if isinstance(declarados, set):
+            declarados.add("aceite-flutuante")
         self.ocioso_s = args.ocioso_min * 60
         self.ultimo_ok = time.monotonic()
         self.c = banco.abrir(args.db)
@@ -692,6 +699,10 @@ class Coletor:
         """ReadyCheck liga a janelinha (se coach.aceiteFlutuante) e a reserva do aceite (se o aceite automático está
         ligado no espelho; sem a janelinha, roda sem janela); qualquer outra fase fecha. Nunca derruba fase()"""
         try:
+            # entrada na fila (vinda de outra fase; o websocket reconectado replica a mesma): o contato do plugin de antes
+            # não vale para esta fila (a reserva confere na hora de agir, aviso_partida SinalPlugin.visto_na_fila)
+            if fase == "Matchmaking" and self.fase_atual != "Matchmaking" and self.sinal is not None:
+                self.sinal.entrada_fila()
             if fase == "ReadyCheck":
                 ligado, atraso = self._cfg_aviso()
                 reserva = self.sinal is not None   # sem a rota do plugin no ar, nunca aceita sozinho
@@ -700,7 +711,8 @@ class Coletor:
                         self.aviso = self.fab_aviso(self.lcu, atraso, sinal=self.sinal, janela=ligado, reserva=reserva)
                         self.aviso.mostrar()
                         auto = "desligado" if atraso is None else f"em {atraso:g} s, reserva do coletor " + (
-                            "armada" if reserva else "desarmada: sem rota do plugin")
+                            ("armada (plugin visto nesta fila)" if self.sinal.visto_na_fila() else
+                             "armada se o plugin falar nesta fila") if reserva else "desarmada: sem rota do plugin")
                         log.info("aviso de partida aberto (aceite automático %s)" if ligado else
                                  "aviso de partida sem janela (aceite automático %s)", auto)
                     return
