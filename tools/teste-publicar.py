@@ -455,18 +455,20 @@ rc, out = calado(P.main, ["--raiz", str(repo), "--saida", str(saida), "--sem-ban
 caso("voz: sem pacote na pasta, aprova sem o zip da voz e avisa", rc == 0 and "nenhum pacote" in out
      and len((pasta12 / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()) == 2, out[-300:])
 
-publicados = set()
+publicados = []   # releases do repositório falso, o mais novo primeiro: (rascunho, pré-lançamento, [nomes dos assets])
 
 
 def gh_voz(args):
     chamadas.append(list(args))
     if args[:2] == ["api", "--paginate"]:
-        return "\n".join(sorted(publicados)) + "\n"
+        if args[-1] == ".[].assets[].name":   # o --jq de antes da revisão: todos os nomes, de todas as páginas
+            return "".join(n + "\n" for _r, _p, ns in publicados for n in ns)
+        return "".join(("pre" if p else "rel") + "".join("\t" + n for n in ns) + "\n" for r, p, ns in publicados if not r)
     if args[:2] == ["release", "view"] and args[2] not in releases:
         raise RuntimeError("gh release view: release not found")
     if args[:2] == ["release", "create"]:
         releases[args[2]] = Path(args[args.index("--notes-file") + 1]).read_text(encoding="utf-8")
-        publicados.update(Path(x).name for x in args[args.index("--verify-tag") + 1:])
+        publicados.insert(0, (False, False, [Path(x).name for x in args[args.index("--verify-tag") + 1:]]))
     return "dosxnjos\n" if args[:2] == ["api", "user"] else ""
 
 
@@ -484,6 +486,21 @@ caso("voz: mesmo catálogo na versão seguinte = o zip da voz não sobe de novo 
      rc == 0 and len(cria) == 1 and [Path(x).name for x in cria[0][-3:]] == [
          "lol-ultra-client-complemento-0.1.3.zip", "lol-ultra-client-plugin-0.1.3.zip", "SHA256SUMS.txt"]
      and zv.name not in s13 and len(s13.splitlines()) == 2, (out[-300:], s13))
+
+# revisão adversarial da P5: o complemento (voz_pacote.achar) lê só a 1ª página de 100 releases. Com o release do zip da voz
+# empurrado para fora dessa janela (95 releases mais novos sem ele, um rascunho com ele que a API sem login não mostra), a
+# versão seguinte com o mesmo catálogo anexa o zip de novo
+for i in range(95):
+    publicados.insert(0, (False, i == 3, ["SHA256SUMS.txt"]))
+publicados.insert(0, (True, False, [zv.name, "SHA256SUMS.txt"]))
+escrever(repo, "pengu/versao.js", "export const VERSAO = '0.1.4';\nexport const REPO = 'dosxnjos/lol-ultra-client';\n")
+commitar(repo, "0.1.4 com o mesmo catálogo, 95 releases depois")
+rc, out = calado(P.main, ARGS_V + ["--publicar", "--remote", str(bare)], rodar_gh=gh_voz)
+cria = [c for c in chamadas if c[:3] == ["release", "create", "v0.1.4"]]
+s14 = (saida / "v0.1.4" / "SHA256SUMS.txt").read_text(encoding="utf-8")
+caso("voz: o release com o zip da voz fora dos 90 mais novos (rascunho não conta) = anexa de novo, SHA256SUMS com 3 linhas",
+     rc == 0 and len(cria) == 1 and zv.name in [Path(x).name for x in cria[0]] and zv.name in s14
+     and len(s14.splitlines()) == 3, (out[-300:], s14))
 
 print(f"\n{len(falhas)} falha(s)" if falhas else "\ntudo ok")
 sys.exit(1 if falhas else 0)

@@ -465,10 +465,21 @@ def _release_existe(rodar_gh, tag, repo):
         raise
 
 
-def _assets_publicados(rodar_gh, repo):
-    """nomes dos assets de todos os releases do REPO (gh api --paginate); repositório sem release = vazio"""
-    saida = rodar_gh(["api", "--paginate", f"repos/{repo}/releases?per_page=100", "--jq", ".[].assets[].name"])
-    return {l.strip() for l in (saida or "").splitlines() if l.strip()}
+JANELA_VOZ = 90   # o complemento acha o zip da voz só na 1ª página de 100 releases (voz_pacote.achar); o release novo empurra 1
+
+
+def _assets_publicados(rodar_gh, repo, janela=JANELA_VOZ):
+    """nomes dos assets dos `janela` releases mais novos como o complemento os vê (sem rascunho, que a API sem login não lista;
+    pré-lançamento ocupa lugar e não conta); repositório sem release = vazio. Zip da voz fora da janela = anexa de novo,
+    senão o complemento nunca o acha (revisão adversarial da P5)"""
+    saida = rodar_gh(["api", "--paginate", f"repos/{repo}/releases?per_page=100", "--jq",
+                      '.[] | select(.draft | not) | [if .prerelease then "pre" else "rel" end] + [.assets[].name] | join("\\t")'])
+    nomes = set()
+    for linha in [l for l in (saida or "").splitlines() if l.strip()][:janela]:
+        tipo, *assets = linha.strip().split("\t")
+        if tipo == "rel":
+            nomes.update(a.strip() for a in assets if a.strip())
+    return nomes
 
 
 def publicar(rel, remote, raiz=RAIZ, rodar_gh=None):
