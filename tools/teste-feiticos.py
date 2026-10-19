@@ -533,7 +533,7 @@ def main():
     confere("observador real liga e para (GetAsyncKeyState, sem tecla nenhuma)", vivo and not real.thread.is_alive())
     # teclas do LoL do Gabriel (Config\input.ini e PersistedSettings.json): o F9 é dele (trava o cursor); F7, F8 e o
     # numérico estão livres. Sem a pasta (outra máquina) a prova é pulada
-    if teclas.CONFIG_LOL.exists():
+    if teclas.config_lol() is not None:
         conf = teclas.conflitos_no_lol(["F7", "F8", "F9", "F10", "Num 1", "Num 3"])
         confere("LoL do Gabriel: F9 = evtToggleMouseClip; F7, F8, F10 sozinho e numérico livres",
                 "evtToggleMouseClip" in conf.get("F9", []) and not set(conf) - {"F9"}, str(conf))
