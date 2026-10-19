@@ -57,6 +57,7 @@ TESTES = [
     ["node", "tools/teste-painel.mjs"],    # painel da 2ª tela em DOM falso (inimigo morto: "morto, volta em N s")
     [PY, "tools/teste-vitrine.py"],
     [PY, "tools/teste-aviso-partida.py"],
+    [PY, "tools/teste-varrer-publico.py"],   # varredura da foto pública: gameId, nome em literal, credencial (19/10/2026)
     [PY, "tools/teste-minimapa.py"],
     [PY, "tools/teste-jungler.py"],
     [PY, "tools/teste-alcance.py"],
