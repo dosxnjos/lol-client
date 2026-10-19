@@ -1,7 +1,8 @@
 # Textos da interface
 
 Régua de todo texto que o jogador lê no client e no painel: rótulo, aviso (toast), nota, dica, tooltip (`title`),
-placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**` e `painel/**`. Origem: relato do Gabriel de
+placeholder, motivo de botão cinza e as Configurações. Vale para `pengu/**`, `painel/**` e o `publico/LEIA-ME.md` (o
+README do repositório público; guarda de tom e de nome em `tools/teste-publicar.py`, desde 19/10/2026). Origem: relato do Gabriel de
 15/10/2026 ("baixando o replay (só porque tu clicou)" e "1 clique na grade declara" soavam imaturos num app que tem
 "tanto texto bacana e adequado"). A persona do chat com o Gabriel (minúsculas, "tu fez") **não** vale aqui
 (`C:\Dev\CLAUDE.md`). Guarda automática: `node tools/teste-textos.mjs`.

@@ -1096,6 +1096,13 @@ Medição completa: [MEDICAO-2026-10-13.md](MEDICAO-2026-10-13.md) § 3 e § 4.
 - **gameId em comentário entrega a conta** → um número de partida (`partida 3293…`) basta para a match-v5 da Riot devolver
   os participantes, e o único comum a várias é o dono. Arquivo que vai para o público passa por
   `python -I tools/varrer-publico.py` (19/10/2026); a palavra `puuid` e o nome em comentário passam, o valor não.
+  Número colado em letra não conta: o hash `70f9590985796fa8.js` (`pengu/compacto/perfil.js`) reprovava o plugin (P1).
+- **`.cmd` perde o CRLF no `git add`** → o `core.autocrlf=true` do Git desta máquina (config do sistema) converte; o
+  `tools/publicar.py` monta a foto do blob cru, e `cmd.exe` com LF quebra rótulo e `goto`. `.gitattributes` tem
+  `*.cmd -text` (P1 da publicação, 19/10/2026; medido: `i/crlf` com o atributo, `i/lf` sem).
+- **Commit público com o e-mail desta máquina** → o `user.name`/`user.email` do Git aqui é o nome completo e o e-mail
+  pessoal; o `publicar.py` commita e marca a tag com `dosxnjos <dosxnjos@users.noreply.github.com>` por variável de
+  ambiente, nunca com a config (prova em `teste-publicar.py`).
 - **Tarefa com `pythonw` abre janela de console para cada filho** (`doppler`, `ffmpeg`, `py`, `tasklist`): processo sem
   console que lança programa de console dá a ele um console novo, visível. O `tools\voz-agendada.py` lança o gerador
   com `CREATE_NO_WINDOW` (console oculto) e os netos herdam esse console: medido em 13/10/2026, `GetConsoleWindow()` = 0

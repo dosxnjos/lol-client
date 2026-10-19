@@ -26,7 +26,10 @@ Bibliotecas com versão fixa: `requirements-complemento.txt`. O que o complement
 fora `mentor`, `riotapi`, `carregamento`, `draft`, `vitrine`, `travadas`, `expansoes`) e os pontos de corte: relatório
 [P0 da publicação](../roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md) § P0-d. O `vida.py` vai
 junto (o `coletor.py` importa sem `try`); o vigia não. Dado pessoal nesses arquivos (gameId, nome em texto literal, Riot ID,
-credencial, caminho): `python -I tools/varrer-publico.py` reprova; prova `tools/teste-varrer-publico.py`.
+credencial, caminho): `python -I tools/varrer-publico.py` reprova; prova `tools/teste-varrer-publico.py`. O zip do complemento
+(`tools/publicar.py`, P1) leva esses arquivos com os mesmos caminhos do repo, numa pasta `lol-ultra-client-complemento/`
+(o código lê `RAIZ/docs/...` e `RAIZ/pengu/posjogo/licoes.md`), mais `LICENSE`, `TERCEIROS.md`, `LEIA-ME.md`, `instalar.cmd`
+e `atualizar.cmd`; conteúdo sempre do commit, nunca da pasta de trabalho.
 
 ## Vida, queda e vigia (15/10/2026)
 

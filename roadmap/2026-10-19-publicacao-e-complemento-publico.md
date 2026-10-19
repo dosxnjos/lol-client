@@ -15,6 +15,10 @@ Revisão adversarial do P0 (19/10, 7 achados reais, tabela no relatório): o có
 dele nos comentários (varredura nova `tools/varrer-publico.py` reprova; P4 tira), `coletor.py` sai ocioso em 10 min sem
 o gatilho e o vigia (P4.3), faixas de calibração do chat fixas em 1080 de altura (P4.2), `ensaio-coach.py` não roda na
 lista (P4.5), `vida.py` vai junto; nome tirado do `docs/ITENS.md` e de 1 string do `aviso_partida.py`.
+**P1 feita em 19/10** (`71c2744`, `7c18f98`, `2e56520`, `8016795`; `teste-publicar.py` 43/43, `teste-varrer-publico.py` 39/39):
+`tools/publicar.py` em ensaio sobre o HEAD = plugin 50 arquivos limpo, complemento 32 e foto 78 reprovados só por 28 gameIds
+(P4.1) e pelos `.cmd` (P3.3, P4.3); `pengu/versao.js` 0.1.0 já existe; voz fica no P5
+([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p1.md)).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 
