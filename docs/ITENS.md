@@ -5,8 +5,8 @@ Dona do lembrete de build que o painel da 2ª tela mostra na tela de carregament
 abaixo: mudar o texto ou o limiar é editar aqui, sem código. Nomes de item em pt-BR como a LCU
 dá (`/lol-game-data/assets/v1/items.json`, conferidos em 13/10/2026, patch 16.20).
 
-Curadoria do agente em 13/10/2026 (conhecimento geral de build, sem estatística do Gabriel):
-**ajustar à mão** quando a build dele divergir.
+Curadoria do agente em 13/10/2026 (conhecimento geral de build, sem estatística pessoal):
+**ajustar à mão** quando a build de quem joga divergir.
 
 ## Como a composição é medida
 
