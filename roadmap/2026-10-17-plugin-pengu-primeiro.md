@@ -44,6 +44,11 @@ execução de cada fase no sidecar `roadmap/2026-10-17-plugin-pengu-primeiro.d/`
   do Gabriel; `restaurar()` mantém os favoritos; config salva dele igual, conferida no DataStore; `teste-config.mjs` 72/72,
   `teste-runas.mjs` 6/6 + 22 extras, bateria node 28/28; passo 3 segue na Fase 5): falta recarregar o plugin:
   [relatório](2026-10-17-plugin-pengu-primeiro.d/2026-10-19-fase-3.md).
+- **Revisão adversarial da Fase 3 (19/10/2026):** 4 achados (2 pares iguais), os 2 problemas reais e corrigidos: a semente
+  do README passa por `__lolClient.definir` (o `DataStore.get` volta `null` numa instalação nova; `be622a8`,
+  `teste-config.mjs` 73/73) e a seleção sem a lista do client e sem favorito visível deixa de dizer "nenhum campeão com esse
+  nome" e "só os favoritos" (`adb3ca2`, commit próprio, `teste-compacto-selecao.mjs` 265/265); bateria node 28/28; tabela no
+  relatório.
 
 ## Decisões do Gabriel (19/10/2026)
 
