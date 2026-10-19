@@ -27,12 +27,11 @@
 // nada decide pelo jogador; nunca tecla ou clique no jogo.
 import { criarJanela, criarCamada, criarBotaoModo, criarArrasto, invocadorRiot, ehAtalho, CSS, GRACA_MEDIDA_MS, tamanho } from './modo.js';
 import { lcu as lcuPadrao, avisar as avisarPadrao, estilo, FASES_JOGO } from './comum.js';
-import { avisarModo } from './chat-ponte.js';
 import { criarGeometria, lerTelaRiot, quadroDaPagina, esperarTamanhoDaPagina } from './geometria.js';
-import { criarLateral, CSS_LATERAL, lateralLigada } from './lateral.js';
+import { criarLateral, CSS_LATERAL } from './lateral.js';
 import { criarFundo } from './fundo.js';
 import { criarRegistroExpansoes, descreverCamada, textoSeguro, enviarAoColetor } from './expansoes.js';
-import { coletor as coletorPadrao, recursoDe, destinoDe } from '../coach.js';
+import { coletor as coletorPadrao, destinoDe } from '../coach.js';
 
 export const FASES = ['None', 'Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'Reconnect',
   'FailedToLaunch', 'TerminatedInError', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame'];
@@ -1210,18 +1209,15 @@ export function iniciarCompacto(context, cfg, servicos = {}) {
   if (doc.body) ligarDom();
   else doc.addEventListener('DOMContentLoaded', ligarDom, { once: true });
 
-  // janelas do chat (tela 5, coletor/chat_janelas.py): conversa nova só abre sozinha com o compacto ligado, e o
-  // coletor só sabe disso pelo POST /chat/plugin {compacto}. Manda na carga, quando a chave muda e, ligado, de novo a
-  // cada CHAT_REAVISO_MS: o coletor sobe depois do client e reinicia (volta com compacto=None). Falha = calada.
-  const chat = criarAvisoChat({ cfg, coletor: servicos.coletor, repetir: setInterval });
-  chat.avisar();
+  // o aviso do modo às janelas do chat do complemento (a cada 60 s) saiu em 19/10/2026 com as janelas (Fase 2 de
+  // roadmap/2026-10-17-plugin-pengu-primeiro.md): o chat é só o ao lado (compacto/lateral.js)
 
   // medição (passo 1): camadas da Riot vistas, para conferir a lista da regra 7 depois de uma partida real
   // (node tools/cdp.mjs eval com window.__lolClient.compacto.modais(); só tag e classe, nunca texto)
   return {
     ...rot,
-    // cfg mudou: roteador + lateral (configurações repintam, chat desligado fecha) + aviso ao coletor se a chave virou
-    sincronizar() { rot.sincronizar(); lateral.sincronizar(); fundo.sincronizar(); chat.mudou(); },
+    // cfg mudou: roteador + lateral (configurações repintam, compacto desligado fecha o chat) + fundo
+    sincronizar() { rot.sincronizar(); lateral.sincronizar(); fundo.sincronizar(); },
     modais: () => vigia.historico(),
     // etapa 3: o fundo da coluna (url à vista, último erro, leituras) — tools/cdp.mjs eval __lolClient.compacto.fundo()
     fundo: () => fundo.estado(),
@@ -1244,30 +1240,4 @@ export function expandirAntes({ compacto, abrir, aVista = () => !!globalThis.doc
     if (naCamada()) { avisar('não foi possível sair do modo compacto: use expandir e chame de novo pelo Ctrl+K', true); return null; }
   }
   return abrir();
-}
-
-export const CHAT_REAVISO_MS = 60000;
-// aviso do modo ao coletor (testável). coletor: fetch do coach.js (injetado; sem ele, o padrão da chat-ponte)
-// Passo 13: com o chat ao lado ligado (compacto.chatLateral), as janelas do Edge do coletor não abrem conversa nova sozinhas
-// (senão a conversa abriria em dobro). O corpo leva {compacto, lateral}: o coletor lê `lateral` (a2ab349) e cala a abertura
-// automática; `compacto` diz a verdade. Coletor anterior ao a2ab349 abriria em dobro: atualizar os dois juntos.
-// chave = o que foi avisado (muda = avisa de novo).
-// Fase 1 de roadmap/2026-10-17-plugin-pengu-primeiro.md: o POST /chat/plugin só sai com o complemento coach anunciando
-// "chat-janelas" (sem as janelas do Edge não há conversa em dobro a evitar); sem o recurso, nada (o reaviso periódico manda
-// quando ele aparecer)
-export function criarAvisoChat({ cfg, coletor, repetir = setInterval, intervaloMs = CHAT_REAVISO_MS }) {
-  let ultimo = null;
-  const col = () => coletor || coletorPadrao;
-  const valor = () => { const ligado = !!cfg.compacto?.ligado, lat = lateralLigada(cfg, recursoDe(col(), 'chat-janelas')); return { compacto: ligado, lateral: lat }; };
-  const chave = () => JSON.stringify(valor());
-  const avisar = () => {
-    const v = valor();
-    ultimo = chave();
-    if (!recursoDe(col(), 'chat-janelas')) return Promise.resolve(false);
-    try { return Promise.resolve(avisarModo(v.compacto, col(), { lateral: v.lateral })).catch(() => false); }
-    catch { return Promise.resolve(false); }
-  };
-  const id = repetir(() => { if (cfg.compacto?.ligado) avisar(); }, intervaloMs);
-  try { id?.unref?.(); } catch { /* browser: número */ }
-  return { avisar, mudou: () => (chave() !== ultimo ? avisar() : Promise.resolve(null)), ultimo: () => (ultimo === null ? null : JSON.parse(ultimo).compacto) };
 }

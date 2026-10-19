@@ -1098,8 +1098,9 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   globalThis.window = { innerWidth: 1280, innerHeight: 720, riotInvoke: a => pedidos.push(JSON.parse(a.request)), addEventListener: (ev, fn) => teclas.push([ev, fn]) };
   globalThis.fetch = lf.fetch;
   globalThis.Toast = { success() {}, error() {} };
-  const { iniciarCompacto, criarAvisoChat, TELAS } = await import('../pengu/compacto/index.js');
-  // coletor falso (POST /chat/plugin vai para ele, não para a LCU)
+  const mod = await import('../pengu/compacto/index.js');
+  const { iniciarCompacto, TELAS } = mod;
+  // coletor falso: desde a Fase 2 (19/10/2026, janelas antigas do chat aposentadas) o compacto não manda mais nada ao chat dele
   const aoColetor = [];
   const coletorFalso = async (caminho, op = {}) => { aoColetor.push([caminho, op.metodo || 'GET', op.corpo]); return { status: 200, dados: { ok: true } }; };
   const cfg = { compacto: { ligado: true, inicioCompacto: true, larg: 420, alt: 640 }, aceite: { ligado: true } };
@@ -1113,10 +1114,9 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
       && Object.keys(TELAS).every(k => e.telas[k] === 'ok')
       && pedidos.filter(p => p.name === 'Window.ResizeTo').map(p => p.params.join('x')).join() === '420x640'
       && !!doc.getElementById('lc-compacto') && doc.documentElement.classList.contains('lc-modo-compacto'), JSON.stringify({ e, pedidos }));
-  // passo 13: com o chat ao lado ligado (padrão), as janelas do coletor não podem abrir conversa sozinhas (abriria em dobro):
-  // vai compacto:true + lateral:true e o coletor (a2ab349) cala pela lateral (o caso de chatLateral desligado fica no bloco de baixo)
-  caso('iniciarCompacto: avisa o coletor do modo (POST /chat/plugin {compacto:true, lateral:true} com o chat ao lado ligado)',
-    aoColetor.some(([c, m, corpo]) => c === '/chat/plugin' && m === 'POST' && corpo?.compacto === true && corpo?.lateral === true), JSON.stringify(aoColetor));
+  // Fase 2 (19/10/2026): o aviso do modo às janelas do chat (a cada 60 s) saiu junto com elas
+  caso('iniciarCompacto: nenhum aviso do modo ao chat do coletor (rota /chat/ nem o antigo criarAvisoChat)',
+    !aoColetor.some(([c]) => String(c).startsWith('/chat/')) && !('criarAvisoChat' in mod) && !('CHAT_REAVISO_MS' in mod), JSON.stringify(aoColetor));
   const tecla = teclas.find(([ev]) => ev === 'keydown')?.[1];
   let parou = false;
   tecla?.({ ctrlKey: true, shiftKey: true, key: 'M', preventDefault() {}, stopPropagation() { parou = true; } });
@@ -1129,14 +1129,13 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   caso('iniciarCompacto: ouve o resize da janela (a Riot pode devolver 1280×720 sozinha)', teclas.some(([ev]) => ev === 'resize'));
   caso('iniciarCompacto: montar o lobby e alternar só leem a LCU (GET)', lf.escritas().length === 0, JSON.stringify(lf.escritas()));
   caso('iniciarCompacto: modais() expõe o histórico da medição', Array.isArray(api.modais()));
-  // chave desligada pelas Configurações: sincronizar avisa o coletor (compacto:false) uma vez
+  // chave desligada pelas Configurações: sincronizar devolve o client normal e não avisa ninguém
   const antesAviso = aoColetor.length;
   cfg.compacto.ligado = false;
   api.sincronizar(); api.sincronizar();
   await tick(10);
-  caso('sincronizar com a chave desligada: client normal e um único POST /chat/plugin {compacto:false}',
-    api.estado().efetivo === 'expandido' && aoColetor.slice(antesAviso).filter(([c]) => c === '/chat/plugin').length === 1
-      && aoColetor.at(-1)?.[2]?.compacto === false, JSON.stringify(aoColetor.slice(antesAviso)));
+  caso('sincronizar com a chave desligada: client normal e nada ao chat do coletor',
+    api.estado().efetivo === 'expandido' && !aoColetor.slice(antesAviso).some(([c]) => String(c).startsWith('/chat/')), JSON.stringify(aoColetor.slice(antesAviso)));
   Object.assign(globalThis, antes);
 }
 {
@@ -1159,8 +1158,8 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   caso('compacto desligado: client normal intocado (sem riotInvoke, sem #lc-compacto, sem botão, sem classe no <html>)',
     api.estado().efetivo === 'expandido' && pedidos.length === 0 && !doc.getElementById('lc-compacto') && !doc.getElementById('lc-botao-compacto')
       && !cl.contains('lc-modo-compacto') && !cl.contains('lc-botao-compacto') && lf.escritas().length === 0, JSON.stringify({ e: api.estado(), pedidos }));
-  caso('compacto desligado: o coletor ouve compacto:false na carga e nada mais',
-    aoColetor.length === 1 && aoColetor[0][0] === '/chat/plugin' && aoColetor[0][2]?.compacto === false, JSON.stringify(aoColetor));
+  caso('compacto desligado: nada ao chat do coletor na carga (o aviso do modo saiu com as janelas, 19/10/2026)',
+    !aoColetor.some(([c]) => String(c).startsWith('/chat/')), JSON.stringify(aoColetor));
   // atalho: desligado, o Ctrl+Shift+M segue para o client (nem engolido nem com aviso de erro)
   const tecla = ouvintes.find(([ev]) => ev === 'keydown')?.[1];
   let parou = false, impediu = false;
@@ -1169,36 +1168,6 @@ caso('CSS: aviso da camada logo abaixo do topo e sem pegar clique (TRAVAR/BANIR/
   caso('compacto desligado: Ctrl+Shift+M não é engolido nem avisa (o client recebe a tecla como sem o plugin)',
     !!tecla && !parou && !impediu && toasts.length === 0 && pedidos.length === 0, JSON.stringify({ parou, impediu, toasts }));
   Object.assign(globalThis, antes);
-}
-{
-  // aviso ao coletor: reaviso periódico só com a chave ligada (o coletor reinicia e volta com compacto=None)
-  const { criarAvisoChat } = await import('../pengu/compacto/index.js');
-  const cfg = { compacto: { ligado: true } };
-  const aoColetor = []; let periodico = null;
-  const aviso = criarAvisoChat({ cfg, coletor: async (c, op = {}) => { aoColetor.push(op.corpo); return { status: 0, dados: null }; }, repetir: fn => { periodico = fn; return 1; } });
-  await aviso.avisar();
-  periodico(); periodico();
-  await tick(4);
-  const ligadoN = aoColetor.length;
-  cfg.compacto.ligado = false;
-  await aviso.mudou();
-  periodico();
-  await tick(4);
-  caso('aviso ao coletor: coletor fora não lança; ligado reavisa a cada volta; desligado avisa 1 vez e para',
-    ligadoN === 3 && aoColetor.length === 4 && aoColetor.at(-1)?.compacto === false, JSON.stringify(aoColetor));
-}
-{
-  // passo 13: chat ao lado desligado = comportamento de antes (compacto:true, as janelas do coletor abrem sozinhas); religar
-  // avisa de novo (compacto:true, lateral:true)
-  const { criarAvisoChat } = await import('../pengu/compacto/index.js');
-  const cfg = { compacto: { ligado: true, chatLateral: false } };
-  const aoColetor = [];
-  const aviso = criarAvisoChat({ cfg, coletor: async (c, op = {}) => { aoColetor.push(op.corpo); return { status: 200, dados: { ok: true } }; }, repetir: () => 1 });
-  await aviso.avisar();
-  cfg.compacto.chatLateral = true;
-  await aviso.mudou(); await aviso.mudou();
-  caso('aviso ao coletor: chatLateral desligado manda compacto:true (como antes); ligar a lateral avisa 1 vez compacto:true + lateral:true',
-    igual(aoColetor, [{ compacto: true, lateral: false }, { compacto: true, lateral: true }]), JSON.stringify(aoColetor));
 }
 
 // ---------- 7b. Ctrl+K "analisar última partida" com a camada à vista (plano, passo 11 b2) ----------
