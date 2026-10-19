@@ -953,7 +953,9 @@ bloco Voz (`pengu\vozes.js`) só com esse recurso. A geração continua só na m
 - **Entrada:** `POST /voz/baixar {}` só com Origin do client ou do Pengu (`ROTAS_SO_PLUGIN_ESTRITO`, como o `/atualizar`: sem
   Origin = 403). `GET /voz/estado` → `{estado, motivo, pacote, instalada: {versao, falas, release} | null, esperada,
   disponivel: {versao, tag, tamanho} | null, acao: baixar | atualizar | nada, recusa, baixados, total}`; estados `parado`,
-  `consultando`, `baixando`, `conferindo`, `trocando`, `pronto`, `erro`, `recusado`. Um download por vez (409).
+  `consultando`, `baixando`, `conferindo`, `trocando`, `pronto`, `erro`, `recusado`. Um download por vez (409). POST que chega
+  durante a consulta do `GET` (GitHub lento) responde na hora (202, `consultando`) e o download sai no fim dela, sem `parado` no
+  meio (revisão da P5: esperar a consulta no handler passava dos 8 s do plugin).
 - **Qual pacote:** `voz-<pacote>-<versao>.zip` com `<versao>` = `avisos.versao_catalogo()` **do código instalado** (as falas que
   este coach diz). O `publicar.py` só anexa o zip no release em que o catálogo mudou, então ele mora num release qualquer: **1
   consulta** a `https://api.github.com/repos/<REPO>/releases?per_page=100` e vale o release mais novo (sem rascunho nem

@@ -214,8 +214,8 @@ atalho da pasta Inicializar subindo no logon e o plugin copiado para o Pengu de 
 trabalho não tem `EDICAO` na raiz (edição completa) e o monitor automático é o mesmo `DISPLAY1`.
 **Botão baixar vozes** (19/10/2026): testado com release falso local, LOCALAPPDATA no temp e complemento falso
 (`teste-voz-baixar.py`, `teste-vozes.mjs`); só o client prova o POST do CEF com Origin, o download de verdade (~36 MB, `digest`
-preenchido, redirecionamento real, só depois do P6) e a linha com o botão desenhados na ⚙; nesta máquina o bloco mostra o pacote
-gerado aqui e nenhum botão (instalação de desenvolvimento)
+preenchido, redirecionamento real, só depois do P6) e a linha com o botão desenhados na ⚙; nesta máquina, depois do próximo
+reinício do coletor, o bloco mostra o pacote gerado aqui e nenhum botão (instalação de desenvolvimento)
 ([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p5.md)).
 **Print do overlay e da moldura** (o print comum não vê os dois, de propósito): `python tools\vitrine.py ligar`
 antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\<data>\` ([COLETOR](docs/COLETOR.md) § Coach na partida).
