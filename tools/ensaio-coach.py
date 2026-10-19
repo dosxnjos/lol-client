@@ -12,6 +12,11 @@
 # Banco: cópia do dados/lol.db em temp/ensaio/ (sem a partida 3292746609, que "chega" pelo backfill no
 # EndOfGame como numa partida de verdade). Porta 8766 e simulador em 2996: o coletor real fica intocado.
 #   python tools/ensaio-coach.py [--velocidade 10] [--sem-prints] [--seg-1x 30]
+# Variante do complemento público (P4.5 de roadmap/2026-10-19-publicacao-e-complemento-publico.md): o código vem só da pasta
+# montada (o complemento instalado pelo instalar.cmd), sem Riot API, mentor, draft nem vitrine (as fábricas de verdade, o
+# caminho real do complemento), saída em temp/ensaio-publico/. Rodar com o python do venv do complemento e -I (sem o site do
+# usuário nem a pasta do script): prova que a lista de inclusão e o requirements-complemento.txt bastam.
+#   <venv>\Scripts\python.exe -I tools/ensaio-coach.py --publico <pasta do complemento> --porta 8833 --porta-sim 8834
 import argparse
 import asyncio
 import io
@@ -30,7 +35,20 @@ from pathlib import Path
 from types import SimpleNamespace
 
 RAIZ = Path(__file__).resolve().parent.parent
-sys.path.insert(0, str(RAIZ / "coletor"))
+
+
+def _publico():
+    """--publico <pasta>: lido antes de qualquer import do coletor (o sys.path decide de onde vem o código)"""
+    if "--publico" in sys.argv:
+        i = sys.argv.index("--publico")
+        if i + 1 < len(sys.argv):
+            import os
+            return Path(os.path.abspath(sys.argv[i + 1]))
+    return None
+
+
+PUBLICO = _publico()
+sys.path.insert(0, str((PUBLICO or RAIZ) / "coletor"))
 import banco  # noqa: E402
 import coach_vivo  # noqa: E402
 import coletor  # noqa: E402
@@ -39,7 +57,8 @@ import servidor_local  # noqa: E402
 GRAV = RAIZ / "temp" / "gravacao" / "20261013-071040"
 GID = 3292746609
 FIXTURES = RAIZ / "tests" / "fixtures"
-SAIDA = RAIZ / "temp" / "ensaio"
+SAIDA = RAIZ / "temp" / ("ensaio-publico" if PUBLICO else "ensaio")
+SO_COMPLETA = ("mentor", "riotapi", "carregamento", "draft", "vitrine", "travadas", "expansoes")   # fora do zip público
 log = logging.getLogger("coletor")
 
 
@@ -259,11 +278,9 @@ async def ensaio(a):
     c.close()
     camp_ids = [(p["championName"], ids.get(p["championName"].lower()), 100 if p["team"] == "ORDER" else 200)
                 for p in primeira["allPlayers"]]
-    api, riot_chamadas = riot_falsa(camp_ids)
     coach_ref = {}
+    riot_chamadas = []
 
-    import carregamento
-    import mentor
     import sugestoes
     from overlay_minimapa import OverlayMinimapa
     from voz import Voz
@@ -275,12 +292,16 @@ async def ensaio(a):
         "atalhos": lambda ao_marcar: atalhos,
         "leitor_chat": lambda f: leitor_gravado(f, lambda: coach_ref["c"].partida.relogio()
                                                 if coach_ref["c"].partida else 0, telas),
-        "carregamento": lambda **kw: carregamento.Carregamento(api=api, **kw),
-        "mentor": lambda d, ler: mentor.Mentor(db=d, ler_live=ler, chamador=claude_falso),
         "janela": lambda url, ligado: janela,
         "estatico": lambda lcu: sugestoes.carregar_estatico(FIXTURES / "jogo-estatico.json"),
         "icones": lambda lcu, ids_: None,
     }
+    if not PUBLICO:   # público: carregamento, mentor e vitrine ficam as fábricas de verdade (módulos fora do zip)
+        import carregamento
+        import mentor
+        api, riot_chamadas = riot_falsa(camp_ids)
+        fab["carregamento"] = lambda **kw: carregamento.Carregamento(api=api, **kw)
+        fab["mentor"] = lambda d, ler: mentor.Mentor(db=d, ler_live=ler, chamador=claude_falso)
     co = coach_vivo.Coach(db=db, liveclient=f"http://127.0.0.1:{a.porta_sim}", porta=a.porta, config=cfg_arq,
                           fabricas=fab, intervalo=1.0, previsoes_db=SAIDA / "previsoes.db", salvar_mapas=False)
     coach_ref["c"] = co
@@ -295,15 +316,35 @@ async def ensaio(a):
         if not cond:
             falhas.append(msg)
 
-    # champ select: as sessões gravadas pelo coletor (draft no GET /draft)
+    if PUBLICO:
+        # a lista de inclusão basta: o código vem só da pasta montada e nada da instalação do mantenedor existe nela
+        import importlib.util
+        fora = [m for m in SO_COMPLETA if importlib.util.find_spec(m) is not None]
+        de_onde = {m: Path(sys.modules[m].__file__).parent for m in ("coletor", "coach_vivo", "servidor_local", "banco")}
+        conferir(not fora and all(p == PUBLICO / "coletor" for p in de_onde.values()),
+                 f"código só da pasta montada ({PUBLICO / 'coletor'}); fora do zip e ausente: {', '.join(SO_COMPLETA)}"
+                 + (f"; ACHADOS: {fora}" if fora else ""))
+        import instalacao
+        st, ola, _ = http(a.porta, "/ola")
+        rec = set((ola or {}).get("recursos") or [])
+        base = {"coach", "painel", "voz", "alertas", "minimapa", "feiticos", "revisao", "estado-partida", "contexto",
+                "aceite-reserva", "aceite-flutuante", "atualizar"}
+        conferir(st == 200 and instalacao.PUBLICA and (ola or {}).get("edicao") == "publica" and base <= rec
+                 and not rec & instalacao.SO_COMPLETA,
+                 f"/ola da edição pública: {sorted(rec)} (pacote {(ola or {}).get('pacote')})")
+
+    # champ select: as sessões gravadas pelo coletor (draft no GET /draft; no público, o plugin calcula: 404)
     await col.fase("ChampSelect")
     sessoes = [json.loads(ln) for ln in open(GRAV / "champselect.jsonl", encoding="utf-8")]
     for s in [s["session"] for s in sessoes if "session" in s][-25:]:
         await col.evento("x", {"uri": "/lol-champ-select/v1/session", "data": s, "eventType": "Update"})
     st, d, _ = http(a.porta, "/draft")
     dr = (d or {}).get("draft") or {}
-    conferir(st == 200 and dr.get("faixa"), f"GET /draft: faixa {dr.get('faixa')}, inimigos "
-             f"{[(i.get('campeao'), i.get('rota')) for i in dr.get('inimigos') or []]}")
+    if PUBLICO:
+        conferir(st == 404, f"GET /draft na edição pública: {st} (o selo do plugin calcula sozinho)")
+    else:
+        conferir(st == 200 and dr.get("faixa"), f"GET /draft: faixa {dr.get('faixa')}, inimigos "
+                 f"{[(i.get('campeao'), i.get('rota')) for i in dr.get('inimigos') or []]}")
 
     # carregamento
     simu = subprocess.Popen([sys.executable, str(RAIZ / "tools" / "simular-liveclient.py"), "--porta", str(a.porta_sim),
@@ -322,13 +363,19 @@ async def ensaio(a):
             est = co.estado()
             if est.get("partida") and (est.get("carregamento") or {}).get("camada") == "pronto":
                 break
+            if PUBLICO and est.get("partida") and len(est.get("jogadores") or []) == 10 and est.get("composicao"):
+                break   # sem Riot API: o carregamento é a composição e a build, sem a camada do carregamento.py
         rel["carregando_ok"] = est.get("fase") == "carregando" and len(est.get("jogadores") or []) == 10
         conferir(rel["carregando_ok"], f"carregando: fase {est.get('fase')}, {len(est.get('jogadores') or [])} jogadores")
         car = est.get("carregamento") or {}
-        conferir(car.get("camada") == "pronto", f"carregamento.py: camada {car.get('camada')}, previsão "
-                 f"{(car.get('previsao') or {}).get('faixa')}, chamadas Riot falsas {len(riot_chamadas)}")
+        if PUBLICO:
+            conferir(not car and co.car is None, f"edição pública: nada da Riot API no carregamento ({car or 'nenhum'})")
+        else:
+            conferir(car.get("camada") == "pronto", f"carregamento.py: camada {car.get('camada')}, previsão "
+                     f"{(car.get('previsao') or {}).get('faixa')}, chamadas Riot falsas {len(riot_chamadas)}")
         conferir(bool(est.get("composicao")), f"composição no carregamento: {(est.get('composicao') or {}).get('texto')}")
-        conferir(bool(p.f.runas), f"runas do spectator no Feiticos: {len(p.f.runas)} campeões")
+        if not PUBLICO:
+            conferir(bool(p.f.runas), f"runas do spectator no Feiticos: {len(p.f.runas)} campeões")
         if not a.sem_prints:
             conferir(print_painel(a.porta, SAIDA / "painel-carregamento.png"), "print do painel no carregamento")
 
@@ -395,8 +442,10 @@ async def ensaio(a):
                  f"(~{100 * cpu_rapido / a.velocidade:.1f}% por leitura/s); passo p50 {statistics.median(ticks):.1f} ms, "
                  f"p95 {sorted(ticks)[int(0.95 * len(ticks))]:.1f} ms, máx {max(ticks):.0f} ms em {len(ticks)} passos")
         conferir({"carregando", "jogo", "fim"} <= fases_vistas, f"fases vistas no /estado: {sorted(fases_vistas)}")
-        faltam = {"aviso", "avisos", "jungler", "selva", "feiticos", "preparo", "carregamento", "jogadores",
-                  "objetivos", "rota", "ameaca", "padrao"} - chaves
+        faltam = {"aviso", "avisos", "jungler", "selva", "feiticos", "preparo", "jogadores",
+                  "objetivos", "rota", "ameaca", "padrao"} - chaves - ({"carregamento"} if PUBLICO else set())
+        if not PUBLICO and "carregamento" not in chaves:
+            faltam.add("carregamento")
         conferir(not faltam, f"chaves do /estado: {sorted(chaves & {'aviso', 'avisos', 'jungler', 'selva', 'feiticos', 'preparo', 'carregamento', 'composicao'})}"
                  + (f"; faltam {sorted(faltam)}" if faltam else ""))
         jog = est.get("jogadores") or []
@@ -491,7 +540,10 @@ async def ensaio(a):
         if co.mentor:
             co.mentor.esperar(10)
         st, m, _ = http(a.porta, f"/mentor/{GID}")
-        conferir(st == 200 and m.get("status") == "pronto", f"GET /mentor/{GID}: {st} status {m.get('status')}")
+        if PUBLICO:
+            conferir(co.mentor is None and st == 404, f"edição pública sem mentor: GET /mentor/{GID} = {st}")
+        else:
+            conferir(st == 200 and m.get("status") == "pronto", f"GET /mentor/{GID}: {st} status {m.get('status')}")
         st, r, _ = http(a.porta, f"/revisao/{GID}")
         rv = (r or {}).get("revisao") or {}
         conferir(st == 200 and rv.get("n"), f"revisão da previsão do jungler: {rv.get('acertos')}/{rv.get('n')} a <= "
@@ -522,6 +574,13 @@ async def ensaio(a):
     restos = [t.name for t in threading.enumerate() if t is not threading.main_thread() and not t.daemon
               and not t.name.startswith("asyncio_")]  # asyncio_N = executor do to_thread, fecha no asyncio.run
     conferir(not restos, f"threads não daemon no fim: {restos or 'nenhuma'}")
+    if PUBLICO:   # nenhum aviso de módulo que faltou: a edição pública nem tenta o que não vai no zip
+        for h in log.handlers:
+            h.flush()
+        ruins = [ln.strip()[:160] for ln in open(SAIDA / "ensaio.log", encoding="utf-8", errors="replace")
+                 if any(f"{m} falhou" in ln or f"No module named '{m}'" in ln for m in SO_COMPLETA)]
+        conferir(not ruins, f"log sem falha de módulo da instalação do mantenedor ({len(ruins)})"
+                 + (f": {ruins[:3]}" if ruins else ""))
     (SAIDA / "relatorio.json").write_text(json.dumps(rel, ensure_ascii=False, indent=1), encoding="utf-8")
     print(f"falas por tipo: {rel.get('falas_por_tipo')}")
     print(f"molduras por tipo: {rel.get('molduras_por_tipo')}; suprimidos {rel.get('suprimidos')}; "
@@ -539,6 +598,7 @@ def principal():
     ap.add_argument("--porta-sim", type=int, default=2996)
     ap.add_argument("--sem-prints", action="store_true", help="não tira os prints headless do painel")
     ap.add_argument("--com-jogo", action="store_true", help="roda mesmo com o jogo aberto (a janela Tk pode roubar foco)")
+    ap.add_argument("--publico", default=None, help="pasta do complemento público montado (o código vem só dela)")
     a = ap.parse_args()
     sys.stdout.reconfigure(encoding="utf-8")
     # chamado direto, o ensaio escapava da trava do rodar-testes e rodou na partida do Gabriel (13/10/2026)

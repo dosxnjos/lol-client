@@ -11,11 +11,12 @@
 #   foto/                                    a árvore do repositório público (mesmos caminhos do privado; publico/X na raiz)
 #   lol-ultra-client-plugin-<v>.zip          pasta lol-ultra-client/ = pengu/ + LICENSE, TERCEIROS.md, LEIA-ME.md, atualizar.cmd
 #   lol-ultra-client-complemento-<v>.zip     pasta lol-ultra-client-complemento/ com os caminhos do repo (o código lê RAIZ/...):
-#                                            a lista do complemento + o plugin inteiro em pengu/ (o instalar.cmd o copia)
+#                                            a lista do complemento + o plugin inteiro em pengu/ (o instalar.cmd o copia), +
+#                                            instalar.cmd, desinstalar.cmd e EDICAO (edição pública) na raiz (P4)
 #   SHA256SUMS.txt                           formato do sha256sum ("<hash>  <arquivo>")
 # Conteúdo = blob do commit (--ref, padrão HEAD), nunca a pasta de trabalho: arquivo mexido e não commitado sai como está no
 # commit (o ensaio avisa; o --publicar recusa). Zip reprodutível: mesma ordem, data do commit, sem atributo da máquina.
-# O pacote de voz (voz-aoede-*.zip) é do P5; o `atualizar.cmd` é do P3 e o `instalar.cmd` do P4: até lá, "falta" reprova.
+# O pacote de voz (voz-aoede-*.zip) é do P5. Arquivo da lista que falta no commit reprova ("falta (<fase>)").
 import argparse
 import hashlib
 import importlib.util
@@ -44,7 +45,8 @@ DEV_PLUGIN = frozenset()                          # arquivos de pengu/ que não 
 # só do público: origem no privado -> (destino na foto, nome no zip)
 COMUNS = {"LICENSE": ("LICENSE", "LICENSE"), "TERCEIROS.md": ("TERCEIROS.md", "TERCEIROS.md"),
           "publico/LEIA-ME.md": ("README.md", "LEIA-ME.md")}   # README.md na foto: é o que o GitHub mostra
-PENDENTES = {"publico/atualizar.cmd": "P3.3", "publico/instalar.cmd": "P4.3"}   # entram quando a fase existir
+PENDENTES = {"publico/atualizar.cmd": "P3.3", "publico/instalar.cmd": "P4.3",
+             "publico/desinstalar.cmd": "P4.3", "publico/EDICAO": "P4"}   # o "falta" diz a fase que cria
 TIPOS = {".js", ".mjs", ".css", ".html", ".md", ".py", ".txt", ".cmd", ".json", ""}
 SAIDA = RAIZ / "dist"
 
@@ -103,6 +105,10 @@ def itens(arv):
     lista.append(("publico/atualizar.cmd", "atualizar.cmd", {"plugin": f"{PASTA_PLUGIN}/atualizar.cmd",
                                                             "complemento": f"{PASTA_COMPLEMENTO}/atualizar.cmd"}))
     lista.append(("publico/instalar.cmd", "instalar.cmd", {"complemento": f"{PASTA_COMPLEMENTO}/instalar.cmd"}))
+    lista.append(("publico/desinstalar.cmd", "desinstalar.cmd", {"complemento": f"{PASTA_COMPLEMENTO}/desinstalar.cmd"}))
+    # EDICAO na raiz = edição pública (coletor/instalacao.py): sem mentor, Riot API, draft, resumos, expansões nem medidor de
+    # travadas. Na pasta de trabalho do mantenedor ele mora em publico/ e a instalação dele segue completa (P4)
+    lista.append(("publico/EDICAO", "EDICAO", {"complemento": f"{PASTA_COMPLEMENTO}/EDICAO"}))
     return lista
 
 

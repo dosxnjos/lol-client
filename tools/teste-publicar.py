@@ -1,7 +1,8 @@
 # prova do tools/publicar.py (P1 do roadmap/2026-10-19-publicacao-e-complemento-publico.md). Tudo numa pasta temporária:
 # repositório falso com a lista de inclusão inteira, remote falso (repositório bare local) e gh falso (só anota os
 # argumentos). Nada vai à rede, ao GitHub nem ao origin deste repositório. No fim, o ensaio do repositório real (só leitura,
-# zips na pasta temporária): o plugin passa e o complemento só pode reprovar por gameId (P4.1) e pelos .cmd pendentes.
+# zips na pasta temporária): aprovado, sem achado nenhum (desde a P4: gameIds fora dos comentários, os .cmd e o EDICAO no
+# commit).
 #   python -I tools/teste-publicar.py
 import importlib.util
 import io
@@ -88,6 +89,8 @@ escrever(repo, "TERCEIROS.md", "# terceiros\n")
 escrever(repo, "publico/LEIA-ME.md", "# lol-ultra-client\n\nplugin do Pengu Loader.\n")
 escrever(repo, "publico/instalar.cmd", b"@echo off\r\necho instalar\r\n")
 escrever(repo, "publico/atualizar.cmd", b"@echo off\r\necho atualizar\r\n")
+escrever(repo, "publico/desinstalar.cmd", b"@echo off\r\necho desinstalar\r\n")
+escrever(repo, "publico/EDICAO", "publica\n")
 # fora da lista: nunca entram
 FORA = ["coletor/mentor.py", "coletor/riotapi.py", "tools/coletar-meta.py", "roadmap/plano.md", "mcp/servidor.py",
         "README.md", "CLAUDE.md"]
@@ -120,9 +123,10 @@ esperado_p = {f"lol-ultra-client/{r[len('pengu/'):]}" for r in PLUGIN} | {
 caso("zip do plugin: exatamente pengu/ do commit + LICENSE, TERCEIROS, LEIA-ME e atualizar.cmd",
      nomes_p == esperado_p, sorted(nomes_p ^ esperado_p))
 esperado_c = {f"lol-ultra-client-complemento/{r}" for r in list(V.COMPLEMENTO) + list(PLUGIN)} | {
-    f"lol-ultra-client-complemento/{n}" for n in ("LICENSE", "TERCEIROS.md", "LEIA-ME.md", "atualizar.cmd", "instalar.cmd")}
+    f"lol-ultra-client-complemento/{n}" for n in ("LICENSE", "TERCEIROS.md", "LEIA-ME.md", "atualizar.cmd", "instalar.cmd",
+                                                  "desinstalar.cmd", "EDICAO")}
 caso("zip do complemento: a lista de inclusão e o plugin inteiro em pengu/ (o instalar.cmd copia), com os caminhos do "
-     "repo, + os 5 do público", nomes_c == esperado_c, sorted(nomes_c ^ esperado_c))
+     "repo, + os 7 do público (EDICAO na raiz: edição pública)", nomes_c == esperado_c, sorted(nomes_c ^ esperado_c))
 with zipfile.ZipFile(zc) as z:
     plugin_no_c = {n[len("lol-ultra-client-complemento/"):]: z.read(n) for n in z.namelist()
                    if n.startswith("lol-ultra-client-complemento/pengu/")}
@@ -344,15 +348,19 @@ caso("LICENSE: MIT, 2026, dosxnjos", lic.startswith("MIT License") and "Copyrigh
 ter = (RAIZ / "TERCEIROS.md").read_text(encoding="utf-8")
 caso("TERCEIROS.md: better-lol-chat (MIT) e Lucide (ISC)", "better-lol-chat" in ter and "Lucide" in ter and "ISC" in ter)
 
-# 6. ensaio do repositório real (só leitura; zips na pasta temporária): o plugin passa; o complemento só pode ter gameId
-# (P4.1) e os .cmd pendentes (P3.3/P4.3)
+# 6. ensaio do repositório real (só leitura; zips na pasta temporária): desde a P4 (gameIds fora dos comentários, .cmd e
+# EDICAO no commit) aprova inteiro, e o complemento leva a edição pública e os 2 módulos novos
 real = P.montar(RAIZ, "HEAD", tmp / "real", RAIZ / "dados" / "lol.db")
 plugin_reais = {d: a for d, a in real["achados"].items() if d.startswith("pengu/")}
 caso("repositório real: o plugin passa na varredura e nos imports", not plugin_reais, plugin_reais)
-resto = {d: [c for c, _ in a if c.split(" ")[0] not in ("partida",) and not c.startswith("falta (P")]
-         for d, a in real["achados"].items()}
-resto = {d: a for d, a in resto.items() if a}
-caso("repositório real: só gameId e .cmd pendentes reprovam", not resto, resto)
+caso("repositório real: aprovado, nenhum achado, os 2 zips gerados", not real["achados"] and len(real["zips"]) == 2,
+     real["achados"])
+pc = set(real["pacotes"]["complemento"])
+caso("repositório real: complemento com EDICAO, instalar.cmd, desinstalar.cmd, instalacao.py e relancador.py",
+     {f"lol-ultra-client-complemento/{n}" for n in ("EDICAO", "instalar.cmd", "desinstalar.cmd", "coletor/instalacao.py",
+                                                     "coletor/relancador.py")} <= pc
+     and not any(n.endswith(("/mentor.py", "/riotapi.py", "/carregamento.py", "/draft.py", "/travadas.py",
+                             "/expansoes.py", "/vitrine.py")) for n in pc), sorted(pc)[:5])
 print(f"repositório real (HEAD {real['commit'][:10]}): plugin {len(real['pacotes']['plugin'])} arquivos, complemento "
       f"{len(real['pacotes']['complemento'])}, foto {len(real['foto'])}; achados "
       f"{sum(len(v) for v in real['achados'].values())} em {len(real['achados'])} arquivos")
