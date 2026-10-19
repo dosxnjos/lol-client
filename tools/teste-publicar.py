@@ -102,7 +102,8 @@ commitar(repo, "base")
 escrever(repo, "pengu/nao-commitado.js", "export const x = 1;\n")    # fora do git
 
 saida = tmp / "dist"
-ARGS = ["--raiz", str(repo), "--saida", str(saida), "--sem-banco", "--resumo"]
+# --sem-voz: o pacote de voz tem a sua parte (7), com um pacote falso; sem a opção, o main leria a pasta de verdade
+ARGS = ["--raiz", str(repo), "--saida", str(saida), "--sem-banco", "--resumo", "--sem-voz"]
 
 # 1. ensaio limpo: aprova, zips e SHA256SUMS, nada do que está fora da lista
 rc, out = calado(P.main, ARGS)
@@ -364,6 +365,125 @@ caso("repositório real: complemento com EDICAO, instalar.cmd, desinstalar.cmd, 
 print(f"repositório real (HEAD {real['commit'][:10]}): plugin {len(real['pacotes']['plugin'])} arquivos, complemento "
       f"{len(real['pacotes']['complemento'])}, foto {len(real['foto'])}; achados "
       f"{sum(len(v) for v in real['achados'].values())} em {len(real['achados'])} arquivos")
+
+# 7. pacote de voz (P5): pacote falso no temp, catálogo do commit pelo avisos.py da foto, varredura das falas, zip enxuto,
+# anexado só quando nenhum release anterior tem o nome; o complemento (coletor/voz_pacote.py) aceita o que sai daqui
+sys.path.insert(0, str(RAIZ / "coletor"))
+import atualizar as A  # noqa: E402
+import voz_pacote as VP  # noqa: E402
+
+AVISOS_FALSO = ('import hashlib\n\n'
+                '# catálogo falso: as duas pessoais montadas por partes (a varredura da foto não as vê; a das falas, sim)\n'
+                'FALAS = ["gank no top", "mid sumiu", "Xe" + "rek no rio", "fala de an" + "jos", "fala suspeita", '
+                '"fala que falta"]\n\n\n'
+                'def catalogo():\n    return sorted(FALAS)\n\n\n'
+                'def versao_catalogo(frases=None):\n    frases = catalogo() if frases is None else frases\n'
+                '    return hashlib.sha1("\\n".join(sorted(frases)).encode("utf-8")).hexdigest()[:12]\n')
+escrever(repo, "coletor/avisos.py", AVISOS_FALSO)
+escrever(repo, "pengu/versao.js", "export const VERSAO = '0.1.2';\nexport const REPO = 'dosxnjos/lol-ultra-client';\n")
+commitar(repo, "catálogo falso e 0.1.2")
+import hashlib as _hl  # noqa: E402
+VERSAO_CAT = _hl.sha1("\n".join(sorted(["gank no top", "mid sumiu", "Xerek no rio", "fala de anjos", "fala suspeita",
+                                         "fala que falta"])).encode()).hexdigest()[:12]
+pac = tmp / "pacotes" / "aoede"
+pac.mkdir(parents=True)
+WAVS = {"gank no top": "aa01.wav", "mid sumiu": "aa02.wav", "Xerek no rio": "aa03.wav", "fala de anjos": "aa04.wav",
+        "fala suspeita": "aa05.wav", "fala velha": "aa06.wav"}
+for fala, arq in WAVS.items():
+    (pac / arq).write_bytes(b"RIFF" + arq.encode() * 50)
+(pac / "notas-da-geracao.txt").write_text("fora\n", encoding="utf-8")
+
+
+def indice_voz(versao=VERSAO_CAT, extra=None):
+    fs = {f: {"arquivo": a, "auditoria": {"texto": f, "nota": 1.0}, "em": "2026-10-16 13:23", "lote": 3}
+          for f, a in WAVS.items()}
+    fs["fala suspeita"]["suspeita"] = True
+    fs.update(extra or {})
+    (pac / "indice.json").write_text(json.dumps({"voz": "aoede", "versao_catalogo": versao, "modelo": "m-tts",
+                                                 "progresso_alvo": {"x": 1}, "falhas": {}, "frases": fs},
+                                                ensure_ascii=False), encoding="utf-8")
+
+
+import json  # noqa: E402
+ARGS_V = ["--raiz", str(repo), "--saida", str(saida), "--sem-banco", "--resumo", "--voz", str(pac)]
+pasta12 = saida / "v0.1.2"
+zv = pasta12 / f"voz-aoede-{VERSAO_CAT}.zip"
+
+indice_voz()                                       # sem "fala que falta": incompleto
+rc, out = calado(P.main, ARGS_V)
+caso("voz: pacote local sem uma fala do catálogo reprova (voz-incompleto), rc 1, nenhum zip",
+     rc == 1 and "voz-incompleto" in out and not zv.exists() and not (pasta12 / "SHA256SUMS.txt").exists(), out[-300:])
+indice_voz("0123456789ab", {"fala que falta": {"arquivo": "aa01.wav"}})
+rc, out = calado(P.main, ARGS_V)
+caso("voz: pacote de outro catálogo reprova (voz-catalogo)", rc == 1 and "voz-catalogo" in out and not zv.exists(), out[-300:])
+indice_voz(extra={"fala que falta": {"arquivo": "..\\fora.wav"}})
+rc, out = calado(P.main, ARGS_V)
+caso("voz: arquivo com caminho no índice local conta como falta (reprova)", rc == 1 and "voz-incompleto" in out, out[-300:])
+(pac / "aa07.wav").write_bytes(b"RIFF" + b"aa07" * 50)
+indice_voz(extra={"fala que falta": {"arquivo": "aa07.wav"}})
+rc, out = calado(P.main, ARGS_V)
+caso("voz: pacote completo aprova (rc 0) com 3 zips", rc == 0 and zv.exists(), out[-400:])
+somas = (pasta12 / "SHA256SUMS.txt").read_text(encoding="utf-8") if (pasta12 / "SHA256SUMS.txt").exists() else ""
+caso("voz: SHA256SUMS com a linha do zip da voz", f"{P.sha256(zv)}  {zv.name}\n" in somas and len(somas.splitlines()) == 3, somas)
+caso("voz: o resumo diz quantas falas e quantas saíram, nunca o texto delas",
+     "3 falas" in out and "pessoal 1" in out and "xerek 1" in out and "Xerek no rio" not in out and "anjos" not in out, out[-400:])
+with zipfile.ZipFile(zv) as z:
+    nomes_v = sorted(z.namelist())
+    ind_v = json.loads(z.read("aoede/indice.json"))
+    wav_ok = z.read("aoede/aa01.wav") == (pac / "aa01.wav").read_bytes()
+caso("voz: zip só com aoede/indice.json e os .wav das falas que passaram (sem suspeita, sem a fala fora do catálogo, sem o "
+     "resto da pasta)", nomes_v == ["aoede/aa01.wav", "aoede/aa02.wav", "aoede/aa07.wav", "aoede/indice.json"] and wav_ok,
+     nomes_v)
+caso("voz: índice enxuto (voz, versão do catálogo do commit, modelo, origem release, frases só com arquivo)",
+     set(ind_v) == {"voz", "versao_catalogo", "modelo", "origem", "frases"} and ind_v["origem"] == "release"
+     and ind_v["versao_catalogo"] == VERSAO_CAT and ind_v["frases"] == {"gank no top": {"arquivo": "aa01.wav"},
+                                                                      "mid sumiu": {"arquivo": "aa02.wav"},
+                                                                      "fala que falta": {"arquivo": "aa07.wav"}}, ind_v)
+h_voz = P.sha256(zv)
+calado(P.main, ARGS_V)
+caso("voz: zip reprodutível (mesmo pacote e commit, mesmo sha256)", P.sha256(zv) == h_voz)
+dest_v = tmp / "extraido-voz"
+dest_v.mkdir()
+esp_v = A.extrair(zv.read_bytes(), "aoede", dest_v)
+try:
+    n_v = VP.conferir_indice(dest_v, esp_v, "aoede", VERSAO_CAT)
+except A.Falha as e:
+    n_v = str(e)
+caso("voz: o complemento (voz_pacote.conferir_indice) aceita o zip que sai daqui", n_v == 3, n_v)
+rc, out = calado(P.main, ["--raiz", str(repo), "--saida", str(saida), "--sem-banco", "--resumo", "--voz",
+                          str(tmp / "pacotes" / "nao-existe")])
+caso("voz: sem pacote na pasta, aprova sem o zip da voz e avisa", rc == 0 and "nenhum pacote" in out
+     and len((pasta12 / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()) == 2, out[-300:])
+
+publicados = set()
+
+
+def gh_voz(args):
+    chamadas.append(list(args))
+    if args[:2] == ["api", "--paginate"]:
+        return "\n".join(sorted(publicados)) + "\n"
+    if args[:2] == ["release", "view"] and args[2] not in releases:
+        raise RuntimeError("gh release view: release not found")
+    if args[:2] == ["release", "create"]:
+        releases[args[2]] = Path(args[args.index("--notes-file") + 1]).read_text(encoding="utf-8")
+        publicados.update(Path(x).name for x in args[args.index("--verify-tag") + 1:])
+    return "dosxnjos\n" if args[:2] == ["api", "user"] else ""
+
+
+rc, out = calado(P.main, ARGS_V + ["--publicar", "--remote", str(bare)], rodar_gh=gh_voz)
+cria = [c for c in chamadas if c[:3] == ["release", "create", "v0.1.2"]]
+caso("voz: --publicar com catálogo novo anexa o zip da voz e o SHA256SUMS com 3 linhas", rc == 0 and len(cria) == 1
+     and zv.name in [Path(x).name for x in cria[0]]
+     and len((pasta12 / "SHA256SUMS.txt").read_text(encoding="utf-8").splitlines()) == 3, out[-300:])
+escrever(repo, "pengu/versao.js", "export const VERSAO = '0.1.3';\nexport const REPO = 'dosxnjos/lol-ultra-client';\n")
+commitar(repo, "0.1.3 com o mesmo catálogo")
+rc, out = calado(P.main, ARGS_V + ["--publicar", "--remote", str(bare)], rodar_gh=gh_voz)
+cria = [c for c in chamadas if c[:3] == ["release", "create", "v0.1.3"]]
+s13 = (saida / "v0.1.3" / "SHA256SUMS.txt").read_text(encoding="utf-8")
+caso("voz: mesmo catálogo na versão seguinte = o zip da voz não sobe de novo e sai do SHA256SUMS (2 zips + SHA256SUMS)",
+     rc == 0 and len(cria) == 1 and [Path(x).name for x in cria[0][-3:]] == [
+         "lol-ultra-client-complemento-0.1.3.zip", "lol-ultra-client-plugin-0.1.3.zip", "SHA256SUMS.txt"]
+     and zv.name not in s13 and len(s13.splitlines()) == 2, (out[-300:], s13))
 
 print(f"\n{len(falhas)} falha(s)" if falhas else "\ntudo ok")
 sys.exit(1 if falhas else 0)

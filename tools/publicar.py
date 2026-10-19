@@ -16,10 +16,20 @@
 #   SHA256SUMS.txt                           formato do sha256sum ("<hash>  <arquivo>")
 # Conteúdo = blob do commit (--ref, padrão HEAD), nunca a pasta de trabalho: arquivo mexido e não commitado sai como está no
 # commit (o ensaio avisa; o --publicar recusa). Zip reprodutível: mesma ordem, data do commit, sem atributo da máquina.
-# O pacote de voz (voz-aoede-*.zip) é do P5. Arquivo da lista que falta no commit reprova ("falta (<fase>)").
+#   voz-aoede-<catálogo>.zip                 (P5) pacote de voz público, montado do pacote gerado nesta máquina (--voz, padrão
+#                                            %LOCALAPPDATA%\lol-client\voz\pacotes\aoede; só leitura): pasta aoede/ com um
+#                                            indice.json enxuto ({voz, versao_catalogo, modelo, origem: "release", frases:
+#                                            {fala: {arquivo}}}) e só os .wav das falas do catálogo do COMMIT que passaram na
+#                                            varredura (P0-c: fala com nome, Riot ID, e-mail... sai e cai na voz do Windows),
+#                                            sem as "suspeita". Reprova: pacote de outro catálogo ou incompleto (gerar antes,
+#                                            tools/voz-agendada.py). Sem pacote na pasta: o release sai sem vozes (aviso).
+#                                            O --publicar só anexa o zip quando nenhum release anterior tem esse nome (o
+#                                            catálogo mudou); o coletor/voz_pacote.py acha o release que tem o nome exato.
+# Arquivo da lista que falta no commit reprova ("falta (<fase>)").
 import argparse
 import hashlib
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -49,6 +59,17 @@ PENDENTES = {"publico/atualizar.cmd": "P3.3", "publico/instalar.cmd": "P4.3",
              "publico/desinstalar.cmd": "P4.3", "publico/EDICAO": "P4"}   # o "falta" diz a fase que cria
 TIPOS = {".js", ".mjs", ".css", ".html", ".md", ".py", ".txt", ".cmd", ".json", ""}
 SAIDA = RAIZ / "dist"
+# pacote de voz (P5): a pasta que o tools/gerar-pacote-voz.py preenche (coletor/voz.py PACOTES_DIR); só leitura daqui
+PACOTES_VOZ = Path(os.environ.get("LOCALAPPDATA", str(Path.home()))) / "lol-client" / "voz" / "pacotes"
+VOZ_PADRAO = "aoede"
+ORIGEM_VOZ = "release"                            # coletor/voz_pacote.py ORIGEM_RELEASE: o botão só troca pacote do release
+_WAV = re.compile(r"^[0-9A-Za-z_-]{1,80}\.wav$")
+# além das regras da foto, numa fala: nome e conta do mantenedor (as do P0-c que a varredura da foto não tem como regra)
+_PESSOAL_VOZ = re.compile(r"anjos|dosxnjos", re.I)
+# catálogo do COMMIT: o avisos.py da foto, num Python isolado com só a pasta coletor/ da foto (o mesmo que o complemento
+# instalado calcula; ARQUIVOS_TEXTOS cai dentro da foto)
+_CATALOGO_PY = ("import json, sys; sys.path.insert(0, sys.argv[1]); import avisos; f = avisos.catalogo(); "
+                "print(json.dumps({'versao': avisos.versao_catalogo(f), 'frases': f}))")
 
 
 def git(raiz, *args, entrada=None, texto=True, ok=True):
@@ -180,7 +201,71 @@ def _apagar(p):
             shutil.rmtree(p, onerror=soltar)
 
 
-def montar(raiz=RAIZ, ref="HEAD", saida=SAIDA, banco=None, notas=None):
+def catalogo_da_foto(foto):
+    """{versao, frases} do catálogo da voz do commit (avisos.py da foto); None se não carrega"""
+    r = subprocess.run([sys.executable, "-I", "-c", _CATALOGO_PY, str(Path(foto) / "coletor")], cwd=str(foto),
+                       capture_output=True, text=True, encoding="utf-8")
+    try:
+        d = json.loads(r.stdout) if r.returncode == 0 else None
+    except ValueError:
+        d = None
+    ok = isinstance(d, dict) and isinstance(d.get("versao"), str) and isinstance(d.get("frases"), list)
+    return d if ok else None
+
+
+def montar_voz(pasta, foto, ids=frozenset(), textos=frozenset()):
+    """(resumo, {nome no zip: bytes}, [(categoria, linha)]) do pacote de voz público a partir do pacote gerado em `pasta`.
+    Resumo: {pacote, versao, zip, falas, fora: {categoria: n}, suspeitas, faltam}; nunca o texto de uma fala (pode ser o achado)"""
+    pasta = Path(pasta)
+    nome = pasta.name
+    resumo = {"pacote": nome, "versao": None, "zip": None, "falas": 0, "fora": {}, "suspeitas": 0, "faltam": 0}
+    try:
+        ind = json.loads((pasta / "indice.json").read_text(encoding="utf-8"))
+        assert isinstance(ind, dict) and isinstance(ind.get("frases"), dict)
+    except (OSError, ValueError, AssertionError):
+        return resumo, {}, [("voz-ilegivel", 0)]
+    cat = catalogo_da_foto(foto)
+    if cat is None:
+        return resumo, {}, [("voz-catalogo", 0)]
+    versao = cat["versao"]
+    resumo.update(versao=versao, zip=f"voz-{nome}-{versao}.zip")
+    achados = []
+    if ind.get("versao_catalogo") != versao:   # pacote gerado para outro catálogo: o voz.py casaria pela fala, mas o nome mentiria
+        achados.append(("voz-catalogo", 0))
+    frases = ind["frases"]
+    incluidas = {}
+    for fala in cat["frases"]:
+        v = frases.get(fala)
+        arq = v.get("arquivo") if isinstance(v, dict) else None
+        if not isinstance(arq, str) or not _WAV.match(arq) or not (pasta / arq).is_file():
+            resumo["faltam"] += 1
+            continue
+        if v.get("suspeita"):   # o Whisper ouviu outra coisa: o voz.py já toca a Maria; não vai
+            resumo["suspeitas"] += 1
+            continue
+        ach = [c for c, _ in V.varrer_texto("fala.txt", fala, ids, textos)] + (["pessoal"] if _PESSOAL_VOZ.search(fala) else [])
+        if ach:                 # P0-c: fala pessoal sai do pacote público (cai na voz do Windows), nunca reprova o resto
+            for c in sorted(set(ach)):
+                resumo["fora"][c] = resumo["fora"].get(c, 0) + 1
+            continue
+        incluidas[fala] = arq
+    if resumo["faltam"]:
+        achados.append(("voz-incompleto", 0))
+    indice = {"voz": nome, "versao_catalogo": versao, "modelo": ind.get("modelo"), "origem": ORIGEM_VOZ,
+              "frases": {f: {"arquivo": a} for f, a in sorted(incluidas.items())}}
+    texto = json.dumps(indice, ensure_ascii=False, indent=1, sort_keys=True) + "\n"
+    if V.varrer_texto("indice.json", texto, ids, textos) or _PESSOAL_VOZ.search(texto):   # o índice inteiro de novo
+        achados.append(("voz-indice", 0))
+    if not incluidas:
+        achados.append(("voz-vazio", 0))
+    resumo["falas"] = len(incluidas)
+    entradas = {f"{nome}/indice.json": texto.encode("utf-8")}
+    for a in sorted(set(incluidas.values())):
+        entradas[f"{nome}/{a}"] = (pasta / a).read_bytes()
+    return resumo, entradas, achados
+
+
+def montar(raiz=RAIZ, ref="HEAD", saida=SAIDA, banco=None, notas=None, voz=None):
     """monta a foto, varre e (só se passou) gera zips e SHA256SUMS. Devolve o relatório (dict). `notas`: arquivo com o
     texto do release, varrido como os arquivos da foto (vai a público no release; o P2 mostra no client)."""
     raiz, saida = Path(raiz), Path(saida)
@@ -249,6 +334,14 @@ def montar(raiz=RAIZ, ref="HEAD", saida=SAIDA, banco=None, notas=None):
     for arq, esp in imports_quebrados({n[len(pre):]: b for n, b in pacotes["complemento"].items()
                                        if n.startswith(pre + "pengu/")}):
         achar(arq, f"import {esp}")
+    voz_resumo, voz_entradas = None, {}
+    if voz is not None:                                             # P5: pacote de voz (pasta só lida)
+        if (Path(voz) / "indice.json").exists():
+            voz_resumo, voz_entradas, ach = montar_voz(voz, foto, ids, textos)
+            for cat, n in ach:
+                achar(voz_resumo["zip"] or f"voz-{Path(voz).name}", cat, n)
+        else:
+            voz_resumo = {"ausente": True}
     for destino in achados:                                         # o mesmo achado pelo zip e pela foto conta 1 vez
         achados[destino] = sorted(set(achados[destino]), key=lambda a: (a[1], a[0]))
 
@@ -261,15 +354,22 @@ def montar(raiz=RAIZ, ref="HEAD", saida=SAIDA, banco=None, notas=None):
 
     rel = {"commit": commit, "versao": versao, "repo": repo, "pasta": pasta, "foto": sorted(dados),
            "pacotes": {p: sorted(z) for p, z in pacotes.items()}, "achados": achados, "difere": difere,
-           "fora": fora, "zips": {}, "notas": texto_notas}
+           "fora": fora, "zips": {}, "notas": texto_notas, "voz": voz_resumo}
     if not achados:
         nomes = {"plugin": f"{NOME}-plugin-{versao}.zip", "complemento": f"{NOME}-complemento-{versao}.zip"}
         for p, nome in nomes.items():
             _zip(pasta / nome, pacotes[p], data)
             rel["zips"][nome] = sha256(pasta / nome)
-        (pasta / "SHA256SUMS.txt").write_text("".join(f"{h}  {n}\n" for n, h in sorted(rel["zips"].items())),
-                                              encoding="utf-8", newline="\n")
+        if voz_entradas:                                            # data do commit também: o mesmo pacote dá os mesmos bytes
+            _zip(pasta / voz_resumo["zip"], voz_entradas, data)
+            rel["zips"][voz_resumo["zip"]] = sha256(pasta / voz_resumo["zip"])
+        escrever_sums(pasta, rel["zips"])
     return rel
+
+
+def escrever_sums(pasta, zips):
+    (Path(pasta) / "SHA256SUMS.txt").write_text("".join(f"{h}  {n}\n" for n, h in sorted(zips.items())),
+                                                encoding="utf-8", newline="\n")
 
 
 def imprimir(rel, todos=True):
@@ -280,6 +380,13 @@ def imprimir(rel, todos=True):
             for n in nomes:
                 print(f"  {n}")
     print(f"\nfoto do repositório público: {len(rel['foto'])} arquivos")
+    vz = rel.get("voz")
+    if vz and vz.get("ausente"):
+        print("\nvoz: nenhum pacote na pasta (--voz); o release sai sem vozes")
+    elif vz:
+        fora = ", ".join(f"{c} {n}" for c, n in sorted(vz["fora"].items())) or "nenhuma"
+        print(f"\nvoz: {vz['zip']}: {vz['falas']} falas; fora pela varredura: {fora}; suspeitas fora: {vz['suspeitas']}; "
+              f"faltam no pacote local: {vz['faltam']} (o --publicar só anexa se nenhum release anterior tiver esse nome)")
     if rel["difere"]:
         print(f"\naviso: {len(rel['difere'])} arquivo(s) da lista mexidos e não commitados (entra o do commit): "
               + ", ".join(rel["difere"]))
@@ -358,6 +465,12 @@ def _release_existe(rodar_gh, tag, repo):
         raise
 
 
+def _assets_publicados(rodar_gh, repo):
+    """nomes dos assets de todos os releases do REPO (gh api --paginate); repositório sem release = vazio"""
+    saida = rodar_gh(["api", "--paginate", f"repos/{repo}/releases?per_page=100", "--jq", ".[].assets[].name"])
+    return {l.strip() for l in (saida or "").splitlines() if l.strip()}
+
+
 def publicar(rel, remote, raiz=RAIZ, rodar_gh=None):
     """commit da foto num clone do remote (dist/publico), tag, push e release. Devolve (sha do commit público, retomou).
     Retomada: a tag já está no remote com a MESMA foto e sem release (o push saiu e o gh release create caiu) → só o
@@ -367,6 +480,12 @@ def publicar(rel, remote, raiz=RAIZ, rodar_gh=None):
     if rel["difere"]:
         raise Recusa("arquivos da lista mexidos e não commitados: " + ", ".join(rel["difere"]))
     rodar_gh = conferir_destino(rel, remote, raiz, rodar_gh)
+    zips = dict(rel["zips"])
+    nome_voz = (rel.get("voz") or {}).get("zip")
+    if nome_voz in zips and nome_voz in _assets_publicados(rodar_gh, rel["repo"]):
+        del zips[nome_voz]          # o catálogo não mudou: o pacote de voz já mora num release anterior (decisão 3 do plano)
+        escrever_sums(rel["pasta"], zips)
+    rel["anexados"] = sorted(zips)
     tag = f"v{rel['versao']}"
     tag_remota = bool(git(raiz, "ls-remote", "--tags", remote, f"refs/tags/{tag}").stdout.strip())
     clone = Path(rel["pasta"]).parent / "publico"
@@ -414,7 +533,7 @@ def publicar(rel, remote, raiz=RAIZ, rodar_gh=None):
     arq_notas = Path(rel["pasta"]) / "NOTAS.md"        # o texto que a varredura viu no montar(), nunca relido
     arq_notas.write_text(rel.get("notas") or f"{NOME} {tag}. Instalação e conferência do hash: README.\n",
                          encoding="utf-8")
-    assets = [str(Path(rel["pasta"]) / n) for n in sorted(rel["zips"])] + [str(Path(rel["pasta"]) / "SHA256SUMS.txt")]
+    assets = [str(Path(rel["pasta"]) / n) for n in sorted(zips)] + [str(Path(rel["pasta"]) / "SHA256SUMS.txt")]
     try:
         rodar_gh(["release", "create", tag, "--repo", rel["repo"], "--title", tag, "--notes-file", str(arq_notas),
                   "--verify-tag", *assets])
@@ -435,8 +554,10 @@ def main(argv=None, rodar_gh=None):
     ap.add_argument("--publicar", action="store_true", help="commit, tag, push e release (só depois do portão do P6)")
     ap.add_argument("--remote", help="destino do --publicar (padrão git@github.com:<REPO>.git)")
     ap.add_argument("--notas", help="arquivo com o texto do release (varrido como a foto)")
+    ap.add_argument("--voz", default=str(PACOTES_VOZ / VOZ_PADRAO), help="pasta do pacote de voz gerado (só leitura)")
+    ap.add_argument("--sem-voz", action="store_true", help="release sem o pacote de voz")
     a = ap.parse_args(argv)
-    rel = montar(a.raiz, a.ref, a.saida, None if a.sem_banco else a.banco, a.notas)
+    rel = montar(a.raiz, a.ref, a.saida, None if a.sem_banco else a.banco, a.notas, None if a.sem_voz else a.voz)
     imprimir(rel, not a.resumo)
     if not a.publicar:
         return 1 if rel["achados"] else 0
@@ -450,7 +571,7 @@ def main(argv=None, rodar_gh=None):
         print(f"\nFALHOU: {e}")
         return 3
     print(f"\n{'retomado (só o release)' if retomou else 'publicado'}: v{rel['versao']} em {remote} "
-          f"(commit {sha[:10]}), release com {len(rel['zips'])} zips")
+          f"(commit {sha[:10]}), release com {len(rel.get('anexados') or rel['zips'])} zips")
     return 0
 
 
