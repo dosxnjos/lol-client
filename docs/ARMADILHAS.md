@@ -359,8 +359,9 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
   `servidor_local.CAMPOS_RESUMO`; quem lê mapeia pelo nome), as 500 partidas mais recentes que entram nas contas (mapa 11,
   fila fora de personalizada/treino, ≥ 300 s), ~130 bytes cada (191 do banco desta máquina = 25,6 KB). Escrevem só três,
   no máximo 1 `set` por vez: o pós-jogo (`analisarPartida`, das GET dele), o backfill (só `None`/`Lobby`, 1 partida a cada
-  5 s, 40 por abertura, 1 `set` por lote de 10, espera o pós-jogo e a lista do histórico em voo, aborta a GET na troca de
-  fase) e a importação do `GET /resumos` (recurso `resumos`, uma vez por abertura). Sintomas: **linha sem papel nem
+  5 s, 40 por abertura, 1 `set` por lote de 10 e o lote incompleto na saída de `None`/`Lobby` e no `beforeunload`, espera o
+  pós-jogo e a lista do histórico em voo conferindo antes de cada GET, não só na largada, aborta a GET na troca de fase;
+  revisão adversarial da Fase 4) e a importação do `GET /resumos` (recurso `resumos`, uma vez por abertura). Sintomas: **linha sem papel nem
   diferenças** = a LCU deu 404 na linha do tempo daquela partida (entra assim e não se pede de novo; outro erro fica de fora
   e volta na próxima abertura); **acumulador parado e "conta diferente da dona" no console** = outra conta no mesmo Pengu
   (o `dono` é o puuid de quem gravou primeiro; nada lido nem gravado para a outra); **partidas de outra conta no `/resumos`**

@@ -51,10 +51,18 @@ const lerHistorico = () => (histEmVoo ||= json('/lol-match-history/v1/products/l
   .finally(() => { histEmVoo = null; }));
 // prazoMs: devolve null se a leitura não terminou a tempo (ela segue e enche o cache)
 const historico = (prazoMs = 0) => (prazoMs ? Promise.race([lerHistorico(), esperar(prazoMs).then(() => null)]) : lerHistorico());
-// o pós-jogo está lendo a LCU (análise em voo ou a lista de 200 partidas): o backfill do acumulador (historico.js) espera
-export const ocupado = () => !!histEmVoo || [...analises.values()].some(a => !a.pronta);
+// o pós-jogo está lendo a LCU (análise em voo ou a lista de 200 partidas): o backfill do acumulador (historico.js) espera.
+// A análise conta pelo próprio analisarPartida, não pelo cache: o ready check (esquecerAnalises) limpa o cache com as GET
+// ainda em voo, e a chamada direta (__lolClient, Ctrl+K) nem passa por ele (revisão adversarial da Fase 4)
+let emAnalise = 0;
+export const ocupado = () => !!histEmVoo || emAnalise > 0;
 
-export async function analisarPartida(gameId, { aoEsperar, vivo } = {}) {
+export async function analisarPartida(gameId, opcoes = {}) {
+  emAnalise++;
+  try { return await analisarLendo(gameId, opcoes); } finally { emAnalise--; }
+}
+
+async function analisarLendo(gameId, { aoEsperar, vivo } = {}) {
   // histórico alimenta média de farm, lições (sessão), tendência e sessão: falha nele não derruba o painel
   // partida e linha do tempo ANTES do histórico: com uma leitura lenta de 200 partidas em voo o painel levou
   // ~50 s para abrir (13/10/2026; provável fila do match-history na LCU). Com cache, o histórico tem 1,5 s; sem, 8 s.

@@ -9,9 +9,10 @@
 // Quem escreve (no máximo 1 DataStore.set por vez):
 //   - o pós-jogo (posjogo/index.js analisarPartida): a partida que acabou, das GET que ele já faz (games + game-timelines);
 //   - o backfill: só em None/Lobby, 1 partida que falta a cada PASSO_MS, da lista que o selo da seleção já leu
-//     (champselect.js partidas()), no máximo MAX_POR_ABERTURA por abertura do client, 1 set por LOTE; para na hora em
-//     qualquer outra fase (aborta a GET em voo) e espera enquanto o pós-jogo ou a lista do histórico estão lendo (a LCU
-//     atende o match-history em fila, ARMADILHAS § LCU);
+//     (champselect.js partidas()), no máximo MAX_POR_ABERTURA por abertura do client, 1 set por LOTE (o lote incompleto
+//     na saída de None/Lobby e no beforeunload); para na hora em qualquer outra fase (aborta a GET em voo) e espera
+//     enquanto o pós-jogo ou a lista do histórico estão lendo, conferido antes de cada GET (a LCU atende o match-history
+//     em fila, ARMADILHAS § LCU);
 //   - a importação do complemento (recurso "resumos", GET /resumos?desde=<imp>): uma vez por abertura, mescla por gameId.
 // Conta diferente da dona (outra conta no mesmo Pengu): nada lido nem gravado, uma linha no console.
 import { analisar, FORA_DAS_CONTAS } from './posjogo/analise.js';
@@ -199,10 +200,15 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
     if (ctl) { try { ctl.abort(); } catch { /* ignora */ } ctl = null; }
   }
 
+  // lote incompleto do backfill (até LOTE - 1 partidas só em memória): grava, para as GET não se repetirem na próxima
+  // abertura. Na saída de None/Lobby (Matchmaking não é hora de carga; set de ~60 KB em 1,5–3,6 ms, medição C) e no
+  // beforeunload (client fechado ou plugin recarregado no lobby); revisão adversarial da Fase 4
+  const gravarPendentes = () => (pendentes > 0 ? salvar() : false);
+
   function aoFase(f) {
     if (f === fase) return;
     fase = f;
-    if (livre()) { fim = false; falhasEu = 0; if (!timer && !emPasso && !inerte) agendarPasso(); } else parar();
+    if (livre()) { fim = false; falhasEu = 0; if (!timer && !emPasso && !inerte) agendarPasso(); } else { parar(); gravarPendentes(); }
   }
   // a ponte mudou (complemento achado com "resumos") ou a lista do histórico chegou: volta a olhar se estava parado
   function cutucar() {
@@ -253,16 +259,22 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
     return mudou;
   }
 
+  // a partida deste passo volta para a fila do backfill (outro leitor da LCU começou no meio: tenta de novo depois)
+  const devolver = g => { if (tentados.delete(g.gameId)) feitos--; };
+
   async function passo() {
     if (!livre() || emPasso || inerte) return;
     emPasso = true;
     let seguir = true;
     try {
-      if (ocupado()) return;   // pós-jogo ou lista do histórico lendo: nunca em paralelo (a LCU atende em fila)
+      // pós-jogo ou lista do histórico lendo: nunca em paralelo (a LCU atende o match-history em fila). Conferido antes de
+      // cada GET, não só na largada: o pós-jogo e a lista não esperam o backfill (revisão adversarial da Fase 4). A GET que
+      // já saiu segue na fila da LCU; o que se evita é a próxima
+      if (ocupado()) return;
       const importar_ = !importado && temRecurso('resumos') && typeof coletor === 'function';
       if (!importar_ && !Array.isArray(partidas())) return;   // lista ainda não lida e nada a importar: espera sem GET
       if (!(await garantirEu())) { if (++falhasEu >= 3) seguir = false; return; }   // sem conta (antes do login): para até a próxima fase
-      if (!livre()) return;
+      if (!livre() || ocupado()) return;
       if (!contaOk(eu)) { seguir = false; return; }
       if (importar_) { await importar(); return; }
       if (feitos >= MAX_POR_ABERTURA) { seguir = false; return; }
@@ -274,10 +286,14 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
       ctl = Abort ? new Abort() : null;
       const sinal = ctl?.signal;
       const pg = await lcu(`/lol-match-history/v1/games/${g.gameId}`, sinal);
-      if (pg.status !== 200 || !livre()) return;
+      if (!livre()) return;
+      if (ocupado()) { devolver(g); return; }
+      if (pg.status !== 200) return;
       const pt = await lcu(`/lol-match-history/v1/game-timelines/${g.gameId}`, sinal);
+      // fase mudou (GET abortada ou já respondida): fica de fora nesta abertura, nada entra fora de None/Lobby.
       // 404 = a LCU não tem a linha do tempo desta partida: entra sem os campos dela (não se pede de novo).
-      // Outro erro ou abortada (fase mudou): fica de fora nesta abertura
+      // Outro erro: fica de fora nesta abertura
+      if (!livre()) return;
       if (pt.status !== 200 && pt.status !== 404) return;
       const l = linhaDe(pg.dados, eu, pt.status === 200 ? pt.dados : null);
       if (adicionar(l)) { dono = eu; pendentes++; }
@@ -302,15 +318,19 @@ export function criarHistorico({ ds = dsPadrao, lcu = lcuPadrao, agendar = (fn, 
   const linhas = (puuid = null) => (outraConta || (puuid && dono && puuid !== dono) ? []
     : [...porId.values()].sort((a, b) => b[IDX.criacao] - a[IDX.criacao]).map(comoObjeto));
 
-  return { carregar, registrar, aoFase, cutucar, passo, importar, estado, linhas, parar };
+  return { carregar, registrar, aoFase, cutucar, passo, importar, estado, linhas, parar, gravarPendentes };
 }
 
 // ---- instância do plugin (index.js chama iniciarHistorico). Antes dela, registrarPartida não faz nada ----
 let inst = null;
 
+// opcoes.janela: quem avisa o beforeunload (o window do client; injetável no teste)
 export function iniciarHistorico(context, opcoes = {}) {
   inst = criarHistorico(opcoes);
   inst.carregar();
+  const janela = 'janela' in opcoes ? opcoes.janela : (typeof window === 'undefined' ? null : window);
+  const meu = inst;
+  try { janela?.addEventListener?.('beforeunload', () => meu.gravarPendentes()); } catch { /* sem janela */ }
   let doSocket = false;
   context.socket.observe('/lol-gameflow/v1/gameflow-phase', m => { doSocket = true; inst.aoFase(m?.data); });
   (opcoes.lcu || lcuPadrao)('/lol-gameflow/v1/gameflow-phase').then(r => { if (!doSocket && r.status === 200) inst.aoFase(r.dados); });

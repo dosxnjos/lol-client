@@ -79,7 +79,8 @@ coluna da direita diz quem precisa dele: chave do coach = só com o complemento;
 partidas próprias do Rift no DataStore (`lol-client.historico`, `pengu/historico.js`), uma linha curta cada (campeão, papel,
 adversário de rota e os 5 inimigos só por campeão, vitória, diferenças aos 10 e 15 min, mortes cedo, farm). Entra a partida
 que acaba (das leituras que o pós-jogo já faz), as que faltam da lista do histórico (1 a cada 5 s, só no lobby, no máximo 40
-por abertura do client) e, com o complemento, as do banco dele (`GET /resumos`, uma vez por abertura). É a amostra do
+por abertura do client) e, com o complemento, as do banco dele (`GET /resumos`, uma vez por abertura, só as da conta
+logada). É a amostra do
 contexto do pós-jogo e da seleção sem o complemento (Fase 5). Conferir: `__lolClient.historico.estado()` no CDP. Apagar:
 `DataStore.remove('lol-client.historico')` (nada mais lê a chave antes da Fase 5).
 

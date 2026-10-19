@@ -16,7 +16,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { relatar, lcuFalsa } from './lcu-falsa.mjs';
-import { criarHistorico, linhaDe, limpar, remapear, comoObjeto, conta, CAMPOS, CHAVE, TETO, PASSO_MS, LOTE, MAX_POR_ABERTURA, VERSAO }
+import { criarHistorico, iniciarHistorico, linhaDe, limpar, remapear, comoObjeto, conta, CAMPOS, CHAVE, TETO, PASSO_MS, LOTE, MAX_POR_ABERTURA, VERSAO }
   from '../pengu/historico.js';
 
 const casos = [];
@@ -216,12 +216,16 @@ function cenario({ n = 60, rotasExtra = {}, ocupado = () => false, ds = dsFalso(
   await c.rel.avancar(PASSO_MS + 1);
   await c.rel.avancar(PASSO_MS * 20);
   const emMM = c.getsPartida().length;
+  // revisão adversarial: as partidas já buscadas (lote incompleto) gravam na saída da fase livre, não só no fim do backfill
+  caso(`5 saída para Matchmaking grava o lote incompleto: 1 set com as ${c.h.estado().linhas} já buscadas, nenhuma pendente`, c.ds.sets === 1
+    && c.h.estado().linhas >= antes && c.ds.get(CHAVE)?.linhas?.length === c.h.estado().linhas && c.h.estado().pendentes === 0,
+    [c.ds.sets, c.ds.get(CHAVE)?.linhas?.length, c.h.estado()]);
   c.h.aoFase('ReadyCheck'); c.h.aoFase('ChampSelect');
   await c.rel.avancar(PASSO_MS * 20);
   caso('5 Matchmaking: para na hora (no máximo a GET que já tinha saído), nada em 100 s', emMM <= antes + 1 && c.getsPartida().length === emMM,
     [antes, emMM, c.getsPartida().length]);
   caso('5 ChampSelect: nenhuma GET', c.getsPartida().length === emMM);
-  caso('5 nenhum set fora de None/Lobby', c.ds.sets === 0, c.ds.sets);
+  caso('5 nenhum set durante Matchmaking/ReadyCheck/ChampSelect (só o da saída)', c.ds.sets === 1, c.ds.sets);
   c.h.aoFase('Lobby');
   await c.rel.avancar(PASSO_MS * 2 + 10);
   caso('5 Lobby de novo: o backfill continua de onde parou', c.getsPartida().length === emMM + 2, c.getsPartida().length);
@@ -237,6 +241,63 @@ function cenario({ n = 60, rotasExtra = {}, ocupado = () => false, ds = dsFalso(
   caso('5 GET em voo abortada na troca de fase: a partida não entra, nenhuma GET de linha do tempo, nenhuma GET depois',
     c.abortadas.length === 1 && c.abortadas[0].endsWith('/5059') && c.h.estado().linhas === 0 && c.ds.sets === 0
     && !c.lcu.chamadas.some(x => x.url.includes('game-timelines')) && c.getsPartida().length === 1, [c.abortadas, c.h.estado(), c.getsPartida()]);
+}
+{
+  // revisão adversarial: o pós-jogo ou a lista começam no meio do passo (depois do ocupado() da largada). A GET que já saiu
+  // segue; a próxima (linha do tempo) não sai enquanto ocupado, e a partida volta para a fila (não se perde na abertura)
+  let oc = false, vezes = 0;
+  const c = cenario({ ocupado: () => oc, rotasExtra: { 'GET /lol-match-history/v1/games/5059': () => { if (!vezes++) oc = true; return partida(5059, 1_760_000_000_000 + 59 * 3_600_000); } } });
+  c.h.aoFase('Lobby');
+  await c.rel.avancar(PASSO_MS * 6);
+  const tl = () => c.lcu.chamadas.filter(x => x.url.startsWith('/lol-match-history/v1/game-timelines/'));
+  caso('6 leitor começa durante games/{id}: nenhuma GET de linha do tempo nem de partida enquanto ocupado', tl().length === 0
+    && c.getsPartida().length === 1 && c.h.estado().linhas === 0, [tl().map(x => x.url), c.getsPartida()]);
+  caso('6 a partida volta para a fila (feitos e tentados devolvidos)', c.h.estado().feitos === 0 && c.h.estado().tentados === 0, c.h.estado());
+  oc = false;
+  await c.rel.avancar(PASSO_MS + 10);
+  const salva = c.h.linhas().find(l => l.gameId === 5059);
+  caso('6 livre de novo: a mesma partida entra completa (com linha do tempo)', salva && salva.papel === 'TOP'
+    && tl().length === 1 && tl()[0].url.endsWith('/5059'), [salva?.papel, tl().map(x => x.url)]);
+  // durante a GET do puuid (current-summoner): nenhuma GET de partida enquanto ocupado
+  let oc2 = false;
+  const d = cenario({ ocupado: () => oc2, rotasExtra: { 'GET /lol-summoner/v1/current-summoner': () => { oc2 = true; return { puuid: EU }; } } });
+  d.h.aoFase('Lobby');
+  await d.rel.avancar(PASSO_MS * 4);
+  caso('6 leitor começa durante a GET do puuid: nenhuma GET de partida enquanto ocupado', d.getsPartida().length === 0, d.getsPartida());
+  oc2 = false;
+  await d.rel.avancar(PASSO_MS + 10);
+  caso('6 livre de novo: anda sem pedir o puuid outra vez', d.getsPartida().length === 1
+    && d.lcu.chamadas.filter(x => x.url === '/lol-summoner/v1/current-summoner').length === 1, d.lcu.chamadas.map(x => x.url));
+}
+{
+  // revisão adversarial: lote incompleto no beforeunload (client fechado ou plugin recarregado no lobby)
+  const c = cenario();
+  c.h.aoFase('Lobby');
+  await c.rel.avancar(PASSO_MS * 3 + 10);
+  const n = c.h.estado().linhas;
+  caso(`5 gravarPendentes: 1 set com as ${n} buscadas (lote incompleto)`, n === 3 && c.h.gravarPendentes() && c.ds.sets === 1
+    && c.ds.get(CHAVE).linhas.length === 3 && c.h.estado().pendentes === 0, [n, c.ds.sets]);
+  caso('5 gravarPendentes sem pendente: nenhum set', !c.h.gravarPendentes() && c.ds.sets === 1);
+  // iniciarHistorico pendura o beforeunload na janela
+  const ouv = {};
+  const janela = { addEventListener: (tipo, fn) => { ouv[tipo] = fn; } };
+  const ds = dsFalso();
+  const rel = relogio();
+  // 3 partidas na lista e 1 passo só: o backfill não acaba (o fim dele já gravaria) e fica 1 pendente
+  const tres = [5100, 5101, 5102].map((id, i) => partida(id, 1_760_000_000_000 + i * 3_600_000));
+  const rotas = { 'GET /lol-summoner/v1/current-summoner': { puuid: EU } };
+  for (const g of tres) { rotas[`GET /lol-match-history/v1/games/${g.gameId}`] = g; rotas[`GET /lol-match-history/v1/game-timelines/${g.gameId}`] = LINHA; }
+  const lf = lcuFalsa(rotas);
+  const fase = [];
+  const inst = iniciarHistorico({ socket: { observe: (rota, fn) => fase.push(fn) } }, { ds, janela, agendar: rel.agendar, cancelar: rel.cancelar,
+    lcu: async u => { const r = await lf.fetch(u); let dados = null; try { dados = await r.json(); } catch { /* vazio */ } return { status: r.status, dados }; },
+    partidas: () => tres.map(daLista), log: () => {} });
+  fase.forEach(fn => fn({ data: 'Lobby' }));
+  await rel.avancar(PASSO_MS + 10);
+  const antes = ds.sets;
+  ouv.beforeunload?.();
+  caso('5 beforeunload (iniciarHistorico) grava o lote incompleto', typeof ouv.beforeunload === 'function' && inst.estado().linhas === 1
+    && antes === 0 && ds.sets === 1 && ds.get(CHAVE).linhas.length === 1, [typeof ouv.beforeunload, antes, ds.sets]);
 }
 {
   // 6. ocupado: pós-jogo ou lista em voo -> nenhuma GET
@@ -420,7 +481,12 @@ function complemento({ dono = EU, linhas, campos = CAMPOS, status = 200 } = {}) 
     && lcu.chamadas.filter(c => c.url === '/lol-summoner/v1/current-summoner').length === 1 && lcu.escritas().length === 0,
     lcu.chamadas.map(c => c.url));
   caso('10 o acumulador assina a fase do gameflow (backfill só em None/Lobby)', ouvintes.some(([rota]) => rota === '/lol-gameflow/v1/gameflow-phase'));
-  await pos.analisarPartida(ID);
+  // revisão adversarial: ocupado() vale enquanto a análise lê a LCU, pelo próprio analisarPartida (chamada direta ou com o
+  // cache já limpo pelo ready check), não só pelo cache do obterAnalise
+  const emVoo = pos.analisarPartida(ID);
+  const ocupadoNoVoo = pos.ocupado();
+  await emVoo;
+  caso('10 pós-jogo ocupado() enquanto a análise lê a LCU (chamada direta) e livre depois', ocupadoNoVoo && !pos.ocupado(), [ocupadoNoVoo, pos.ocupado()]);
   caso('10 a mesma partida analisada de novo (painel reaberto, Ctrl+K): nenhum set a mais', ds.sets === 1, ds.sets);
   caso('10 varredura de privacidade no que o pós-jogo gravou', varrer(ds.bruto()).length === 0, varrer(ds.bruto()));
 }
