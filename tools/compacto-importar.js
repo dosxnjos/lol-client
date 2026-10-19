@@ -15,7 +15,9 @@
     // passo 15 (registro das expansões) e plano de 16/10/2026 (amigos com pastas e menu, perfil e editor, fundo da coluna)
     'compacto/expansoes.js', 'compacto/amigos.js', 'compacto/amigos-menu.js', 'compacto/perfil.js', 'compacto/fundo.js',
     // etapas B e C de roadmap/2026-10-16-chat-da-sala-som-icones.md (som do client nas configurações; ícones Lucide embutidos)
-    'compacto/som.js', 'icones.js', 'replay.js'];
+    'compacto/som.js', 'icones.js', 'replay.js',
+    // Fase 4 de roadmap/2026-10-17-plugin-pengu-primeiro.md (acumulador do histórico)
+    'historico.js'];
   const out = {};
   for (const m of mods) {
     try { const mod = await import(`${base}${m}?v=${v}`); out[m] = Object.keys(mod).length + (typeof mod.montar === 'function' ? ' montar' : ''); }

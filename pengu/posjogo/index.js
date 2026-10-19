@@ -13,6 +13,7 @@ import { criarConfirmacao, cliqueComFreio, JANELA_MS } from '../freios.js';
 import { criarReplay, REPLAY, CSS_REPLAY } from '../replay.js';
 import { estilo, frase } from '../compacto/comum.js';
 import { icone, iconeHtml } from '../icones.js';
+import { registrarPartida } from '../historico.js';
 
 const esperar = ms => new Promise(r => setTimeout(r, ms));
 const json = async url => { const r = await fetch(url); if (!r.ok) throw new Error(`${url}: ${r.status}`); return r.json(); };
@@ -50,6 +51,8 @@ const lerHistorico = () => (histEmVoo ||= json('/lol-match-history/v1/products/l
   .finally(() => { histEmVoo = null; }));
 // prazoMs: devolve null se a leitura não terminou a tempo (ela segue e enche o cache)
 const historico = (prazoMs = 0) => (prazoMs ? Promise.race([lerHistorico(), esperar(prazoMs).then(() => null)]) : lerHistorico());
+// o pós-jogo está lendo a LCU (análise em voo ou a lista de 200 partidas): o backfill do acumulador (historico.js) espera
+export const ocupado = () => !!histEmVoo || [...analises.values()].some(a => !a.pronta);
 
 export async function analisarPartida(gameId, { aoEsperar, vivo } = {}) {
   // histórico alimenta média de farm, lições (sessão), tendência e sessão: falha nele não derruba o painel
@@ -61,6 +64,8 @@ export async function analisarPartida(gameId, { aoEsperar, vivo } = {}) {
   const hist = lido || [...cacheHist.values()];
   const r = analisar(partida, linha, eu.puuid, hist);
   if (r.erro) return r;
+  // acumulador do histórico (historico.js, Fase 4): a partida entra das GET que já foram feitas aqui, sem GET a mais
+  try { registrarPartida(partida, linha, eu.puuid, r); } catch (e) { console.error('[lol-client] histórico', e); }
   r.historicoIncompleto = !lido;
   const meu = partida.participants.find(p => p.participantId === r.participantId);
   r.esta = {

@@ -5,7 +5,8 @@ import { cfg, carregar, registrarAcoes, registrarAcoesCoach, definir, aoMudar, c
 import { iniciarConfiguracoes, registrarBloco, usarRecursos, redesenharConfiguracoes } from './configuracoes.js';
 import { iniciarAceite, mostrarOverlay, esconderOverlay } from './aceite.js';
 import { iniciarFilaRapida } from './fila-rapida.js';
-import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel } from './posjogo/index.js';
+import { iniciarPosjogo, analisarUltima, abrirPainel, analisarPartida, fecharPainel, ocupado as posjogoOcupado } from './posjogo/index.js';
+import { iniciarHistorico } from './historico.js';
 import { iniciarChampSelect } from './champselect.js';
 import { iniciarRunas } from './runas.js';
 import { iniciarRecompensas, levantar, criarLcu } from './recompensas.js';
@@ -39,6 +40,14 @@ export function init(context) {
   const historico = champ ? { partidas: champ.partidas, ler: champ.lerHistorico } : null;
   const fila = seguro('fila rápida', () => iniciarFilaRapida(context, cfg, { historico }));
   const posjogo = seguro('pós-jogo', () => iniciarPosjogo(context, cfg, coletor));
+  // acumulador do histórico próprio no DataStore (historico.js, Fase 4 do plano plugin Pengu primeiro): a partida que acaba
+  // entra pelo pós-jogo; o backfill (só None/Lobby) usa a lista que o selo já leu e espera o pós-jogo e a lista em voo;
+  // com "resumos" anunciado, importa do complemento uma vez por abertura
+  const acumulador = seguro('histórico', () => iniciarHistorico(context, {
+    partidas: () => champ?.partidas() ?? null,
+    ocupado: () => !!(posjogoOcupado() || champ?.estado().carregando),
+    coletor, temRecurso,
+  }));
   const chat = seguro('chat do pós-jogo', () => iniciarChatPosjogo(context, cfg));
   const runas = seguro('runas', () => iniciarRunas(context, cfg));
   const recompensas = seguro('recompensas', () => iniciarRecompensas(context, cfg));
@@ -84,6 +93,7 @@ export function init(context) {
     seguro('compacto', () => compacto?.sincronizar());
     seguro('champ select', () => champ?.desenhar());
     seguro('ações do coach', () => registrarAcoesCoach(mostraRecurso));
+    seguro('histórico', () => acumulador?.cutucar()); // complemento com "resumos" achado: a importação sai no próximo passo
   });
   // com a camada compacta à vista, expande antes de abrir o painel (compacto/index.js expandirAntes, passo 11 b2)
   seguro('ações', () => registrarAcoes([
@@ -103,6 +113,7 @@ export function init(context) {
     coach: { coletor, estado: estadoPonte, temRecurso, apertar: () => apertarMao('cdp'), sincronizar: () => sincronizarConfig(cfg) },
     aceite: { mostrarOverlay, esconderOverlay }, // overlay só desenha; quem aceita é o observador
     winrate: champ, // estado(), estatisticas(championId, posicao), lerHistorico()
+    historico: acumulador && { estado: acumulador.estado, linhas: acumulador.linhas }, // acumulador (só leitura)
     runas, // aoTravar(championId, posicao) simula o travamento: aplica a runa ou abre o popup
     // levantar() só lê (GET): o que está pendente e o motivo de pular cada item; rodar() coleta de verdade
     recompensas: { levantar: () => levantar(criarLcu(), cfg), rodar: () => recompensas?.rodar('manual'), estado: () => recompensas?.estado() },
