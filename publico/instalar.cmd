@@ -135,7 +135,7 @@ function DeHex([string]$h) {
 
 # versão e bits de um Python, sem deixar o stderr dele virar erro do PowerShell. Exe/Pre = o candidato como foi chamado (é
 # com ele que o venv nasce): o sys.executable impresso num pipe sai na página ANSI e o PowerShell lê na OEM, e um acento no
-# caminho (C:\Users\João) chegava trocado. Caminho = o sys.executable em hex do UTF-8, só para mostrar.
+# caminho (pasta do usuário João) chegava trocado. Caminho = o sys.executable em hex do UTF-8, só para mostrar.
 function InfoPython([string]$exe, [string[]]$pre) {
   $ErrorActionPreference = 'Continue'
   try {
