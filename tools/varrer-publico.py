@@ -53,7 +53,12 @@ def do_banco(caminho):
     ids, textos = set(), set()
     if not caminho or not Path(caminho).exists():
         return ids, textos
-    con = sqlite3.connect(f"file:{Path(caminho).resolve().as_posix()}?mode=ro", uri=True)
+    try:
+        con = sqlite3.connect(f"file:{Path(caminho).resolve().as_posix()}?mode=ro", uri=True)
+        con.execute("select 1 from sqlite_master limit 1")
+    except sqlite3.Error as e:   # WAL sem -shm com o coletor parado, banco travado: segue só com as regras de texto
+        print(f"aviso: banco {caminho} ilegível só leitura ({e}); varredura sem os game_ids do banco", file=sys.stderr)
+        return ids, textos
     try:
         tabelas = {r[0] for r in con.execute("select name from sqlite_master where type='table'")}
         for t in sorted(tabelas):
