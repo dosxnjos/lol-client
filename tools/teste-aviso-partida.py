@@ -546,8 +546,8 @@ def aperto_de_mao():
                                          mentor_http=lambda *a: (200, {}), ao_config=lambda c: None, rotas_get=rotas,
                                          recursos=servidor_local.RECURSOS_COACH)
     esperado = sorted(["coach", "painel", "voz", "alertas", "minimapa", "feiticos", "carregamento", "estado-partida",
-                       "mentor", "contexto", "draft", "revisao"])
-    caso("H2 coach de pé (como o coach_vivo monta): coach, módulos declarados, estado, mentor, contexto, draft, revisão",
+                       "mentor", "contexto", "resumos", "draft", "revisao"])
+    caso("H2 coach de pé (como o coach_vivo monta): coach, módulos declarados, estado, mentor, contexto, resumos, draft, revisão",
          cheio.recursos() == esperado, cheio.recursos())
     sem_draft = servidor_local.ServidorLocal(lambda: {}, db=db, porta=0, config=TMP / "cfg-ola.json",
                                              ao_config=lambda c: None, rotas_get={"/revisao/": rotas["/revisao/"]})
@@ -566,7 +566,9 @@ def aperto_de_mao():
     rec_chat = cheio.recursos()
     del cheio.rotas_post["/chat/"]
     caso("H5 /aceite/ e /compacto/ pendurados: aceite-reserva e expansoes anunciados; chat-janelas nunca (aposentado)",
-         {"aceite-reserva", "expansoes"} <= set(rec) and "resumos" not in rec and "chat-janelas" not in rec_chat, [rec, rec_chat])
+         {"aceite-reserva", "expansoes"} <= set(rec) and "chat-janelas" not in rec_chat, [rec, rec_chat])
+    caso("H5c resumos (Fase 4) só com o banco, como contexto: anunciado no cheio, fora no servidor sem banco",
+         "resumos" in rec and "resumos" not in nu.recursos(), [rec, nu.recursos()])
     args = SimpleNamespace(db=str(TMP / "teste.db"), ocioso_min=10, lockfile=None, config=str(TMP / "cfg-ola.json"))
     col = coletor.Coletor(args, SimpleNamespace(srv=cheio, servidor_no_ar=True), fab_aviso=lambda *a, **k: None)
     caso("H5b o Coletor não monta mais as janelas do chat (nem atributo chat, nem rota /chat/ pendurada)",

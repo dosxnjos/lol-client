@@ -9,6 +9,8 @@
 #                          plugin (as chaves do coach dentro de "coach") ou só as chaves soltas
 #   GET  /contexto/<gameId> contexto do coletor para as lições do pós-jogo (coach.contexto_partida)
 #   GET  /licoes/<gameId>  as 3 lições da partida (coach.licoes_partida)
+#   GET  /resumos?desde=<gameId> as partidas próprias no formato do acumulador do plugin (pengu/historico.js; só leitura,
+#                          só agregado próprio; resumos_do_banco), para a importação uma vez por abertura do client
 #   GET  <rotas extras>    o coletor pendura outras (ex.: /draft, /revisao/<gameId>); as /chat/* das janelas do chat
 #                          fora do client saíram em 19/10/2026 (Fase 2 de roadmap/2026-10-17-plugin-pengu-primeiro.md)
 #   POST /aceite/plugin    sinal e diagnóstico do aceite do plugin (aviso_partida.rota_aceite; coletor.py pendura)
@@ -26,7 +28,7 @@ import sys
 import threading
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from urllib.parse import urlsplit
+from urllib.parse import parse_qs, urlsplit
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import avisos  # noqa: E402
@@ -174,6 +176,53 @@ def mentor_do_banco(db):
     return f
 
 
+# GET /resumos?desde=<gameId> (Fase 4 de roadmap/2026-10-17-plugin-pengu-primeiro.md): as partidas próprias do banco no
+# formato do acumulador do plugin (pengu/historico.js, chave lol-client.historico), para a importação uma vez por abertura.
+# Só leitura e só agregado próprio: o inimigo entra por campeão, nunca nome, Riot ID nem puuid de outro jogador. A ordem
+# dos campos é a de pengu/historico.js CAMPOS (guarda: tools/teste-resumos.py), e o plugin mapeia pelo nome.
+CAMPOS_RESUMO = ("gameId", "criacao", "duracao", "fila", "campeao", "papel", "adversario", "incerto", "vitoria",
+                 "ouro10", "xp10", "farm10", "ouro15", "xp15", "farm15", "mortes10", "solo10", "gank10", "cs", "inimigos")
+TETO_RESUMOS = 500      # pengu/historico.js TETO: as mais recentes
+MS_10 = 600000
+VERSAO_RESUMOS = 1
+
+
+def resumos_do_banco(c, desde=0, teto=TETO_RESUMOS):
+    """{v, dono, campos, linhas}: até `teto` partidas próprias com game_id > desde, mais recentes primeiro, só as que entram
+    nas contas (mapa 11, fila fora de analise.FORA_DAS_CONTAS, duração >= analise.REMAKE_S). Com linha do tempo no banco,
+    papel, adversário, diferenças aos 10/15 e mortes cedo saem do analise.analisar (o mesmo que o pós-jogo do plugin
+    calcula em JS); sem ela, null. dono = puuid desta conta (meta), que o plugin confere antes de mesclar"""
+    import analise  # noqa: PLC0415 (só quando pedem: o servidor sobe sem ele)
+    puuid = banco.meta(c, "puuid")
+    sql = ("select game_id, criacao, duracao, fila, campeao, time, vitoria, tem_timeline from partidas "
+           f"where eu is not null and mapa = 11 and fila not in {analise.FORA_DAS_CONTAS} and duracao >= {analise.REMAKE_S} "
+           "and game_id > ? order by criacao desc, game_id desc limit ?")
+    linhas = []
+    for gid, criacao, duracao, fila, campeao, time_, vitoria, tem_tl in c.execute(sql, (int(desde), int(teto))).fetchall():
+        inimigos = [r[0] for r in c.execute(
+            "select campeao from participantes where game_id = ? and time <> ? order by participant_id", (gid, time_))]
+        cs = c.execute("select coalesce(cs_tropas, 0) + coalesce(cs_selva, 0) from participantes where game_id = ? and eu = 1",
+                       (gid,)).fetchone()
+        o = {"gameId": gid, "criacao": criacao, "duracao": duracao, "fila": fila, "campeao": campeao, "papel": None,
+             "adversario": None, "incerto": None, "vitoria": 1 if vitoria else 0, "cs": cs[0] if cs else 0, "inimigos": inimigos}
+        r = analise.analisar(c, gid, puuid) if tem_tl and puuid else {"erro": "sem linha do tempo"}
+        if "erro" not in r:
+            o["papel"] = r.get("papel")
+            adv = r.get("adversario")
+            if adv:
+                o["adversario"], o["incerto"] = adv["campeao"], 1 if adv["incerto"] else 0
+            for m in ("10", "15"):
+                d = r["diffs"].get(m) or {}
+                for k in ("ouro", "xp", "farm"):
+                    o[f"{k}{m}"] = d.get(k)
+            cedo = [x for x in r["mortes"] if x["ms"] < MS_10]
+            o["mortes10"] = len(cedo)
+            o["solo10"] = sum(x["inimigos"] == 1 for x in cedo)
+            o["gank10"] = sum(x["inimigos"] >= 2 for x in cedo)
+        linhas.append([o.get(k) for k in CAMPOS_RESUMO])
+    return {"v": VERSAO_RESUMOS, "dono": puuid, "campos": list(CAMPOS_RESUMO), "linhas": linhas}
+
+
 def origem_ok(origem):
     if not origem:
         return True  # sem Origin: navegação direta, curl, o próprio painel
@@ -309,6 +358,8 @@ class _Handler(BaseHTTPRequestHandler):
                 self._enviar(200 if r else 404, {"gameId": gid, "mentor": r})
             elif rota.startswith(("/contexto/", "/licoes/")):
                 self._enviar(*srv.licoes_ou_contexto(rota))
+            elif rota == "/resumos":
+                self._enviar(*srv.resumos(self.path))
             elif any(rota.startswith(p) for p in srv.rotas_get):
                 prefixo = next(p for p in srv.rotas_get if rota.startswith(p))
                 self._enviar(*srv.rotas_get[prefixo](rota))
@@ -401,7 +452,7 @@ class ServidorLocal:
 
     def recursos(self):
         """recursos do aperto de mão (GET /ola), calculados AGORA do que está pendurado: anunciar uma rota ausente faria o
-        plugin chamá-la (ex.: aceite-reserva com a reserva desarmada, draft com --sem-coach). resumos não existe ainda"""
+        plugin chamá-la (ex.: aceite-reserva com a reserva desarmada, draft com --sem-coach)"""
         r = set(self.recursos_declarados)
         if self.ao_config is not None:   # POST /config chega a um coach ao vivo (coach_vivo.Coach.configurar)
             r.add("coach")
@@ -409,8 +460,9 @@ class ServidorLocal:
             r.add("estado-partida")
         if self.mentor_real:
             r.add("mentor")
-        if Path(self.db).exists():       # /contexto e /licoes leem o banco
+        if Path(self.db).exists():       # /contexto, /licoes e /resumos leem o banco
             r.add("contexto")
+            r.add("resumos")
         pendurados = [*self.rotas_get, *self.rotas_post]
         for prefixo, nome in (("/draft", "draft"), ("/revisao/", "revisao"),
                               ("/aceite/", "aceite-reserva"), ("/compacto/", "expansoes")):
@@ -444,6 +496,22 @@ class ServidorLocal:
                 r = coach.licoes_partida(c, gid)
                 return (404 if "erro" in r else 200), r
             return 200, coach.contexto_partida(c, gid)
+        finally:
+            c.close()
+
+    def resumos(self, caminho):
+        """GET /resumos?desde=<gameId>: resumos_do_banco (importação do acumulador do plugin). desde inválido = 400"""
+        q = parse_qs(urlsplit(caminho).query)
+        try:
+            desde = int((q.get("desde") or ["0"])[0] or 0)
+        except ValueError:
+            return 400, {"erro": "desde inválido"}
+        try:
+            c = banco.abrir_leitura(self.db)
+        except FileNotFoundError:
+            return 404, {"erro": "sem banco"}
+        try:
+            return 200, resumos_do_banco(c, max(0, desde))
         finally:
             c.close()
 

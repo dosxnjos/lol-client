@@ -25,6 +25,7 @@ TESTES = [
     ["node", "tools/teste-aceite.mjs"],
     ["node", "tools/teste-config.mjs"],
     ["node", "tools/teste-ponte.mjs"],    # ponte com o complemento coach: chave, aperto de mão, recuo, recursos (19/10/2026)
+    ["node", "tools/teste-historico.mjs"],   # acumulador do histórico no DataStore: formato, teto, backfill, importação, privacidade (19/10/2026)
     ["node", "tools/teste-sem-popups.mjs"],
     ["node", "tools/teste-chat-posjogo.mjs"],
     ["node", "tools/teste-recompensas.mjs"],
@@ -45,6 +46,7 @@ TESTES = [
     ["node", "tools/teste-textos.mjs"],   # tom dos textos da interface (docs/TEXTOS-DA-INTERFACE.md, 15/10/2026)
     ["node", "tools/teste-icones.mjs"],   # ícones Lucide embutidos (pengu/icones.js) e nenhum emoji como ícone (17/10/2026)
     [PY, "tools/teste-expansoes.py"],      # rota /compacto/expansoes (porta 8798), jsonl com rotação e relatório
+    [PY, "tools/teste-resumos.py"],        # rota GET /resumos (porta 0): mesmo formato e mesma linha do plugin, privacidade (19/10/2026)
     [PY, "tools/teste-medir-compacto.py"],
     [PY, "tools/teste-coach.py"],
     [PY, "tools/teste-assistida.py"],      # partida assistida (espectador): nada de coach, voz, painel, medidor nem gravação (17/10/2026)
