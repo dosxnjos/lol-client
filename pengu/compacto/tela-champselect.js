@@ -1314,7 +1314,7 @@ function dadosEscolha(st) {
   const { fora, permitidos: lista } = indisponiveis(st.l, st.sessao, { pickable: st.pickable, bannable: st.bannable });
   // lista do client vazia ou sem nenhum id do catálogo (a grade do ban veio vazia na ranqueada de 14/10/2026, conteúdo
   // não capturado). No BAN não filtra por ela e avisa: banir não depende de ter o campeão e quem recusa o inválido é o
-  // client, no clique dele. Na ESCOLHA (e na intenção) segue filtrando (só favoritos, cinza) com a nota e o ⤢: mostrar
+  // client, no clique dele. Na ESCOLHA (e na intenção) segue filtrando (só favoritos, cinza; sem favorito, grade vazia) com a nota e o ⤢: mostrar
   // campeão que ele não tem seria deixar de checar justo o que o client garante
   const semLista = !!lista && (lista.size === 0 || (st.cat.size > 0 && ![...lista].some(x => st.cat.has(x))));
   const permitidos = semLista && st.l.modo.tipo === 'banir' ? null : lista;
@@ -1399,9 +1399,13 @@ function pintarEscolha(st) {
   if (tipo === 'esperar' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, l.modo.acao ? 'sua vez de escolher ainda não chegou: um clique muda a intenção.' : 'sua vez ainda não chegou.'));
   // a nota da intenção fica no topo, com as outras: o que fica embaixo da grade tem altura fixa entre as fases
   if (tipo === 'intencao' && !avisoPos) notas.push(el('div', { class: 'lc-cp-nota' }, 'um clique declara a intenção (só o seu time vê); a escolha vale na sua vez.'));
+  // sem favorito visível (o padrão de instalação nova é a lista vazia; id salvo fora do catálogo não aparece na grade), a nota
+  // não fala de favoritos: a grade fica vazia (revisão adversarial da Fase 3 do plano plugin Pengu primeiro, 19/10/2026)
   if (semLista) notas.push(el('div', { class: 'lc-cp-nota', dataset: { a: 'sem-lista' } }, tipo === 'banir'
     ? 'o client não mandou a lista de bans: mostrando todos (se não valer, o client recusa e avisa).'
-    : 'o client não mandou a lista dos seus campeões: só os favoritos, em cinza. Use expandir para escolher na tela da Riot.'));
+    : fav.some(x => st.cat.has(x))
+      ? 'o client não mandou a lista dos seus campeões: só os favoritos, em cinza. Use expandir para escolher na tela da Riot.'
+      : 'o client não mandou a lista dos seus campeões: use expandir para escolher na tela da Riot.'));
   p.notas.replaceChildren(...notas);
   p.fim.replaceChildren();
 }
@@ -1415,14 +1419,18 @@ function pintarGrade(st, dados) {
   }
   const { fav, pode, id, permitidos } = dados;
   const ids = listaGrade(st.cat, { busca: st.busca, permitidos, favoritos: fav });
-  const chave = JSON.stringify([ids, ids.map(pode), id, st.cat.size]);
+  // grade vazia: "nenhum campeão com esse nome" só com busca digitada; sem busca, o vazio só vem da escolha sem a lista do
+  // client e sem favorito visível, e a nota do sem-lista já diz o fato e a saída (nada a repetir aqui)
+  const buscou = !!semAcento(st.busca);
+  const chave = JSON.stringify([ids, ids.map(pode), id, st.cat.size, ids.length ? 0 : buscou]);
   if (chave === st.chaveGrade) return;
   st.chaveGrade = chave;
   const rolagem = p.grade.scrollTop;
   p.grade.replaceChildren(...(ids.length ? ids.map(x => el('button', {
     class: 'lc-cp-sel-gc' + (x === id ? ' lc-cp-sel-on' : ''), disabled: !pode(x), title: nomeDe(st, x), dataset: { a: 'campeao', id: x },
     on: { click: ctx.seguro(() => clicarCampeao(st, x)) },
-  }, foto(st, x, 30), el('span', { class: 'lc-cp-sel-nm' }, nomeDe(st, x)))) : [el('span', { class: 'lc-cp-nota' }, st.cat.size ? 'nenhum campeão com esse nome' : 'carregando os campeões…')]));
+  }, foto(st, x, 30), el('span', { class: 'lc-cp-sel-nm' }, nomeDe(st, x)))) : !st.cat.size ? [el('span', { class: 'lc-cp-nota' }, 'carregando os campeões…')]
+    : buscou ? [el('span', { class: 'lc-cp-nota' }, 'nenhum campeão com esse nome')] : []));
   p.grade.scrollTop = rolagem;
 }
 

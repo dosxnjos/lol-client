@@ -877,6 +877,28 @@ const todasEscritas = [];
     caso('escolha sem lista de picks: grade = só os favoritos, cinza; TRAVAR cinza; nota com expandir (nunca mostra campeão que ele não tem)',
       igual(grade(t).map(x => Number(x.dataset.id)).sort((a, b) => a - b), [58, 154]) && ligados(t).length === 0 && t.achar('button[data-a="acao"]').disabled
       && /expandir/.test(nota), JSON.stringify({ g: grade(t).map(x => x.dataset.id), nota }));
+    // a nota com favoritos visíveis segue a de antes
+    caso('escolha sem lista de picks, com favoritos: a nota fala dos favoritos', /só os favoritos, em cinza/.test(nota), nota);
+  }
+  {
+    // nº 5 com o PADRAO de instalação nova (favoritos [], Fase 3 do plano plugin Pengu primeiro; revisão adversarial de 19/10/2026):
+    // grade vazia sem "nenhum campeão com esse nome" (nada foi digitado) e a nota sem "favoritos" (não há nenhum); com a busca
+    // digitada, o texto da busca volta. Favorito fora do catálogo (id salvo que o client não tem mais) conta como nenhum
+    for (const [rot, favs] of [['favoritos []', []], ['favorito fora do catálogo', [99999]]]) {
+      const t = await montarTela({ inicial: SR(14), cfg: { ...CFG, compacto: { ...CFG.compacto, favoritos: favs } },
+        rotas: { 'GET /lol-champ-select/v1/pickable-champion-ids': [] } });
+      t.rodarTimers(tela.ARMAR_MS);
+      const nota = t.achar('[data-a="sem-lista"]')?.textContent || '';
+      const caixa = () => t.achar('div.lc-cp-sel-grade')?.textContent || '';
+      const vazia = caixa();
+      const campo = t.achar('input[data-a="busca"]');
+      campo.value = 'zzz'; campo.disparar('input'); await tick();
+      const comBusca = caixa();
+      caso(`escolha sem lista de picks e ${rot}: grade vazia sem texto de busca, nota sem "favoritos" e com expandir; com busca digitada, "nenhum campeão com esse nome"`,
+        grade(t).length === 0 && !/nenhum campeão com esse nome/.test(vazia) && !/favorito/.test(nota) && /expandir/.test(nota)
+        && /nenhum campeão com esse nome/.test(comBusca) && t.achar('button[data-a="acao"]').disabled && t.falhas.length === 0,
+        JSON.stringify({ vazia, nota, comBusca, falhas: t.falhas.map(String) }));
+    }
   }
   {
     // nº 8: o mesmo campeão não reenvia na hora, mas reenvia depois de REENVIO_MS (o 204 que não muda nada existe)
