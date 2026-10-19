@@ -37,7 +37,8 @@ export const TEXTOS = {
   'troca-nova': 'Não foi possível instalar as vozes: os avisos seguem na voz Maria do Windows.',
   'troca-incompleta': 'A troca das vozes parou no meio: o pacote anterior volta quando o complemento coach reiniciar.',
 };
-export const TEXTO_FALHA = 'Não foi possível baixar as vozes agora: tente de novo mais tarde.';
+const RECUSAS_DA_LINHA = ['desenvolvimento', 'gerado-aqui', 'versao'];   // voz_pacote.PacoteVoz.recusa()
+export const TEXTO_FALHA ='Não foi possível baixar as vozes agora: tente de novo mais tarde.';
 export const TEXTO_DEMORA = 'O download das vozes ainda não terminou: confira de novo em alguns minutos.';
 export const TEXTO_CONSULTANDO = 'Consultando o pacote de vozes…';
 
@@ -55,6 +56,8 @@ export function textoEstado(d) {
     if (!obj(d.disponivel) && d.estado === 'consultando') t += ' Procurando o pacote desta versão…';
     else if (!obj(d.disponivel) && d.motivo === 'release') t += ' O pacote desta versão ainda não foi publicado.';
   }
+  // recusa do complemento (sem botão): o motivo na linha, senão o texto dele só sairia num clique que não existe
+  if (RECUSAS_DA_LINHA.includes(d.recusa)) t += ` ${TEXTOS[d.recusa]}`;
   return t;
 }
 

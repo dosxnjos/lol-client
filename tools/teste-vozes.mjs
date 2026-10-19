@@ -162,6 +162,16 @@ caso('(b) consulta do release que falhou na rede: botão sem tamanho (o clique t
 caso('(b) instalação de desenvolvimento / pacote gerado aqui (acao nada): linha do pacote e nenhum botão',
   VZ.rotuloBotao(D({ instalada: { ...INST, release: false }, acao: 'nada', recusa: 'gerado-aqui' })) === null
   && linha(D({ instalada: { ...INST, release: false }, acao: 'nada' })) === 'Pacote de vozes Aoede instalado (versão 76d3c16afdfb, 476 falas).');
+caso('(b) recusa sem botão vai para a linha: gerado aqui, desenvolvimento e versão desconhecida (nunca em-dia)',
+  linha(D({ instalada: { ...INST, release: false }, acao: 'nada', recusa: 'gerado-aqui' }))
+    === 'Pacote de vozes Aoede instalado (versão 76d3c16afdfb, 476 falas). Pacote de vozes gerado neste computador: o botão não troca este pacote.'
+  && linha(D({ instalada: INST, acao: 'nada', recusa: 'desenvolvimento' }))
+    === 'Pacote de vozes Aoede instalado (versão 76d3c16afdfb, 476 falas). Instalação de desenvolvimento: o botão não troca este pacote de vozes.'
+  && linha(D({ acao: 'nada', recusa: 'versao' }))
+    === 'Sem o pacote de vozes Aoede: os avisos saem na voz Maria do Windows. Não foi possível identificar a versão das vozes desta instalação.'
+  && linha(D({ instalada: INST, acao: 'nada', recusa: 'em-dia' })) === 'Pacote de vozes Aoede instalado (versão 76d3c16afdfb, 476 falas).'
+  && linha(D({ acao: 'nada', recusa: '<b>x</b>' })) === 'Sem o pacote de vozes Aoede: os avisos saem na voz Maria do Windows.',
+  [linha(D({ acao: 'nada', recusa: 'versao' })), linha(D({ instalada: INST, acao: 'nada', recusa: 'desenvolvimento' }))]);
 caso('(b) versão e nome tortos do complemento não vão para a tela', linha(D({ pacote: '<img>', instalada: { versao: '<b>x</b>', falas: 'a' }, acao: 'nada' }))
   === 'Pacote de vozes Aoede instalado (versão ?, 0 falas).');
 caso('(b) mb(): 36418377 -> "36 MB", 300 KB -> "1 MB"', VZ.mb(TAM) === '36 MB' && VZ.mb(300000) === '1 MB');
