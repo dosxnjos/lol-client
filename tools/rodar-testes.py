@@ -27,6 +27,7 @@ TESTES = [
     ["node", "tools/teste-ponte.mjs"],    # ponte com o complemento coach: chave, aperto de mão, recuo, recursos (19/10/2026)
     ["node", "tools/teste-atualizacao.mjs"],   # aviso de versão nova: 1 consulta por dia, chave, fase, erros calados, corpo como texto (P2, 19/10/2026; ~6 s: prazo real de 5 s no servidor falso local)
     ["node", "tools/teste-atualizador.mjs"],   # botão atualizar do plugin: complemento falso, progresso, recarregar só em None/Lobby, sem complemento = atualizar.cmd e copiar link (P3, 19/10/2026)
+    ["node", "tools/teste-vozes.mjs"],         # bloco Voz: estado do pacote, "baixar vozes (36 MB)", progresso, recusas; complemento falso (P5, 19/10/2026)
     ["node", "tools/teste-historico.mjs"],   # acumulador do histórico no DataStore: formato, teto, backfill, importação, privacidade (19/10/2026)
     [PY, "tools/teste-contexto.py"],      # contexto do pós-jogo do coletor sobre a fixture do acumulador = contexto-esperado.json (19/10/2026)
     ["node", "tools/teste-contexto.mjs"],   # pengu/posjogo/contexto.js = Python ao vivo e = esperado; freios e selo locais (19/10/2026)
@@ -62,6 +63,7 @@ TESTES = [
     [PY, "tools/teste-varrer-publico.py"],   # varredura da foto pública: gameId, nome em literal, credencial (19/10/2026)
     [PY, "tools/teste-publicar.py"],         # foto pública, zips e --publicar com remote e gh falsos (P1, 19/10/2026); ~3 min (git)
     [PY, "tools/teste-atualizar.py"],        # atualizar do complemento e atualizar.cmd: release falso em 8831-8840, hash, origem, troca com volta, junção/.git (P3, 19/10/2026)
+    [PY, "tools/teste-voz-baixar.py"],       # botão baixar vozes do complemento: release falso em 8831-8840, hash, zip com ..\, queda, troca com volta, fala em curso (P5, 19/10/2026)
     [PY, "tools/teste-instalacao.py"],       # edição pública x completa, pasta do LoL, monitor do painel, calibração do chat por resolução (P4, 19/10/2026)
     [PY, "tools/teste-instalar.py"],         # instalar/desinstalar.cmd no temp (pip sem rede), relançador e ensaio-coach --publico em 8833/8834 (P4; ~4 min)
     [PY, "tools/teste-minimapa.py"],
