@@ -103,7 +103,8 @@ antes de trocar) e reinicia logo depois; a linha mostra
 Baixando…, Conferindo…, Instalando… e "Atualizado para a versão x." com **recarregar agora** (só em `None`/`Lobby`, por clique).
 Junção ou pasta num repositório git (esta instalação) = "Instalação de desenvolvimento": nada troca. Sem o complemento: o caminho
 do `atualizar.cmd` (vem no pacote, na pasta do plugin; mesmas regras, PowerShell sem admin) e o endereço da página da versão com
-**copiar link**; nada abre o navegador até a medição P0-a. Estado no DataStore `lol-client.atualizacao` (hora,
+**abrir página** (no clique dele, `window.open` da página de releases do `REPO`, que o client manda ao navegador padrão;
+P0-a, 20/10/2026) e **copiar link** de reserva (o `window.open` devolve `null` mesmo abrindo). Estado no DataStore `lol-client.atualizacao` (hora,
 versão vista, notas cortadas em 4.000 caracteres; nada pessoal). Conferir: `__lolClient.atualizacao.estado()` no CDP;
 consultar já: `__lolClient.atualizacao.procurar()` (1 GET); esquecer o dia: `DataStore.remove('lol-client.atualizacao')`.
 
@@ -204,7 +205,8 @@ LCU tem a linha do tempo das partidas antigas ([relatório](roadmap/2026-10-17-p
 (`teste-atualizacao.mjs`); só o client prova a consulta de verdade à `api.github.com` (404 calado até o repositório existir),
 a linha no topo das Configurações e o ponto no ⚙ desenhados no CEF ([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p2.md)).
 **Botão atualizar** (19/10/2026): testado com release falso local, pastas no temp e complemento falso (`teste-atualizar.py`,
-`teste-atualizador.mjs`); só o client prova o "copiar link" no CEF, o `location.reload()` da recarga e a troca com o Pengu e o
+`teste-atualizador.mjs`); só o client prova o "copiar link" no CEF, o "abrir página" por um clique de verdade no botão (o P0-a
+mediu o `window.open` pelo CDP, não pelo clique), o `location.reload()` da recarga e a troca com o Pengu e o
 Explorer abertos na pasta; nesta máquina, depois do próximo reinício do coletor, o botão responde "Instalação de desenvolvimento"
 ([relatório](roadmap/2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p3.md)).
 **Complemento público** (19/10/2026): instalado e ensaiado só no temp (`teste-instalar.py`, `ensaio-coach.py --publico`); só
@@ -233,7 +235,7 @@ antes da partida (vale 1 partida; `estado`/`desligar`), prints em `temp\vitrine\
 | auditoria do pacote de voz (cada `.wav` pelo Whisper contra o catálogo inteiro; o que não bate vira suspeita, toca na Maria e a tarefa `lol-client-voz` refaz no modelo-alvo; só com o jogo fechado, retoma) | `python tools\auditar-pacote-voz.py` (`--so-indice`, `--relatorio`, `--refazer "frase"`) |
 | foto pública do `lol-ultra-client` (ensaio, padrão: monta do commit pela lista de inclusão, varre e mostra o que entraria; zips e `SHA256SUMS.txt` em `dist\v<versão>\` só se a varredura passar; `--publicar` só depois do portão do P6 do [plano da publicação](roadmap/2026-10-19-publicacao-e-complemento-publico.md)). Textos do público: `publico\LEIA-ME.md` (vira o `README.md` do repositório público), `LICENSE`, `TERCEIROS.md`; versão em `pengu\versao.js`. Desde a P5 também o `voz-aoede-<catálogo>.zip` do pacote gerado aqui (só leitura; `--sem-voz` sem ele) | `python -I tools\publicar.py` (prova: `python -I tools\teste-publicar.py`) |
 | aviso de versão nova (1 consulta por dia, chave, fase, erros calados, notas como texto; servidor falso local na porta 0; ~6 s) | `node tools\teste-atualizacao.mjs` |
-| botão atualizar: complemento e `atualizar.cmd` contra um release falso em 8831–8840 (hash, digest nulo, queda, junção, `.git`, origem, troca com volta, fila que anda no download, troca incompleta, `!` no caminho; pastas no temp; ~60 s) e o lado do plugin (progresso, recarregar só em None/Lobby, copiar link) | `python tools\teste-atualizar.py` · `node tools\teste-atualizador.mjs` |
+| botão atualizar: complemento e `atualizar.cmd` contra um release falso em 8831–8840 (hash, digest nulo, queda, junção, `.git`, origem, troca com volta, fila que anda no download, troca incompleta, `!` no caminho; pastas no temp; ~60 s) e o lado do plugin (progresso, recarregar só em None/Lobby, copiar link, abrir página só no clique e só a página do `REPO`) | `python tools\teste-atualizar.py` · `node tools\teste-atualizador.mjs` |
 | botão baixar vozes: complemento contra um release falso em 8831–8840 (lista de releases, hash, zip com `..\`, índice torto, queda, pasta presa por fala tocando, fala em curso, recusas, origem, POST recusado durante a consulta lenta; LOCALAPPDATA no temp; ~15 s) e o lado do plugin (linha do pacote, "baixar vozes (36 MB)", progresso, recusas na linha, plugin recarregado no meio do download) | `python tools\teste-voz-baixar.py` · `node tools\teste-vozes.mjs` |
 | complemento público (P4 da publicação): edição pública x completa no `/ola` e na config, pasta do LoL sem caminho fixo, monitor do painel, calibração do chat por resolução (OCR do Windows nos prints gravados; ~1 min) | `python tools\teste-instalacao.py` (`--sem-ocr`: segundos) |
 | instalação limpa do complemento público do zip do HEAD (LOCALAPPDATA, plugins e Inicializar no temp; pip sem rede), relançador, reinstalar em `chcp 65001`, recusa de dentro da pasta instalada, acento no caminho, venv sem pip, volta do venv e do complemento na falha, desinstalar e o `ensaio-coach.py --publico` com o python do venv (portas 8833/8834; ~6 min; só com o jogo fechado) | `python tools\teste-instalar.py` (`--sem-ensaio`) |

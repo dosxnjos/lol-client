@@ -104,7 +104,8 @@ configurações padrão e, ao salvar as configurações de novo, guarda o texto 
 
 Com versão nova, a engrenagem do modo compacto ganha um ponto e as Configurações mostram a versão com o botão Atualizar.
 Com o complemento coach, o botão baixa, confere e troca os arquivos do plugin e do complemento; depois, o botão
-"Recarregar agora" aparece na tela inicial ou no lobby. Sem o complemento, o `atualizar.cmd` do pacote faz a mesma troca com um duplo clique.
+"Recarregar agora" aparece na tela inicial ou no lobby. Sem o complemento, o `atualizar.cmd` do pacote faz a mesma troca com um duplo clique;
+a linha também mostra o endereço da página da versão com "abrir página" (abre no navegador padrão) e "copiar link".
 Plugin e complemento sempre saem juntos, na mesma versão.
 
 ## Desinstalar

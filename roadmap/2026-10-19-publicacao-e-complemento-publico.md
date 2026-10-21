@@ -55,6 +55,9 @@ Revisão adversarial da P5 (19/10, `6a010e5` a `ba8d30b`; 6 achados = 5 distinto
 POST recusado durante a consulta abria 2 downloads, zip da voz além do 100º release (`publicar.py` `JANELA_VOZ = 90`), plugin
 recarregado no meio do download, recusa na linha, `troca-nova`; `teste-voz-baixar.py` 70/70 (64/67 antes), `teste-vozes.mjs` 48/48,
 `teste-publicar.py` 67/67.
+**P0-a fechado em 20/10** (`9e6becd`; `teste-atualizador.mjs` 69/69, 63/69 sem a trava do `isTrusted`): sem o complemento, "abrir
+página" ao lado de "copiar link" (`window.open` só no clique dele e só na página de releases do `REPO`)
+([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-20-p0a-abrir-pagina.md)).
 
 ## Pedido (Gabriel, 19/10/2026, palavras dele)
 

@@ -526,6 +526,12 @@ Sintoma → causa → o que fazer. Datas = quando foi medido.
 - **Troca nova apagava o `anterior\` de uma troca que não voltou inteira** → era a única cópia da versão velha. A marca
   `<pasta>\.atualizacao\troca-em-curso` (entra antes do 1º rename, sai no fim ou na volta completa) faz o botão e o `.cmd`
   recusarem com `troca-incompleta` antes da rede. Prova: `teste-atualizar.py` (i).
+- **`window.open` no client devolve `null` mesmo abrindo** (P0-a medido 20/10/2026 com o Gabriel, `tools/cdp.mjs eval` em
+  `None`) → `window.open('https://github.com', '_blank')` abre uma aba no navegador padrão do Windows, devolve `null` e nenhum
+  alvo novo aparece no CEF: não dá para saber se abriu, então `null` nunca é erro e "copiar link" com o endereço selecionável
+  ficam de reserva. Abrir é só do clique dele: `atualizacao.js` `abrirPagina` exige `isTrusted === true` (o `!== false` usado em
+  `compacto/` deixaria passar chamada sem evento) e só abre a página de releases do `REPO` (`linkAbrivel`); `window.open` existe
+  num lugar só de `pengu/**`. Prova: `teste-atualizador.mjs` (e) e (f).
 
 ## LCU API
 

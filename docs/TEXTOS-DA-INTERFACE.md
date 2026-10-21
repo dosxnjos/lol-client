@@ -96,7 +96,9 @@ A lista completa de 15/10 está no passo 17 do [plano do compacto](../roadmap/20
   versão 0.2.0…", "Conferindo os arquivos…", "Instalando…"; fim "Atualizado para a versão 0.2.0." com o botão "recarregar
   agora" (fora de None/Lobby: "Recarregue na tela inicial ou no lobby."); recusas e erros em frase de fato + saída ("Instalação
   de desenvolvimento (…): o botão não troca estes arquivos.", "Os arquivos da versão 0.2.0 não conferem com o release: nada foi
-  trocado."); sem o complemento, o caminho do `atualizar.cmd` e o endereço com "copiar link". O `publico/atualizar.cmd` segue o
+  trocado."); sem o complemento, o caminho do `atualizar.cmd` e o endereço com os botões "abrir página" e "copiar link"
+  (minúsculas; 20/10/2026), e depois do clique em "abrir página" a dica 'A página abre no navegador padrão. Se ela não aparecer,
+  use "copiar link".' (o `window.open` não diz se abriu: a frase nunca afirma que abriu). O `publico/atualizar.cmd` segue o
   mesmo tom nas mensagens dele, e o `instalar.cmd` e o `desinstalar.cmd` (P4) também: fato + saída, impessoal ou "você"
   ("Python 3.12 ou mais novo (64 bits) não encontrado.", "Baixe em … e rode o instalar.cmd de novo.", "Plugin não copiado: …
   e os dois carregariam juntos."). Nenhuma guarda automática lê os `.cmd`: revisar à mão (o `teste-instalar.py` confere as
