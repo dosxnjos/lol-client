@@ -174,6 +174,6 @@ Partida das 17:26, com o Gabriel sentindo teleporte. Ping a cada 200–250 ms ao
 - **No roteador direto (17:51):** 0/200 até o roteador e até a operadora, 1/200 até a internet.
 - **O coach ficou descartado:** desligado às 17:44, as perdas continuaram iguais. Rede própria zero, uns 16% de 1 núcleo.
 - **O medidor da partida das 13:44 já apontava isso:** 7 de 8 picos do jogo com o "Wi-Fi da casa" como causa.
-- **Feito:** `Roaming Aggressiveness` de `4. Medium` para `2. Lowest` (UAC; reverte com o mesmo comando e `4. Medium`).
-  Isso não impede o Windows de escolher o repetidor ao reconectar.
+- **Feito e desfeito:** `Roaming Aggressiveness` foi de `4. Medium` para `2. Lowest` (UAC). O Gabriel pediu para
+  reverter, e voltou para `4. Medium` no mesmo dia. Nada da rede do PC fica diferente de antes.
 - **Recomendado ao Gabriel:** dar ao repetidor um SSID próprio, ou tirá-lo da tomada para jogar.
