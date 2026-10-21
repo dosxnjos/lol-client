@@ -161,3 +161,19 @@ achou os mesmos três picos da Fase 1 (12:44:46, 13:00:47, 13:06:17).
    - atualizar o driver Realtek;
    - pausar Drive e OneDrive durante o jogo.
 3. **Depois da próxima partida:** abrir `dados\travadas-<data>-<HHMM>.txt` e ler o VEREDITO.
+
+## Achado de 21/10/2026: o repetidor do quarto
+
+Partida das 17:26, com o Gabriel sentindo teleporte. Ping a cada 200–250 ms ao roteador, ao 1º salto da operadora
+(`100.64.192.1`) e à internet (`1.1.1.1`, `8.8.8.8`); o servidor da partida (`45.7.37.2`) não responde ICMP.
+
+- **Causa:** o PC estava num repetidor TP-Link (BSSID `b0:a7:b9:…`, canal 36), com o mesmo SSID do roteador principal.
+  O roteador principal é o BSSID `84:93:b2:…` (canal 100); o MAC do gateway `192.168.1.1` é da mesma família.
+- **No repetidor (17:36–17:50):** 0 a 6 perdas por minuto já até o roteador (até 3,6%) e 2 a 8 até a internet.
+  Sinal de 100% o tempo todo: o sinal forte era só até o repetidor.
+- **No roteador direto (17:51):** 0/200 até o roteador e até a operadora, 1/200 até a internet.
+- **O coach ficou descartado:** desligado às 17:44, as perdas continuaram iguais. Rede própria zero, uns 16% de 1 núcleo.
+- **O medidor da partida das 13:44 já apontava isso:** 7 de 8 picos do jogo com o "Wi-Fi da casa" como causa.
+- **Feito:** `Roaming Aggressiveness` de `4. Medium` para `2. Lowest` (UAC; reverte com o mesmo comando e `4. Medium`).
+  Isso não impede o Windows de escolher o repetidor ao reconectar.
+- **Recomendado ao Gabriel:** dar ao repetidor um SSID próprio, ou tirá-lo da tomada para jogar.
