@@ -116,6 +116,9 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 
 - **a. O client abre o navegador?** Em `None`, `window.open('https://github.com', '_blank')` pelo `tools/cdp.mjs eval`.
   Anotar se abriu o navegador padrão, uma janela do CEF ou nada. Decide o botão sem complemento.
+  **Medido 20/10 com o Gabriel:** abre uma aba no navegador padrão dele (Chrome); `window.open` devolve `null` (sem
+  referência à janela) e nenhum alvo novo aparece no CEF. O botão sem complemento pode abrir a página da versão (só no
+  clique dele), com "copiar link" de reserva.
 - **b. Release da API do GitHub de dentro do client:** `fetch('https://api.github.com/repos/<um repo público qualquer com
   release>/releases/latest')` em `None`: status, CORS, se cada asset traz `digest`. (CORS já medido ok em 17/10 para a raiz.)
   **Medido 19/10:** 200 e `type: cors` (Pengu e `cli/cli`), 213–1066 ms, `x-ratelimit-*` legíveis (60/h sem login).
@@ -225,7 +228,7 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 
 ### P6 — publicar (portão)
 
-Só com: (1) nome respondido (`lol-ultra-client`, 19/10) e a conta `dosxnjos` confirmada por ele em 1 linha; (2) as provas no client real do plano das telas e uma partida dele
+Só com: (1) nome respondido (`lol-ultra-client`, 19/10) e a conta `dosxnjos` confirmada por ele em 1 linha (**confirmada 20/10**); (2) as provas no client real do plano das telas e uma partida dele
 com a edição nova; (3) `publicar.py` em ensaio sem reprovação. Sequência da regra de contas
 (`C:\Dev\cerebro\temas\harness\git-contas-e-repos.md`): `gh auth switch --user <conta>` → `gh repo create <conta>/<nome>
 --public` → remote em SSH → `publicar.py --publicar` → `gh auth switch` de volta para a conta que estava ativa, no mesmo
