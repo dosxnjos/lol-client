@@ -4,8 +4,9 @@
 //   o complemento acha sozinho na origem fixa, coletor/atualizar.py) e o progresso por GET /atualizar/estado a cada PASSO_MS. O
 //   complemento baixa, confere o hash, troca plugin e complemento e reinicia; aqui "pronto" vira "Atualizado para a versão x." com
 //   "recarregar agora" (o atualizacao.js só recarrega em None/Lobby, por clique). Só em None/Lobby (o complemento também recusa).
-// - sem ele: o caminho do atualizar.cmd (vem no pacote, na pasta do plugin) e o endereço da página da versão com "copiar link".
-//   Nada abre sozinho: window.open fica de fora até a medição P0-a (o client abre o navegador?).
+// - sem ele: o caminho do atualizar.cmd (vem no pacote, na pasta do plugin) e o endereço da página da versão, que a linha do
+//   atualizacao.js mostra com "abrir página" (window.open só no clique dele, só a página de releases do REPO; P0-a medido em
+//   20/10/2026: abre o navegador padrão e devolve null) e "copiar link". Este módulo nunca abre nada: só devolve o link.
 // Nunca: código baixado rodando no client (import de URL, eval). Atualização é arquivo trocado e conferido, num clique dele.
 import { FASES_CONSULTA } from './atualizacao.js';
 

@@ -9,9 +9,14 @@
 //   (c) recarregar só em None/Lobby e por clique (fase lida na hora); fora: "Recarregue na tela inicial ou no lobby.";
 //   (d) fora de None/Lobby nem pede ao complemento; recusas e erros do complemento viram o texto do guia (desenvolvimento, hash…);
 //       409 com outra troca em curso acompanha até o fim; sem resposta e demora;
-//   (e) guardas: nenhum window.open, <a href>, eval, new Function nem import de URL no código da atualização; link só github.com.
+//   (e) guardas: window.open uma vez só em pengu/** (abrirPadrao do atualizacao.js), chamado só pelo abrirPagina depois do
+//       isTrusted; nenhum <a href>, eval, new Function nem import de URL no código da atualização; link só github.com;
+//   (f) "abrir página" (P0-a medido em 20/10/2026: abre o navegador padrão, devolve null): só sem o complemento (e na troca
+//       incompleta); o clique dele (isTrusted true) chama window.open 1 vez com a página da versão e '_blank'; clique sintético,
+//       sem evento ou isTrusted que não é true = nada; endereço fora da página de releases do REPO nunca abre (nem botão);
+//       null não vira erro (dica de reserva, "copiar link" segue); nada abre na carga, na consulta, no laço nem na virada de fase.
 // uso: node tools/teste-atualizador.mjs
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { relatar } from './lcu-falsa.mjs';
 
 const casos = [];
@@ -48,7 +53,8 @@ class El {
   set textContent(v) { this.replaceChildren(new Texto(v)); }
   addEventListener(ev, fn) { (this.ouvintes[ev] ||= []).push(fn); }
   removeEventListener() {}
-  clicar() { for (const fn of this.ouvintes.click || []) fn({ isTrusted: true, target: this }); }
+  // clique dele por padrão; clicar({isTrusted: false}) = evento sintético (dispatchEvent/el.click() no client) pelo mesmo ouvinte
+  clicar(ev = { isTrusted: true }) { for (const fn of this.ouvintes.click || []) fn({ ...ev, target: this }); }
   *desc() { for (const n of this.children) { yield n; yield* n.desc(); } }
   querySelectorAll(sel) { const c = sel.replace(/^\./, ''); return [...this.desc()].filter(n => (sel.startsWith('.') ? n.classList.contains(c) : n.tagName === sel.toUpperCase())); }
   querySelector(sel) { return this.querySelectorAll(sel)[0] || null; }
@@ -56,9 +62,10 @@ class El {
 const doc = { createElement: t => new El(t), createTextNode: t => new Texto(t) };
 doc.documentElement = new El('html'); doc.body = new El('body'); doc.documentElement.append(doc.body);
 globalThis.document = doc;
-// window.open espião: nada da atualização pode chamar
+// window.open espião: como no client (P0-a, 20/10/2026), devolve null mesmo "abrindo". Só o clique dele em "abrir página" chama
 const abertos = [];
-globalThis.window = { open: (...a) => { abertos.push(a); return null; } };
+const openEspiao = (...a) => { abertos.push(a); return null; };
+globalThis.window = { open: openEspiao };
 
 const A = await import('../pengu/atualizacao.js');
 const AT = await import('../pengu/atualizador.js');
@@ -132,7 +139,7 @@ const st = (estado, extra = {}) => ({ status: 200, dados: { estado, versao: '0.2
   const c = complemento({ estados: [st('baixando'), st('conferindo'), st('trocando'), st('pronto', { reiniciar: true })] });
   m.v.registrarAtualizador(AT.criarAtualizador({ coletor: c.coletor, temRecurso: c.temRecurso, agendar: r.agendar, agora: () => r.agora }));
   const vistos = [];
-  m.v.aoMudar(() => { const l = A.linhaVersaoNova(ui, m.v); vistos.push({ txt: l?.textContent || '', atualizar: !!(l && porTexto(l, 'atualizar')) }); });
+  m.v.aoMudar(() => { const l = A.linhaVersaoNova(ui, m.v); vistos.push({ txt: l?.textContent || '', atualizar: !!(l && porTexto(l, 'atualizar')), abrir: !!(l && porTexto(l, 'abrir página')) }); });
   porTexto(A.linhaVersaoNova(ui, m.v), 'atualizar').clicar();
   await flush();
   const durante = A.linhaVersaoNova(ui, m.v);
@@ -155,6 +162,8 @@ const st = (estado, extra = {}) => ({ status: 200, dados: { estado, versao: '0.2
   caso('(b) GET /atualizar/estado a cada PASSO_MS (4 consultas), nenhum outro POST', c.pedidos.filter(p => p.caminho === '/atualizar/estado').length === 4
     && c.pedidos.filter(p => p.metodo === 'POST').length === 1 && r.agora === 4 * AT.PASSO_MS, JSON.stringify(c.pedidos.map(p => p.caminho)));
   caso('(b) nada recarregou sozinho', m.est.recargas === 0);
+  caso('(b) com o complemento: "abrir página" nunca aparece (progresso, pronto) e nada abre', vistos.length > 0 && !vistos.some(x => x.abrir)
+    && !porTexto(fim, 'abrir página') && !porTexto(durante, 'abrir página') && abertos.length === 0, JSON.stringify(vistos.map(x => x.abrir)));
 
   // ---------- (c) recarregar só em None/Lobby, por clique ----------
   m.est.faseLida = 'ChampSelect';
@@ -203,19 +212,21 @@ async function executar({ fase = 'None', post, estados, passos = 40 } = {}) {
   ];
   for (const [motivo, trecho] of recusas) {
     const x = await executar({ post: { status: 409, dados: { estado: 'recusado', motivo } } });
-    caso(`(d) recusa '${motivo}': "${trecho}…", "atualizar" volta, sem consultar o estado`, x.txt.includes(trecho) && !!porTexto(x.linha, 'atualizar')
-      && x.c.pedidos.length === 1, x.txt);
+    caso(`(d) recusa '${motivo}': "${trecho}…", "atualizar" volta, sem consultar o estado, sem "abrir página"`, x.txt.includes(trecho) && !!porTexto(x.linha, 'atualizar')
+      && x.c.pedidos.length === 1 && !porTexto(x.linha, 'abrir página'), x.txt);
   }
   const erros = [['hash', 'não conferem com o release: nada foi trocado'], ['origem', 'não vieram do endereço oficial'], ['pacote', 'está incompleto'],
     ['rede', 'Não foi possível baixar a versão 0.2.0'], ['release', 'não encontrada no GitHub'], ['troca', 'a versão anterior continua instalada'],
     ['qualquer-outro', 'Não foi possível atualizar agora']];
   for (const [motivo, trecho] of erros) {
     const x = await executar({ estados: [st('baixando'), st('erro', { motivo })] });
-    caso(`(d) erro '${motivo}': "${trecho}…"`, x.txt.includes(trecho) && !porTexto(x.linha, 'recarregar agora'), x.txt);
+    caso(`(d) erro '${motivo}': "${trecho}…" (sem "abrir página")`, x.txt.includes(trecho) && !porTexto(x.linha, 'recarregar agora')
+      && !porTexto(x.linha, 'abrir página'), x.txt);
   }
   const inc = await executar({ estados: [st('trocando'), st('erro', { motivo: 'troca-incompleta' })] });
-  caso('(d) troca incompleta: o texto e o endereço da página da versão para instalar à mão', inc.txt.includes('parou no meio')
-    && inc.linha.querySelector('.lc-versao-link')?.textContent === `https://github.com/${REPO}/releases/tag/v0.2.0`, inc.txt);
+  caso('(d) troca incompleta: o texto e o endereço da página da versão para instalar à mão, com "abrir página" e "copiar link"', inc.txt.includes('parou no meio')
+    && inc.linha.querySelector('.lc-versao-link')?.textContent === `https://github.com/${REPO}/releases/tag/v0.2.0`
+    && !!porTexto(inc.linha, 'abrir página') && !!porTexto(inc.linha, 'copiar link'), inc.txt);
   const outra = await executar({ post: { status: 409, dados: { estado: 'conferindo', versao: '0.2.0' } }, estados: [st('trocando'), st('pronto')] });
   caso('(d) 409 com outra troca em curso: acompanha até "Atualizado"', outra.txt.includes('Atualizado para a versão 0.2.0.'), outra.txt);
   // revisão adversarial da P3: o 'pronto' segurado passou sem ser lido (timer do CEF atrasado) e a instância nova responde
@@ -249,11 +260,114 @@ async function executar({ fase = 'None', post, estados, passos = 40 } = {}) {
 {
   const src = ['pengu/atualizador.js', 'pengu/atualizacao.js'].map(f => [f, readFileSync(new URL(`../${f}`, import.meta.url), 'utf8')]);
   const semComentario = s => s.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+  // window.open em qualquer grafia (window.open, window?.open, globalThis.open, self['open']…)
+  const OPEN = /\b(?:window|globalThis|self|top|parent)\s*(?:\?\.|\.)\s*open\b|\[\s*['"`]open['"`]\s*\]/g;
   for (const [f, s] of src) {
     const c = semComentario(s);
-    caso(`(e) ${f}: sem window.open, <a, href, eval, new Function nem import() de URL`, !/window\.open|<a[\s>]|\bhref\b|\beval\s*\(|new Function|import\s*\(\s*['"`]https?:/.test(c));
+    caso(`(e) ${f}: sem <a, href, eval, new Function nem import() de URL`, !/<a[\s>]|\bhref\b|\beval\s*\(|new Function|import\s*\(\s*['"`]https?:/.test(c));
     caso(`(e) ${f}: sem innerHTML`, !/innerHTML/.test(c));
   }
+  const c1 = semComentario(src[0][1]), c2 = semComentario(src[1][1]);
+  caso('(e) atualizador.js: nenhum window.open (só devolve o link)', !(c1.match(OPEN) || []).length);
+  const linhasOpen = c2.split('\n').filter(l => { OPEN.lastIndex = 0; return OPEN.test(l); });
+  caso('(e) atualizacao.js: window.open uma vez só, no abrirPadrao, com (url, \'_blank\') e sem usar o retorno',
+    linhasOpen.length === 1 && /^const abrirPadrao = url => \{ try \{ globalThis\.window\?\.open\?\.\(url, '_blank'\); \}/.test(linhasOpen[0].trim()), linhasOpen.join(' | '));
+  // quem chama abrir(): só o abrirPagina, e depois da trava do isTrusted
+  const chamadas = [...c2.matchAll(/(?<![\w.$])abrir\s*\(/g)].map(x => x.index);
+  const corpo = c2.slice(c2.indexOf('function abrirPagina(ev)'), c2.indexOf('function abrirPagina(ev)') + 400);
+  const iTrava = corpo.indexOf('if (ev?.isTrusted !== true) return false;'), iAbre = corpo.search(/(?<![\w.$])abrir\s*\(/);
+  caso('(e) atualizacao.js: abrir() chamado num lugar só, o abrirPagina, depois de "if (ev?.isTrusted !== true) return false;"',
+    chamadas.length === 1 && iTrava >= 0 && iAbre > iTrava && c2.indexOf('function abrirPagina(ev)') < chamadas[0], JSON.stringify({ chamadas: chamadas.length, iTrava, iAbre }));
+  // o plugin inteiro: window.open só ali (nenhum outro módulo de pengu/** abre janela)
+  const raiz = new URL('../pengu/', import.meta.url);
+  const todos = readdirSync(raiz, { recursive: true }).map(String).filter(p => p.endsWith('.js'));
+  const comOpen = todos.filter(p => { OPEN.lastIndex = 0; return OPEN.test(semComentario(readFileSync(new URL(p.replace(/\\/g, '/'), raiz), 'utf8'))); });
+  caso(`(e) pengu/** (${todos.length} módulos): window.open só no atualizacao.js`, todos.length > 20 && comOpen.length === 1 && comOpen[0] === 'atualizacao.js', comOpen.join(', '));
 }
+
+// ---------- (f) "abrir página" (P0-a medido em 20/10/2026: o window.open do client abre o navegador padrão e devolve null) ----------
+const PAGINA = `https://github.com/${REPO}/releases/tag/v0.2.0`;
+{
+  const m = montar();
+  const c = complemento({ recurso: false });
+  m.v.registrarAtualizador(AT.criarAtualizador({ coletor: c.coletor, temRecurso: c.temRecurso, pasta: 'lol-ultra-client' }));
+  const antes = abertos.length;
+  const l0 = A.linhaVersaoNova(ui, m.v);
+  caso('(f) antes do "atualizar": sem "abrir página"; abrirPagina com clique dele e sem link = nada', !porTexto(l0, 'abrir página')
+    && m.v.abrirPagina({ isTrusted: true }) === false && abertos.length === antes);
+  porTexto(l0, 'atualizar').clicar(); await flush();
+  const linha = A.linhaVersaoNova(ui, m.v);
+  const bt = porTexto(linha, 'abrir página');
+  const ordem = botoes(linha).map(b => b.textContent);
+  caso('(f) sem o complemento: "abrir página" antes de "copiar link", endereço selecionável segue', !!bt && ordem.indexOf('abrir página') >= 0
+    && ordem.indexOf('abrir página') < ordem.indexOf('copiar link') && linha.querySelector('.lc-versao-link')?.textContent === PAGINA, JSON.stringify(ordem));
+  caso('(f) mostrar o botão não abre nada', abertos.length === antes);
+  bt.clicar({ isTrusted: false }); await flush();
+  caso('(f) clique sintético (isTrusted false) pelo ouvinte do botão: nada abre, nenhuma dica', abertos.length === antes
+    && !A.linhaVersaoNova(ui, m.v).textContent.includes(A.TEXTO_ABRINDO));
+  const rets = [undefined, null, {}, { isTrusted: 'true' }, { isTrusted: 1 }, { isTrusted: false }].map(ev => m.v.abrirPagina(ev));
+  caso('(f) abrirPagina sem evento, null, {}, isTrusted "true"/1/false: nada abre, devolve false', abertos.length === antes && rets.every(r => r === false), JSON.stringify(rets));
+  bt.clicar(); await flush();
+  const ab = abertos.slice(antes);
+  caso('(f) clique dele (isTrusted true): window.open 1 vez com a página da versão e \'_blank\'', ab.length === 1 && ab[0][0] === PAGINA && ab[0][1] === '_blank'
+    && ab[0].length === 2, JSON.stringify(ab));
+  const depois = A.linhaVersaoNova(ui, m.v);
+  caso('(f) o null do window.open não vira erro: dica de reserva, "abrir página", "copiar link" e o endereço seguem', depois.textContent.includes(A.TEXTO_ABRINDO)
+    && !!porTexto(depois, 'abrir página') && !!porTexto(depois, 'copiar link') && !!depois.querySelector('.lc-versao-link')
+    && !/Não foi possível/.test(depois.textContent), depois.textContent);
+  porTexto(depois, 'copiar link').clicar(); await flush();
+  const d2 = A.linhaVersaoNova(ui, m.v).textContent;
+  caso('(f) "copiar link" depois: só "Link copiado." (uma dica por vez)', d2.includes('Link copiado.') && !d2.includes(A.TEXTO_ABRINDO), d2);
+  porTexto(A.linhaVersaoNova(ui, m.v), 'abrir página').clicar(); await flush();
+  caso('(f) 2º clique dele: abre de novo (1 por clique), sem "Link copiado." velho', abertos.length === antes + 2
+    && !A.linhaVersaoNova(ui, m.v).textContent.includes('Link copiado.'));
+  // nada abre sozinho: carga, consulta, laço e todas as fases com o botão já na tela
+  const n = abertos.length;
+  for (const f of ['Lobby', 'Matchmaking', 'ReadyCheck', 'ChampSelect', 'GameStart', 'InProgress', 'WaitingForStats', 'PreEndOfGame', 'EndOfGame', 'None']) m.v.aoFase(f);
+  await m.v.iniciar(); await m.v.procurar(); await m.v.consultar('teste'); m.v.sincronizar({ atualizacao: { verificar: false } }); m.v.sincronizar({ atualizacao: { verificar: true } });
+  await flush();
+  caso('(f) com o botão na tela: 10 viradas de fase, carga, consulta, "procurar agora" e a chave: nenhum window.open', abertos.length === n
+    && !!porTexto(A.linhaVersaoNova(ui, m.v), 'abrir página'), abertos.length - n);
+  // window.open que lança ou window ausente: calado (nada quebra, a dica aparece)
+  globalThis.window = { open: () => { throw new Error('bloqueado'); } };
+  let lancou = false;
+  try { porTexto(A.linhaVersaoNova(ui, m.v), 'abrir página').clicar(); } catch { lancou = true; }
+  globalThis.window = undefined;
+  try { m.v.abrirPagina({ isTrusted: true }); } catch { lancou = true; }
+  globalThis.window = { open: openEspiao };
+  caso('(f) window.open que lança e window ausente: nada quebra', !lancou && A.linhaVersaoNova(ui, m.v).textContent.includes(A.TEXTO_ABRINDO));
+  // o "atualizar" de novo apaga a dica
+  await m.v.atualizar();
+  caso('(f) "atualizar" de novo: a dica some, o botão volta', !A.linhaVersaoNova(ui, m.v).textContent.includes(A.TEXTO_ABRINDO)
+    && !!porTexto(A.linhaVersaoNova(ui, m.v), 'abrir página'));
+}
+{
+  // endereço fora da página de releases do REPO: o "copiar link" pode aparecer (github.com), o "abrir página" nunca, nem pelo método
+  const fora = [
+    'https://github.com/outro/repo/releases/tag/v0.2.0', `https://github.com/${REPO}-x/releases/tag/v0.2.0`,
+    `https://github.com/${REPO}/releases/tag/v0.2.0/../../../../evil/x`, `https://github.com/${REPO}/releases/download/v0.2.0/x.zip`,
+    `https://github.com/${REPO}/releases/tag/v0.2.0?x=1`, `https://github.com/${REPO}/releases/tag/v0.2.0#x`, `${PAGINA}\n`,
+    `https://github.com/${REPO}/releases/tag/%2e%2e`, `https://github.com/${REPO}/releases/tag/v0.2`, `https://github.com/${REPO}`,
+    `https://github.com.evil.example/${REPO}/releases`, `http://github.com/${REPO}/releases`, `javascript:alert(1)`,
+  ];
+  const n = abertos.length;
+  const ruins = [];
+  for (const link of fora) {
+    const m = montar();
+    m.v.registrarAtualizador(async () => ({ texto: 'Página da versão:', link }));
+    await m.v.atualizar();
+    const l = A.linhaVersaoNova(ui, m.v);
+    const temBotao = !!porTexto(l, 'abrir página');
+    const ret = m.v.abrirPagina({ isTrusted: true });
+    if (temBotao || ret !== false || m.v.estado().abrivel) ruins.push(link);
+  }
+  caso(`(f) ${fora.length} endereços fora da página de releases do REPO (outro repo, ../, download, query, #, http, outro host…): sem botão, nada abre`,
+    ruins.length === 0 && abertos.length === n, JSON.stringify(ruins));
+  caso('(f) linkAbrivel: a página da tag (com e sem v) e /releases do REPO passam; ponto do nome não é curinga',
+    A.linkAbrivel(PAGINA, REPO) === PAGINA && A.linkAbrivel(`https://github.com/${REPO}/releases`, REPO) !== ''
+    && A.linkAbrivel(`https://github.com/${REPO}/releases/tag/0.2.0`, REPO) !== '' && A.linkAbrivel('https://github.com/dono/lolXclient/releases', 'dono/lol.client') === ''
+    && A.linkAbrivel('https://github.com/dono/lol.client/releases', 'dono/lol.client') !== '' && A.linkAbrivel(PAGINA, 'repo invalido') === '');
+}
+caso('(f) total no arquivo: window.open só pelos 2 cliques dele em "abrir página" que chegaram ao espião', abertos.length === 2, abertos.length);
 
 relatar(casos);

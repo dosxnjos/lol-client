@@ -26,7 +26,7 @@ TESTES = [
     ["node", "tools/teste-config.mjs"],
     ["node", "tools/teste-ponte.mjs"],    # ponte com o complemento coach: chave, aperto de mão, recuo, recursos (19/10/2026)
     ["node", "tools/teste-atualizacao.mjs"],   # aviso de versão nova: 1 consulta por dia, chave, fase, erros calados, corpo como texto (P2, 19/10/2026; ~6 s: prazo real de 5 s no servidor falso local)
-    ["node", "tools/teste-atualizador.mjs"],   # botão atualizar do plugin: complemento falso, progresso, recarregar só em None/Lobby, sem complemento = atualizar.cmd e copiar link (P3, 19/10/2026)
+    ["node", "tools/teste-atualizador.mjs"],   # botão atualizar do plugin: complemento falso, progresso, recarregar só em None/Lobby, sem complemento = atualizar.cmd, abrir página (só clique isTrusted) e copiar link (P3, 19/10/2026; P0-a, 20/10)
     ["node", "tools/teste-vozes.mjs"],         # bloco Voz: estado do pacote, "baixar vozes (36 MB)", progresso, recusas; complemento falso (P5, 19/10/2026)
     ["node", "tools/teste-historico.mjs"],   # acumulador do histórico no DataStore: formato, teto, backfill, importação, privacidade (19/10/2026)
     [PY, "tools/teste-contexto.py"],      # contexto do pós-jogo do coletor sobre a fixture do acumulador = contexto-esperado.json (19/10/2026)

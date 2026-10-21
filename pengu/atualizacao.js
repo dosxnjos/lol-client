@@ -11,8 +11,11 @@
 // do configuracoes.js) com "atualizar" e "o que mudou", e a classe lc-versao-nova no <html> (o ponto no ⚙ do compacto,
 // compacto/chat-botao.js). Nada abre sozinho. O "atualizar" chama o atualizador registrado (registrarAtualizador; P3,
 // pengu/atualizador.js: complemento coach ou atualizar.cmd); sem ele, diz onde baixar. O atualizador recebe ({versao, tag, repo},
-// {fase, progresso}) e devolve texto ou {texto, link, recarregar}: link = endereço da página da versão com "copiar link" (nada de
-// window.open até a medição P0-a), recarregar = "recarregar agora", que só recarrega em None/Lobby e por clique.
+// {fase, progresso}) e devolve texto ou {texto, link, recarregar}: link = endereço da página da versão com "abrir página" e
+// "copiar link", recarregar = "recarregar agora", que só recarrega em None/Lobby e por clique. "abrir página" (medição P0-a,
+// 20/10/2026: window.open no client abre uma aba no navegador padrão e devolve null) chama window.open(url, '_blank') só dentro
+// do clique dele (evento com isTrusted === true) e só com um endereço de linkAbrivel (página de releases do REPO); o null não
+// diz se abriu, então "copiar link" e o endereço selecionável ficam de reserva.
 import { VERSAO, REPO } from './versao.js';
 
 export const CHAVE_ATUALIZACAO = 'lol-client.atualizacao';
@@ -38,6 +41,14 @@ export function compararVersoes(a, b) {
 export const repoValido = r => typeof r === 'string' && /^[A-Za-z0-9](?:[A-Za-z0-9-]{0,38})\/[A-Za-z0-9._-]{1,100}$/.test(r) && !/\/\.\.?$/.test(r);
 export const urlConsulta = repo => `https://api.github.com/repos/${repo}/releases/latest`;
 export const enderecoReleases = repo => `github.com/${repo}/releases`;
+// endereço que "abrir página" aceita: só https://github.com/<repo>/releases ou .../releases/tag/vX.Y.Z do REPO, inteiro (o
+// link já nasce do REPO e de uma tag x.y.z conferida em lerRelease; isto é a 2ª trava) -> o link ou ''
+const escRegex = s => s.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+export function linkAbrivel(link, repo) {
+  if (typeof link !== 'string' || !repoValido(repo)) return '';
+  const ok = new RegExp(`^https://github\\.com/${escRegex(repo)}/releases(?:/tag/v?\\d{1,6}\\.\\d{1,6}\\.\\d{1,6})?$`).test(link);
+  return ok ? link : '';
+}
 
 // corpo da API -> {versao, tag, corpo} ou null (rascunho, pré-lançamento, tag fora de x.y.z, corpo que não é texto)
 export function lerRelease(d) {
@@ -71,19 +82,24 @@ const copiarPadrao = async texto => {
     return !!ok;
   } catch { return false; }
 };
+// a página no navegador padrão (P0-a: o client manda o window.open para o navegador do Windows e devolve null mesmo abrindo;
+// a chamada medida, sem 3º argumento). O retorno não diz nada: nunca vira erro. Quem chama confere o clique dele antes
+const abrirPadrao = url => { try { globalThis.window?.open?.(url, '_blank'); } catch { /* sem janela */ } };
 export const TEXTO_RECARREGAR_FORA = 'Recarregue na tela inicial ou no lobby.';
+export const TEXTO_ABRINDO = 'A página abre no navegador padrão. Se ela não aparecer, use "copiar link".';
 
 // cfg: objeto vivo do config.js. Tudo injetável (tools/teste-atualizacao.mjs): f = fetch, agendar/cancelar, agora, ds, lerFase,
-// recarregarPagina, copiar
+// recarregarPagina, copiar, abrir
 export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f = (...a) => fetch(...a), agendar = (fn, ms) => setTimeout(fn, ms),
   cancelar = t => clearTimeout(t), agora = () => Date.now(), ds = dsPadrao, lerFase = lerFasePadrao, ouvintes = new Set(),
-  log = m => console.log('[lol-client]', m), recarregarPagina = recarregarPadrao, copiar = copiarPadrao } = {}) {
+  log = m => console.log('[lol-client]', m), recarregarPagina = recarregarPadrao, copiar = copiarPadrao, abrir = abrirPadrao } = {}) {
   // ultimaEm: a hora da última tentativa também em memória (DataStore ausente ou que não grava não vira 1 GET por virada de fase)
   let cfgVivo = cfg, fase = null, emVoo = null, laco = null, ligadoAntes = null, ultimaEm = 0;
   // só da sessão: o resultado do último "procurar agora" e o que a linha mostra (sobrevive à remontagem do painel); a mensagem do
   // "atualizar" vale só para a versão em mensagemDe (versão mais nova vista depois apaga a mensagem velha). P3: atualizando = o
-  // atualizador em curso (o botão some), acao = {link, recarregar} da resposta dele, copiado = 'ok' | 'falhou' do "copiar link"
-  const tela = { resultado: '', notas: false, mensagem: '', mensagemDe: '', atualizando: false, acao: null, copiado: '' };
+  // atualizador em curso (o botão some), acao = {link, recarregar} da resposta dele, copiado = 'ok' | 'falhou' do "copiar link",
+  // abriu = o "abrir página" foi clicado (só a dica de reserva: o window.open não diz se abriu)
+  const tela = { resultado: '', notas: false, mensagem: '', mensagemDe: '', atualizando: false, acao: null, copiado: '', abriu: false };
   let atualizador = null;
 
   const ligado = () => !!cfgVivo?.atualizacao?.verificar;
@@ -110,7 +126,8 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
   const acao = () => (tela.acao && daVersao() ? { ...tela.acao } : null);
   const estado = () => ({ ligado: ligado(), versao, repo, fase, verificando: !!emVoo, salvo: salvo(), nova: nova(), aviso: aviso(),
     resultado: tela.resultado, notas: tela.notas, mensagem: mensagem(), atualizador: typeof atualizador === 'function',
-    atualizando: tela.atualizando, acao: acao(), copiado: acao()?.link ? tela.copiado : '' });
+    atualizando: tela.atualizando, acao: acao(), copiado: acao()?.link ? tela.copiado : '',
+    abrivel: !!linkAbrivel(acao()?.link, repo), abriu: !!linkAbrivel(acao()?.link, repo) && tela.abriu });
   const avisar = () => { const e = estado(); for (const fn of ouvintes) try { fn(e); } catch (err) { console.error('[lol-client] atualização', err); } };
 
   // GET com prazo -> {status, dados}; status 0 = sem resposta (rede, prazo, CORS)
@@ -207,6 +224,7 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
   // resposta do atualizador: texto, ou {texto, link, recarregar}
   function aplicar(r) {
     tela.copiado = '';
+    tela.abriu = false;
     if (r && typeof r === 'object') {
       tela.mensagem = typeof r.texto === 'string' ? r.texto : '';
       const link = typeof r.link === 'string' && /^https:\/\/github\.com\//.test(r.link) ? r.link : '';
@@ -222,6 +240,7 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
     tela.mensagemDe = n.versao;
     tela.acao = null;
     tela.copiado = '';
+    tela.abriu = false;
     if (typeof atualizador === 'function') {
       tela.atualizando = true;
       // progresso: o texto da etapa ("Baixando…") repinta a linha enquanto o atualizador trabalha
@@ -255,11 +274,26 @@ export function criarVerificador({ cfg = null, versao = VERSAO, repo = REPO, f =
     let ok = false;
     try { ok = !!(await copiar(link)); } catch { ok = false; }
     tela.copiado = ok ? 'ok' : 'falhou';
+    tela.abriu = false;
     avisar();
     return ok;
   }
 
-  return { estado, consultar, procurar: () => consultar('procurar agora', true), aoFase, sincronizar, iniciar, atualizar, recarregar, copiarLink,
+  // "abrir página": só com o evento do clique DELE (isTrusted === true; sem evento, sintético ou chamada pelo console = nada) e
+  // só com o endereço da página de releases do REPO. Nunca em carga, consulta, laço ou virada de fase: ninguém além do botão
+  // chama isto. O null do window.open não é erro (P0-a): a dica de reserva aparece sempre depois do clique
+  function abrirPagina(ev) {
+    if (ev?.isTrusted !== true) return false;
+    const url = linkAbrivel(acao()?.link, repo);
+    if (!url) return false;
+    abrir(url);
+    tela.abriu = true;
+    tela.copiado = '';
+    avisar();
+    return true;
+  }
+
+  return { estado, consultar, procurar: () => consultar('procurar agora', true), aoFase, sincronizar, iniciar, atualizar, recarregar, copiarLink, abrirPagina,
     alternarNotas: () => { tela.notas = !tela.notas; avisar(); return tela.notas; },
     registrarAtualizador: fn => { atualizador = typeof fn === 'function' ? fn : null; avisar(); },
     parar: () => { cancelar(laco); laco = null; },
@@ -310,13 +344,16 @@ export function linhaVersaoNova(ui, v = verificador) {
   if (e.notas) linha.append(el('div', 'lc-versao-notas', e.aviso.corpo.trim() || 'Sem notas nesta versão.'));
   const explica = t => (ui?.explica ? ui.explica(t) : el('p', 'lc-explica', t));
   if (e.mensagem) linha.append(explica(e.mensagem));
-  // sem o complemento: o endereço da página da versão como texto selecionável e "copiar link" (nada abre: P0-a pendente)
+  // sem o complemento (e na troca incompleta): o endereço da página da versão como texto selecionável, "abrir página" (só com
+  // endereço da página de releases do REPO; abre no navegador padrão, P0-a) e "copiar link" de reserva
   if (e.acao?.link) {
     const end = explica(e.acao.link);
     end.classList?.add('lc-versao-link');
-    const copiar = el('div', 'lc-versao-acoes');
-    copiar.append(botao('copiar link', 'lc-versao-copiar', () => { v.copiarLink(); }));
-    linha.append(end, copiar);
+    const botoes = el('div', 'lc-versao-acoes');
+    if (e.abrivel) botoes.append(botao('abrir página', 'lc-versao-abrir', ev => { v.abrirPagina(ev); }));
+    botoes.append(botao('copiar link', 'lc-versao-copiar', () => { v.copiarLink(); }));
+    linha.append(end, botoes);
+    if (e.abriu) linha.append(explica(TEXTO_ABRINDO));
     if (e.copiado) linha.append(explica(e.copiado === 'ok' ? 'Link copiado.' : 'Não foi possível copiar: selecione o endereço acima.'));
   }
   return linha;

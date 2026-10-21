@@ -12,10 +12,16 @@
 //   (h) linha da ⚙: corpo do release só como texto (HTML plantado vira texto, zero elemento), "atualizar" sem atualizador diz
 //       onde baixar, com atualizador (P3) chama ele com {versao, tag, repo}; bloco Atualizações; a linha no topo do painel do
 //       client e da ⚙ do compacto; o ponto no ⚙ do compacto (classe lc-versao-nova no <html>);
-//   (i) PADRAO e mescla: atualizacao.verificar nasce ligado, inclusive na config salva antes da chave existir.
+//   (i) PADRAO e mescla: atualizacao.verificar nasce ligado, inclusive na config salva antes da chave existir;
+//   (o) window.open espião no arquivo inteiro: nenhuma chamada na carga, nas consultas (dia, laço, fases, erro, "procurar agora"),
+//       nas telas nem no "atualizar" sem atualizador ("abrir página" é só do clique dele: tools/teste-atualizador.mjs (f)).
 // uso: node tools/teste-atualizacao.mjs
 import { createServer } from 'node:http';
 import { relatar } from './lcu-falsa.mjs';
+
+// window.open espião antes de importar o módulo (como no client, devolve null)
+const abertos = [];
+globalThis.window = { open: (...a) => { abertos.push(a); return null; } };
 
 const A = await import('../pengu/atualizacao.js');
 const { criarVerificador, compararVersoes, lerVersao, lerRelease, repoValido, CHAVE_ATUALIZACAO, DIA_MS, PRAZO_MS, CORPO_MAX, FASES_CONSULTA } = A;
@@ -550,5 +556,8 @@ const blocoDe = v => { const c = doc.createElement('div'); A.blocoAtualizacao(c,
   srv.closeAllConnections?.();
   await new Promise(r => srv.close(r));
 }
+
+caso('(o) nenhum window.open no arquivo inteiro (carga, 1 por dia, laço, viradas de fase, erros, "procurar agora", telas, "atualizar")',
+  abertos.length === 0, JSON.stringify(abertos));
 
 relatar(casos);
