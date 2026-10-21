@@ -8,8 +8,8 @@ a Fase 9 (complemento público). As Fases 1 a 7 e os passos 1, 2 e 4 da Fase 8 d
 
 Estado (19/10/2026): plano escrito; nada executado. Depende da Fase 1 do plano Pengu (aperto de mão `GET /ola` com
 `recursos`). Relatórios no sidecar `roadmap/2026-10-19-publicacao-e-complemento-publico.d/`.
-P0-b, c e d medidos em 19/10 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md)); P0-a pendente
-(orquestrador, com o Gabriel). Achados que mudam fases: `dados/` dentro da pasta trocada (P3/P4), `travadas` sem proteção,
+P0-b, c e d medidos em 19/10 ([relatório](2026-10-19-publicacao-e-complemento-publico.d/2026-10-19-p0.md)); P0-a medido
+com o Gabriel e fechado em 20/10 ("abrir página", abaixo). Achados que mudam fases: `dados/` dentro da pasta trocada (P3/P4), `travadas` sem proteção,
 `/ola` sem chave de edição, `ddragon` fora da origem fixa.
 Revisão adversarial do P0 (19/10, 7 achados reais, tabela no relatório): o código da lista leva 31 citações de 8 gameIds
 dele nos comentários (varredura nova `tools/varrer-publico.py` reprova; P4 tira), `coletor.py` sai ocioso em 10 min sem
