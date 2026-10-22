@@ -231,6 +231,10 @@ update automatizado ao clicar no botão, se possível. Se possível, também com
 
 ### P6 — publicar (portão)
 
+**Parado em 21/10/2026:** o Gabriel jogou a partida de teste (aceite e histórico ok) e não quis publicar ainda ("quero
+testar outras coisas"). Depois desinstalou o LoL. Para retomar: rodar `publicar.py` em ensaio de novo (houve commits depois do
+último ensaio) e pedir o "pode publicar" dele.
+
 Só com: (1) nome respondido (`lol-ultra-client`, 19/10) e a conta `dosxnjos` confirmada por ele em 1 linha (**confirmada 20/10**); (2) as provas no client real do plano das telas e uma partida dele
 com a edição nova; (3) `publicar.py` em ensaio sem reprovação. Sequência da regra de contas
 (`C:\Dev\cerebro\temas\harness\git-contas-e-repos.md`): `gh auth switch --user <conta>` → `gh repo create <conta>/<nome>
